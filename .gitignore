@@ -44,25 +44,69 @@ app.*.map.json
 **/android/.gradle/
 **/android/local.properties
 **/android/captures/
+**/android/**/gradle-wrapper.jar
+**/android/gradlew
+**/android/gradlew.bat
 **/android/**/GeneratedPluginRegistrant.java
+**/android/**/.cxx/
 **/android/app/debug/
 **/android/app/profile/
 **/android/app/release/
+**/android/key.properties
 *.jks
 *.keystore
 
-# iOS and macOS / Xcode
+# iOS / Xcode
 **/ios/Flutter/.last_build_id
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/App.framework
 **/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
 **/ios/Flutter/flutter_assets/
-**/ios/Pods/
+**/ios/**/dgph
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/.generated/
+**/ios/**/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Keep Xcode's shared defaults
+!**/ios/**/default.mode1v3
+!**/ios/**/default.mode2v3
+!**/ios/**/default.pbxuser
+!**/ios/**/default.perspectivev3
+
+# macOS / Xcode
 **/macos/Flutter/GeneratedPluginRegistrant.swift
 **/macos/Flutter/ephemeral/
-**/macos/Pods/
+**/macos/**/Pods/
+**/macos/**/dgph
 *.xcuserstate
 **/xcuserdata/
+
+# Windows / Visual Studio
+**/windows/**/*.suo
+**/windows/**/*.user
+**/windows/**/*.userosscache
+**/windows/**/*.sln.docstates
+**/windows/**/x64/
+**/windows/**/x86/
+**/windows/**/*.[Cc]ache
+!**/windows/**/*.[Cc]ache/
 
 # IDE metadata
 .idea/
