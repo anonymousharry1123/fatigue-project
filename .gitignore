@@ -1,1 +1,71 @@
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Dart and Flutter
+*.class
+*.log
+*.pyc
+*.swp
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/build/
+coverage/
+doc/api/
+app.*.symbols
+app.*.map.json
+
+# Generated Flutter files
+**/generated_plugin_registrant.dart
+**/flutter_export_environment.sh
+**/ephemeral/
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/captures/
+**/android/**/GeneratedPluginRegistrant.java
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+*.jks
+*.keystore
+
+# iOS and macOS / Xcode
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/flutter_assets/
+**/ios/Pods/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+*.xcuserstate
+**/xcuserdata/
+
+# IDE metadata
+.idea/
+*.iml
+*.ipr
+*.iws
