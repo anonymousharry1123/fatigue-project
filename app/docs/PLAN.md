@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: July 21, 2026  
-Current release: **Version 0.5 — Local Storage**
+Current release: **Version 0.5.1 — Account and Navigation Update**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -33,7 +33,7 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Editable Profile screen
 - Wellness-only positioning and privacy messaging
 
-### Version 0.5 — Local Storage ✅ Current
+### Version 0.5 — Local Storage ✅
 
 - Profile and onboarding state persist across app restarts
 - Shared local repository for fixture signals and check-ins
@@ -41,6 +41,15 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Today and Forecast screens render from the shared persisted state
 - Daily Check-in, Reaction Test, Insights, AI Coach, and Profile designs are connected as fixture-backed previews
 - Automated tests cover persistence, scoring fixtures, onboarding, navigation, and screen routing
+
+### Version 0.5.1 — Account and Navigation Update ✅ Current
+
+- Welcome continues into local account creation before personal-model setup
+- Account setup validates email and password confirmation without persisting the password
+- Forecast and Insights share one bottom-navigation destination with an in-screen switcher
+- AI Coach has a dedicated bottom-navigation destination
+- Profile displays the locally saved account email
+- Automated tests cover the new account flow and navigation structure
 
 ## Upcoming Versions
 

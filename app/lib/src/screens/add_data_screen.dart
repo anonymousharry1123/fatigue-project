@@ -69,7 +69,7 @@ class AddDataScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Version 0.5 local storage',
+                        'Version 0.5.1 local storage',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),

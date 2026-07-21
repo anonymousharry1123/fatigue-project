@@ -14,8 +14,15 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
+  final _accountFormKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _nameController = TextEditingController(text: 'Maya');
   int _page = 0;
+  bool _acceptedPrivacy = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   String _age = '16–18';
   String _role = 'Student athlete';
   String _goal = 'Balance focus and training';
@@ -25,6 +32,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _nameController.dispose();
     super.dispose();
   }
@@ -37,9 +47,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Expanded(
             child: PageView(
               controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
               onPageChanged: (value) => setState(() => _page = value),
               children: [
                 _welcome(context),
+                _account(context),
                 _profile(context),
                 _schedule(context),
               ],
@@ -52,7 +64,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
-                    3,
+                    4,
                     (index) => AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: index == _page ? 24 : 7,
@@ -81,8 +93,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     child: Text(
                       _page == 0
-                          ? 'Build my fatigue model'
+                          ? 'Create my account'
                           : _page == 1
+                          ? 'Continue to my profile'
+                          : _page == 2
                           ? 'Set my schedule'
                           : 'Start with demo data',
                     ),
@@ -98,6 +112,136 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _account(BuildContext context) => Form(
+    key: _accountFormKey,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(24, 30, 24, 12),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: IconButton.filledTonal(
+            onPressed: _previous,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Create your account',
+          style: Theme.of(context).textTheme.headlineLarge,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Start with a local account. Cloud sign-in and syncing will be added in a later release.',
+          style: TextStyle(color: TonyoColors.muted),
+        ),
+        const SizedBox(height: 28),
+        TextFormField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.email],
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.mail_outline_rounded),
+          ),
+          validator: (value) {
+            final email = value?.trim() ?? '';
+            if (email.isEmpty) return 'Enter your email';
+            if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+              return 'Enter a valid email';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          key: const Key('password-field'),
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.newPassword],
+          decoration: InputDecoration(
+            labelText: 'Password',
+            prefixIcon: const Icon(Icons.lock_outline_rounded),
+            suffixIcon: IconButton(
+              key: const Key('password-visibility'),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              icon: Icon(
+                _obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+            ),
+          ),
+          validator: (value) {
+            if ((value ?? '').length < 8) {
+              return 'Use at least 8 characters';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          key: const Key('confirm-password-field'),
+          controller: _confirmPasswordController,
+          obscureText: _obscureConfirmPassword,
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            labelText: 'Confirm password',
+            prefixIcon: const Icon(Icons.lock_reset_rounded),
+            suffixIcon: IconButton(
+              key: const Key('confirm-password-visibility'),
+              onPressed: () => setState(
+                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+              ),
+              icon: Icon(
+                _obscureConfirmPassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+            ),
+          ),
+          validator: (value) => value != _passwordController.text
+              ? 'Passwords do not match'
+              : null,
+        ),
+        const SizedBox(height: 14),
+        CheckboxListTile(
+          value: _acceptedPrivacy,
+          onChanged: (value) =>
+              setState(() => _acceptedPrivacy = value ?? false),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text(
+            'I understand this preview stores my account email and app data locally on this device.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(height: 10),
+        const TonyoCard(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              MetricIcon(icon: Icons.password_rounded, color: TonyoColors.mint),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Your password is validated for this setup flow but is never saved. Authentication arrives with a secure account service later.',
+                  style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     ),
   );
 
@@ -204,6 +348,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _profile(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(24, 38, 24, 12),
     children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: IconButton.filledTonal(
+          onPressed: _previous,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+      ),
+      const SizedBox(height: 20),
       Text('Make it yours', style: Theme.of(context).textTheme.headlineLarge),
       const SizedBox(height: 8),
       const Text(
@@ -264,6 +416,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _schedule(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(24, 38, 24, 12),
     children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: IconButton.filledTonal(
+          onPressed: _previous,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+      ),
+      const SizedBox(height: 20),
       Text(
         'Your usual rhythm',
         style: Theme.of(context).textTheme.headlineLarge,
@@ -332,7 +492,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   );
 
   Future<void> _next() async {
-    if (_page < 2) {
+    if (_page == 1) {
+      final valid = _accountFormKey.currentState?.validate() ?? false;
+      if (!valid || !_acceptedPrivacy) {
+        if (!_acceptedPrivacy) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Confirm the local-data notice to continue.'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (_page < 3) {
       await _pageController.nextPage(
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOut,
@@ -349,6 +522,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         wakeHour: _wake,
         bedHour: _bed,
       ),
+      email: _emailController.text,
+    );
+  }
+
+  Future<void> _previous() async {
+    if (_page == 0) return;
+    await _pageController.previousPage(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
     );
   }
 

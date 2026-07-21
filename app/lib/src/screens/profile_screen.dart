@@ -49,6 +49,14 @@ class ProfileScreen extends StatelessWidget {
                         fontSize: 11,
                       ),
                     ),
+                    if (controller.accountEmail != null)
+                      Text(
+                        controller.accountEmail!,
+                        style: const TextStyle(
+                          color: TonyoColors.muted,
+                          fontSize: 10,
+                        ),
+                      ),
                     const SizedBox(height: 7),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -141,7 +149,7 @@ class ProfileScreen extends StatelessWidget {
           _SettingTile(
             icon: Icons.notifications_outlined,
             title: 'Forecast alerts',
-            subtitle: 'Preview only in Version 0.5',
+            subtitle: 'Preview only in Version 0.5.1',
             onTap: () =>
                 _preview(context, 'Notifications arrive in Version 0.20.'),
           ),
@@ -287,7 +295,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Version 0.5 stores your profile, onboarding status, fixtures, and check-ins locally. No account or cloud upload is used.',
+              'Version 0.5.1 stores your account email, profile, onboarding status, fixtures, and check-ins locally. Passwords are never saved and no cloud upload is used.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 16),

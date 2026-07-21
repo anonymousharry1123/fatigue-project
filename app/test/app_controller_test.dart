@@ -15,6 +15,7 @@ void main() {
       await first.load();
       await first.completeOnboarding(
         const UserProfile(name: 'Jordan', role: 'Athlete'),
+        email: 'Jordan@Example.com',
       );
 
       final restored = AppController();
@@ -23,6 +24,8 @@ void main() {
       expect(restored.onboardingComplete, isTrue);
       expect(restored.profile.name, 'Jordan');
       expect(restored.profile.role, 'Athlete');
+      expect(restored.accountEmail, 'jordan@example.com');
+      expect(restored.exportJson(), isNot(contains('password')));
       expect(restored.signals, isNotEmpty);
     },
   );
@@ -36,6 +39,7 @@ void main() {
     final restored = AppController();
     await restored.load();
     expect(restored.onboardingComplete, isFalse);
+    expect(restored.accountEmail, isNull);
     expect(restored.signals, isEmpty);
   });
 }

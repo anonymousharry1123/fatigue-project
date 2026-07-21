@@ -1,6 +1,7 @@
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/demo_data.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,17 +23,36 @@ void main() {
     await tester.pumpWidget(TonyoApp(controller: readyController()));
     expect(find.textContaining('Morning,'), findsOneWidget);
 
-    await tester.tap(find.text('Forecast'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Energy Forecast'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SegmentedButton<int>),
+        matching: find.text('Insights'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Your Fatigue Model'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     expect(find.text('Add & Explore'), findsOneWidget);
 
-    await tester.tap(find.text('Insights'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Coach'),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Your Fatigue Model'), findsOneWidget);
+    expect(find.text('Today’s plan'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -65,6 +85,87 @@ void main() {
     final controller = AppController()..isReady = true;
     await tester.pumpWidget(TonyoApp(controller: controller));
     expect(find.text('Tonyo'), findsOneWidget);
-    expect(find.text('Build my fatigue model'), findsOneWidget);
+    expect(find.text('Create my account'), findsOneWidget);
+  });
+
+  testWidgets('welcome leads to account creation before profile setup', (
+    tester,
+  ) async {
+    final controller = AppController()..isReady = true;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Create my account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create your account'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email'),
+      'maya@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'tonyo-pass',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Confirm password'),
+      'tonyo-pass',
+    );
+    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.text('Continue to my profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Make it yours'), findsOneWidget);
+  });
+
+  testWidgets('confirm password can be edited and revealed independently', (
+    tester,
+  ) async {
+    final controller = AppController()..isReady = true;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Create my account'));
+    await tester.pumpAndSettle();
+
+    final passwordFinder = find.byKey(const Key('password-field'));
+    final confirmFinder = find.byKey(const Key('confirm-password-field'));
+    await tester.enterText(passwordFinder, 'first-password');
+    await tester.enterText(confirmFinder, 'first-password');
+    await tester.enterText(confirmFinder, 'changed-password');
+
+    expect(
+      tester.widget<TextFormField>(confirmFinder).controller!.text,
+      'changed-password',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('password-visibility')),
+        matching: find.byIcon(Icons.visibility_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('confirm-password-visibility')),
+        matching: find.byIcon(Icons.visibility_outlined),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('confirm-password-visibility')));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('password-visibility')),
+        matching: find.byIcon(Icons.visibility_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('confirm-password-visibility')),
+        matching: find.byIcon(Icons.visibility_off_outlined),
+      ),
+      findsOneWidget,
+    );
   });
 }

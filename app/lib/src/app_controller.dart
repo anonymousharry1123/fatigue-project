@@ -23,6 +23,7 @@ class AppController extends ChangeNotifier {
   bool healthAuthorized = false;
   bool isSyncing = false;
   DateTime? lastSync;
+  String? accountEmail;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
@@ -52,6 +53,7 @@ class AppController extends ChangeNotifier {
         notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
         outcomeConsent = json['outcomeConsent'] as bool? ?? false;
         healthAuthorized = json['healthAuthorized'] as bool? ?? false;
+        accountEmail = json['accountEmail'] as String?;
         lastSync = json['lastSync'] == null
             ? null
             : DateTime.tryParse(json['lastSync'] as String);
@@ -88,8 +90,12 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> completeOnboarding(UserProfile newProfile) async {
+  Future<void> completeOnboarding(
+    UserProfile newProfile, {
+    String? email,
+  }) async {
     profile = newProfile;
+    accountEmail = email?.trim().toLowerCase();
     onboardingComplete = true;
     if (signals.isEmpty) {
       signals = buildDemoSignals(DateTime.now());
@@ -229,6 +235,7 @@ class AppController extends ChangeNotifier {
     outcomeConsent = false;
     healthAuthorized = false;
     lastSync = null;
+    accountEmail = null;
     profile = const UserProfile();
     signals = [];
     checkIns = [];
@@ -243,6 +250,7 @@ class AppController extends ChangeNotifier {
     'notificationsEnabled': notificationsEnabled,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
+    'accountEmail': accountEmail,
     'lastSync': lastSync?.toIso8601String(),
     'profile': profile.toJson(),
     'signals': signals.map((item) => item.toJson()).toList(),
