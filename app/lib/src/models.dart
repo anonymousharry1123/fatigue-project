@@ -56,6 +56,7 @@ class SignalReading {
     this.source = SignalSource.manual,
     this.quality = 1,
     this.note,
+    this.groupId,
   });
 
   final String id;
@@ -65,6 +66,7 @@ class SignalReading {
   final SignalSource source;
   final double quality;
   final String? note;
+  final String? groupId;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -74,6 +76,7 @@ class SignalReading {
     'source': source.name,
     'quality': quality,
     'note': note,
+    'groupId': groupId,
   };
 
   factory SignalReading.fromJson(Map<String, dynamic> json) => SignalReading(
@@ -84,6 +87,7 @@ class SignalReading {
     source: SignalSource.values.byName((json['source'] as String?) ?? 'manual'),
     quality: (json['quality'] as num?)?.toDouble() ?? 1,
     note: json['note'] as String?,
+    groupId: json['groupId'] as String?,
   );
 }
 
@@ -94,6 +98,94 @@ extension CheckInPeriodLabel on CheckInPeriod {
     CheckInPeriod.morning => 'Morning',
     CheckInPeriod.evening => 'Evening',
   };
+class ActivityLogEntry {
+  const ActivityLogEntry({
+    required this.id,
+    required this.timestamp,
+    required this.hydrationLiters,
+    required this.studyHours,
+    required this.exerciseHours,
+    required this.screenTimeHours,
+  });
+
+  static const allowedTypes = {
+    SignalType.hydration,
+    SignalType.study,
+    SignalType.exercise,
+    SignalType.screenTime,
+  };
+
+  final String id;
+  final DateTime timestamp;
+  final double hydrationLiters;
+  final double studyHours;
+  final double exerciseHours;
+  final double screenTimeHours;
+
+  static String? validationMessage(SignalType type, double value) {
+    if (!value.isFinite) return 'Enter a valid number.';
+    final range = switch (type) {
+      SignalType.hydration => (minimum: 0.0, maximum: 10.0, unit: 'liters'),
+      SignalType.study => (minimum: 0.0, maximum: 18.0, unit: 'hours'),
+      SignalType.exercise => (minimum: 0.0, maximum: 12.0, unit: 'hours'),
+      SignalType.screenTime => (minimum: 0.0, maximum: 24.0, unit: 'hours'),
+      _ => null,
+    };
+    if (range == null) return 'This is not an activity-log value.';
+    if (value < range.minimum || value > range.maximum) {
+      return 'Enter ${range.minimum.toStringAsFixed(0)}–${range.maximum.toStringAsFixed(0)} ${range.unit}.';
+    }
+    return null;
+  }
+}
+
+class SleepLogEntry {
+  const SleepLogEntry({
+    required this.id,
+    required this.bedtime,
+    required this.wakeTime,
+    required this.quality,
+  });
+
+  final String id;
+  final DateTime bedtime;
+  final DateTime wakeTime;
+  final double quality;
+
+  Duration get duration => wakeTime.difference(bedtime);
+  double get durationHours => duration.inMinutes / 60;
+
+  static String? validationMessage({
+    required DateTime bedtime,
+    required DateTime wakeTime,
+    required double quality,
+  }) {
+    if (!quality.isFinite || quality < 1 || quality > 5) {
+      return 'Sleep quality must be between 1 and 5.';
+    }
+    final duration = wakeTime.difference(bedtime);
+    if (duration < const Duration(minutes: 30) ||
+        duration > const Duration(hours: 16)) {
+      return 'Sleep duration must be between 30 minutes and 16 hours.';
+    }
+    return null;
+  }
+
+  static double bedtimeConsistencyMinutes(Iterable<SleepLogEntry> entries) {
+    final bedtimeMinutes = entries.map((entry) {
+      final time = entry.bedtime;
+      final minutes = time.hour * 60 + time.minute;
+      return minutes < 12 * 60 ? minutes + 24 * 60 : minutes;
+    }).toList();
+    if (bedtimeMinutes.length < 2) return 0;
+    final average =
+        bedtimeMinutes.reduce((left, right) => left + right) /
+        bedtimeMinutes.length;
+    return bedtimeMinutes
+            .map((minutes) => (minutes - average).abs())
+            .reduce((left, right) => left + right) /
+        bedtimeMinutes.length;
+  }
 }
 
 class DailyCheckIn {

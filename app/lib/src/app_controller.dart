@@ -25,10 +25,79 @@ class AppController extends ChangeNotifier {
   bool healthAuthorized = false;
   bool isSyncing = false;
   DateTime? lastSync;
+  String? accountEmail;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
+
+  List<ActivityLogEntry> get activityLogs {
+    final grouped = <String, List<SignalReading>>{};
+    for (final signal in signals) {
+      final groupId = signal.groupId;
+      if (groupId != null && groupId.startsWith('activity-')) {
+        grouped.putIfAbsent(groupId, () => []).add(signal);
+      }
+    }
+    final entries = <ActivityLogEntry>[];
+    for (final group in grouped.entries) {
+      double? valueFor(SignalType type) =>
+          group.value.where((item) => item.type == type).firstOrNull?.value;
+      final hydration = valueFor(SignalType.hydration);
+      final study = valueFor(SignalType.study);
+      final exercise = valueFor(SignalType.exercise);
+      final screenTime = valueFor(SignalType.screenTime);
+      if (hydration == null ||
+          study == null ||
+          exercise == null ||
+          screenTime == null) {
+        continue;
+      }
+      entries.add(
+        ActivityLogEntry(
+          id: group.key,
+          timestamp: group.value.first.timestamp,
+          hydrationLiters: hydration,
+          studyHours: study,
+          exerciseHours: exercise,
+          screenTimeHours: screenTime,
+        ),
+      );
+    }
+    return entries..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  List<SleepLogEntry> get sleepLogs {
+    final grouped = <String, List<SignalReading>>{};
+    for (final signal in signals) {
+      final groupId = signal.groupId;
+      if (groupId != null && groupId.startsWith('sleep-')) {
+        grouped.putIfAbsent(groupId, () => []).add(signal);
+      }
+    }
+    final entries = <SleepLogEntry>[];
+    for (final group in grouped.entries) {
+      final sleep = group.value
+          .where((item) => item.type == SignalType.sleep)
+          .firstOrNull;
+      final bedtime = group.value
+          .where((item) => item.type == SignalType.bedtime)
+          .firstOrNull;
+      if (sleep == null || bedtime == null) continue;
+      entries.add(
+        SleepLogEntry(
+          id: group.key,
+          bedtime: bedtime.timestamp,
+          wakeTime: sleep.timestamp,
+          quality: sleep.quality * 5,
+        ),
+      );
+    }
+    return entries..sort((a, b) => b.wakeTime.compareTo(a.wakeTime));
+  }
+
+  double get bedtimeConsistencyMinutes =>
+      SleepLogEntry.bedtimeConsistencyMinutes(sleepLogs.take(7));
 
   ScoreSnapshot get score =>
       FatigueEngine.score(signals: signals, checkIns: checkIns);
@@ -60,6 +129,7 @@ class AppController extends ChangeNotifier {
         notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
         outcomeConsent = json['outcomeConsent'] as bool? ?? false;
         healthAuthorized = json['healthAuthorized'] as bool? ?? false;
+        accountEmail = json['accountEmail'] as String?;
         lastSync = json['lastSync'] == null
             ? null
             : DateTime.tryParse(json['lastSync'] as String);
@@ -96,8 +166,12 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> completeOnboarding(UserProfile newProfile) async {
+  Future<void> completeOnboarding(
+    UserProfile newProfile, {
+    String? email,
+  }) async {
     profile = newProfile;
+    accountEmail = email?.trim().toLowerCase();
     onboardingComplete = true;
     if (signals.isEmpty) {
       signals = buildDemoSignals(DateTime.now());
@@ -125,31 +199,94 @@ class AppController extends ChangeNotifier {
     await _commit();
   }
 
+  Future<void> saveActivityLog({
+    String? id,
+    required double hydrationLiters,
+    required double studyHours,
+    required double exerciseHours,
+    required double screenTimeHours,
+    DateTime? timestamp,
+  }) async {
+    final values = {
+      SignalType.hydration: hydrationLiters,
+      SignalType.study: studyHours,
+      SignalType.exercise: exerciseHours,
+      SignalType.screenTime: screenTimeHours,
+    };
+    for (final entry in values.entries) {
+      final message = ActivityLogEntry.validationMessage(
+        entry.key,
+        entry.value,
+      );
+      if (message != null) {
+        throw ArgumentError.value(entry.value, entry.key.name, message);
+      }
+    }
+    final now = DateTime.now();
+    final groupId = id ?? 'activity-${now.microsecondsSinceEpoch}';
+    final recordedAt = timestamp ?? now;
+    signals.removeWhere((item) => item.groupId == groupId);
+    signals.insertAll(
+      0,
+      values.entries.map(
+        (entry) => SignalReading(
+          id: '$groupId-${entry.key.name}',
+          groupId: groupId,
+          type: entry.key,
+          value: entry.value,
+          timestamp: recordedAt,
+        ),
+      ),
+    );
+    await _commit();
+  }
+
+  Future<void> deleteActivityLog(String id) async {
+    signals.removeWhere((item) => item.groupId == id);
+    await _commit();
+  }
+
   Future<void> addSleep({
+    String? id,
     required DateTime bedtime,
     required DateTime wakeTime,
     required double quality,
   }) async {
     var end = wakeTime;
     if (!end.isAfter(bedtime)) end = end.add(const Duration(days: 1));
+    final validation = SleepLogEntry.validationMessage(
+      bedtime: bedtime,
+      wakeTime: end,
+      quality: quality,
+    );
+    if (validation != null) throw ArgumentError(validation);
     final hours = end.difference(bedtime).inMinutes / 60;
+    final groupId = id ?? 'sleep-${DateTime.now().microsecondsSinceEpoch}';
+    signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(0, [
       SignalReading(
-        id: 'manual-sleep-${DateTime.now().microsecondsSinceEpoch}',
+        id: '$groupId-duration',
+        groupId: groupId,
         type: SignalType.sleep,
         value: hours,
-        timestamp: wakeTime,
+        timestamp: end,
         quality: quality / 5,
         note:
             '${_clock(bedtime)}–${_clock(end)} · quality ${quality.round()}/5',
       ),
       SignalReading(
-        id: 'manual-bed-${DateTime.now().microsecondsSinceEpoch}',
+        id: '$groupId-bedtime',
+        groupId: groupId,
         type: SignalType.bedtime,
         value: bedtime.hour + bedtime.minute / 60,
         timestamp: bedtime,
       ),
     ]);
+    await _commit();
+  }
+
+  Future<void> deleteSleepLog(String id) async {
+    signals.removeWhere((item) => item.groupId == id);
     await _commit();
   }
 
@@ -263,6 +400,7 @@ class AppController extends ChangeNotifier {
     outcomeConsent = false;
     healthAuthorized = false;
     lastSync = null;
+    accountEmail = null;
     profile = const UserProfile();
     signals = [];
     checkIns = [];
@@ -277,6 +415,7 @@ class AppController extends ChangeNotifier {
     'notificationsEnabled': notificationsEnabled,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
+    'accountEmail': accountEmail,
     'lastSync': lastSync?.toIso8601String(),
     'profile': profile.toJson(),
     'signals': signals.map((item) => item.toJson()).toList(),

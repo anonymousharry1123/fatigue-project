@@ -78,6 +78,31 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Daily Check-in, Reaction Test, Insights, AI Coach, and Profile designs are connected as fixture-backed previews
 - Automated tests cover persistence, scoring fixtures, onboarding, navigation, and screen routing
 
+### Version 0.5.1 — Account and Navigation Update ✅
+
+- Welcome continues into local account creation before personal-model setup
+- Account setup validates email and password confirmation without persisting the password
+- Forecast and Insights share one bottom-navigation destination with an in-screen switcher
+- AI Coach has a dedicated bottom-navigation destination
+- Profile displays the locally saved account email
+- Automated tests cover the new account flow and navigation structure
+
+### Version 0.6 — Manual Activity Log ✅
+
+- Record hydration, study time, exercise load, and screen time
+- Validate values and reject impossible entries
+- Edit and add data through the center navigation action
+- Persist grouped activity records locally
+- Automated tests cover validation, editing, persistence, and the activity form
+
+### Version 0.7 — Manual Sleep Log ✅ Current
+
+- Record bedtime, wake time, and sleep quality
+- Calculate sleep duration and bedtime consistency
+- Display recent sleep entries
+- Edit or remove manual sleep entries
+- Automated tests cover overnight duration, consistency, validation, persistence, and the sleep form
+- 
 ### Version 0.8 — Mood and Stress Check-In ✅
 
 - Daily Check-in stores morning and evening energy, mood, and stress
@@ -87,25 +112,13 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Ratings validate and persist through the shared local repository
 
 ### Version 0.9 — Reaction-Time Test ✅ Current
-
-- Reaction Test is a completed daily benchmark with three valid rounds
+valid rounds
 - Early taps and out-of-range attempts are detected and discarded
 - Valid results compare against a personal reaction-time baseline
 - Automated tests cover check-in ratings, reaction validation, baselines, and persistence
+- Reaction Test is a completed daily benchmark with three 
 
 ## Upcoming Versions
-
-### Version 0.6 — Manual Activity Log
-
-- Record hydration, study time, exercise load, and screen time
-- Validate values and reject impossible entries
-- Edit and add data through the center navigation action
-
-### Version 0.7 — Manual Sleep Log
-
-- Record bedtime, wake time, and sleep quality
-- Calculate sleep duration and bedtime consistency
-- Display recent sleep entries
 
 ### Version 0.10 — Daily History
 

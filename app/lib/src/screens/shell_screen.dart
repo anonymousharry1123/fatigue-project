@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'add_data_screen.dart';
-import 'forecast_screen.dart';
-import 'insights_screen.dart';
+import 'coach_screen.dart';
+import 'forecast_insights_screen.dart';
 import 'profile_screen.dart';
 import 'today_screen.dart';
 
@@ -19,9 +19,9 @@ class _ShellScreenState extends State<ShellScreen> {
 
   static const screens = [
     TodayScreen(),
-    ForecastScreen(),
+    ForecastInsightsScreen(),
     AddDataScreen(),
-    InsightsScreen(),
+    CoachScreen(embedded: true),
     ProfileScreen(),
   ];
 
@@ -59,9 +59,9 @@ class _ShellScreenState extends State<ShellScreen> {
           label: 'Add',
         ),
         const NavigationDestination(
-          icon: Icon(Icons.insights_outlined),
-          selectedIcon: Icon(Icons.insights_rounded),
-          label: 'Insights',
+          icon: Icon(Icons.auto_awesome_outlined),
+          selectedIcon: Icon(Icons.auto_awesome_rounded),
+          label: 'Coach',
         ),
         const NavigationDestination(
           icon: Icon(Icons.person_outline_rounded),
