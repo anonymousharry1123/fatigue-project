@@ -8,7 +8,9 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
 class ActivityLogScreen extends StatefulWidget {
-  const ActivityLogScreen({super.key});
+  const ActivityLogScreen({super.key, this.initialLog});
+
+  final ActivityLogEntry? initialLog;
 
   @override
   State<ActivityLogScreen> createState() => _ActivityLogScreenState();
@@ -21,7 +23,15 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final _exercise = TextEditingController();
   final _screenTime = TextEditingController();
   String? _editingId;
+  DateTime? _editingTimestamp;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialLog = widget.initialLog;
+    if (initialLog != null) _loadLog(initialLog);
+  }
 
   @override
   void dispose() {
@@ -107,7 +117,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                         if (_editingId != null) ...[
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: _saving ? null : _clearForm,
+                              onPressed: _saving ? null : _cancelEdit,
                               child: const Text('Cancel'),
                             ),
                           ),
@@ -201,8 +211,13 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         studyHours: study,
         exerciseHours: exercise,
         screenTimeHours: screenTime,
+        timestamp: _editingTimestamp,
       );
       if (!mounted) return;
+      if (widget.initialLog != null) {
+        Navigator.of(context).pop();
+        return;
+      }
       _clearForm();
       ScaffoldMessenger.of(
         context,
@@ -217,18 +232,30 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   }
 
   void _edit(ActivityLogEntry log) {
-    setState(() {
-      _editingId = log.id;
-      _hydration.text = _number(log.hydrationLiters ?? 0);
-      _study.text = _number(log.studyHours ?? 0);
-      _exercise.text = _number(log.exerciseHours ?? 0);
-      _screenTime.text = _number(log.screenTimeHours ?? 0);
-    });
+    setState(() => _loadLog(log));
+  }
+
+  void _loadLog(ActivityLogEntry log) {
+    _editingId = log.id;
+    _editingTimestamp = log.timestamp;
+    _hydration.text = _number(log.hydrationLiters ?? 0);
+    _study.text = _number(log.studyHours ?? 0);
+    _exercise.text = _number(log.exerciseHours ?? 0);
+    _screenTime.text = _number(log.screenTimeHours ?? 0);
+  }
+
+  void _cancelEdit() {
+    if (widget.initialLog != null) {
+      Navigator.of(context).pop();
+    } else {
+      _clearForm();
+    }
   }
 
   void _clearForm() {
     setState(() {
       _editingId = null;
+      _editingTimestamp = null;
       _saving = false;
       _hydration.clear();
       _study.clear();
@@ -428,8 +455,9 @@ class _CategoryWeekCard extends StatelessWidget {
     return labels[day.weekday - 1];
   }
 
-  static String _format(double value) =>
-      value == value.roundToDouble() ? '${value.round()}' : value.toStringAsFixed(1);
+  static String _format(double value) => value == value.roundToDouble()
+      ? '${value.round()}'
+      : value.toStringAsFixed(1);
 }
 
 class _ActivityHistoryCard extends StatelessWidget {

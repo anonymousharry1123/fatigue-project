@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_log_logic.dart';
 import 'check_in_logic.dart';
+import 'daily_history_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
@@ -99,6 +100,13 @@ class AppController extends ChangeNotifier {
 
   double get bedtimeConsistencyMinutes =>
       SleepLogEntry.bedtimeConsistencyMinutes(sleepLogs.take(7));
+
+  List<DailyHistoryDay> get dailyHistory => DailyHistoryLogic.build(
+    signals: signals,
+    checkIns: checkIns,
+    activityLogs: activityLogs,
+    sleepLogs: sleepLogs,
+  );
 
   ScoreSnapshot get score =>
       FatigueEngine.score(signals: signals, checkIns: checkIns);
@@ -227,7 +235,10 @@ class AppController extends ChangeNotifier {
       SignalType.screenTime: screenTime,
     };
     for (final entry in values.entries) {
-      final message = ActivityLogEntry.validationMessage(entry.key, entry.value);
+      final message = ActivityLogEntry.validationMessage(
+        entry.key,
+        entry.value,
+      );
       if (message != null) {
         throw ArgumentError.value(entry.value, entry.key.name, message);
       }
@@ -301,6 +312,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> addCheckIn({
+    String? id,
     required double energy,
     required double mood,
     required double stress,
@@ -316,10 +328,12 @@ class AppController extends ChangeNotifier {
       );
     }
     final when = timestamp ?? DateTime.now();
+    final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
+    checkIns.removeWhere((item) => item.id == checkInId);
     checkIns.insert(
       0,
       DailyCheckIn(
-        id: 'checkin-${when.microsecondsSinceEpoch}',
+        id: checkInId,
         timestamp: when,
         energy: CheckInLogic.clampRating(energy),
         mood: CheckInLogic.clampRating(mood),

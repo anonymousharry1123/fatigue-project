@@ -7,6 +7,7 @@ import '../widgets/common_widgets.dart';
 import 'activity_log_screen.dart';
 import 'coach_screen.dart';
 import 'daily_checkin_screen.dart';
+import 'daily_history_screen.dart';
 import 'reaction_test_screen.dart';
 import 'sleep_log_screen.dart';
 
@@ -29,6 +30,15 @@ class AddDataScreen extends StatelessWidget {
           const Text(
             'Log how you feel and run your daily reaction benchmark.',
             style: TextStyle(color: TonyoColors.muted),
+          ),
+          const SectionHeader('Review'),
+          _LaunchCard(
+            icon: Icons.calendar_month_rounded,
+            color: TonyoColors.primary,
+            title: 'Daily history',
+            detail: 'Signals, check-ins, and daily completion',
+            badge: '${controller.dailyHistory.length} days',
+            onTap: () => _push(context, const DailyHistoryScreen()),
           ),
           const SectionHeader('Manual logs'),
           _LaunchCard(
@@ -92,7 +102,7 @@ class AddDataScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Versions 0.6–0.9 local inputs',
+                        'Versions 0.6–0.10 local inputs',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),

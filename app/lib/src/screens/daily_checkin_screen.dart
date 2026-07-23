@@ -8,7 +8,9 @@ import '../widgets/common_widgets.dart';
 import 'reaction_test_screen.dart';
 
 class DailyCheckInScreen extends StatefulWidget {
-  const DailyCheckInScreen({super.key});
+  const DailyCheckInScreen({super.key, this.initialCheckIn});
+
+  final DailyCheckIn? initialCheckIn;
 
   @override
   State<DailyCheckInScreen> createState() => _DailyCheckInScreenState();
@@ -21,7 +23,20 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   final noteController = TextEditingController();
   bool saving = false;
 
-  CheckInPeriod get period => CheckInLogic.periodFor();
+  CheckInPeriod get period =>
+      CheckInLogic.periodFor(widget.initialCheckIn?.timestamp);
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialCheckIn;
+    if (initial != null) {
+      energy = initial.energy;
+      mood = initial.mood;
+      stress = initial.stress;
+      noteController.text = initial.note;
+    }
+  }
 
   @override
   void dispose() {
@@ -36,7 +51,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
     final period = this.period;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daily Check-in'),
+        title: Text(
+          widget.initialCheckIn == null ? 'Daily Check-in' : 'Edit Check-in',
+        ),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -48,7 +65,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                 children: [
                   Text(
-                    'How are you feeling?',
+                    widget.initialCheckIn == null
+                        ? 'How are you feeling?'
+                        : 'Update your check-in',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 7),
@@ -150,7 +169,13 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: Text(saving ? 'Saving…' : 'Save check-in'),
+                  child: Text(
+                    saving
+                        ? 'Saving…'
+                        : widget.initialCheckIn == null
+                        ? 'Save check-in'
+                        : 'Update check-in',
+                  ),
                 ),
               ),
             ),
@@ -162,9 +187,11 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
 
   Future<void> _save() async {
     setState(() => saving = true);
-    final when = DateTime.now();
+    final initial = widget.initialCheckIn;
+    final when = initial?.timestamp ?? DateTime.now();
     final period = CheckInLogic.periodFor(when);
     await AppScope.of(context).addCheckIn(
+      id: initial?.id,
       energy: energy,
       mood: mood,
       stress: stress,
@@ -204,10 +231,7 @@ class _PeriodBanner extends StatelessWidget {
               children: [
                 Text(
                   '${period.label} check-in',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -442,11 +466,7 @@ class _Chip extends StatelessWidget {
     ),
     child: Text(
       label,
-      style: TextStyle(
-        color: color,
-        fontSize: 10,
-        fontWeight: FontWeight.w800,
-      ),
+      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
     ),
   );
 }

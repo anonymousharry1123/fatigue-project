@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.9 — Reaction-Time Test (as of 2026-07-23)
+- **Current release:** Version 0.10 — Daily History (as of 2026-07-23)
 
 ## Implementation Report (through v0.9)
 
@@ -20,7 +20,8 @@
 | 0.7 | Manual sleep log (duration + bedtime consistency) | Complete |
 | 0.8 | Mood & stress check-in (1–10, auto morning/evening, history) | Complete |
 | 0.9 | Reaction-time daily benchmark (invalid attempts + baseline) | Complete |
-| 0.10+ | Daily history, scores, forecast engine, HealthKit, AI coach, etc. | Not started |
+| 0.10 | Daily history (grouping, completion, edit/delete) | Complete |
+| 0.11+ | Scores, forecast engine, HealthKit, AI coach, etc. | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -34,9 +35,16 @@
 - Average compared to a personal baseline from prior reaction signals
 - Results persist as `SignalType.reactionTime` readings
 
+### What ships in 0.10
+- Signals and check-ins grouped into local calendar days
+- Activity and sleep signal groups displayed once as semantic history entries
+- Activity, Sleep, Check-in, and Reaction completion status for each day
+- Manual activity, sleep, and check-in records can be edited; all manual records can be deleted
+- Imported and fixture-backed signals remain visible but read-only
+
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-07-23 — **29 tests passed** after post-merge syntax repairs
+- Last verified: 2026-07-23 — **37 tests passed** with Version 0.10 Daily History
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -49,7 +57,7 @@
 8. Manual sleep log - Complete (v0.7)
 9. Mood & stress daily check-in (1–10, auto morning/evening, history) - Complete (v0.8)
 10. Reaction-time daily benchmark (early taps, invalid attempts, baseline) - Complete (v0.9)
-11. Daily history (edit/delete by date) - Not started (v0.10)
+11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
 
 ## Day-to-Day Entries
 
@@ -106,6 +114,26 @@
 **Major issues:**
 - Post-merge syntax errors nested `ActivityLogEntry` / later classes inside the check-in period extension and left a dangling test body — compile failed until braces were restored.
 
+### 2026-07-23 — Version 0.10 Daily History
+
+**Branch:** `main`
+
+**Goal:** Complete Version 0.10 with date-grouped signals and check-ins, a four-part daily completion status, and working edit/delete actions for manual entries.
+
+**Results:**
+- Group activity and sleep signal groups into one semantic history item each.
+- Assign overnight sleep to its wake date.
+- Track Activity, Sleep, Check-in, and Reaction as the four daily completion categories.
+- Keep imported/read-only signals visible while restricting edit/delete actions to manual records.
+- Added a Daily History launch card under Add, date cards with progress/checklist status, and edit/delete controls.
+- Activity, sleep, and check-in forms accept an initial record when opened from history and update in place.
+- Added pure grouping tests, controller persistence/edit/delete coverage, and a widget edit/delete flow.
+- `flutter analyze` reported no issues; `flutter test` passed all 37 tests.
+
+**Major issues:**
+- Raw activity and sleep data uses multiple `SignalReading` rows per logical record. The history builder explicitly suppresses grouped raw rows and emits one semantic item to prevent duplicates.
+- Overnight sleep spans two dates; assigning it by wake time keeps the full sleep record on the day it informs.
+
 ---
 
 ## Prompts Used
@@ -149,6 +177,14 @@
 
 **Modifications:** None expected.
 
+### Feature: Version 0.10 Daily History
+**Prompt:**
+"complete version .10 -daily history. Make sure it functions correctly."
+
+**Result:** Completed date-grouped Daily History with four-part completion status, semantic activity/sleep grouping, manual edit/delete actions, read-only imported data, and automated coverage.
+
+**Modifications:** Overnight sleep is assigned to the wake date; reaction benchmarks are removable but not editable so measured results are not converted into manual values.
+
 ---
 
 ## Challenges & Solutions
@@ -168,6 +204,11 @@
 **Solution:** Close the extension before `ActivityLogEntry`; finish the reaction-rejection test block; re-run `flutter test`.
 **Prompt used:** Implementation report closeout prompt.
 
+### Challenge 4: Grouped signals duplicated logical history records
+**Problem:** Activity is stored as four signals and sleep as duration + bedtime, so naïve date grouping would show repeated rows and split overnight sleep.
+**Solution:** Build semantic activity/sleep items first, suppress their grouped raw signals, and assign sleep by wake date.
+**Prompt used:** Version 0.10 Daily History prompt.
+
 ## What I Learned
 - Fixture-backed UI previews are not “done” until data is validated, persisted, and covered by tests (`PLAN.md` release rules).
 - Extracting pure helpers (`CheckInLogic`, `ReactionTestLogic`) makes feature behavior easy to unit test without driving the full UI.
@@ -176,7 +217,7 @@
 - After merging parallel feature branches, re-run the full test suite immediately — small brace mismatches can look like “missing types” across the whole app.
 
 ## Future Improvements
-- [ ] Implement Version 0.10 — fuller Daily History (edit/delete by date)
+- [x] Implement Version 0.10 — fuller Daily History (edit/delete by date)
 - [ ] Implement Version 0.11+ Energy / Cognitive scores and Today dashboard
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

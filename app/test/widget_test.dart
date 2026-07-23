@@ -64,6 +64,7 @@ void main() {
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Daily check-in'), 200);
     await tester.tap(find.text('Daily check-in'));
     await tester.pumpAndSettle();
     expect(find.text('How are you feeling?'), findsOneWidget);
@@ -84,6 +85,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('Reaction test'), 200);
     await tester.tap(find.text('Reaction test'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction Test'), findsOneWidget);
@@ -154,6 +156,62 @@ void main() {
     expect(controller.sleepLogs, hasLength(1));
     await tester.scrollUntilVisible(find.textContaining('quality 3/5'), 250);
     expect(find.textContaining('quality 3/5'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.10 history groups days and edits/deletes manual logs', (
+    tester,
+  ) async {
+    final controller = readyController();
+    await controller.saveActivityLog(
+      hydrationLiters: 2.5,
+      timestamp: DateTime(2026, 7, 21, 18),
+    );
+    final activityId = controller.activityLogs.single.id;
+
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Daily history'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your daily record'), findsOneWidget);
+    expect(find.text('Complete'), findsWidgets);
+    expect(find.text('Activity'), findsWidgets);
+    expect(find.text('Sleep'), findsWidgets);
+    expect(find.text('Check-in'), findsWidgets);
+    expect(find.text('Reaction'), findsWidgets);
+
+    final activityItem = find.byKey(Key('history-item-$activityId'));
+    final editActivity = find.descendant(
+      of: activityItem,
+      matching: find.byTooltip('Edit Activity log'),
+    );
+    await tester.tap(editActivity);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit activity'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('hydration-field')), '3.5');
+    await tester.ensureVisible(find.text('Update activity'));
+    await tester.tap(find.text('Update activity'));
+    await tester.pumpAndSettle();
+    expect(controller.activityLogs.single.hydrationLiters, 3.5);
+    expect(
+      controller.activityLogs.single.timestamp,
+      DateTime(2026, 7, 21, 18),
+    );
+    expect(find.text('Your daily record'), findsOneWidget);
+
+    final updatedItem = find.byKey(Key('history-item-$activityId'));
+    final deleteActivity = find.descendant(
+      of: updatedItem,
+      matching: find.byTooltip('Delete Activity log'),
+    );
+    await tester.tap(deleteActivity);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete history entry?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(controller.activityLogs, isEmpty);
   });
 
   testWidgets('new users see the welcome screen', (tester) async {

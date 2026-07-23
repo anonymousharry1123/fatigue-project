@@ -276,6 +276,54 @@ void main() {
     },
   );
 
+  test('Version 0.10 history persists, edits, and deletes manual entries', () async {
+    final controller = AppController();
+    await controller.load();
+    final day = DateTime(2026, 7, 23);
+    await controller.saveActivityLog(
+      hydrationLiters: 2.5,
+      timestamp: day.add(const Duration(hours: 18)),
+    );
+    await controller.addSleep(
+      bedtime: day.subtract(const Duration(hours: 1)),
+      wakeTime: day.add(const Duration(hours: 7)),
+      quality: 4,
+    );
+    await controller.addCheckIn(
+      energy: 8,
+      mood: 7,
+      stress: 3,
+      timestamp: day.add(const Duration(hours: 9)),
+    );
+
+    expect(controller.dailyHistory, hasLength(1));
+    expect(controller.dailyHistory.single.completionCount, 3);
+    expect(controller.dailyHistory.single.items, hasLength(3));
+
+    final checkIn = controller.checkIns.single;
+    await controller.addCheckIn(
+      id: checkIn.id,
+      energy: 6,
+      mood: 5,
+      stress: 4,
+      note: 'Updated',
+      timestamp: checkIn.timestamp,
+    );
+    expect(controller.checkIns, hasLength(1));
+    expect(controller.checkIns.single.energy, 6);
+    expect(controller.checkIns.single.note, 'Updated');
+
+    final restored = AppController();
+    await restored.load();
+    expect(restored.dailyHistory.single.completionCount, 3);
+    expect(restored.checkIns.single.energy, 6);
+
+    await restored.deleteActivityLog(restored.activityLogs.single.id);
+    await restored.deleteSleepLog(restored.sleepLogs.single.id);
+    await restored.deleteCheckIn(restored.checkIns.single.id);
+    expect(restored.dailyHistory, isEmpty);
+  });
+
   test('manual log validation covers every Version 0.6 and 0.7 input', () {
     expect(
       ActivityLogEntry.validationMessage(SignalType.hydration, -0.1),

@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: July 23, 2026  
-Current release: **Version 0.9 — Reaction-Time Test**
+Current release: **Version 0.10 — Daily History**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -111,20 +111,24 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Saved check-ins appear in on-screen daily history
 - Ratings validate and persist through the shared local repository
 
-### Version 0.9 — Reaction-Time Test ✅ Current
+### Version 0.9 — Reaction-Time Test ✅
 
 - Reaction Test is a completed daily benchmark with three valid rounds
 - Early taps and out-of-range attempts are detected and discarded
 - Valid results compare against a personal reaction-time baseline
 - Automated tests cover check-in ratings, reaction validation, baselines, and persistence
 
-## Upcoming Versions
-
-### Version 0.10 — Daily History
+### Version 0.10 — Daily History ✅ Current
 
 - Group signals and check-ins by date
 - Edit or delete manual entries
 - Display completion status for each day
+- Show grouped activity and sleep records once while retaining other signals
+- Track Activity, Sleep, Check-in, and Reaction completion for each day
+- Keep imported and fixture signals read-only
+- Automated tests cover grouping, overnight sleep dates, completion, persistence, editing, deletion, and routing
+
+## Upcoming Versions
 
 ### Version 0.11 — Basic Energy Score
 

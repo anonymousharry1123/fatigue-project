@@ -6,7 +6,9 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
 class SleepLogScreen extends StatefulWidget {
-  const SleepLogScreen({super.key});
+  const SleepLogScreen({super.key, this.initialLog});
+
+  final SleepLogEntry? initialLog;
 
   @override
   State<SleepLogScreen> createState() => _SleepLogScreenState();
@@ -22,7 +24,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   @override
   void initState() {
     super.initState();
-    _resetTimes();
+    final initialLog = widget.initialLog;
+    if (initialLog == null) {
+      _resetTimes();
+    } else {
+      _loadLog(initialLog);
+    }
   }
 
   @override
@@ -126,7 +133,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       if (_editingId != null) ...[
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: _saving ? null : _clearForm,
+                            onPressed: _saving ? null : _cancelEdit,
                             child: const Text('Cancel'),
                           ),
                         ),
@@ -263,6 +270,10 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       quality: _quality,
     );
     if (!mounted) return;
+    if (widget.initialLog != null) {
+      Navigator.of(context).pop();
+      return;
+    }
     _clearForm();
     ScaffoldMessenger.of(
       context,
@@ -270,12 +281,22 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   }
 
   void _edit(SleepLogEntry log) {
-    setState(() {
-      _editingId = log.id;
-      _bedtime = log.bedtime;
-      _wakeTime = log.wakeTime;
-      _quality = log.quality;
-    });
+    setState(() => _loadLog(log));
+  }
+
+  void _loadLog(SleepLogEntry log) {
+    _editingId = log.id;
+    _bedtime = log.bedtime;
+    _wakeTime = log.wakeTime;
+    _quality = log.quality;
+  }
+
+  void _cancelEdit() {
+    if (widget.initialLog != null) {
+      Navigator.of(context).pop();
+    } else {
+      _clearForm();
+    }
   }
 
   void _clearForm() {
