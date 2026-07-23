@@ -11,13 +11,21 @@ void main() {
       expect(CheckInLogic.isValidRating(11), isFalse);
     });
 
-    test('suggests morning before 14:00 and evening afterward', () {
+    test('assigns morning before 14:00 and evening afterward from the clock', () {
       expect(
-        CheckInLogic.suggestedPeriod(DateTime(2026, 7, 23, 8)),
+        CheckInLogic.periodFor(DateTime(2026, 7, 23, 8)),
         CheckInPeriod.morning,
       );
       expect(
-        CheckInLogic.suggestedPeriod(DateTime(2026, 7, 23, 18)),
+        CheckInLogic.periodFor(DateTime(2026, 7, 23, 13, 59)),
+        CheckInPeriod.morning,
+      );
+      expect(
+        CheckInLogic.periodFor(DateTime(2026, 7, 23, 14)),
+        CheckInPeriod.evening,
+      );
+      expect(
+        CheckInLogic.periodFor(DateTime(2026, 7, 23, 18)),
         CheckInPeriod.evening,
       );
     });

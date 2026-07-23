@@ -11,7 +11,8 @@ abstract final class CheckInLogic {
   static double clampRating(double value) =>
       value.clamp(minRating, maxRating).toDouble();
 
-  static CheckInPeriod suggestedPeriod([DateTime? now]) {
+  /// Morning before 14:00 local time; evening at/after 14:00.
+  static CheckInPeriod periodFor([DateTime? now]) {
     final hour = (now ?? DateTime.now()).hour;
     return hour < 14 ? CheckInPeriod.morning : CheckInPeriod.evening;
   }

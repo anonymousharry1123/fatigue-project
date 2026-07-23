@@ -157,7 +157,6 @@ class AppController extends ChangeNotifier {
     required double energy,
     required double mood,
     required double stress,
-    CheckInPeriod? period,
     String note = '',
     DateTime? timestamp,
   }) async {
@@ -178,7 +177,8 @@ class AppController extends ChangeNotifier {
         energy: CheckInLogic.clampRating(energy),
         mood: CheckInLogic.clampRating(mood),
         stress: CheckInLogic.clampRating(stress),
-        period: period ?? CheckInLogic.suggestedPeriod(when),
+        // Period always follows the check-in timestamp (morning < 14:00).
+        period: CheckInLogic.periodFor(when),
         note: note,
       ),
     );

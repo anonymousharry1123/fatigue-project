@@ -15,12 +15,13 @@ class DailyCheckInScreen extends StatefulWidget {
 }
 
 class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
-  late CheckInPeriod period = CheckInLogic.suggestedPeriod();
   double energy = 6;
   double mood = 6;
   double stress = 4;
   final noteController = TextEditingController();
   bool saving = false;
+
+  CheckInPeriod get period => CheckInLogic.periodFor();
 
   @override
   void dispose() {
@@ -32,6 +33,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final history = controller.recentCheckIns();
+    final period = this.period;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Daily Check-in'),
@@ -50,28 +52,12 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 7),
-                  const Text(
-                    'Rate energy, mood, and stress on a 1–10 scale. Morning and evening check-ins help Tonyo learn your day.',
-                    style: TextStyle(color: TonyoColors.muted),
+                  Text(
+                    'Rate energy, mood, and stress on a 1–10 scale. This is logged as a ${period.label.toLowerCase()} check-in based on the time of day.',
+                    style: const TextStyle(color: TonyoColors.muted),
                   ),
                   const SizedBox(height: 18),
-                  SegmentedButton<CheckInPeriod>(
-                    segments: const [
-                      ButtonSegment(
-                        value: CheckInPeriod.morning,
-                        label: Text('Morning'),
-                        icon: Icon(Icons.wb_sunny_outlined, size: 16),
-                      ),
-                      ButtonSegment(
-                        value: CheckInPeriod.evening,
-                        label: Text('Evening'),
-                        icon: Icon(Icons.nights_stay_outlined, size: 16),
-                      ),
-                    ],
-                    selected: {period},
-                    onSelectionChanged: (value) =>
-                        setState(() => period = value.first),
-                  ),
+                  _PeriodBanner(period: period),
                   const SizedBox(height: 18),
                   _RatingCard(
                     icon: Icons.bolt_rounded,
@@ -176,12 +162,14 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
 
   Future<void> _save() async {
     setState(() => saving = true);
+    final when = DateTime.now();
+    final period = CheckInLogic.periodFor(when);
     await AppScope.of(context).addCheckIn(
       energy: energy,
       mood: mood,
       stress: stress,
-      period: period,
       note: noteController.text.trim(),
+      timestamp: when,
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,6 +179,52 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
       );
       Navigator.of(context).pop();
     }
+  }
+}
+
+class _PeriodBanner extends StatelessWidget {
+  const _PeriodBanner({required this.period});
+  final CheckInPeriod period;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMorning = period == CheckInPeriod.morning;
+    final color = isMorning ? TonyoColors.amber : TonyoColors.violet;
+    final icon = isMorning
+        ? Icons.wb_sunny_outlined
+        : Icons.nights_stay_outlined;
+    return TonyoCard(
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${period.label} check-in',
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isMorning
+                      ? 'Before 2:00 PM is logged as morning.'
+                      : 'From 2:00 PM onward is logged as evening.',
+                  style: const TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
