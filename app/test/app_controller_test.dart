@@ -245,6 +245,37 @@ void main() {
     },
   );
 
+  test(
+    'Version 0.6 activity logs allow one value and persist None values',
+    () async {
+      final controller = AppController();
+      await controller.load();
+      await controller.saveActivityLog(
+        hydrationLiters: 2.2,
+        timestamp: DateTime(2026, 7, 23, 12),
+      );
+
+      expect(controller.activityLogs, hasLength(1));
+      expect(controller.activityLogs.single.hydrationLiters, 2.2);
+      expect(controller.activityLogs.single.studyHours, isNull);
+      expect(controller.activityLogs.single.exerciseHours, isNull);
+      expect(controller.activityLogs.single.screenTimeHours, isNull);
+      expect(
+        controller.signals.where(
+          (signal) => signal.groupId == controller.activityLogs.single.id,
+        ),
+        hasLength(1),
+      );
+
+      final restored = AppController();
+      await restored.load();
+      expect(restored.activityLogs.single.hydrationLiters, 2.2);
+      expect(restored.activityLogs.single.studyHours, isNull);
+
+      expect(() => controller.saveActivityLog(), throwsArgumentError);
+    },
+  );
+
   test('manual log validation covers every Version 0.6 and 0.7 input', () {
     expect(
       ActivityLogEntry.validationMessage(SignalType.hydration, -0.1),

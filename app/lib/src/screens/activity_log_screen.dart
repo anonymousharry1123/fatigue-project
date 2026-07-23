@@ -19,6 +19,12 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final _study = TextEditingController();
   final _exercise = TextEditingController();
   final _screenTime = TextEditingController();
+  final _none = <SignalType, bool>{
+    SignalType.hydration: false,
+    SignalType.study: false,
+    SignalType.exercise: false,
+    SignalType.screenTime: false,
+  };
   String? _editingId;
   bool _saving = false;
 
@@ -67,6 +73,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'liters',
                       icon: Icons.water_drop_rounded,
                       color: TonyoColors.mint,
+                      isNone: _none[SignalType.hydration]!,
+                      onNoneChanged: (value) =>
+                          _setNone(SignalType.hydration, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -77,6 +86,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.menu_book_rounded,
                       color: TonyoColors.amber,
+                      isNone: _none[SignalType.study]!,
+                      onNoneChanged: (value) =>
+                          _setNone(SignalType.study, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -87,6 +99,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.fitness_center_rounded,
                       color: TonyoColors.coral,
+                      isNone: _none[SignalType.exercise]!,
+                      onNoneChanged: (value) =>
+                          _setNone(SignalType.exercise, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -97,6 +112,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.smartphone_rounded,
                       color: TonyoColors.violet,
+                      isNone: _none[SignalType.screenTime]!,
+                      onNoneChanged: (value) =>
+                          _setNone(SignalType.screenTime, value),
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -160,13 +178,19 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_none.values.every((value) => value)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose at least one activity to save.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     await AppScope.of(context).saveActivityLog(
       id: _editingId,
-      hydrationLiters: double.parse(_hydration.text),
-      studyHours: double.parse(_study.text),
-      exerciseHours: double.parse(_exercise.text),
-      screenTimeHours: double.parse(_screenTime.text),
+      hydrationLiters: _value(SignalType.hydration, _hydration),
+      studyHours: _value(SignalType.study, _study),
+      exerciseHours: _value(SignalType.exercise, _exercise),
+      screenTimeHours: _value(SignalType.screenTime, _screenTime),
     );
     if (!mounted) return;
     _clearForm();
@@ -178,10 +202,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   void _edit(ActivityLogEntry log) {
     setState(() {
       _editingId = log.id;
-      _hydration.text = _number(log.hydrationLiters);
-      _study.text = _number(log.studyHours);
-      _exercise.text = _number(log.exerciseHours);
-      _screenTime.text = _number(log.screenTimeHours);
+      _setEditingValue(SignalType.hydration, _hydration, log.hydrationLiters);
+      _setEditingValue(SignalType.study, _study, log.studyHours);
+      _setEditingValue(SignalType.exercise, _exercise, log.exerciseHours);
+      _setEditingValue(SignalType.screenTime, _screenTime, log.screenTimeHours);
     });
   }
 
@@ -193,8 +217,38 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       _study.clear();
       _exercise.clear();
       _screenTime.clear();
+      for (final type in _none.keys) {
+        _none[type] = false;
+      }
     });
   }
+
+  void _setNone(SignalType type, bool value) {
+    setState(() {
+      _none[type] = value;
+      if (value) _controllerFor(type).clear();
+    });
+  }
+
+  void _setEditingValue(
+    SignalType type,
+    TextEditingController controller,
+    double? value,
+  ) {
+    _none[type] = value == null;
+    controller.text = value == null ? '' : _number(value);
+  }
+
+  double? _value(SignalType type, TextEditingController controller) =>
+      _none[type]! ? null : double.parse(controller.text);
+
+  TextEditingController _controllerFor(SignalType type) => switch (type) {
+    SignalType.hydration => _hydration,
+    SignalType.study => _study,
+    SignalType.exercise => _exercise,
+    SignalType.screenTime => _screenTime,
+    _ => throw ArgumentError.value(type, 'type'),
+  };
 
   static String _number(double value) =>
       value == value.roundToDouble() ? value.round().toString() : '$value';
@@ -209,6 +263,8 @@ class _NumberField extends StatelessWidget {
     required this.suffix,
     required this.icon,
     required this.color,
+    required this.isNone,
+    required this.onNoneChanged,
   });
 
   final TextEditingController controller;
@@ -217,24 +273,44 @@ class _NumberField extends StatelessWidget {
   final String suffix;
   final IconData icon;
   final Color color;
+  final bool isNone;
+  final ValueChanged<bool> onNoneChanged;
 
   @override
-  Widget build(BuildContext context) => TextFormField(
-    controller: controller,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    inputFormatters: [
-      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: TextFormField(
+          controller: controller,
+          enabled: !isNone,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
+          decoration: InputDecoration(
+            labelText: isNone ? '$label (not logged)' : label,
+            suffixText: isNone ? null : suffix,
+            prefixIcon: Icon(icon, color: isNone ? TonyoColors.muted : color),
+          ),
+          validator: (raw) {
+            if (isNone) return null;
+            final value = double.tryParse(raw?.trim() ?? '');
+            if (value == null) return 'Enter a number or choose None.';
+            return ActivityLogEntry.validationMessage(type, value);
+          },
+        ),
+      ),
+      const SizedBox(width: 8),
+      FilterChip(
+        key: Key('${type.name}-none-button'),
+        label: const Text('None'),
+        selected: isNone,
+        showCheckmark: false,
+        onSelected: onNoneChanged,
+        selectedColor: TonyoColors.primary.withValues(alpha: .25),
+      ),
     ],
-    decoration: InputDecoration(
-      labelText: label,
-      suffixText: suffix,
-      prefixIcon: Icon(icon, color: color),
-    ),
-    validator: (raw) {
-      final value = double.tryParse(raw?.trim() ?? '');
-      if (value == null) return 'Enter a number.';
-      return ActivityLogEntry.validationMessage(type, value);
-    },
   );
 }
 
@@ -277,16 +353,14 @@ class _ActivityHistoryCard extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
-            _metric(Icons.water_drop_rounded, '${log.hydrationLiters} L'),
-            _metric(Icons.menu_book_rounded, '${log.studyHours} hr study'),
-            _metric(
-              Icons.fitness_center_rounded,
-              '${log.exerciseHours} hr exercise',
-            ),
-            _metric(
-              Icons.smartphone_rounded,
-              '${log.screenTimeHours} hr screen',
-            ),
+            if (log.hydrationLiters case final value?)
+              _metric(Icons.water_drop_rounded, '$value L'),
+            if (log.studyHours case final value?)
+              _metric(Icons.menu_book_rounded, '$value hr study'),
+            if (log.exerciseHours case final value?)
+              _metric(Icons.fitness_center_rounded, '$value hr exercise'),
+            if (log.screenTimeHours case final value?)
+              _metric(Icons.smartphone_rounded, '$value hr screen'),
           ],
         ),
       ],

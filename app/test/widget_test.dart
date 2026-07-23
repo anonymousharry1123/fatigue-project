@@ -109,9 +109,9 @@ void main() {
 
     expect(find.text('Log today’s activity'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('hydration-field')), '11');
-    await tester.enterText(find.byKey(const Key('study-field')), '3');
-    await tester.enterText(find.byKey(const Key('exercise-field')), '1');
-    await tester.enterText(find.byKey(const Key('screen-time-field')), '4');
+    await tester.tap(find.byKey(const Key('study-none-button')));
+    await tester.tap(find.byKey(const Key('exercise-none-button')));
+    await tester.tap(find.byKey(const Key('screenTime-none-button')));
     await tester.ensureVisible(find.text('Save activity'));
     await tester.tap(find.text('Save activity'));
     await tester.pump();
@@ -123,6 +123,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Activity log saved.'), findsOneWidget);
     expect(controller.activityLogs, hasLength(1));
+    expect(controller.activityLogs.single.hydrationLiters, 2.5);
+    expect(controller.activityLogs.single.studyHours, isNull);
+    expect(controller.activityLogs.single.exerciseHours, isNull);
+    expect(controller.activityLogs.single.screenTimeHours, isNull);
+    expect(
+      controller.signals.where(
+        (signal) => signal.groupId == controller.activityLogs.single.id,
+      ),
+      hasLength(1),
+    );
   });
 
   testWidgets('Version 0.7 sleep log shows duration and recent entries', (
