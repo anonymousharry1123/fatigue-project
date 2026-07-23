@@ -1,6 +1,7 @@
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/demo_data.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,13 +47,28 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Daily check-in'));
     await tester.pumpAndSettle();
-    expect(find.text('How drained do you feel?'), findsOneWidget);
+    expect(find.text('How are you feeling?'), findsOneWidget);
+    expect(find.text('Energy'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('Stress'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('Stress'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Check-in history'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Check-in history'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Reaction test'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction Test'), findsOneWidget);
+    expect(find.text('Personal baseline'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

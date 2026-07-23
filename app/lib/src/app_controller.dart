@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'check_in_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
 import 'models.dart';
+import 'reaction_test_logic.dart';
 
 class AppController extends ChangeNotifier {
   AppController({HealthService? healthService})
@@ -41,6 +43,12 @@ class AppController extends ChangeNotifier {
             (item) => item.copyWith(status: _recommendationStatuses[item.id]),
           )
           .toList();
+
+  /// Personal reaction baseline from prior valid tests (Version 0.9).
+  double? get reactionBaseline => ReactionTestLogic.baselineMs(signals);
+
+  List<DailyCheckIn> recentCheckIns({int limit = 8}) =>
+      CheckInLogic.recentHistory(checkIns, limit: limit);
 
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -149,20 +157,46 @@ class AppController extends ChangeNotifier {
     required double energy,
     required double mood,
     required double stress,
+    CheckInPeriod? period,
     String note = '',
+    DateTime? timestamp,
   }) async {
+    if (!CheckInLogic.isValidRating(energy) ||
+        !CheckInLogic.isValidRating(mood) ||
+        !CheckInLogic.isValidRating(stress)) {
+      throw ArgumentError(
+        'Energy, mood, and stress must each be between '
+        '${CheckInLogic.minRating} and ${CheckInLogic.maxRating}',
+      );
+    }
+    final when = timestamp ?? DateTime.now();
     checkIns.insert(
       0,
       DailyCheckIn(
-        id: 'checkin-${DateTime.now().microsecondsSinceEpoch}',
-        timestamp: DateTime.now(),
-        energy: energy,
-        mood: mood,
-        stress: stress,
+        id: 'checkin-${when.microsecondsSinceEpoch}',
+        timestamp: when,
+        energy: CheckInLogic.clampRating(energy),
+        mood: CheckInLogic.clampRating(mood),
+        stress: CheckInLogic.clampRating(stress),
+        period: period ?? CheckInLogic.suggestedPeriod(when),
         note: note,
       ),
     );
     await _commit();
+  }
+
+  Future<void> addReactionResult(double averageMs, {String? note}) async {
+    if (!ReactionTestLogic.isValidReaction(averageMs.round())) {
+      throw ArgumentError(
+        'Reaction average must be between '
+        '${ReactionTestLogic.minValidMs} and ${ReactionTestLogic.maxValidMs} ms',
+      );
+    }
+    await addSignal(
+      SignalType.reactionTime,
+      averageMs,
+      note: note ?? 'Three-round reaction test',
+    );
   }
 
   Future<void> deleteSignal(String id) async {

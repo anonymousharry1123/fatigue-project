@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'coach_screen.dart';
@@ -24,7 +25,7 @@ class AddDataScreen extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           const Text(
-            'Preview the daily tools that will feed your personal model.',
+            'Log how you feel and run your daily reaction benchmark.',
             style: TextStyle(color: TonyoColors.muted),
           ),
           const SectionHeader('Daily inputs'),
@@ -32,7 +33,7 @@ class AddDataScreen extends StatelessWidget {
             icon: Icons.tune_rounded,
             color: TonyoColors.amber,
             title: 'Daily check-in',
-            detail: 'Fatigue and focus self-ratings',
+            detail: 'Energy, mood, and stress · 1–10',
             badge: '${controller.checkIns.length} saved',
             onTap: () => _push(context, const DailyCheckInScreen()),
           ),
@@ -41,8 +42,10 @@ class AddDataScreen extends StatelessWidget {
             icon: Icons.bolt_rounded,
             color: TonyoColors.primary,
             title: 'Reaction test',
-            detail: 'Three quick reaction rounds',
-            badge: '30 sec',
+            detail: 'Three valid rounds vs your baseline',
+            badge: controller.reactionBaseline == null
+                ? 'New'
+                : '${controller.reactionBaseline!.round()} ms',
             onTap: () => _push(context, const ReactionTestScreen()),
           ),
           const SectionHeader('Plan preview'),
@@ -69,12 +72,12 @@ class AddDataScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Version 0.5 local storage',
+                        'Versions 0.8 & 0.9',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${controller.signals.length} fixture signals and ${controller.checkIns.length} check-ins are persisted on this device.',
+                        '${controller.checkIns.length} mood/stress check-ins and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are saved on this device.',
                         style: const TextStyle(
                           color: TonyoColors.muted,
                           fontSize: 11,

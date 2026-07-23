@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: July 21, 2026  
-Current release: **Version 0.5 — Local Storage**
+Last updated: July 23, 2026  
+Current release: **Version 0.9 — Reaction-Time Test**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -33,7 +33,7 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Editable Profile screen
 - Wellness-only positioning and privacy messaging
 
-### Version 0.5 — Local Storage ✅ Current
+### Version 0.5 — Local Storage ✅
 
 - Profile and onboarding state persist across app restarts
 - Shared local repository for fixture signals and check-ins
@@ -41,6 +41,20 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Today and Forecast screens render from the shared persisted state
 - Daily Check-in, Reaction Test, Insights, AI Coach, and Profile designs are connected as fixture-backed previews
 - Automated tests cover persistence, scoring fixtures, onboarding, navigation, and screen routing
+
+### Version 0.8 — Mood and Stress Check-In ✅
+
+- Daily Check-in stores morning and evening energy, mood, and stress
+- Mood and stress use an intuitive 1–10 scale (energy matches the same scale)
+- Saved check-ins appear in on-screen daily history
+- Ratings validate and persist through the shared local repository
+
+### Version 0.9 — Reaction-Time Test ✅ Current
+
+- Reaction Test is a completed daily benchmark with three valid rounds
+- Early taps and out-of-range attempts are detected and discarded
+- Valid results compare against a personal reaction-time baseline
+- Automated tests cover check-in ratings, reaction validation, baselines, and persistence
 
 ## Upcoming Versions
 
@@ -55,18 +69,6 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Record bedtime, wake time, and sleep quality
 - Calculate sleep duration and bedtime consistency
 - Display recent sleep entries
-
-### Version 0.8 — Mood and Stress Check-In
-
-- Promote the Daily Check-in preview into a completed feature
-- Store morning and evening energy, stress, and mood ratings
-- Display saved check-ins in daily history
-
-### Version 0.9 — Reaction-Time Test
-
-- Promote the Reaction Test preview into a completed daily benchmark
-- Detect early taps and invalid attempts
-- Compare valid results with a personal baseline
 
 ### Version 0.10 — Daily History
 
@@ -225,7 +227,7 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 ## Stable Data Interfaces
 
 - `SignalReading`: measurement type, value, unit, timestamp, source, and quality
-- `DailyCheckIn`: energy, mood, stress, and optional notes
+- `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers
 - `ForecastPoint`: predicted energy, timestamp, and uncertainty
 - `ForecastWindow`: peak, crash, or recovery period
