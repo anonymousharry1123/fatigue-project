@@ -119,10 +119,10 @@ class ActivityLogEntry {
 
   final String id;
   final DateTime timestamp;
-  final double hydrationLiters;
-  final double studyHours;
-  final double exerciseHours;
-  final double screenTimeHours;
+  final double? hydrationLiters;
+  final double? studyHours;
+  final double? exerciseHours;
+  final double? screenTimeHours;
 
   static String? validationMessage(SignalType type, double value) {
     if (!value.isFinite) return 'Enter a valid number.';

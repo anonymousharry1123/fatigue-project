@@ -47,9 +47,9 @@ class AppController extends ChangeNotifier {
       final study = valueFor(SignalType.study);
       final exercise = valueFor(SignalType.exercise);
       final screenTime = valueFor(SignalType.screenTime);
-      if (hydration == null ||
-          study == null ||
-          exercise == null ||
+      if (hydration == null &&
+          study == null &&
+          exercise == null &&
           screenTime == null) {
         continue;
       }
@@ -201,22 +201,28 @@ class AppController extends ChangeNotifier {
 
   Future<void> saveActivityLog({
     String? id,
-    required double hydrationLiters,
-    required double studyHours,
-    required double exerciseHours,
-    required double screenTimeHours,
+    double? hydrationLiters,
+    double? studyHours,
+    double? exerciseHours,
+    double? screenTimeHours,
     DateTime? timestamp,
   }) async {
-    final values = {
+    final values = <SignalType, double?>{
       SignalType.hydration: hydrationLiters,
       SignalType.study: studyHours,
       SignalType.exercise: exerciseHours,
       SignalType.screenTime: screenTimeHours,
     };
-    for (final entry in values.entries) {
+    final selectedValues = values.entries
+        .where((entry) => entry.value != null)
+        .toList();
+    if (selectedValues.isEmpty) {
+      throw ArgumentError('Choose at least one activity to save.');
+    }
+    for (final entry in selectedValues) {
       final message = ActivityLogEntry.validationMessage(
         entry.key,
-        entry.value,
+        entry.value!,
       );
       if (message != null) {
         throw ArgumentError.value(entry.value, entry.key.name, message);
@@ -228,12 +234,12 @@ class AppController extends ChangeNotifier {
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(
       0,
-      values.entries.map(
+      selectedValues.map(
         (entry) => SignalReading(
           id: '$groupId-${entry.key.name}',
           groupId: groupId,
           type: entry.key,
-          value: entry.value,
+          value: entry.value!,
           timestamp: recordedAt,
         ),
       ),
