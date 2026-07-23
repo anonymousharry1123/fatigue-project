@@ -304,27 +304,78 @@ class _RatingCard extends StatelessWidget {
             ],
           ),
         ),
-        Slider(
-          value: value,
-          min: CheckInLogic.minRating,
-          max: CheckInLogic.maxRating,
-          divisions: 9,
-          activeColor: color,
-          onChanged: onChanged,
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            overlayShape: SliderComponentShape.noOverlay,
+            trackShape: const RoundedRectSliderTrackShape(),
+            thumbShape: const RoundSliderThumbShape(
+              enabledThumbRadius: _thumbRadius,
+            ),
+            showValueIndicator: ShowValueIndicator.never,
+            // Zero out Material 3 padding so label inset matches thumb centers.
+            padding: EdgeInsets.zero,
+          ),
+          child: Slider(
+            value: value,
+            min: CheckInLogic.minRating,
+            max: CheckInLogic.maxRating,
+            divisions: 9,
+            activeColor: color,
+            onChanged: onChanged,
+          ),
         ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(low, style: _caption),
-            Text(middle, style: _caption),
-            Text(high, style: _caption),
-          ],
+        // Only 1 / 5 / 10 — placed at true tick fractions (5 is at 4/9, not 50%).
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _thumbRadius),
+          child: SizedBox(
+            height: 28,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final trackWidth = constraints.maxWidth;
+                Widget tickLabel(double rating, String text) {
+                  final fraction =
+                      (rating - CheckInLogic.minRating) /
+                      (CheckInLogic.maxRating - CheckInLogic.minRating);
+                  const labelWidth = 76.0;
+                  final centerX = fraction * trackWidth;
+                  return Positioned(
+                    left: centerX - labelWidth / 2,
+                    width: labelWidth,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Text(
+                        text,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.visible,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    tickLabel(1, low),
+                    tickLabel(5, middle),
+                    tickLabel(10, high),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ],
     ),
   );
 
-  static const _caption = TextStyle(color: TonyoColors.muted, fontSize: 9);
+  static const _thumbRadius = 10.0;
 }
 
 class _HistoryCard extends StatelessWidget {

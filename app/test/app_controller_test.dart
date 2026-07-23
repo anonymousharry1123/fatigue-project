@@ -246,7 +246,7 @@ void main() {
   );
 
   test(
-    'Version 0.6 activity logs allow one value and persist None values',
+    'Version 0.6 activity logs treat omitted fields as zero',
     () async {
       final controller = AppController();
       await controller.load();
@@ -257,20 +257,20 @@ void main() {
 
       expect(controller.activityLogs, hasLength(1));
       expect(controller.activityLogs.single.hydrationLiters, 2.2);
-      expect(controller.activityLogs.single.studyHours, isNull);
-      expect(controller.activityLogs.single.exerciseHours, isNull);
-      expect(controller.activityLogs.single.screenTimeHours, isNull);
+      expect(controller.activityLogs.single.studyHours, 0);
+      expect(controller.activityLogs.single.exerciseHours, 0);
+      expect(controller.activityLogs.single.screenTimeHours, 0);
       expect(
         controller.signals.where(
           (signal) => signal.groupId == controller.activityLogs.single.id,
         ),
-        hasLength(1),
+        hasLength(4),
       );
 
       final restored = AppController();
       await restored.load();
       expect(restored.activityLogs.single.hydrationLiters, 2.2);
-      expect(restored.activityLogs.single.studyHours, isNull);
+      expect(restored.activityLogs.single.studyHours, 0);
 
       expect(() => controller.saveActivityLog(), throwsArgumentError);
     },

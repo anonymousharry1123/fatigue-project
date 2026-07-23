@@ -81,6 +81,18 @@
 
 **Major issues:** None beyond the product rule that evening check-ins must not be mislabeled as morning.
 
+### 2026-07-23 (UI polish) — Check-in slider alignment + activity category charts
+
+**Goal:** Align daily check-in scale labels under slider ticks; improve activity logging UX.
+
+**Results:**
+- Check-in rating cards use a 1–10 tick row under the slider so the “5” label centers on the middle tick.
+- Activity log: removed None chips; blank fields save as 0; all four categories persist together.
+- Added last-7-days category bar charts highlighting the peak day for hydration, study, exercise, and screen time.
+- `flutter test` — 32 tests passed.
+
+**Major issues:** Chart column overflow when value labels sat above tall bars — fixed by reserving label height and capping bar height.
+
 ### 2026-07-23 (closeout) — Implementation report + post-merge test repair
 
 **Goal:** Refresh this development log to reflect completion through v0.9 and confirm the full suite is green on `main`.
@@ -127,13 +139,15 @@
 
 **Modifications:** None expected beyond review on GitHub.
 
-### Docs: Implementation report closeout
+### Feature: Check-in slider + activity category charts
 **Prompt:**
-"update development log with current implementation report, we have completed up to .9. double check all tests pass"
+"fix these following issues/small changes. *daily checkin ui should be centered so that the label for 5 is under the ticker on the number line
 
-**Result:** Implementation report added; merge syntax fixes applied; test suite re-verified.
+*activity data should be split up between the different categories. remove the none button and make it so that if user inputs an activity and leaves others blank those will be taken as 0. the recent activity should be broken down into different categories of the last week. show which days had the most of each category in a bar chart"
 
-**Modifications:** _(none expected beyond this log update)_
+**Result:** Slider tick labels aligned; None removed; blanks → 0; weekly per-category peak charts added; tests updated (32 passing).
+
+**Modifications:** None expected.
 
 ---
 

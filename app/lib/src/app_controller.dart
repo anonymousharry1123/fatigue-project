@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'activity_log_logic.dart';
 import 'check_in_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
@@ -57,10 +58,10 @@ class AppController extends ChangeNotifier {
         ActivityLogEntry(
           id: group.key,
           timestamp: group.value.first.timestamp,
-          hydrationLiters: hydration,
-          studyHours: study,
-          exerciseHours: exercise,
-          screenTimeHours: screenTime,
+          hydrationLiters: hydration ?? 0,
+          studyHours: study ?? 0,
+          exerciseHours: exercise ?? 0,
+          screenTimeHours: screenTime ?? 0,
         ),
       );
     }
@@ -207,23 +208,26 @@ class AppController extends ChangeNotifier {
     double? screenTimeHours,
     DateTime? timestamp,
   }) async {
-    final values = <SignalType, double?>{
-      SignalType.hydration: hydrationLiters,
-      SignalType.study: studyHours,
-      SignalType.exercise: exerciseHours,
-      SignalType.screenTime: screenTimeHours,
-    };
-    final selectedValues = values.entries
-        .where((entry) => entry.value != null)
-        .toList();
-    if (selectedValues.isEmpty) {
-      throw ArgumentError('Choose at least one activity to save.');
+    final hydration = ActivityLogLogic.valueOrZero(hydrationLiters);
+    final study = ActivityLogLogic.valueOrZero(studyHours);
+    final exercise = ActivityLogLogic.valueOrZero(exerciseHours);
+    final screenTime = ActivityLogLogic.valueOrZero(screenTimeHours);
+    if (!ActivityLogLogic.hasAnyLoggedValue(
+      hydrationLiters: hydration,
+      studyHours: study,
+      exerciseHours: exercise,
+      screenTimeHours: screenTime,
+    )) {
+      throw ArgumentError('Enter at least one activity value.');
     }
-    for (final entry in selectedValues) {
-      final message = ActivityLogEntry.validationMessage(
-        entry.key,
-        entry.value!,
-      );
+    final values = <SignalType, double>{
+      SignalType.hydration: hydration,
+      SignalType.study: study,
+      SignalType.exercise: exercise,
+      SignalType.screenTime: screenTime,
+    };
+    for (final entry in values.entries) {
+      final message = ActivityLogEntry.validationMessage(entry.key, entry.value);
       if (message != null) {
         throw ArgumentError.value(entry.value, entry.key.name, message);
       }
@@ -234,12 +238,12 @@ class AppController extends ChangeNotifier {
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(
       0,
-      selectedValues.map(
+      values.entries.map(
         (entry) => SignalReading(
           id: '$groupId-${entry.key.name}',
           groupId: groupId,
           type: entry.key,
-          value: entry.value!,
+          value: entry.value,
           timestamp: recordedAt,
         ),
       ),

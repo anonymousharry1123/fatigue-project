@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../activity_log_logic.dart';
 import '../app.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -19,12 +20,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final _study = TextEditingController();
   final _exercise = TextEditingController();
   final _screenTime = TextEditingController();
-  final _none = <SignalType, bool>{
-    SignalType.hydration: false,
-    SignalType.study: false,
-    SignalType.exercise: false,
-    SignalType.screenTime: false,
-  };
   String? _editingId;
   bool _saving = false;
 
@@ -39,7 +34,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final logs = AppScope.of(context).activityLogs;
+    final controller = AppScope.of(context);
+    final logs = controller.activityLogs;
+    final week = ActivityLogLogic.weekByCategory(logs);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Activity Log'),
@@ -56,7 +53,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Add the daily behaviors that shape your energy forecast.',
+              'Fill any categories you tracked. Blank fields save as 0.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 18),
@@ -73,9 +70,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'liters',
                       icon: Icons.water_drop_rounded,
                       color: TonyoColors.mint,
-                      isNone: _none[SignalType.hydration]!,
-                      onNoneChanged: (value) =>
-                          _setNone(SignalType.hydration, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -86,9 +80,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.menu_book_rounded,
                       color: TonyoColors.amber,
-                      isNone: _none[SignalType.study]!,
-                      onNoneChanged: (value) =>
-                          _setNone(SignalType.study, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -99,9 +90,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.fitness_center_rounded,
                       color: TonyoColors.coral,
-                      isNone: _none[SignalType.exercise]!,
-                      onNoneChanged: (value) =>
-                          _setNone(SignalType.exercise, value),
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -112,9 +100,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       suffix: 'hours',
                       icon: Icons.smartphone_rounded,
                       color: TonyoColors.violet,
-                      isNone: _none[SignalType.screenTime]!,
-                      onNoneChanged: (value) =>
-                          _setNone(SignalType.screenTime, value),
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -148,7 +133,22 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                 ),
               ),
             ),
-            SectionHeader('Recent activity', action: '${logs.length} saved'),
+            const SectionHeader('Last 7 days by category'),
+            if (!week.any((series) => series.hasData))
+              const TonyoCard(
+                child: Text(
+                  'No activity yet this week. Save a log to see daily category charts.',
+                  style: TextStyle(color: TonyoColors.muted),
+                ),
+              )
+            else
+              ...week.map(
+                (series) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _CategoryWeekCard(series: series),
+                ),
+              ),
+            SectionHeader('Recent entries', action: '${logs.length} saved'),
             if (logs.isEmpty)
               const TonyoCard(
                 child: Text(
@@ -178,34 +178,51 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_none.values.every((value) => value)) {
+    final hydration = _parsed(_hydration);
+    final study = _parsed(_study);
+    final exercise = _parsed(_exercise);
+    final screenTime = _parsed(_screenTime);
+    if (!ActivityLogLogic.hasAnyLoggedValue(
+      hydrationLiters: hydration,
+      studyHours: study,
+      exerciseHours: exercise,
+      screenTimeHours: screenTime,
+    )) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose at least one activity to save.')),
+        const SnackBar(content: Text('Enter at least one activity value.')),
       );
       return;
     }
     setState(() => _saving = true);
-    await AppScope.of(context).saveActivityLog(
-      id: _editingId,
-      hydrationLiters: _value(SignalType.hydration, _hydration),
-      studyHours: _value(SignalType.study, _study),
-      exerciseHours: _value(SignalType.exercise, _exercise),
-      screenTimeHours: _value(SignalType.screenTime, _screenTime),
-    );
-    if (!mounted) return;
-    _clearForm();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Activity log saved.')));
+    try {
+      await AppScope.of(context).saveActivityLog(
+        id: _editingId,
+        hydrationLiters: hydration,
+        studyHours: study,
+        exerciseHours: exercise,
+        screenTimeHours: screenTime,
+      );
+      if (!mounted) return;
+      _clearForm();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Activity log saved.')));
+    } on ArgumentError catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$error')));
+    }
   }
 
   void _edit(ActivityLogEntry log) {
     setState(() {
       _editingId = log.id;
-      _setEditingValue(SignalType.hydration, _hydration, log.hydrationLiters);
-      _setEditingValue(SignalType.study, _study, log.studyHours);
-      _setEditingValue(SignalType.exercise, _exercise, log.exerciseHours);
-      _setEditingValue(SignalType.screenTime, _screenTime, log.screenTimeHours);
+      _hydration.text = _number(log.hydrationLiters ?? 0);
+      _study.text = _number(log.studyHours ?? 0);
+      _exercise.text = _number(log.exerciseHours ?? 0);
+      _screenTime.text = _number(log.screenTimeHours ?? 0);
     });
   }
 
@@ -217,38 +234,14 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       _study.clear();
       _exercise.clear();
       _screenTime.clear();
-      for (final type in _none.keys) {
-        _none[type] = false;
-      }
     });
   }
 
-  void _setNone(SignalType type, bool value) {
-    setState(() {
-      _none[type] = value;
-      if (value) _controllerFor(type).clear();
-    });
+  double _parsed(TextEditingController controller) {
+    final raw = controller.text.trim();
+    if (raw.isEmpty) return 0;
+    return double.parse(raw);
   }
-
-  void _setEditingValue(
-    SignalType type,
-    TextEditingController controller,
-    double? value,
-  ) {
-    _none[type] = value == null;
-    controller.text = value == null ? '' : _number(value);
-  }
-
-  double? _value(SignalType type, TextEditingController controller) =>
-      _none[type]! ? null : double.parse(controller.text);
-
-  TextEditingController _controllerFor(SignalType type) => switch (type) {
-    SignalType.hydration => _hydration,
-    SignalType.study => _study,
-    SignalType.exercise => _exercise,
-    SignalType.screenTime => _screenTime,
-    _ => throw ArgumentError.value(type, 'type'),
-  };
 
   static String _number(double value) =>
       value == value.roundToDouble() ? value.round().toString() : '$value';
@@ -263,8 +256,6 @@ class _NumberField extends StatelessWidget {
     required this.suffix,
     required this.icon,
     required this.color,
-    required this.isNone,
-    required this.onNoneChanged,
   });
 
   final TextEditingController controller;
@@ -273,45 +264,172 @@ class _NumberField extends StatelessWidget {
   final String suffix;
   final IconData icon;
   final Color color;
-  final bool isNone;
-  final ValueChanged<bool> onNoneChanged;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: TextFormField(
-          controller: controller,
-          enabled: !isNone,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-          ],
-          decoration: InputDecoration(
-            labelText: isNone ? '$label (not logged)' : label,
-            suffixText: isNone ? null : suffix,
-            prefixIcon: Icon(icon, color: isNone ? TonyoColors.muted : color),
-          ),
-          validator: (raw) {
-            if (isNone) return null;
-            final value = double.tryParse(raw?.trim() ?? '');
-            if (value == null) return 'Enter a number or choose None.';
-            return ActivityLogEntry.validationMessage(type, value);
-          },
-        ),
-      ),
-      const SizedBox(width: 8),
-      FilterChip(
-        key: Key('${type.name}-none-button'),
-        label: const Text('None'),
-        selected: isNone,
-        showCheckmark: false,
-        onSelected: onNoneChanged,
-        selectedColor: TonyoColors.primary.withValues(alpha: .25),
-      ),
+  Widget build(BuildContext context) => TextFormField(
+    controller: controller,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    inputFormatters: [
+      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
     ],
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: '0 if blank',
+      suffixText: suffix,
+      prefixIcon: Icon(icon, color: color),
+    ),
+    validator: (raw) {
+      final text = raw?.trim() ?? '';
+      if (text.isEmpty) return null;
+      final value = double.tryParse(text);
+      if (value == null) return 'Enter a valid number.';
+      return ActivityLogEntry.validationMessage(type, value);
+    },
   );
+}
+
+class _CategoryWeekCard extends StatelessWidget {
+  const _CategoryWeekCard({required this.series});
+  final CategoryWeekSeries series;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color(series.type);
+    final unit = ActivityLogLogic.categoryUnit(series.type);
+    final peakLabel = series.hasData
+        ? 'Most on ${_weekday(series.peakDay)} · ${_format(series.peakValue)} $unit'
+        : 'No data this week';
+    return TonyoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(_icon(series.type), color: color, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  ActivityLogLogic.categoryTitle(series.type),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              Text(
+                peakLabel,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 124,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: series.values.asMap().entries.map((entry) {
+                final max = series.values.fold<double>(
+                  0,
+                  (peak, value) => value > peak ? value : peak,
+                );
+                final height = max <= 0
+                    ? 10.0
+                    : (10 + (entry.value / max) * 78).clamp(10, 88).toDouble();
+                final isPeak =
+                    series.hasData && entry.key == series.peakDayIndex;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 14,
+                          child: entry.value > 0
+                              ? Text(
+                                  _format(entry.value),
+                                  style: TextStyle(
+                                    color: isPeak ? color : TonyoColors.muted,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          height: height,
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(6),
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: isPeak
+                                  ? [color, color.withValues(alpha: .65)]
+                                  : [
+                                      color.withValues(alpha: .35),
+                                      color.withValues(alpha: .18),
+                                    ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: series.days
+                .map(
+                  (day) => Expanded(
+                    child: Text(
+                      _weekday(day),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: TonyoColors.muted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static IconData _icon(SignalType type) => switch (type) {
+    SignalType.hydration => Icons.water_drop_rounded,
+    SignalType.study => Icons.menu_book_rounded,
+    SignalType.exercise => Icons.fitness_center_rounded,
+    SignalType.screenTime => Icons.smartphone_rounded,
+    _ => Icons.insights_rounded,
+  };
+
+  static Color _color(SignalType type) => switch (type) {
+    SignalType.hydration => TonyoColors.mint,
+    SignalType.study => TonyoColors.amber,
+    SignalType.exercise => TonyoColors.coral,
+    SignalType.screenTime => TonyoColors.violet,
+    _ => TonyoColors.primary,
+  };
+
+  static String _weekday(DateTime day) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels[day.weekday - 1];
+  }
+
+  static String _format(double value) =>
+      value == value.roundToDouble() ? '${value.round()}' : value.toStringAsFixed(1);
 }
 
 class _ActivityHistoryCard extends StatelessWidget {
@@ -353,19 +471,34 @@ class _ActivityHistoryCard extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
-            if (log.hydrationLiters case final value?)
-              _metric(Icons.water_drop_rounded, '$value L'),
-            if (log.studyHours case final value?)
-              _metric(Icons.menu_book_rounded, '$value hr study'),
-            if (log.exerciseHours case final value?)
-              _metric(Icons.fitness_center_rounded, '$value hr exercise'),
-            if (log.screenTimeHours case final value?)
-              _metric(Icons.smartphone_rounded, '$value hr screen'),
+            _metric(
+              Icons.water_drop_rounded,
+              '${_format(log.hydrationLiters)} L',
+            ),
+            _metric(
+              Icons.menu_book_rounded,
+              '${_format(log.studyHours)} hr study',
+            ),
+            _metric(
+              Icons.fitness_center_rounded,
+              '${_format(log.exerciseHours)} hr exercise',
+            ),
+            _metric(
+              Icons.smartphone_rounded,
+              '${_format(log.screenTimeHours)} hr screen',
+            ),
           ],
         ),
       ],
     ),
   );
+
+  String _format(double? value) {
+    final amount = value ?? 0;
+    return amount == amount.roundToDouble()
+        ? '${amount.round()}'
+        : amount.toStringAsFixed(1);
+  }
 
   Widget _metric(IconData icon, String text) => Row(
     mainAxisSize: MainAxisSize.min,

@@ -108,10 +108,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Log today’s activity'), findsOneWidget);
+    expect(find.text('None'), findsNothing);
     await tester.enterText(find.byKey(const Key('hydration-field')), '11');
-    await tester.tap(find.byKey(const Key('study-none-button')));
-    await tester.tap(find.byKey(const Key('exercise-none-button')));
-    await tester.tap(find.byKey(const Key('screenTime-none-button')));
     await tester.ensureVisible(find.text('Save activity'));
     await tester.tap(find.text('Save activity'));
     await tester.pump();
@@ -119,20 +117,23 @@ void main() {
     expect(controller.activityLogs, isEmpty);
 
     await tester.enterText(find.byKey(const Key('hydration-field')), '2.5');
+    await tester.ensureVisible(find.text('Save activity'));
     await tester.tap(find.text('Save activity'));
     await tester.pumpAndSettle();
     expect(find.text('Activity log saved.'), findsOneWidget);
     expect(controller.activityLogs, hasLength(1));
     expect(controller.activityLogs.single.hydrationLiters, 2.5);
-    expect(controller.activityLogs.single.studyHours, isNull);
-    expect(controller.activityLogs.single.exerciseHours, isNull);
-    expect(controller.activityLogs.single.screenTimeHours, isNull);
+    expect(controller.activityLogs.single.studyHours, 0);
+    expect(controller.activityLogs.single.exerciseHours, 0);
+    expect(controller.activityLogs.single.screenTimeHours, 0);
     expect(
       controller.signals.where(
         (signal) => signal.groupId == controller.activityLogs.single.id,
       ),
-      hasLength(1),
+      hasLength(4),
     );
+    expect(find.text('Last 7 days by category'), findsOneWidget);
+    expect(find.text('Hydration'), findsWidgets);
   });
 
   testWidgets('Version 0.7 sleep log shows duration and recent entries', (
