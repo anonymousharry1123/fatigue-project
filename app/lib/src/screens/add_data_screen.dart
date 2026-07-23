@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'activity_log_screen.dart';
 import 'coach_screen.dart';
 import 'daily_checkin_screen.dart';
 import 'reaction_test_screen.dart';
+import 'sleep_log_screen.dart';
 
 class AddDataScreen extends StatelessWidget {
   const AddDataScreen({super.key});
@@ -24,12 +26,30 @@ class AddDataScreen extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           const Text(
-            'Preview the daily tools that will feed your personal model.',
+            'Record the daily signals that feed your personal model.',
             style: TextStyle(color: TonyoColors.muted),
+          ),
+          const SectionHeader('Manual logs'),
+          _LaunchCard(
+            icon: Icons.tune_rounded,
+            color: TonyoColors.amber,
+            title: 'Activity log',
+            detail: 'Hydration, study, exercise, and screen time',
+            badge: '${controller.activityLogs.length} saved',
+            onTap: () => _push(context, const ActivityLogScreen()),
+          ),
+          const SizedBox(height: 10),
+          _LaunchCard(
+            icon: Icons.bedtime_rounded,
+            color: TonyoColors.blue,
+            title: 'Sleep log',
+            detail: 'Bedtime, wake time, quality, and consistency',
+            badge: '${controller.sleepLogs.length} saved',
+            onTap: () => _push(context, const SleepLogScreen()),
           ),
           const SectionHeader('Daily inputs'),
           _LaunchCard(
-            icon: Icons.tune_rounded,
+            icon: Icons.sentiment_satisfied_alt_rounded,
             color: TonyoColors.amber,
             title: 'Daily check-in',
             detail: 'Fatigue and focus self-ratings',
@@ -69,12 +89,12 @@ class AddDataScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Version 0.5.1 local storage',
+                        'Version 0.7 local storage',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${controller.signals.length} fixture signals and ${controller.checkIns.length} check-ins are persisted on this device.',
+                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, and ${controller.checkIns.length} check-ins are persisted on this device.',
                         style: const TextStyle(
                           color: TonyoColors.muted,
                           fontSize: 11,

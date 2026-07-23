@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: July 21, 2026  
-Current release: **Version 0.5.1 — Account and Navigation Update**
+Last updated: July 23, 2026
+Current release: **Version 0.7 — Manual Sleep Log**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -42,7 +42,7 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Daily Check-in, Reaction Test, Insights, AI Coach, and Profile designs are connected as fixture-backed previews
 - Automated tests cover persistence, scoring fixtures, onboarding, navigation, and screen routing
 
-### Version 0.5.1 — Account and Navigation Update ✅ Current
+### Version 0.5.1 — Account and Navigation Update ✅
 
 - Welcome continues into local account creation before personal-model setup
 - Account setup validates email and password confirmation without persisting the password
@@ -51,19 +51,23 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Profile displays the locally saved account email
 - Automated tests cover the new account flow and navigation structure
 
-## Upcoming Versions
-
-### Version 0.6 — Manual Activity Log
+### Version 0.6 — Manual Activity Log ✅
 
 - Record hydration, study time, exercise load, and screen time
 - Validate values and reject impossible entries
 - Edit and add data through the center navigation action
+- Persist grouped activity records locally
+- Automated tests cover validation, editing, persistence, and the activity form
 
-### Version 0.7 — Manual Sleep Log
+### Version 0.7 — Manual Sleep Log ✅ Current
 
 - Record bedtime, wake time, and sleep quality
 - Calculate sleep duration and bedtime consistency
 - Display recent sleep entries
+- Edit or remove manual sleep entries
+- Automated tests cover overnight duration, consistency, validation, persistence, and the sleep form
+
+## Upcoming Versions
 
 ### Version 0.8 — Mood and Stress Check-In
 

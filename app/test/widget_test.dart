@@ -76,9 +76,58 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('AI Coach'), 250);
     await tester.tap(find.text('AI Coach'));
     await tester.pumpAndSettle();
     expect(find.text('Today’s plan'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.6 activity log validates and saves manual data', (
+    tester,
+  ) async {
+    final controller = readyController();
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Activity log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Log today’s activity'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('hydration-field')), '11');
+    await tester.enterText(find.byKey(const Key('study-field')), '3');
+    await tester.enterText(find.byKey(const Key('exercise-field')), '1');
+    await tester.enterText(find.byKey(const Key('screen-time-field')), '4');
+    await tester.ensureVisible(find.text('Save activity'));
+    await tester.tap(find.text('Save activity'));
+    await tester.pump();
+    expect(find.text('Enter 0–10 liters.'), findsOneWidget);
+    expect(controller.activityLogs, isEmpty);
+
+    await tester.enterText(find.byKey(const Key('hydration-field')), '2.5');
+    await tester.tap(find.text('Save activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity log saved.'), findsOneWidget);
+    expect(controller.activityLogs, hasLength(1));
+  });
+
+  testWidgets('Version 0.7 sleep log shows duration and recent entries', (
+    tester,
+  ) async {
+    final controller = readyController();
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sleep log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('How did you sleep?'), findsOneWidget);
+    expect(find.text('Calculated duration: 8h 00m'), findsOneWidget);
+    await tester.tap(find.text('Save sleep'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sleep log saved.'), findsOneWidget);
+    expect(controller.sleepLogs, hasLength(1));
+    await tester.scrollUntilVisible(find.textContaining('quality 3/5'), 250);
+    expect(find.textContaining('quality 3/5'), findsOneWidget);
   });
 
   testWidgets('new users see the welcome screen', (tester) async {
