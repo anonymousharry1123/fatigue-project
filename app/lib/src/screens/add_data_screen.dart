@@ -92,14 +92,12 @@ class AddDataScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Versions 0.8 & 0.9',
-                        'Version 0.7 local storage',
+                        'Versions 0.6–0.9 local inputs',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${controller.checkIns.length} mood/stress check-ins and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are saved on this device.',
-                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, and ${controller.checkIns.length} check-ins are persisted on this device.',
+                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are saved on this device.',
                         style: const TextStyle(
                           color: TonyoColors.muted,
                           fontSize: 11,

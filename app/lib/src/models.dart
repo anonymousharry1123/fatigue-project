@@ -98,6 +98,8 @@ extension CheckInPeriodLabel on CheckInPeriod {
     CheckInPeriod.morning => 'Morning',
     CheckInPeriod.evening => 'Evening',
   };
+}
+
 class ActivityLogEntry {
   const ActivityLogEntry({
     required this.id,

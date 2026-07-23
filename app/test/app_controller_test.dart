@@ -136,6 +136,8 @@ void main() {
 
     expect(() => controller.addReactionResult(50), throwsArgumentError);
     expect(() => controller.addReactionResult(2000), throwsArgumentError);
+  });
+
   test(
     'Version 0.6 saves, validates, edits, and restores activity logs',
     () async {
