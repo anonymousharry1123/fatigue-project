@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../models.dart';
+import '../reaction_test_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
@@ -23,6 +24,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
   Timer? timer;
   DateTime? started;
   int earlyTaps = 0;
+  int invalidAttempts = 0;
+  double? savedAverage;
+  double? baselineAtSave;
 
   @override
   void dispose() {
@@ -32,7 +36,26 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final latest = results.isEmpty ? 248 : results.last;
+    final controller = AppScope.of(context);
+    final baseline = baselineAtSave ?? controller.reactionBaseline;
+    final latest = results.isEmpty
+        ? (savedAverage?.round() ?? 0)
+        : results.last;
+    final history = controller.signals
+        .where((item) => item.type == SignalType.reactionTime)
+        .take(7)
+        .map((item) => item.value.round())
+        .toList();
+    while (history.length < 7) {
+      history.add(0);
+    }
+    final chartValues = history.reversed.toList();
+    if (savedAverage != null) {
+      chartValues[chartValues.length - 1] = savedAverage!.round();
+    } else if (results.isNotEmpty) {
+      chartValues[chartValues.length - 1] = latest;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reaction Test'),
@@ -92,7 +115,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '$latest',
+                                  latest == 0 ? '—' : '$latest',
                                   style: const TextStyle(
                                     fontSize: 43,
                                     fontWeight: FontWeight.w900,
@@ -127,9 +150,11 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
                   icon: Icons.timer_outlined,
                   color: TonyoColors.violet,
                   title: 'Reaction time',
-                  value: '$latest ms',
+                  value: results.isEmpty && savedAverage == null
+                      ? '—'
+                      : '${savedAverage?.round() ?? latest} ms',
                   detail: results.isEmpty
-                      ? 'Complete a round'
+                      ? 'Complete ${ReactionTestLogic.roundsRequired} rounds'
                       : '${results.length} valid round${results.length == 1 ? '' : 's'}',
                 ),
               ),
@@ -138,14 +163,69 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
                 child: _StatCard(
                   icon: Icons.warning_amber_rounded,
                   color: TonyoColors.amber,
-                  title: 'Early taps',
-                  value: '$earlyTaps',
-                  detail: earlyTaps == 0 ? 'Stay sharp' : 'Wait for green',
+                  title: 'Invalid attempts',
+                  value: '${earlyTaps + invalidAttempts}',
+                  detail: earlyTaps == 0 && invalidAttempts == 0
+                      ? 'Stay sharp'
+                      : '$earlyTaps early · $invalidAttempts out of range',
                 ),
               ),
             ],
           ),
-          const SectionHeader('Reaction time · last 7 days'),
+          if (baseline != null) ...[
+            const SizedBox(height: 12),
+            TonyoCard(
+              child: Row(
+                children: [
+                  const MetricIcon(
+                    icon: Icons.insights_rounded,
+                    color: TonyoColors.mint,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Personal baseline',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          savedAverage == null
+                              ? 'Your baseline is ${baseline.round()} ms from recent tests.'
+                              : ReactionTestLogic.comparisonLabel(
+                                  savedAverage!,
+                                  baseline,
+                                ),
+                          style: const TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${baseline.round()} ms',
+                    style: const TextStyle(
+                      color: TonyoColors.mint,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            const TonyoCard(
+              child: Text(
+                'Complete a few valid tests to build your personal reaction baseline.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+            ),
+          ],
+          const SectionHeader('Reaction time · recent tests'),
           TonyoCard(
             child: Column(
               children: [
@@ -153,52 +233,39 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
                   height: 115,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [286, 272, 334, 280, 275, 248, latest]
-                        .asMap()
-                        .entries
-                        .map((entry) {
-                          final height = (380 - entry.value)
-                              .clamp(35, 120)
-                              .toDouble();
-                          return Expanded(
-                            child: Container(
-                              height: height,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: entry.key >= 5
-                                      ? [TonyoColors.amber, TonyoColors.coral]
-                                      : [TonyoColors.blue, TonyoColors.primary],
-                                ),
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(6),
-                                ),
-                              ),
+                    children: chartValues.asMap().entries.map((entry) {
+                      final value = entry.value == 0 ? 300 : entry.value;
+                      final height = (380 - value).clamp(35, 120).toDouble();
+                      return Expanded(
+                        child: Container(
+                          height: height,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: entry.key >= 5
+                                  ? [TonyoColors.amber, TonyoColors.coral]
+                                  : [TonyoColors.blue, TonyoColors.primary],
                             ),
-                          );
-                        })
-                        .toList(),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(6),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
-                const SizedBox(height: 9),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Text('W', style: _day),
-                    Text('T', style: _day),
-                    Text('F', style: _day),
-                    Text('S', style: _day),
-                    Text('S', style: _day),
-                    Text('M', style: _day),
-                    Text('T', style: _day),
-                  ],
-                ),
                 const SizedBox(height: 14),
-                const Text(
-                  'This Version 0.5 preview stores completed results locally. Trend interpretation arrives in Version 0.21.',
-                  style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+                Text(
+                  phase == _ReactionPhase.complete
+                      ? 'Result saved. Early taps and out-of-range attempts do not count toward your baseline.'
+                      : 'Three valid rounds make one daily benchmark. Early taps reset the current round.',
+                  style: const TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 10,
+                  ),
                 ),
               ],
             ),
@@ -208,8 +275,6 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
     );
   }
 
-  static const _day = TextStyle(color: TonyoColors.muted, fontSize: 9);
-
   String get _instruction => switch (phase) {
     _ReactionPhase.idle => 'TAP TO BEGIN',
     _ReactionPhase.waiting => 'WAIT FOR GREEN',
@@ -217,14 +282,16 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
     _ReactionPhase.result => 'NICE — TAP FOR NEXT ROUND',
     _ReactionPhase.complete => 'TEST COMPLETE',
   };
+
   String get _footer => switch (phase) {
     _ReactionPhase.idle => 'Three quick rounds',
     _ReactionPhase.waiting => 'Hold steady…',
     _ReactionPhase.ready => 'Go!',
     _ReactionPhase.result =>
-      '${3 - results.length} round${3 - results.length == 1 ? '' : 's'} left',
+      '${ReactionTestLogic.roundsRequired - results.length} round${ReactionTestLogic.roundsRequired - results.length == 1 ? '' : 's'} left',
     _ReactionPhase.complete => 'Saved to this device',
   };
+
   IconData get _phaseIcon => switch (phase) {
     _ReactionPhase.idle => Icons.touch_app_rounded,
     _ReactionPhase.waiting => Icons.more_horiz_rounded,
@@ -250,23 +317,46 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
         );
       case _ReactionPhase.ready:
         final elapsed = DateTime.now().difference(started!).inMilliseconds;
+        if (!ReactionTestLogic.isValidReaction(elapsed)) {
+          setState(() {
+            invalidAttempts++;
+            phase = _ReactionPhase.idle;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                elapsed < ReactionTestLogic.minValidMs
+                    ? 'That tap was unrealistically fast and was discarded.'
+                    : 'That reaction was too slow and was discarded.',
+              ),
+            ),
+          );
+          return;
+        }
         setState(() {
           results.add(elapsed);
-          phase = results.length == 3
+          phase = ReactionTestLogic.isComplete(results)
               ? _ReactionPhase.complete
               : _ReactionPhase.result;
         });
-        if (results.length == 3) {
-          final average = results.reduce((a, b) => a + b) / results.length;
-          AppScope.of(context).addSignal(
-            SignalType.reactionTime,
-            average,
-            note: 'Three-round reaction test',
-          );
+        if (ReactionTestLogic.isComplete(results)) {
+          _saveResults();
         }
       case _ReactionPhase.complete:
         Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _saveResults() async {
+    final average = ReactionTestLogic.averageMs(results);
+    final controller = AppScope.of(context);
+    final baseline = controller.reactionBaseline;
+    await controller.addReactionResult(average);
+    if (!mounted) return;
+    setState(() {
+      savedAverage = average;
+      baselineAtSave = baseline;
+    });
   }
 
   void _startRound() {
@@ -286,7 +376,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
     builder: (context) => AlertDialog(
       title: const Text('How it works'),
       content: const Text(
-        'Start a round, wait for the panel to turn green, then tap as quickly as you can. Early taps do not count.',
+        'Start a round, wait for the panel to turn green, then tap as quickly as you can. Early taps and out-of-range times do not count. After three valid rounds, Tonyo compares your average with your personal baseline.',
       ),
       actions: [
         TextButton(
@@ -311,6 +401,7 @@ class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final String detail;
+
   @override
   Widget build(BuildContext context) => TonyoCard(
     padding: const EdgeInsets.all(13),

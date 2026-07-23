@@ -84,7 +84,8 @@ abstract final class FatigueEngine {
     }
     if (latestCheckIn != null) {
       final impact =
-          ((latestCheckIn.energy - 3) * 5 - (latestCheckIn.stress - 3) * 3)
+          ((latestCheckIn.energy - 5.5) * 2.5 -
+                  (latestCheckIn.stress - 5.5) * 1.5)
               .clamp(-16, 16)
               .toDouble();
       energy += impact;
@@ -92,7 +93,7 @@ abstract final class FatigueEngine {
         ScoreDriver(
           'Check-in',
           impact,
-          'Energy ${latestCheckIn.energy.round()}/5 · stress ${latestCheckIn.stress.round()}/5',
+          'Energy ${latestCheckIn.energy.round()}/10 · stress ${latestCheckIn.stress.round()}/10',
         ),
       );
     }
@@ -114,8 +115,8 @@ abstract final class FatigueEngine {
     if (sleep != null) cognitive += ((sleep - 7.5) * 6).clamp(-16, 12);
     if (study != null) cognitive -= ((study - 3).clamp(0, 5) * 3);
     if (latestCheckIn != null) {
-      cognitive += (latestCheckIn.mood - 3) * 3;
-      cognitive -= (latestCheckIn.stress - 3) * 4;
+      cognitive += (latestCheckIn.mood - 5.5) * 1.5;
+      cognitive -= (latestCheckIn.stress - 5.5) * 2;
     }
 
     drivers.sort(
@@ -284,7 +285,7 @@ abstract final class FatigueEngine {
     }
     final strained = checkIns
         .take(5)
-        .where((item) => item.stress >= 4 && item.energy <= 2)
+        .where((item) => item.stress >= 7 && item.energy <= 4)
         .length;
     if (strained >= 3) {
       alerts.add(

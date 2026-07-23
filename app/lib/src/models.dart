@@ -91,6 +91,13 @@ class SignalReading {
   );
 }
 
+enum CheckInPeriod { morning, evening }
+
+extension CheckInPeriodLabel on CheckInPeriod {
+  String get label => switch (this) {
+    CheckInPeriod.morning => 'Morning',
+    CheckInPeriod.evening => 'Evening',
+  };
 class ActivityLogEntry {
   const ActivityLogEntry({
     required this.id,
@@ -188,14 +195,17 @@ class DailyCheckIn {
     required this.energy,
     required this.mood,
     required this.stress,
+    this.period = CheckInPeriod.morning,
     this.note = '',
   });
 
+  /// Energy, mood, and stress use an intuitive 1–10 scale.
   final String id;
   final DateTime timestamp;
   final double energy;
   final double mood;
   final double stress;
+  final CheckInPeriod period;
   final String note;
 
   Map<String, Object?> toJson() => {
@@ -204,17 +214,38 @@ class DailyCheckIn {
     'energy': energy,
     'mood': mood,
     'stress': stress,
+    'period': period.name,
     'note': note,
   };
 
-  factory DailyCheckIn.fromJson(Map<String, dynamic> json) => DailyCheckIn(
-    id: json['id'] as String,
-    timestamp: DateTime.parse(json['timestamp'] as String),
-    energy: (json['energy'] as num).toDouble(),
-    mood: (json['mood'] as num).toDouble(),
-    stress: (json['stress'] as num).toDouble(),
-    note: (json['note'] as String?) ?? '',
-  );
+  factory DailyCheckIn.fromJson(Map<String, dynamic> json) {
+    final timestamp = DateTime.parse(json['timestamp'] as String);
+    final periodName = json['period'] as String?;
+    final legacyScale = periodName == null;
+    final period = periodName != null
+        ? CheckInPeriod.values.byName(periodName)
+        : timestamp.hour < 14
+        ? CheckInPeriod.morning
+        : CheckInPeriod.evening;
+    return DailyCheckIn(
+      id: json['id'] as String,
+      timestamp: timestamp,
+      energy: _ratingFromJson(json['energy'], legacyScale: legacyScale),
+      mood: _ratingFromJson(json['mood'], legacyScale: legacyScale),
+      stress: _ratingFromJson(json['stress'], legacyScale: legacyScale),
+      period: period,
+      note: (json['note'] as String?) ?? '',
+    );
+  }
+
+  /// Migrates pre-0.8 1–5 ratings (no period field) onto the 1–10 scale.
+  static double _ratingFromJson(Object? raw, {required bool legacyScale}) {
+    final value = (raw as num).toDouble();
+    if (legacyScale && value > 0 && value <= 5) {
+      return (value * 2).clamp(1, 10);
+    }
+    return value.clamp(1, 10);
+  }
 }
 
 class UserProfile {

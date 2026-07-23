@@ -1,9 +1,45 @@
 # Tonyo Product Roadmap
 
-Last updated: July 23, 2026
-Current release: **Version 0.7 — Manual Sleep Log**
+Last updated: July 23, 2026  
+Current release: **Version 0.9 — Reaction-Time Test**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
+
+## Development Log (required for agents)
+
+Keep a running narrative of day-to-day work in [`DEVELOPMENT_LOG.md`](./DEVELOPMENT_LOG.md). The product roadmap below tracks *what* ships; the development log tracks *how* it was built (prompts, results, issues, learnings).
+
+### When to update
+
+Future agents **must** update `DEVELOPMENT_LOG.md` during the same session when they:
+
+- Start or finish a roadmap version / major feature
+- Hit a non-trivial bug, design decision, or schema migration
+- Run an important user prompt that drives implementation
+- Close out a work day or prepare a merge/PR
+
+Do **not** wait until merge to invent history. Append as work happens.
+
+### What to record
+
+1. **Day-to-Day Entries** — dated section with branch, goal, results, and major issues.
+2. **Prompts Used** — important prompts verbatim (or closely paraphrased if huge), plus **Result** and **Modifications**.
+3. **Challenges & Solutions** — problem → fix → related prompt if any.
+4. **Features Implemented** — keep status in sync with this roadmap.
+5. **What I Learned / Future Improvements** — short bullets only; no essay.
+
+### How to edit
+
+- Prefer **appending** new day entries and prompt blocks; do not rewrite older days unless correcting a factual error.
+- Quote prompts under `### Feature:` or `### Screen:` headings matching the template in `DEVELOPMENT_LOG.md`.
+- Note test commands and outcomes when they matter (e.g. `flutter test` pass/fail and what broke).
+- Keep the tone factual and concise; skip filler and unrelated chat.
+
+### Relationship to this file
+
+- Update **this** `PLAN.md` checklist when a version’s acceptance criteria are met.
+- Update **`DEVELOPMENT_LOG.md`** with the prompt trail, issues, and daily outcomes for that work.
+- Both files live under `app/docs/` and should stay consistent on status (Complete vs upcoming).
 
 ## Current Progress
 
@@ -66,20 +102,23 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 - Display recent sleep entries
 - Edit or remove manual sleep entries
 - Automated tests cover overnight duration, consistency, validation, persistence, and the sleep form
+- 
+### Version 0.8 — Mood and Stress Check-In ✅
+
+- Daily Check-in stores morning and evening energy, mood, and stress
+- Mood and stress use an intuitive 1–10 scale (energy matches the same scale)
+- Morning vs evening is set automatically from the check-in time (before/after 2:00 PM)
+- Saved check-ins appear in on-screen daily history
+- Ratings validate and persist through the shared local repository
+
+### Version 0.9 — Reaction-Time Test ✅ Current
+valid rounds
+- Early taps and out-of-range attempts are detected and discarded
+- Valid results compare against a personal reaction-time baseline
+- Automated tests cover check-in ratings, reaction validation, baselines, and persistence
+- Reaction Test is a completed daily benchmark with three 
 
 ## Upcoming Versions
-
-### Version 0.8 — Mood and Stress Check-In
-
-- Promote the Daily Check-in preview into a completed feature
-- Store morning and evening energy, stress, and mood ratings
-- Display saved check-ins in daily history
-
-### Version 0.9 — Reaction-Time Test
-
-- Promote the Reaction Test preview into a completed daily benchmark
-- Detect early taps and invalid attempts
-- Compare valid results with a personal baseline
 
 ### Version 0.10 — Daily History
 
@@ -238,7 +277,7 @@ Tonyo is developed through small, runnable releases. Fixture data is used first 
 ## Stable Data Interfaces
 
 - `SignalReading`: measurement type, value, unit, timestamp, source, and quality
-- `DailyCheckIn`: energy, mood, stress, and optional notes
+- `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers
 - `ForecastPoint`: predicted energy, timestamp, and uncertainty
 - `ForecastWindow`: peak, crash, or recovery period
