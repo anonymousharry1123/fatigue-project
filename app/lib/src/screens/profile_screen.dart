@@ -67,9 +67,11 @@ class ProfileScreen extends StatelessWidget {
                         color: TonyoColors.mint.withValues(alpha: .13),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        '● Local profile active',
-                        style: TextStyle(
+                      child: Text(
+                        controller.isCloudAuthenticated
+                            ? '● Private cloud sync active'
+                            : '● Local demo profile',
+                        style: const TextStyle(
                           color: TonyoColors.mint,
                           fontSize: 9,
                           fontWeight: FontWeight.w900,
@@ -132,14 +134,35 @@ class ProfileScreen extends StatelessWidget {
             status: 'Preview',
           ),
           const SizedBox(height: 9),
-          const _SourceCard(
+          _SourceCard(
             icon: Icons.storage_rounded,
             color: TonyoColors.mint,
-            title: 'Local app storage',
-            detail: 'Profile and demo state',
-            status: 'On',
+            title: controller.isCloudAuthenticated
+                ? 'Firebase Cloud Firestore'
+                : 'Local app storage',
+            detail: controller.isCloudAuthenticated
+                ? controller.isCloudSyncing
+                      ? 'Syncing private account data'
+                      : controller.cloudSyncError == null
+                      ? 'Offline cache enabled'
+                      : 'Offline cache active · sync will retry'
+                : controller.cloudEnabled
+                ? 'Sign in to migrate local data'
+                : 'Offline demo mode',
+            status: controller.isCloudAuthenticated ? 'On' : 'Local',
           ),
           const SectionHeader('Settings'),
+          if (controller.cloudEnabled)
+            _SettingTile(
+              icon: Icons.cloud_outlined,
+              title: 'Cloud account',
+              subtitle: controller.isCloudAuthenticated
+                  ? 'Signed in as ${controller.accountEmail}'
+                  : 'Sign in and migrate this device’s data',
+              onTap: () => controller.isCloudAuthenticated
+                  ? _signOut(context, controller)
+                  : _signIn(context, controller),
+            ),
           _SettingTile(
             icon: Icons.track_changes_rounded,
             title: 'Goals & schedule',
@@ -156,7 +179,8 @@ class ProfileScreen extends StatelessWidget {
           _SettingTile(
             icon: Icons.privacy_tip_outlined,
             title: 'Model & data privacy',
-            subtitle: '${controller.signals.length} local fixture signals',
+            subtitle:
+                '${controller.signals.length} signals · ${controller.isCloudAuthenticated ? 'private cloud + cache' : 'local cache'}',
             onTap: () => _privacy(context, controller),
           ),
           _SettingTile(
@@ -275,6 +299,82 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
 
+  static Future<void> _signIn(
+    BuildContext context,
+    AppController controller,
+  ) async {
+    final email = TextEditingController(text: controller.accountEmail);
+    final password = TextEditingController();
+    final credentials = await showDialog<(String, String)>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign in to Tonyo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
+              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(context, (email.text.trim(), password.text)),
+            child: const Text('Sign in'),
+          ),
+        ],
+      ),
+    );
+    email.dispose();
+    password.dispose();
+    if (credentials == null) return;
+    try {
+      await controller.signIn(email: credentials.$1, password: credentials.$2);
+    } on Object {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sign-in failed. Check your email and password.'),
+          ),
+        );
+      }
+    }
+  }
+
+  static Future<void> _signOut(
+    BuildContext context,
+    AppController controller,
+  ) async {
+    await controller.signOut();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Signed out. The offline cache remains on this device.',
+          ),
+        ),
+      );
+    }
+  }
+
   static void _privacy(
     BuildContext context,
     AppController controller,
@@ -294,19 +394,20 @@ class ProfileScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Version 0.5.1 stores your account email, profile, onboarding status, fixtures, and check-ins locally. Passwords are never saved and no cloud upload is used.',
+            Text(
+              controller.isCloudAuthenticated
+                  ? 'Tonyo stores your profile, preferences, signals, and check-ins under your Firebase user ID. Firestore rules restrict access to that account. A local cache keeps the demo usable offline. Passwords are handled only by Firebase Authentication.'
+                  : 'This build currently stores your profile, preferences, signals, and check-ins in the on-device offline cache. Passwords are never saved by Tonyo.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 16),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.copy_rounded, color: TonyoColors.blue),
-              title: const Text('Copy local data export'),
+              title: const Text('Copy my data export'),
               onTap: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: controller.exportJson()),
-                );
+                final export = await controller.exportAllData();
+                await Clipboard.setData(ClipboardData(text: export));
                 if (context.mounted) Navigator.pop(context);
               },
             ),
@@ -316,10 +417,48 @@ class ProfileScreen extends StatelessWidget {
                 Icons.delete_outline_rounded,
                 color: TonyoColors.coral,
               ),
-              title: const Text('Delete local data'),
+              title: Text(
+                controller.isCloudAuthenticated
+                    ? 'Permanently delete account data'
+                    : 'Delete local data',
+              ),
               onTap: () async {
-                await controller.reset();
-                if (context.mounted) Navigator.pop(context);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('Delete all Tonyo data?'),
+                    content: Text(
+                      controller.isCloudAuthenticated
+                          ? 'This permanently deletes your Firestore data, Firebase account, and local cache. This cannot be undone.'
+                          : 'This permanently deletes the Tonyo data cached on this device. This cannot be undone.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('Delete permanently'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true) return;
+                try {
+                  await controller.deleteAccountData();
+                  if (context.mounted) Navigator.pop(context);
+                } on Object {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Deletion could not finish. Sign in again and retry.',
+                        ),
+                      ),
+                    );
+                  }
+                }
               },
             ),
           ],

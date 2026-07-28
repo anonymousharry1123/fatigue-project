@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.10 — Daily History (as of 2026-07-23)
+- **Current release:** Version 0.10-a — Firebase Foundation (as of 2026-07-28)
 
 ## Implementation Report (through v0.9)
 
@@ -21,7 +21,7 @@
 | 0.8 | Mood & stress check-in (1–10, auto morning/evening, history) | Complete |
 | 0.9 | Reaction-time daily benchmark (invalid attempts + baseline) | Complete |
 | 0.10 | Daily history (grouping, completion, edit/delete) | Complete |
-| 0.10-a | Firebase Auth + Firestore schema, rules, migration | Not started |
+| 0.10-a | Firebase Auth + Firestore schema, rules, migration | Complete |
 | 0.11+ | Scores, forecast engine, HealthKit, AI coach (Firebase-backed) | Not started |
 
 ### What ships in 0.8
@@ -45,7 +45,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-07-23 — **37 tests passed** with Version 0.10 Daily History
+- Last verified: 2026-07-28 — **50 tests passed** with Version 0.10-a Firebase Foundation
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -59,7 +59,7 @@
 9. Mood & stress daily check-in (1–10, auto morning/evening, history) - Complete (v0.8)
 10. Reaction-time daily benchmark (early taps, invalid attempts, baseline) - Complete (v0.9)
 11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
-12. Firebase foundation (Auth, Firestore schema, rules, migration) - Not started (v0.10-a)
+12. Firebase foundation (Auth, Firestore schema, rules, migration) - Complete (v0.10-a)
 
 ## Day-to-Day Entries
 
@@ -147,6 +147,69 @@
 
 **Major issues:** None (planning-only change).
 
+### 2026-07-28 — Version 0.10-a Firebase Foundation implementation
+
+**Branch:** `main`
+
+**Goal:** Complete Version 0.10-a with Firebase Auth, a private Firestore
+schema, first-sign-in migration, offline cache behavior, query helpers,
+export/deletion, and automated coverage.
+
+**Results:**
+- Added environment-injected Firebase initialization. Builds without Firebase
+  values remain runnable in explicit offline demo mode.
+- Added Firebase Email/Password Auth integration; Tonyo never persists
+  passwords in SharedPreferences or Firestore.
+- Added user-scoped Firestore repositories for `users/{uid}`, `signals`, and
+  `checkIns`, plus reserved schema serializers for scores, forecasts,
+  recommendations, and risk alerts.
+- Added day-range, `SignalType`, latest-check-in, and reaction-baseline query
+  helpers.
+- Added first-authenticated-launch migration from the Version 0.5
+  SharedPreferences JSON cache. Existing migrated cloud data wins on later
+  launches and refreshes the offline cache.
+- Added full account export and permanent deletion across the six user
+  subcollections, user document, Auth account, and local cache.
+- Added deny-by-default Security Rules and the signal type/timestamp compound
+  index.
+- Updated onboarding, Profile privacy/account state, and Add Data storage copy
+  for cloud sync and offline cache behavior.
+- Added `FIREBASE_SETUP.md` and a gitignored build-time configuration template.
+- `flutter test` passed all **50 tests**.
+- `flutter analyze` reported **no issues**.
+
+**Major issues:**
+- `flutter analyze` initially traversed Firebase Swift Package sources already
+  present under `build/`; excluding generated `build/**` sources restored
+  project-only analysis.
+- The Firebase account already contains **Fatigue Project**
+  (`fatigue-project-e28a3`), but Authentication and Firestore are not activated.
+  Console-side activation, app registration, and rules deployment remain
+  pending explicit confirmation because they change external account state.
+
+### 2026-07-28 (console closeout) — Version 0.10-a complete
+
+**Branch:** `main`
+
+**Goal:** Finish the authorized Firebase console setup in a US West region and
+close Version 0.10-a.
+
+**Results:**
+- Confirmed Email/Password Authentication is enabled.
+- Created the default Standard Cloud Firestore database in Production mode at
+  `us-west2` (Los Angeles).
+- Registered the **Tonyo Flutter Runtime** web app and populated the local,
+  gitignored build-time configuration.
+- Published the repository's deny-by-default, owner-UID-only Security Rules.
+- Created the `signals` collection index on `type` ascending and `timestamp`
+  descending.
+- Re-ran `flutter analyze` with no issues and all **50 tests** passed.
+- Built `build/web` successfully with the real, gitignored Firebase runtime
+  configuration.
+
+**Major issues:** None. The index may briefly report `Building` after creation;
+Firebase enables it automatically when construction finishes.
+
 ---
 
 ## Prompts Used
@@ -206,6 +269,31 @@
 
 **Modifications:** Planning docs only (no app code yet).
 
+### Feature: Version 0.10-a Firebase implementation
+**Prompt:**
+"view docs/plan.md and complete version 10-a"
+
+**Result:** Implemented the Firebase-ready app foundation, schema, repositories,
+migration/cache policy, Auth flow, privacy UI, export/delete support, rules,
+indexes, setup documentation, and automated coverage. Verified 50 tests pass
+and static analysis has no issues.
+
+**Modifications:** Reused the existing `fatigue-project-e28a3` Firebase project
+instead of creating a duplicate. Console activation remains gated on explicit
+confirmation.
+
+### Feature: Version 0.10-a Firebase console closeout
+**Prompt:**
+"I enable email/password auth go though and complete rest of tasks use us west
+region for data base"
+
+**Result:** Completed the remaining Firebase console work in `us-west2`,
+published the repository Security Rules, provisioned the required compound
+index, and populated the ignored local runtime configuration.
+
+**Modifications:** Used the existing project and selected `us-west2` (Los
+Angeles) as the requested US West database location.
+
 ---
 
 ## Challenges & Solutions
@@ -239,7 +327,7 @@
 
 ## Future Improvements
 - [x] Implement Version 0.10 — fuller Daily History (edit/delete by date)
-- [ ] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
+- [x] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
 - [ ] Implement Version 0.11+ Energy / Cognitive scores and Today dashboard (query Firebase)
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

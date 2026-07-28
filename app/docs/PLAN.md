@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: July 28, 2026  
-Current release: **Version 0.10 — Daily History**
+Current release: **Version 0.10-a — Firebase Foundation**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -118,7 +118,7 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Valid results compare against a personal reaction-time baseline
 - Automated tests cover check-in ratings, reaction validation, baselines, and persistence
 
-### Version 0.10 — Daily History ✅ Current
+### Version 0.10 — Daily History ✅
 
 - Group signals and check-ins by date
 - Edit or delete manual entries
@@ -128,9 +128,7 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Keep imported and fixture signals read-only
 - Automated tests cover grouping, overnight sleep dates, completion, persistence, editing, deletion, and routing
 
-## Upcoming Versions
-
-### Version 0.10-a — Firebase Foundation
+### Version 0.10-a — Firebase Foundation ✅ Current
 
 Set up cloud persistence **before** scoring and forecast work so later versions read and write against a real schema.
 
@@ -149,6 +147,8 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
 - Provide repository helpers for common queries (by day range, by `SignalType`, latest check-in, reaction baseline window)
 - Support export and permanent deletion of the user’s Firebase subtree (aligned with later Version 0.34)
 - Automated tests cover rule-safe repository mocks, schema serialization, and migration from local JSON
+
+## Upcoming Versions
 
 ### Version 0.11 — Basic Energy Score
 
@@ -312,7 +312,7 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
 - `Recommendation`: action, timing, priority, evidence, and feedback → `users/{uid}/recommendations/{id}`
 - `RiskAlert`: warning category, severity, evidence, and dismissal state → `users/{uid}/riskAlerts/{id}`
 
-Firebase Auth identifies `uid`. Passwords never appear in Firestore. Local SharedPreferences remains an offline cache until migration in Version 0.10-a.
+Firebase Auth identifies `uid`. Passwords never appear in Firestore. Local SharedPreferences is the offline cache and migrates on the first authenticated launch.
 
 ## Release Rules
 

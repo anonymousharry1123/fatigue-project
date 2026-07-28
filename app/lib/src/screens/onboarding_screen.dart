@@ -21,6 +21,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _nameController = TextEditingController(text: 'Maya');
   int _page = 0;
   bool _acceptedPrivacy = false;
+  bool _isSubmitting = false;
+  bool _signInExisting = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   String _age = '16–18';
@@ -84,7 +86,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: double.infinity,
                   height: 54,
                   child: FilledButton(
-                    onPressed: _next,
+                    onPressed: _isSubmitting ? null : _next,
                     style: FilledButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -98,13 +100,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ? 'Continue to my profile'
                           : _page == 2
                           ? 'Set my schedule'
+                          : _signInExisting && AppScope.of(context).cloudEnabled
+                          ? 'Sign in and sync'
                           : 'Start with demo data',
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Private by design. Your data stays on this device.',
+                Text(
+                  AppScope.of(context).cloudEnabled
+                      ? 'Private by design. Your data syncs only to your account.'
+                      : 'Offline demo mode. Your data stays on this device.',
                   style: TextStyle(color: TonyoColors.muted, fontSize: 11),
                 ),
               ],
@@ -129,14 +135,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 20),
         Text(
-          'Create your account',
+          _signInExisting ? 'Welcome back' : 'Create your account',
           style: Theme.of(context).textTheme.headlineLarge,
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Start with a local account. Cloud sign-in and syncing will be added in a later release.',
+        Text(
+          AppScope.of(context).cloudEnabled
+              ? _signInExisting
+                    ? 'Sign in to restore your private Tonyo cloud data.'
+                    : 'Your account securely syncs your Tonyo data through Firebase.'
+              : 'Firebase values are not configured, so this build uses local demo storage.',
           style: TextStyle(color: TonyoColors.muted),
         ),
+        if (AppScope.of(context).cloudEnabled) ...[
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () =>
+                  setState(() => _signInExisting = !_signInExisting),
+              child: Text(
+                _signInExisting
+                    ? 'Create a new account instead'
+                    : 'Already have an account? Sign in',
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 28),
         TextFormField(
           controller: _emailController,
@@ -164,7 +189,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           enableSuggestions: false,
           autocorrect: false,
           textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.newPassword],
+          autofillHints: [
+            _signInExisting
+                ? AutofillHints.password
+                : AutofillHints.newPassword,
+          ],
           decoration: InputDecoration(
             labelText: 'Password',
             prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -186,33 +215,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             return null;
           },
         ),
-        const SizedBox(height: 14),
-        TextFormField(
-          key: const Key('confirm-password-field'),
-          controller: _confirmPasswordController,
-          obscureText: _obscureConfirmPassword,
-          enableSuggestions: false,
-          autocorrect: false,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            labelText: 'Confirm password',
-            prefixIcon: const Icon(Icons.lock_reset_rounded),
-            suffixIcon: IconButton(
-              key: const Key('confirm-password-visibility'),
-              onPressed: () => setState(
-                () => _obscureConfirmPassword = !_obscureConfirmPassword,
-              ),
-              icon: Icon(
-                _obscureConfirmPassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
+        if (!_signInExisting) ...[
+          const SizedBox(height: 14),
+          TextFormField(
+            key: const Key('confirm-password-field'),
+            controller: _confirmPasswordController,
+            obscureText: _obscureConfirmPassword,
+            enableSuggestions: false,
+            autocorrect: false,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: 'Confirm password',
+              prefixIcon: const Icon(Icons.lock_reset_rounded),
+              suffixIcon: IconButton(
+                key: const Key('confirm-password-visibility'),
+                onPressed: () => setState(
+                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                ),
+                icon: Icon(
+                  _obscureConfirmPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
               ),
             ),
+            validator: (value) => value != _passwordController.text
+                ? 'Passwords do not match'
+                : null,
           ),
-          validator: (value) => value != _passwordController.text
-              ? 'Passwords do not match'
-              : null,
-        ),
+        ],
         const SizedBox(height: 14),
         CheckboxListTile(
           value: _acceptedPrivacy,
@@ -220,21 +251,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               setState(() => _acceptedPrivacy = value ?? false),
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
-          title: const Text(
-            'I understand this preview stores my account email and app data locally on this device.',
+          title: Text(
+            AppScope.of(context).cloudEnabled
+                ? 'I understand Tonyo stores wellness data in my private cloud account and keeps an offline cache on this device.'
+                : 'I understand this demo stores my account email and app data locally on this device.',
             style: TextStyle(fontSize: 12),
           ),
         ),
         const SizedBox(height: 10),
-        const TonyoCard(
+        TonyoCard(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              MetricIcon(icon: Icons.password_rounded, color: TonyoColors.mint),
-              SizedBox(width: 12),
+              const MetricIcon(
+                icon: Icons.password_rounded,
+                color: TonyoColors.mint,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Your password is validated for this setup flow but is never saved. Authentication arrives with a secure account service later.',
+                  AppScope.of(context).cloudEnabled
+                      ? 'Firebase Authentication handles your password. Tonyo never writes passwords to Firestore or its local cache.'
+                      : 'Your password is validated for this demo flow but is never saved.',
                   style: TextStyle(color: TonyoColors.muted, fontSize: 11),
                 ),
               ),
@@ -498,7 +536,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (!_acceptedPrivacy) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Confirm the local-data notice to continue.'),
+              content: Text('Confirm the data privacy notice to continue.'),
             ),
           );
         }
@@ -512,18 +550,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
+    setState(() => _isSubmitting = true);
     final name = _nameController.text.trim();
-    await AppScope.of(context).completeOnboarding(
-      UserProfile(
-        name: name.isEmpty ? 'Maya' : name,
-        ageRange: _age,
-        role: _role,
-        goal: _goal,
-        wakeHour: _wake,
-        bedHour: _bed,
-      ),
-      email: _emailController.text,
-    );
+    try {
+      await AppScope.of(context).completeOnboarding(
+        UserProfile(
+          name: name.isEmpty ? 'Maya' : name,
+          ageRange: _age,
+          role: _role,
+          goal: _goal,
+          wakeHour: _wake,
+          bedHour: _bed,
+        ),
+        email: _emailController.text,
+        password: _passwordController.text,
+        signInToExistingAccount: _signInExisting,
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_accountError(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   Future<void> _previous() async {
@@ -540,6 +591,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     hour %= 24;
     final displayHour = hour % 12 == 0 ? 12 : hour % 12;
     return '$displayHour:${minute.toString().padLeft(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  static String _accountError(Object error) {
+    final message = error.toString();
+    if (message.contains('email-already-in-use')) {
+      return 'An account already exists for this email. Choose “Already have an account? Sign in”.';
+    }
+    if (message.contains('network-request-failed')) {
+      return 'Account setup needs a network connection. Please try again.';
+    }
+    return 'Account setup failed. Please verify your details and try again.';
   }
 }
 

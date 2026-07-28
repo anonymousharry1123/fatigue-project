@@ -101,13 +101,15 @@ class AddDataScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Versions 0.6–0.10 local inputs',
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                      Text(
+                        controller.isCloudAuthenticated
+                            ? 'Version 0.10-a private cloud inputs'
+                            : 'Version 0.10-a offline inputs',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are saved on this device.',
+                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are ${controller.isCloudAuthenticated ? 'synced to your account and cached offline' : 'saved in the offline cache'}.',
                         style: const TextStyle(
                           color: TonyoColors.muted,
                           fontSize: 11,

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_log_logic.dart';
 import 'check_in_logic.dart';
+import 'cloud_repository.dart';
+import 'cloud_schema.dart';
 import 'daily_history_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
@@ -13,11 +15,17 @@ import 'models.dart';
 import 'reaction_test_logic.dart';
 
 class AppController extends ChangeNotifier {
-  AppController({HealthService? healthService})
-    : _healthService = healthService ?? const HealthService();
+  AppController({
+    HealthService? healthService,
+    AccountAuth? accountAuth,
+    this.cloudRepository,
+  }) : _healthService = healthService ?? const HealthService(),
+       _accountAuth = accountAuth ?? const LocalOnlyAccountAuth();
 
   static const _storageKey = 'tonyo_state_v1';
   final HealthService _healthService;
+  final AccountAuth _accountAuth;
+  final CloudRepository? cloudRepository;
 
   bool isReady = false;
   bool onboardingComplete = false;
@@ -26,12 +34,18 @@ class AppController extends ChangeNotifier {
   bool healthAvailable = false;
   bool healthAuthorized = false;
   bool isSyncing = false;
+  bool isCloudSyncing = false;
   DateTime? lastSync;
   String? accountEmail;
+  String? cloudSyncError;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
+
+  bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
+  bool get isCloudAuthenticated => _accountAuth.currentSession != null;
+  String? get cloudUid => _accountAuth.currentSession?.uid;
 
   List<ActivityLogEntry> get activityLogs {
     final grouped = <String, List<SignalReading>>{};
@@ -133,37 +147,7 @@ class AppController extends ChangeNotifier {
     final raw = preferences.getString(_storageKey);
     if (raw != null) {
       try {
-        final json = jsonDecode(raw) as Map<String, dynamic>;
-        onboardingComplete = json['onboardingComplete'] as bool? ?? false;
-        notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
-        outcomeConsent = json['outcomeConsent'] as bool? ?? false;
-        healthAuthorized = json['healthAuthorized'] as bool? ?? false;
-        accountEmail = json['accountEmail'] as String?;
-        lastSync = json['lastSync'] == null
-            ? null
-            : DateTime.tryParse(json['lastSync'] as String);
-        profile = UserProfile.fromJson(
-          (json['profile'] as Map).cast<String, dynamic>(),
-        );
-        signals = ((json['signals'] as List?) ?? const [])
-            .map(
-              (item) =>
-                  SignalReading.fromJson((item as Map).cast<String, dynamic>()),
-            )
-            .toList();
-        checkIns = ((json['checkIns'] as List?) ?? const [])
-            .map(
-              (item) =>
-                  DailyCheckIn.fromJson((item as Map).cast<String, dynamic>()),
-            )
-            .toList();
-        final statuses =
-            (json['recommendationStatuses'] as Map?)?.cast<String, dynamic>() ??
-            const {};
-        for (final entry in statuses.entries) {
-          _recommendationStatuses[entry.key] = RecommendationStatus.values
-              .byName(entry.value as String);
-        }
+        _restoreLocal(jsonDecode(raw) as Map<String, dynamic>);
       } on Object {
         onboardingComplete = false;
         signals = [];
@@ -171,6 +155,10 @@ class AppController extends ChangeNotifier {
       }
     }
     healthAvailable = await _healthService.isAvailable();
+    if (isCloudAuthenticated) {
+      await _hydrateOrMigrateCloud();
+      await _writeLocal();
+    }
     isReady = true;
     notifyListeners();
   }
@@ -178,15 +166,52 @@ class AppController extends ChangeNotifier {
   Future<void> completeOnboarding(
     UserProfile newProfile, {
     String? email,
+    String? password,
+    bool signInToExistingAccount = false,
   }) async {
+    final normalizedEmail = email?.trim().toLowerCase();
+    if (cloudEnabled) {
+      if (normalizedEmail == null ||
+          normalizedEmail.isEmpty ||
+          password == null ||
+          password.isEmpty) {
+        throw ArgumentError('Email and password are required for cloud setup.');
+      }
+      if (signInToExistingAccount) {
+        await _accountAuth.signIn(email: normalizedEmail, password: password);
+        await _hydrateOrMigrateCloud();
+        if (onboardingComplete) {
+          await _writeLocal();
+          notifyListeners();
+          return;
+        }
+      } else {
+        await _accountAuth.register(email: normalizedEmail, password: password);
+      }
+    }
     profile = newProfile;
-    accountEmail = email?.trim().toLowerCase();
+    accountEmail =
+        _accountAuth.currentSession?.email ?? normalizedEmail ?? accountEmail;
     onboardingComplete = true;
     if (signals.isEmpty) {
       signals = buildDemoSignals(DateTime.now());
       checkIns = buildDemoCheckIns(DateTime.now());
     }
     await _commit();
+  }
+
+  Future<void> signIn({required String email, required String password}) async {
+    if (!cloudEnabled) throw StateError('Firebase is not configured.');
+    await _accountAuth.signIn(email: email, password: password);
+    await _hydrateOrMigrateCloud();
+    await _writeLocal();
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await _accountAuth.signOut();
+    cloudSyncError = null;
+    notifyListeners();
   }
 
   Future<void> updateProfile(UserProfile value) async {
@@ -418,6 +443,26 @@ class AppController extends ChangeNotifier {
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());
 
+  Future<String> exportAllData() async {
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session == null || repository == null) return exportJson();
+    final exported = await repository.exportUser(session.uid);
+    return const JsonEncoder.withIndent('  ').convert(exported);
+  }
+
+  /// Permanently removes all documents under users/{uid}, deletes the Firebase
+  /// Auth account, and then clears the local cache.
+  Future<void> deleteAccountData() async {
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      await repository.deleteUserTree(session.uid);
+      await _accountAuth.deleteCurrentAccount();
+    }
+    await reset();
+  }
+
   Future<void> reset() async {
     onboardingComplete = false;
     notificationsEnabled = true;
@@ -451,8 +496,130 @@ class AppController extends ChangeNotifier {
 
   Future<void> _commit() async {
     notifyListeners();
+    await _writeLocal();
+    await _pushCloud();
+  }
+
+  Future<void> _writeLocal() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_storageKey, jsonEncode(_json()));
+  }
+
+  Future<void> _hydrateOrMigrateCloud() async {
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session == null || repository == null) return;
+    isCloudSyncing = true;
+    cloudSyncError = null;
+    notifyListeners();
+    try {
+      final remote = await repository.readUser(session.uid);
+      if (remote == null) {
+        if (onboardingComplete) {
+          accountEmail = session.email;
+          await repository.replaceUser(
+            session.uid,
+            _cloudState(migrationVersion: localMigrationVersion),
+          );
+        }
+      } else {
+        _applyCloud(remote);
+        accountEmail = session.email;
+        if (remote.migrationVersion < localMigrationVersion) {
+          await repository.replaceUser(
+            session.uid,
+            remote.copyWith(migrationVersion: localMigrationVersion),
+          );
+        }
+      }
+    } on Object catch (error) {
+      cloudSyncError = error.toString();
+    } finally {
+      isCloudSyncing = false;
+    }
+  }
+
+  Future<void> _pushCloud() async {
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session == null || repository == null) return;
+    isCloudSyncing = true;
+    cloudSyncError = null;
+    notifyListeners();
+    try {
+      await repository.replaceUser(
+        session.uid,
+        _cloudState(migrationVersion: localMigrationVersion),
+      );
+    } on Object catch (error) {
+      // SharedPreferences remains the authoritative offline cache. A later
+      // successful commit retries the complete user-scoped snapshot.
+      cloudSyncError = error.toString();
+    } finally {
+      isCloudSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  CloudUserState _cloudState({required int migrationVersion}) => CloudUserState(
+    profile: profile,
+    accountEmail: _accountAuth.currentSession?.email ?? accountEmail ?? '',
+    onboardingComplete: onboardingComplete,
+    notificationsEnabled: notificationsEnabled,
+    outcomeConsent: outcomeConsent,
+    healthAuthorized: healthAuthorized,
+    lastSync: lastSync,
+    migrationVersion: migrationVersion,
+    signals: List.unmodifiable(signals),
+    checkIns: List.unmodifiable(checkIns),
+  );
+
+  void _applyCloud(CloudUserState state) {
+    profile = state.profile;
+    accountEmail = state.accountEmail;
+    onboardingComplete = state.onboardingComplete;
+    notificationsEnabled = state.notificationsEnabled;
+    outcomeConsent = state.outcomeConsent;
+    healthAuthorized = state.healthAuthorized;
+    lastSync = state.lastSync;
+    signals = [...state.signals]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    checkIns = [...state.checkIns]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  void _restoreLocal(Map<String, dynamic> json) {
+    onboardingComplete = json['onboardingComplete'] as bool? ?? false;
+    notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
+    outcomeConsent = json['outcomeConsent'] as bool? ?? false;
+    healthAuthorized = json['healthAuthorized'] as bool? ?? false;
+    accountEmail = json['accountEmail'] as String?;
+    lastSync = json['lastSync'] == null
+        ? null
+        : DateTime.tryParse(json['lastSync'] as String);
+    profile = UserProfile.fromJson(
+      (json['profile'] as Map).cast<String, dynamic>(),
+    );
+    signals = ((json['signals'] as List?) ?? const [])
+        .map(
+          (item) =>
+              SignalReading.fromJson((item as Map).cast<String, dynamic>()),
+        )
+        .toList();
+    checkIns = ((json['checkIns'] as List?) ?? const [])
+        .map(
+          (item) =>
+              DailyCheckIn.fromJson((item as Map).cast<String, dynamic>()),
+        )
+        .toList();
+    final statuses =
+        (json['recommendationStatuses'] as Map?)?.cast<String, dynamic>() ??
+        const {};
+    for (final entry in statuses.entries) {
+      _recommendationStatuses[entry.key] = RecommendationStatus.values.byName(
+        entry.value as String,
+      );
+    }
   }
 
   static String _clock(DateTime value) {

@@ -40,6 +40,9 @@ app.*.map.json
 **/flutter_export_environment.sh
 **/ephemeral/
 
+# Local Firebase runtime values (commit the example only)
+**/config/firebase_options.json
+
 # Android
 **/android/.gradle/
 **/android/local.properties

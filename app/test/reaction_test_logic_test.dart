@@ -47,10 +47,7 @@ void main() {
       ];
 
       expect(ReactionTestLogic.baselineMs(signals), closeTo(280, 0.01));
-      expect(
-        ReactionTestLogic.baselineMs(signals, minSamples: 4),
-        isNull,
-      );
+      expect(ReactionTestLogic.baselineMs(signals, minSamples: 4), isNull);
     });
 
     test('compares a result against the personal baseline', () {
@@ -62,10 +59,7 @@ void main() {
         ReactionTestLogic.comparisonLabel(300, 280),
         '20 ms slower than baseline',
       );
-      expect(
-        ReactionTestLogic.comparisonLabel(285, 280),
-        'Near your baseline',
-      );
+      expect(ReactionTestLogic.comparisonLabel(285, 280), 'Near your baseline');
     });
   });
 }

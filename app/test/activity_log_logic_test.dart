@@ -58,7 +58,9 @@ void main() {
       expect(hydration.peakValue, 3);
       expect(hydration.peakDay, DateTime(2026, 7, 23));
 
-      final study = week.firstWhere((series) => series.type == SignalType.study);
+      final study = week.firstWhere(
+        (series) => series.type == SignalType.study,
+      );
       expect(study.peakValue, 4);
       expect(study.peakDay, DateTime(2026, 7, 21));
     });

@@ -42,9 +42,7 @@ abstract final class ActivityLogLogic {
 
   static String categoryUnit(SignalType type) => switch (type) {
     SignalType.hydration => 'L',
-    SignalType.study ||
-    SignalType.exercise ||
-    SignalType.screenTime => 'hr',
+    SignalType.study || SignalType.exercise || SignalType.screenTime => 'hr',
     _ => type.unit,
   };
 

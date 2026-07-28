@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, create, update, delete: if isOwner(uid);
+
+      match /{document=**} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+    }
+
+    // No collection-group or top-level access is granted. Any path not under
+    // the signed-in user's own users/{uid} document is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
