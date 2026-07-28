@@ -21,7 +21,8 @@
 | 0.8 | Mood & stress check-in (1–10, auto morning/evening, history) | Complete |
 | 0.9 | Reaction-time daily benchmark (invalid attempts + baseline) | Complete |
 | 0.10 | Daily history (grouping, completion, edit/delete) | Complete |
-| 0.11+ | Scores, forecast engine, HealthKit, AI coach, etc. | Not started |
+| 0.10-a | Firebase Auth + Firestore schema, rules, migration | Not started |
+| 0.11+ | Scores, forecast engine, HealthKit, AI coach (Firebase-backed) | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -58,6 +59,7 @@
 9. Mood & stress daily check-in (1–10, auto morning/evening, history) - Complete (v0.8)
 10. Reaction-time daily benchmark (early taps, invalid attempts, baseline) - Complete (v0.9)
 11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
+12. Firebase foundation (Auth, Firestore schema, rules, migration) - Not started (v0.10-a)
 
 ## Day-to-Day Entries
 
@@ -134,6 +136,17 @@
 - Raw activity and sleep data uses multiple `SignalReading` rows per logical record. The history builder explicitly suppresses grouped raw rows and emits one semantic item to prevent duplicates.
 - Overnight sleep spans two dates; assigning it by wake time keeps the full sleep record on the day it informs.
 
+### 2026-07-28 — Planned Version 0.10-a Firebase Foundation
+
+**Goal:** Insert Firebase setup into the roadmap before scoring/forecast work, and retarget later versions to the cloud schema.
+
+**Results:**
+- Added **Version 0.10-a — Firebase Foundation** to `PLAN.md` (Auth, Firestore collections, Security Rules, migration, query helpers, export/delete).
+- Updated Versions 0.11–0.35 to reference user-scoped queries, schema collections, and privacy constraints.
+- Mapped Stable Data Interfaces to Firestore paths; release rules now prefer Firebase for new persisted features.
+
+**Major issues:** None (planning-only change).
+
 ---
 
 ## Prompts Used
@@ -185,6 +198,14 @@
 
 **Modifications:** Overnight sleep is assigned to the wake date; reaction benchmarks are removable but not editable so measured results are not converted into manual values.
 
+### Docs: Version 0.10-a Firebase roadmap
+**Prompt:**
+"we want to setup a firebase database before working . add that in as a version .10-a and then edit later versions to reference what you created (using the database schema, querying correctly for new data, privacy)"
+
+**Result:** Added Version 0.10-a Firebase Foundation to `PLAN.md`; retargeted 0.11–0.35 and Stable Data Interfaces to Firestore paths, user-scoped queries, and Security Rules / privacy.
+
+**Modifications:** Planning docs only (no app code yet).
+
 ---
 
 ## Challenges & Solutions
@@ -218,6 +239,7 @@
 
 ## Future Improvements
 - [x] Implement Version 0.10 — fuller Daily History (edit/delete by date)
-- [ ] Implement Version 0.11+ Energy / Cognitive scores and Today dashboard
+- [ ] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
+- [ ] Implement Version 0.11+ Energy / Cognitive scores and Today dashboard (query Firebase)
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history
