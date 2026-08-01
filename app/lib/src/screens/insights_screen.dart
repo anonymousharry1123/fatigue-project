@@ -41,11 +41,11 @@ class InsightsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Your Fatigue Model',
+                            'Energy Score Model',
                             style: TextStyle(fontWeight: FontWeight.w900),
                           ),
                           Text(
-                            'Fixture model · Version 0.5',
+                            'Daily wellness estimate · Version 0.11',
                             style: TextStyle(
                               color: TonyoColors.muted,
                               fontSize: 10,
@@ -65,8 +65,8 @@ class InsightsScreen extends StatelessWidget {
                       TonyoColors.mint,
                     ),
                     _ModelStat(
-                      '${controller.checkIns.length}',
-                      'Check-ins',
+                      '${score.inputCount}/7',
+                      'Inputs used',
                       Colors.white,
                     ),
                     _ModelStat(
@@ -79,11 +79,11 @@ class InsightsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SectionHeader('What drives your fatigue'),
+          const SectionHeader('Energy Score factors'),
           if (drivers.isEmpty)
             const TonyoCard(
               child: Text(
-                'No fixture drivers are available. Reset the demo from Profile.',
+                'Log sleep, activity, and a check-in to explain your estimate.',
                 style: TextStyle(color: TonyoColors.muted),
               ),
             )
@@ -97,7 +97,6 @@ class InsightsScreen extends StatelessWidget {
                 TonyoColors.amber,
               ];
               final color = colors[entry.key];
-              final importance = (34 - entry.key * 5).clamp(10, 40);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: Column(
@@ -117,7 +116,7 @@ class InsightsScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$importance%',
+                          '${entry.value.contribution >= 0 ? '+' : ''}${entry.value.contribution.round()} pts',
                           style: TextStyle(
                             color: color,
                             fontWeight: FontWeight.w900,
@@ -129,7 +128,7 @@ class InsightsScreen extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: LinearProgressIndicator(
-                        value: importance / 40,
+                        value: entry.value.contribution.abs().clamp(0, 20) / 20,
                         minHeight: 7,
                         color: color,
                         backgroundColor: TonyoColors.surfaceRaised,
@@ -175,7 +174,7 @@ class InsightsScreen extends StatelessWidget {
 
   static IconData _driverIcon(String label) {
     if (label.contains('Sleep')) return Icons.bedtime_rounded;
-    if (label.contains('Training')) return Icons.fitness_center_rounded;
+    if (label.contains('Exercise')) return Icons.fitness_center_rounded;
     if (label.contains('Screen')) return Icons.smartphone_rounded;
     if (label.contains('Hydration')) return Icons.water_drop_rounded;
     return Icons.auto_awesome_rounded;

@@ -235,6 +235,26 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<DailyCheckIn>> checkInsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final snapshot = await _user(uid)
+        .collection('checkIns')
+        .where('timestamp', isGreaterThanOrEqualTo: start)
+        .where('timestamp', isLessThan: end)
+        .orderBy('timestamp', descending: true)
+        .get();
+    return snapshot.docs
+        .map(
+          (document) =>
+              checkInFromCloud(document.id, _normalizeDates(document.data())),
+        )
+        .toList();
+  }
+
+  @override
   Future<DailyCheckIn?> latestCheckIn(String uid) async {
     final snapshot = await _user(uid)
         .collection('checkIns')
@@ -263,6 +283,28 @@ class FirestoreCloudRepository implements CloudRepository {
               signalFromCloud(document.id, _normalizeDates(document.data())),
         )
         .toList();
+  }
+
+  @override
+  Future<void> upsertScoreSnapshot(String uid, ScoreSnapshot snapshot) async {
+    final day = snapshot.day;
+    if (day == null) throw ArgumentError('A score snapshot requires a day.');
+    await _user(uid)
+        .collection('scoreSnapshots')
+        .doc(scoreSnapshotId(day))
+        .set(
+          scoreSnapshotToCloud(snapshot: snapshot, day: day),
+          SetOptions(merge: true),
+        );
+  }
+
+  @override
+  Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day) async {
+    final document = await _user(
+      uid,
+    ).collection('scoreSnapshots').doc(scoreSnapshotId(day)).get();
+    final data = document.data();
+    return data == null ? null : scoreSnapshotFromCloud(_normalizeDates(data));
   }
 
   @override
