@@ -169,6 +169,24 @@ Map<String, Object?> scoreSnapshotToCloud({
   'schemaVersion': cloudSchemaVersion,
 };
 
+ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) {
+  final drivers = ((data['drivers'] as List?) ?? const [])
+      .map(
+        (raw) => ScoreDriver(
+          raw['label'] as String,
+          (raw['contribution'] as num).toDouble(),
+          raw['detail'] as String,
+        ),
+      )
+      .toList();
+  return ScoreSnapshot(
+    energy: (data['energy'] as num).toInt(),
+    cognitive: (data['cognitive'] as num).toInt(),
+    confidence: (data['confidence'] as num).toDouble(),
+    drivers: drivers,
+  );
+}
+
 /// Reserved Version 0.15+ forecast document.
 Map<String, Object?> forecastPointToCloud(ForecastPoint point) => {
   'time': point.time,

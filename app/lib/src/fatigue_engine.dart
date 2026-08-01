@@ -82,6 +82,21 @@ abstract final class FatigueEngine {
         ),
       );
     }
+    final caffeine = value(SignalType.caffeine);
+    if (caffeine != null) {
+      // Mild lift for 0–2 drinks; excess caffeine drains recovery estimate.
+      final impact = caffeine <= 2
+          ? (caffeine * 1.5).clamp(0, 3).toDouble()
+          : (-(caffeine - 2) * 2.2).clamp(-10, 0).toDouble();
+      energy += impact;
+      drivers.add(
+        ScoreDriver(
+          'Caffeine',
+          impact,
+          '${caffeine.toStringAsFixed(0)} drinks today',
+        ),
+      );
+    }
     if (latestCheckIn != null) {
       final impact =
           ((latestCheckIn.energy - 5.5) * 2.5 -

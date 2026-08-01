@@ -100,3 +100,43 @@ by Firebase Authentication.
 
 The `signals(type, timestamp)` compound index is declared in
 `firestore.indexes.json`.
+
+## Synthetic Cohort Lab
+
+Tonyo can load a bundled synthetic student CSV for score debugging without
+creating Firebase Auth accounts.
+
+### Local visualizations
+
+1. Open the app and complete onboarding / sign in as usual (optional for charts).
+2. Profile → **Cohort Lab** → **Load CSV**.
+3. Overview / Relations / People tabs render in-memory scores from
+   `FatigueEngine`. Firebase config is not required for this path.
+
+### Optional Firestore publish
+
+Requires a signed-in Firebase account and
+`--dart-define-from-file=config/firebase_options.json`.
+
+Published tree:
+
+```text
+syntheticUsers/{studentId}
+  meta, displayName, schemaVersion, updatedAt
+  ├── signals/{signalId}
+  ├── checkIns/{checkInId}
+  └── scoreSnapshots/latest
+syntheticCohort/summary
+```
+
+Security rules allow any authenticated user to read/write the synthetic tree
+only. Real `users/{uid}` documents remain owner-only. Redeploy rules after
+pulling this change:
+
+```sh
+firebase use fatigue-project-e28a3
+firebase deploy --only firestore:rules
+```
+
+Use **Clear cloud** in Cohort Lab to delete the published synthetic tree without
+touching production user accounts.
