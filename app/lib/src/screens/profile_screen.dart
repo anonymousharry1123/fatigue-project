@@ -6,6 +6,7 @@ import '../app_controller.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'admin/admin_cohort_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -190,6 +191,17 @@ class ProfileScreen extends StatelessWidget {
             onTap: () => _preview(
               context,
               'Tonyo provides wellness estimates, not medical advice.',
+            ),
+          ),
+          const SectionHeader('Developer'),
+          _SettingTile(
+            icon: Icons.science_outlined,
+            title: 'Cohort Lab',
+            subtitle: 'Synthetic students · score debug dashboard',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AdminCohortScreen(controller: controller),
+              ),
             ),
           ),
         ],

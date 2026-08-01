@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     match /users/{uid} {
       allow read, create, update, delete: if isOwner(uid);
 
@@ -14,8 +18,22 @@ service cloud.firestore {
       }
     }
 
-    // No collection-group or top-level access is granted. Any path not under
-    // the signed-in user's own users/{uid} document is denied.
+    // Synthetic cohort lab (non-PII fake students). Authenticated Tonyo
+    // accounts may read/write so the Flutter Admin screen can publish without
+    // the Admin SDK. Real users/{uid} trees stay owner-only above.
+    match /syntheticUsers/{studentId} {
+      allow read, create, update, delete: if isSignedIn();
+
+      match /{document=**} {
+        allow read, create, update, delete: if isSignedIn();
+      }
+    }
+
+    match /syntheticCohort/{docId} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    // No collection-group or other top-level access is granted.
     match /{document=**} {
       allow read, write: if false;
     }
