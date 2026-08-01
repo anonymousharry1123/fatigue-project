@@ -28,7 +28,11 @@ snapshots are the live-app path. Keep both aligned.
 - [ ] Open **Cohort Lab → Load CSV** (or **Recompute** if already loaded).
 - [ ] Record Overview: `N`, mean/median **Energy**, mean/median **Cognitive**.
 - [ ] Glance Relations: sleep→energy, screen→cognitive, caffeine→energy.
-- [ ] Spot-check 3 People IDs (low sleep, high screen, high caffeine).
+- [ ] Spot-check 3 outlier people via **People → Sort**:
+  1. Sort **Sleep ↑ low** → open the first 3 → confirm low sleep pulls energy down and Sleep appears in drivers.
+  2. Sort **Screen ↓ high** → open the first 3 → confirm high folded screen shows up in screen drivers / lower cognitive.
+  3. Sort **Caffeine ↓ high** → open the first 3 → confirm caffeine driver sign matches intake (mild + vs excess −).
+  Optional extras: **Energy ↑ low**, **Stress ↓ high** if you are tuning check-in weights.
 
 ### 2. Hypothesize
 
