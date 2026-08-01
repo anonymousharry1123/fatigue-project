@@ -127,7 +127,7 @@ abstract final class FatigueEngine {
         ),
       );
     }
-    final caffeine = value(SignalType.caffeine);
+    final caffeine = dailyTotal(SignalType.caffeine);
     if (caffeine != null) {
       // Mild lift for 0–2 drinks; excess caffeine drains recovery estimate.
       final impact = caffeine <= 2
