@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.10-a — Firebase Foundation (as of 2026-07-28)
+- **Current release:** Version 0.11 — Basic Energy Score (as of 2026-08-01)
 
 ## Implementation Report (through v0.9)
 
@@ -22,7 +22,8 @@
 | 0.9 | Reaction-time daily benchmark (invalid attempts + baseline) | Complete |
 | 0.10 | Daily history (grouping, completion, edit/delete) | Complete |
 | 0.10-a | Firebase Auth + Firestore schema, rules, migration | Complete |
-| 0.11+ | Scores, forecast engine, HealthKit, AI coach (Firebase-backed) | Not started |
+| 0.11 | Firebase-backed Basic Energy Score | Complete |
+| 0.12+ | Cognitive score, forecast engine, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -45,7 +46,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-07-28 — **50 tests passed** with Version 0.10-a Firebase Foundation
+- Last verified: 2026-08-01 — **57 tests passed** with Version 0.11 Basic Energy Score
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -60,6 +61,7 @@
 10. Reaction-time daily benchmark (early taps, invalid attempts, baseline) - Complete (v0.9)
 11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
 12. Firebase foundation (Auth, Firestore schema, rules, migration) - Complete (v0.10-a)
+13. Basic Energy Score (seven explainable factors + daily cloud snapshot) - Complete (v0.11)
 
 ## Day-to-Day Entries
 
@@ -210,6 +212,42 @@ close Version 0.10-a.
 **Major issues:** None. The index may briefly report `Building` after creation;
 Firebase enables it automatically when construction finishes.
 
+### 2026-08-01 — Version 0.11 Basic Energy Score
+
+**Branch:** `feature/v0.11-basic-energy-score`
+
+**Goal:** Complete Version 0.11 as a professional, explainable daily Energy
+Score backed by the Version 0.10-a Firebase schema.
+
+**Results:**
+- Replaced the fixture-only prototype path with a bounded 0–100 estimate using
+  sleep, exercise, hydration, workload, screen time, mood, and stress.
+- Added day-scoped activity totals, future-reading exclusion, a three-record
+  recent sleep window, bounded point contributions, and completeness-based
+  confidence. Self-reported energy is intentionally excluded to avoid a
+  circular score.
+- Added user-scoped Firestore and memory-repository queries for check-in ranges,
+  plus deterministic `scoreSnapshots/{yyyy-MM-dd}` reads/upserts.
+- Score documents include `energy`, `confidence`, `inputCount`, `isEstimate`,
+  explainable `drivers`, `day`, and `calculatedAt`. The cognitive field remains
+  reserved for Version 0.12.
+- Recalculation runs after relevant data changes. Query/write failures retain a
+  local wellness estimate and surface an offline-cache status.
+- Refined Today, Insights, Profile, and Forecast copy to distinguish the real
+  Energy Score from upcoming preview models. Today shows loading, refresh,
+  input coverage, confidence, factor points, and non-medical positioning.
+- Bumped the app to `0.11.0+12`.
+- `flutter test` passed all **57 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- The memory repository initially exported raw score `DateTime` values, unlike
+  the production Firestore exporter, breaking account JSON export. The mock now
+  normalizes nested score data to ISO-8601 strings.
+- The previous score used latest values and HRV/resting heart rate, combined
+  check-in energy with stress, and never persisted a snapshot. Version 0.11 now
+  follows the seven roadmap inputs and keeps later-version fields out of its
+  cloud write.
+
 ---
 
 ## Prompts Used
@@ -293,6 +331,19 @@ index, and populated the ignored local runtime configuration.
 
 **Modifications:** Used the existing project and selected `us-west2` (Los
 Angeles) as the requested US West database location.
+
+### Feature: Version 0.11 Basic Energy Score
+**Prompt:**
+"complete version 0.11 in a seperate feature branch. Make it professional."
+
+**Result:** Created `feature/v0.11-basic-energy-score`; implemented a
+Firebase-backed, explainable 0–100 Energy Score, deterministic daily snapshot
+persistence, offline fallback, polished UI states/copy, and regression tests.
+
+**Modifications:** Daily activity rows are summed; sleep uses up to three recent
+records; future readings are ignored; mood and stress contribute independently;
+self-reported energy is not used as a score input; Version 0.12’s cognitive
+field is deliberately not written by the Version 0.11 serializer.
 
 ---
 

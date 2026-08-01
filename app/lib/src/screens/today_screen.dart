@@ -56,6 +56,7 @@ class TodayScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 TonyoCard(
+                  key: const Key('energy-score-card'),
                   padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
@@ -66,7 +67,7 @@ class TodayScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'AI ENERGY FORECAST',
+                              'ESTIMATED ENERGY SCORE',
                               style: TextStyle(
                                 color: TonyoColors.violet,
                                 fontSize: 10,
@@ -98,7 +99,7 @@ class TodayScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '${(score.confidence * 100).round()}% data confidence',
+                                '${score.inputCount}/7 inputs · ${(score.confidence * 100).round()}% confidence',
                                 style: const TextStyle(
                                   color: TonyoColors.mint,
                                   fontSize: 10,
@@ -112,6 +113,36 @@ class TodayScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (controller.isEnergyScoreLoading) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(
+                    minHeight: 2,
+                    color: TonyoColors.primary,
+                    backgroundColor: TonyoColors.surfaceRaised,
+                  ),
+                ],
+                if (controller.energyScoreError case final error?) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.cloud_off_rounded,
+                        color: TonyoColors.amber,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          error,
+                          style: const TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (firstAlert != null) ...[
                   const SizedBox(height: 12),
                   TonyoCard(
@@ -157,69 +188,127 @@ class TodayScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SectionHeader('Today’s drivers'),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = (constraints.maxWidth - 10) / 2;
-                    return Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: score.drivers
-                          .take(4)
-                          .map(
-                            (driver) => SizedBox(
-                              width: width,
-                              child: TonyoCard(
-                                padding: const EdgeInsets.all(13),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        MetricIcon(
-                                          icon: _driverIcon(driver.label),
-                                          color: driver.contribution >= 0
-                                              ? TonyoColors.mint
-                                              : TonyoColors.coral,
-                                          size: 32,
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          '${driver.contribution >= 0 ? '+' : ''}${driver.contribution.round()}',
-                                          style: TextStyle(
+                SectionHeader(
+                  'Today’s score factors',
+                  action: controller.isEnergyScoreLoading
+                      ? 'Updating…'
+                      : 'Refresh',
+                  onTap: controller.isEnergyScoreLoading
+                      ? null
+                      : () => controller.refreshEnergyScore(),
+                ),
+                if (score.drivers.isEmpty)
+                  const TonyoCard(
+                    child: Row(
+                      children: [
+                        MetricIcon(
+                          icon: Icons.add_chart_rounded,
+                          color: TonyoColors.violet,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Log sleep, activity, and a check-in to personalize today’s estimate.',
+                            style: TextStyle(
+                              color: TonyoColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = (constraints.maxWidth - 10) / 2;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: score.drivers
+                            .take(4)
+                            .map(
+                              (driver) => SizedBox(
+                                width: width,
+                                child: TonyoCard(
+                                  padding: const EdgeInsets.all(13),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          MetricIcon(
+                                            icon: _driverIcon(driver.label),
                                             color: driver.contribution >= 0
                                                 ? TonyoColors.mint
                                                 : TonyoColors.coral,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w900,
+                                            size: 32,
                                           ),
+                                          const Spacer(),
+                                          Text(
+                                            '${driver.contribution >= 0 ? '+' : ''}${driver.contribution.round()}',
+                                            style: TextStyle(
+                                              color: driver.contribution >= 0
+                                                  ? TonyoColors.mint
+                                                  : TonyoColors.coral,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 11),
+                                      Text(
+                                        driver.label,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
                                         ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 11),
-                                    Text(
-                                      driver.label,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
                                       ),
-                                    ),
-                                    Text(
-                                      driver.detail,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: TonyoColors.muted,
-                                        fontSize: 10,
+                                      Text(
+                                        driver.detail,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: TonyoColors.muted,
+                                          fontSize: 10,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                    );
-                  },
+                            )
+                            .toList(),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 12),
+                TonyoCard(
+                  key: const Key('energy-score-explanation'),
+                  color: const Color(0xFF111722),
+                  padding: const EdgeInsets.all(14),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: TonyoColors.blue,
+                        size: 19,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'How it works: a neutral baseline is adjusted by sleep, exercise, hydration, workload, screen time, mood, and stress. This wellness estimate is not a medical assessment.',
+                          style: TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 10,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 6),
                 SectionHeader(
@@ -252,7 +341,7 @@ class TodayScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 5),
                             const Text(
-                              'This preview uses your reaction, sleep, stress, and study fixtures.',
+                              'Cognitive scoring is the next model upgrade in Version 0.12.',
                               style: TextStyle(
                                 color: TonyoColors.muted,
                                 fontSize: 11,
@@ -282,16 +371,19 @@ class TodayScreen extends StatelessWidget {
       ? 'Steady energy'
       : 'Recovery first';
   static String _statusDetail(int value) => value >= 72
-      ? 'Energy should hold into early afternoon.'
+      ? 'Today’s recovery and behavior inputs are trending well.'
       : value >= 52
-      ? 'Protect the afternoon dip with a lighter block.'
-      : 'Your fixture signals favor a lower-load day.';
+      ? 'A balanced day with room for deliberate recovery.'
+      : 'Today’s inputs support choosing a lower-load day.';
 
   static IconData _driverIcon(String label) {
     if (label.contains('Sleep')) return Icons.bedtime_rounded;
-    if (label.contains('Training')) return Icons.fitness_center_rounded;
+    if (label.contains('Exercise')) return Icons.fitness_center_rounded;
     if (label.contains('Screen')) return Icons.smartphone_rounded;
     if (label.contains('Hydration')) return Icons.water_drop_rounded;
+    if (label.contains('Workload')) return Icons.menu_book_rounded;
+    if (label.contains('Mood')) return Icons.mood_rounded;
+    if (label.contains('Stress')) return Icons.psychology_rounded;
     return Icons.auto_awesome_rounded;
   }
 

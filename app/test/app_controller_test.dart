@@ -192,6 +192,71 @@ void main() {
   });
 
   test(
+    'Version 0.11 queries cloud inputs and persists today’s estimate',
+    () async {
+      final now = DateTime.now();
+      final recordedAt = now.subtract(const Duration(minutes: 30));
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'score-uid',
+          email: 'score@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'score-uid')
+        ..seed(
+          'score-uid',
+          CloudUserState(
+            profile: const UserProfile(name: 'Score Maya'),
+            accountEmail: 'score@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: true,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [
+              for (final entry in const {
+                SignalType.sleep: 8.1,
+                SignalType.hydration: 2.3,
+                SignalType.study: 3.0,
+                SignalType.exercise: .8,
+                SignalType.screenTime: 2.5,
+              }.entries)
+                SignalReading(
+                  id: entry.key.name,
+                  type: entry.key,
+                  value: entry.value,
+                  timestamp: recordedAt,
+                ),
+            ],
+            checkIns: [
+              DailyCheckIn(
+                id: 'today-check-in',
+                timestamp: recordedAt,
+                energy: 8,
+                mood: 8,
+                stress: 3,
+              ),
+            ],
+          ),
+        );
+      final controller = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+
+      await controller.load();
+
+      final persisted = await repository.scoreSnapshotForDay('score-uid', now);
+      expect(controller.score.inputCount, 7);
+      expect(controller.score.isEstimate, isTrue);
+      expect(controller.energyScoreError, isNull);
+      expect(persisted, isNotNull);
+      expect(persisted?.energy, controller.score.energy);
+      expect(persisted?.drivers, hasLength(7));
+    },
+  );
+
+  test(
     'Version 0.8 stores morning/evening check-ins on a 1–10 scale',
     () async {
       final controller = AppController();

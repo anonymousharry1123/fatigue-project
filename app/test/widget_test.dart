@@ -1,6 +1,7 @@
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/demo_data.dart';
+import 'package:app/src/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,7 +40,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Your Fatigue Model'), findsOneWidget);
+    expect(find.text('Energy Score Model'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -97,6 +98,53 @@ void main() {
     await tester.tap(find.text('AI Coach'));
     await tester.pumpAndSettle();
     expect(find.text('Today’s plan'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.11 clearly presents an explainable estimate', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final recordedAt = now.subtract(const Duration(minutes: 1));
+    final controller = AppController()
+      ..isReady = true
+      ..onboardingComplete = true
+      ..signals = [
+        for (final entry in const {
+          SignalType.sleep: 8.0,
+          SignalType.hydration: 2.2,
+          SignalType.study: 3.0,
+          SignalType.exercise: .75,
+          SignalType.screenTime: 2.5,
+        }.entries)
+          SignalReading(
+            id: entry.key.name,
+            type: entry.key,
+            value: entry.value,
+            timestamp: recordedAt,
+          ),
+      ]
+      ..checkIns = [
+        DailyCheckIn(
+          id: 'today',
+          timestamp: recordedAt,
+          energy: 7,
+          mood: 8,
+          stress: 3,
+        ),
+      ];
+    await controller.refreshEnergyScore();
+
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    expect(find.text('ESTIMATED ENERGY SCORE'), findsOneWidget);
+    expect(find.textContaining('7/7 inputs'), findsOneWidget);
+    expect(find.text('Today’s score factors'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('energy-score-explanation')),
+      250,
+    );
+    expect(find.textContaining('This wellness estimate'), findsOneWidget);
   });
 
   testWidgets('Version 0.6 activity log validates and saves manual data', (

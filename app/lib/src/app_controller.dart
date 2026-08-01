@@ -35,12 +35,15 @@ class AppController extends ChangeNotifier {
   bool healthAuthorized = false;
   bool isSyncing = false;
   bool isCloudSyncing = false;
+  bool isEnergyScoreLoading = false;
   DateTime? lastSync;
   String? accountEmail;
   String? cloudSyncError;
+  String? energyScoreError;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
+  ScoreSnapshot? _energyScore;
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
@@ -123,7 +126,7 @@ class AppController extends ChangeNotifier {
   );
 
   ScoreSnapshot get score =>
-      FatigueEngine.score(signals: signals, checkIns: checkIns);
+      _energyScore ?? FatigueEngine.score(signals: signals, checkIns: checkIns);
   List<ForecastPoint> forecastFor(DateTime day) =>
       FatigueEngine.forecast(score, day);
   List<ForecastWindow> get windows =>
@@ -142,6 +145,67 @@ class AppController extends ChangeNotifier {
   List<DailyCheckIn> recentCheckIns({int limit = 8}) =>
       CheckInLogic.recentHistory(checkIns, limit: limit);
 
+  /// Recalculates Version 0.11 from a user-scoped cloud query when signed in,
+  /// then persists one deterministic scoreSnapshots/{yyyy-MM-dd} document.
+  /// Local inputs remain a safe offline fallback.
+  Future<void> refreshEnergyScore({DateTime? day, bool notify = true}) async {
+    final currentTime = DateTime.now();
+    final target = day ?? currentTime;
+    final start = DateTime(target.year, target.month, target.day);
+    final end = start.add(const Duration(days: 1));
+    final calculationTime = _sameDay(currentTime, start)
+        ? currentTime
+        : end.subtract(const Duration(microseconds: 1));
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+
+    isEnergyScoreLoading = true;
+    energyScoreError = null;
+    if (notify) notifyListeners();
+    try {
+      List<SignalReading> scoringSignals = signals;
+      List<DailyCheckIn> scoringCheckIns = checkIns;
+      final canUseCloud =
+          session != null && repository != null && cloudSyncError == null;
+      if (canUseCloud) {
+        scoringSignals = await repository.signalsByRange(
+          session.uid,
+          start: start.subtract(const Duration(days: 6)),
+          end: end,
+        );
+        scoringCheckIns = await repository.checkInsByRange(
+          session.uid,
+          start: start.subtract(const Duration(hours: 36)),
+          end: end,
+        );
+      } else if (session != null && repository != null) {
+        energyScoreError = 'Cloud scoring unavailable · using cached inputs';
+      }
+      final snapshot = FatigueEngine.score(
+        signals: scoringSignals,
+        checkIns: scoringCheckIns,
+        now: calculationTime,
+        day: start,
+      );
+      if (canUseCloud) {
+        await repository.upsertScoreSnapshot(session.uid, snapshot);
+      }
+      _energyScore = snapshot;
+    } on Object {
+      // A network/query failure must not make the wellness estimate disappear.
+      _energyScore = FatigueEngine.score(
+        signals: signals,
+        checkIns: checkIns,
+        now: calculationTime,
+        day: start,
+      );
+      energyScoreError = 'Cloud scoring unavailable · using cached inputs';
+    } finally {
+      isEnergyScoreLoading = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString(_storageKey);
@@ -159,6 +223,7 @@ class AppController extends ChangeNotifier {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
     }
+    if (onboardingComplete) await refreshEnergyScore(notify: false);
     isReady = true;
     notifyListeners();
   }
@@ -182,6 +247,7 @@ class AppController extends ChangeNotifier {
         await _hydrateOrMigrateCloud();
         if (onboardingComplete) {
           await _writeLocal();
+          await refreshEnergyScore(notify: false);
           notifyListeners();
           return;
         }
@@ -197,7 +263,7 @@ class AppController extends ChangeNotifier {
       signals = buildDemoSignals(DateTime.now());
       checkIns = buildDemoCheckIns(DateTime.now());
     }
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> signIn({required String email, required String password}) async {
@@ -205,6 +271,7 @@ class AppController extends ChangeNotifier {
     await _accountAuth.signIn(email: email, password: password);
     await _hydrateOrMigrateCloud();
     await _writeLocal();
+    if (onboardingComplete) await refreshEnergyScore(notify: false);
     notifyListeners();
   }
 
@@ -230,7 +297,7 @@ class AppController extends ChangeNotifier {
         note: note,
       ),
     );
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> saveActivityLog({
@@ -284,12 +351,12 @@ class AppController extends ChangeNotifier {
         ),
       ),
     );
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> deleteActivityLog(String id) async {
     signals.removeWhere((item) => item.groupId == id);
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> addSleep({
@@ -328,12 +395,12 @@ class AppController extends ChangeNotifier {
         timestamp: bedtime,
       ),
     ]);
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> deleteSleepLog(String id) async {
     signals.removeWhere((item) => item.groupId == id);
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> addCheckIn({
@@ -368,7 +435,7 @@ class AppController extends ChangeNotifier {
         note: note,
       ),
     );
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> addReactionResult(double averageMs, {String? note}) async {
@@ -387,12 +454,12 @@ class AppController extends ChangeNotifier {
 
   Future<void> deleteSignal(String id) async {
     signals.removeWhere((item) => item.id == id);
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> deleteCheckIn(String id) async {
     checkIns.removeWhere((item) => item.id == id);
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   Future<void> setRecommendationStatus(
@@ -438,7 +505,7 @@ class AppController extends ChangeNotifier {
     signals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     lastSync = DateTime.now();
     isSyncing = false;
-    await _commit();
+    await _commit(energyInputsChanged: true);
   }
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());
@@ -473,6 +540,8 @@ class AppController extends ChangeNotifier {
     profile = const UserProfile();
     signals = [];
     checkIns = [];
+    _energyScore = null;
+    energyScoreError = null;
     _recommendationStatuses.clear();
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_storageKey);
@@ -494,10 +563,13 @@ class AppController extends ChangeNotifier {
     ),
   };
 
-  Future<void> _commit() async {
+  Future<void> _commit({bool energyInputsChanged = false}) async {
     notifyListeners();
     await _writeLocal();
     await _pushCloud();
+    if (energyInputsChanged && onboardingComplete) {
+      await refreshEnergyScore();
+    }
   }
 
   Future<void> _writeLocal() async {
@@ -575,6 +647,7 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    _energyScore = null;
     profile = state.profile;
     accountEmail = state.accountEmail;
     onboardingComplete = state.onboardingComplete;
@@ -589,6 +662,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _restoreLocal(Map<String, dynamic> json) {
+    _energyScore = null;
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
     notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;
@@ -626,4 +700,9 @@ class AppController extends ChangeNotifier {
     final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
     return '$hour:${value.minute.toString().padLeft(2, '0')} ${value.hour >= 12 ? 'PM' : 'AM'}';
   }
+
+  static bool _sameDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 }
