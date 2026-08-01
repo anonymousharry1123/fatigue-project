@@ -41,11 +41,11 @@ class InsightsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Energy Score Model',
+                            'Daily Score Models',
                             style: TextStyle(fontWeight: FontWeight.w900),
                           ),
                           Text(
-                            'Daily wellness estimate · Version 0.11',
+                            'Energy v0.11 · Cognitive v0.12',
                             style: TextStyle(
                               color: TonyoColors.muted,
                               fontSize: 10,
@@ -59,19 +59,15 @@ class InsightsScreen extends StatelessWidget {
                 const SizedBox(height: 18),
                 Row(
                   children: [
+                    _ModelStat('${score.energy}', 'Energy', TonyoColors.mint),
                     _ModelStat(
-                      '${(score.confidence * 100).round()}%',
-                      'Data confidence',
-                      TonyoColors.mint,
+                      '${score.cognitive}',
+                      'Cognitive',
+                      TonyoColors.blue,
                     ),
                     _ModelStat(
-                      '${score.inputCount}/7',
-                      'Inputs used',
-                      Colors.white,
-                    ),
-                    _ModelStat(
-                      '${controller.signals.map((item) => item.type).toSet().length}',
-                      'Signals tracked',
+                      '${(score.cognitiveConfidence * 100).round()}%',
+                      'Cognitive confidence',
                       Colors.white,
                     ),
                   ],
@@ -138,6 +134,92 @@ class InsightsScreen extends StatelessWidget {
                 ),
               );
             }),
+          const SectionHeader('Cognitive Score factors'),
+          TonyoCard(
+            key: const Key('insights-cognitive-model'),
+            color: const Color(0xFF111722),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const MetricIcon(
+                      icon: Icons.psychology_rounded,
+                      color: TonyoColors.blue,
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        '${score.cognitiveInputCount}/5 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 13),
+                  child: Divider(color: TonyoColors.border, height: 1),
+                ),
+                if (score.cognitiveDrivers.isEmpty)
+                  const Text(
+                    'Complete a reaction test, sleep or activity log, and check-in to explain cognitive readiness.',
+                    style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                  )
+                else
+                  ...score.cognitiveDrivers.map((driver) {
+                    final positive = driver.contribution >= 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            positive
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                            color: positive
+                                ? TonyoColors.mint
+                                : TonyoColors.coral,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  driver.label,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                Text(
+                                  driver.detail,
+                                  style: const TextStyle(
+                                    color: TonyoColors.muted,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '${positive ? '+' : ''}${driver.contribution.round()} pts',
+                            style: TextStyle(
+                              color: positive
+                                  ? TonyoColors.mint
+                                  : TonyoColors.coral,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
           const SectionHeader('Patterns preview'),
           const _PatternCard(
             icon: Icons.trending_down_rounded,
@@ -163,7 +245,7 @@ class InsightsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Trend analysis is scheduled for Version 0.21. Version 0.5 persists the profile and fixture state needed to preview this screen.',
+            'Daily score factors are live. Longer-term trend analysis is scheduled for Version 0.21.',
             textAlign: TextAlign.center,
             style: TextStyle(color: TonyoColors.muted, fontSize: 10),
           ),

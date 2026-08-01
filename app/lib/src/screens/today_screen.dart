@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'coach_screen.dart';
@@ -113,7 +114,7 @@ class TodayScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (controller.isEnergyScoreLoading) ...[
+                if (controller.isScoreLoading) ...[
                   const SizedBox(height: 10),
                   const LinearProgressIndicator(
                     minHeight: 2,
@@ -121,7 +122,7 @@ class TodayScreen extends StatelessWidget {
                     backgroundColor: TonyoColors.surfaceRaised,
                   ),
                 ],
-                if (controller.energyScoreError case final error?) ...[
+                if (controller.scoreError case final error?) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -190,12 +191,10 @@ class TodayScreen extends StatelessWidget {
                 ],
                 SectionHeader(
                   'Today’s score factors',
-                  action: controller.isEnergyScoreLoading
-                      ? 'Updating…'
-                      : 'Refresh',
-                  onTap: controller.isEnergyScoreLoading
+                  action: controller.isScoreLoading ? 'Updating…' : 'Refresh',
+                  onTap: controller.isScoreLoading
                       ? null
-                      : () => controller.refreshEnergyScore(),
+                      : () => controller.refreshScores(),
                 ),
                 if (score.drivers.isEmpty)
                   const TonyoCard(
@@ -319,35 +318,100 @@ class TodayScreen extends StatelessWidget {
                 _RecommendationPreview(onTap: () => _openCoach(context)),
                 const SectionHeader('Cognitive readiness'),
                 TonyoCard(
-                  child: Row(
+                  key: const Key('cognitive-score-card'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ScoreRing(
-                        value: score.cognitive,
-                        label: 'Focus',
-                        size: 82,
+                      Row(
+                        children: [
+                          ScoreRing(
+                            value: score.cognitive,
+                            label: 'Cognitive',
+                            size: 88,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'ESTIMATED COGNITIVE SCORE',
+                                  style: TextStyle(
+                                    color: TonyoColors.blue,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: .6,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _cognitiveStatus(score.cognitive),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _cognitiveComparison(score),
+                                  style: TextStyle(
+                                    color: score.cognitiveChange == null
+                                        ? TonyoColors.muted
+                                        : score.cognitiveChange! >= 0
+                                        ? TonyoColors.mint
+                                        : TonyoColors.coral,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${score.cognitiveInputCount}/5 cognitive inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                                  style: const TextStyle(
+                                    color: TonyoColors.muted,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              score.cognitive >= 70
-                                  ? 'Ready for deep work'
-                                  : 'Keep tasks lighter',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Divider(color: TonyoColors.border, height: 1),
+                      ),
+                      const Text(
+                        'WHAT SHAPED THIS ESTIMATE',
+                        style: TextStyle(
+                          color: TonyoColors.muted,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: .6,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      if (score.cognitiveDrivers.isEmpty)
+                        const Text(
+                          'Complete a reaction test, sleep log, activity log, or check-in to personalize this score.',
+                          style: TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 11,
+                          ),
+                        )
+                      else
+                        ...score.cognitiveDrivers
+                            .take(3)
+                            .map(
+                              (driver) => _CognitiveFactorRow(driver: driver),
                             ),
-                            const SizedBox(height: 5),
-                            const Text(
-                              'Cognitive scoring is the next model upgrade in Version 0.12.',
-                              style: TextStyle(
-                                color: TonyoColors.muted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        'A wellness estimate for planning focus—not a measure of intelligence or a medical assessment.',
+                        style: TextStyle(
+                          color: TonyoColors.muted,
+                          fontSize: 9,
+                          height: 1.35,
                         ),
                       ),
                     ],
@@ -375,6 +439,21 @@ class TodayScreen extends StatelessWidget {
       : value >= 52
       ? 'A balanced day with room for deliberate recovery.'
       : 'Today’s inputs support choosing a lower-load day.';
+
+  static String _cognitiveStatus(int value) => value >= 72
+      ? 'Ready for focused work'
+      : value >= 52
+      ? 'Steady cognitive load'
+      : 'Protect your focus';
+
+  static String _cognitiveComparison(ScoreSnapshot score) {
+    final change = score.cognitiveChange;
+    if (change == null) {
+      return 'First Cognitive Score · comparison starts tomorrow';
+    }
+    if (change == 0) return 'No change from yesterday';
+    return '${change > 0 ? '↑' : '↓'} ${change.abs()} points from yesterday';
+  }
 
   static IconData _driverIcon(String label) {
     if (label.contains('Sleep')) return Icons.bedtime_rounded;
@@ -413,6 +492,59 @@ class TodayScreen extends StatelessWidget {
     ];
     final now = DateTime.now();
     return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+}
+
+class _CognitiveFactorRow extends StatelessWidget {
+  const _CognitiveFactorRow({required this.driver});
+
+  final ScoreDriver driver;
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = driver.contribution >= 0;
+    final color = positive ? TonyoColors.mint : TonyoColors.coral;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  driver.label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  driver.detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${positive ? '+' : ''}${driver.contribution.round()} pts',
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -192,10 +192,15 @@ void main() {
   });
 
   test(
-    'Version 0.11 queries cloud inputs and persists today’s estimate',
+    'Versions 0.11–0.12 query cloud inputs and update one daily snapshot',
     () async {
       final now = DateTime.now();
-      final recordedAt = now.subtract(const Duration(minutes: 30));
+      final recordedAt = now;
+      final previousDay = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 1));
       final auth = MemoryAccountAuth(
         session: const AccountSession(
           uid: 'score-uid',
@@ -227,6 +232,18 @@ void main() {
                   value: entry.value,
                   timestamp: recordedAt,
                 ),
+              SignalReading(
+                id: 'reaction-today',
+                type: SignalType.reactionTime,
+                value: 260,
+                timestamp: recordedAt,
+              ),
+              SignalReading(
+                id: 'reaction-prior',
+                type: SignalType.reactionTime,
+                value: 280,
+                timestamp: recordedAt.subtract(const Duration(days: 8)),
+              ),
             ],
             checkIns: [
               DailyCheckIn(
@@ -239,6 +256,18 @@ void main() {
             ],
           ),
         );
+      await repository.upsertScoreSnapshot(
+        'score-uid',
+        ScoreSnapshot(
+          energy: 68,
+          cognitive: 62,
+          confidence: .8,
+          drivers: const [],
+          cognitiveConfidence: .7,
+          cognitiveDrivers: const [],
+          day: previousDay,
+        ),
+      );
       final controller = AppController(
         accountAuth: auth,
         cloudRepository: repository,
@@ -248,10 +277,21 @@ void main() {
 
       final persisted = await repository.scoreSnapshotForDay('score-uid', now);
       expect(controller.score.inputCount, 7);
+      expect(controller.score.cognitiveInputCount, 5);
+      expect(controller.score.previousCognitive, 62);
+      expect(
+        controller.score.cognitiveDrivers
+            .singleWhere((driver) => driver.label == 'Reaction time')
+            .detail,
+        contains('baseline'),
+      );
       expect(controller.score.isEstimate, isTrue);
-      expect(controller.energyScoreError, isNull);
+      expect(controller.scoreError, isNull);
       expect(persisted, isNotNull);
       expect(persisted?.energy, controller.score.energy);
+      expect(persisted?.cognitive, controller.score.cognitive);
+      expect(persisted?.cognitiveDrivers, hasLength(5));
+      expect(persisted?.previousCognitive, 62);
       expect(persisted?.drivers, hasLength(7));
     },
   );

@@ -40,7 +40,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Energy Score Model'), findsOneWidget);
+    expect(find.text('Daily Score Models'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -104,7 +104,7 @@ void main() {
     tester,
   ) async {
     final now = DateTime.now();
-    final recordedAt = now.subtract(const Duration(minutes: 1));
+    final recordedAt = now;
     final controller = AppController()
       ..isReady = true
       ..onboardingComplete = true
@@ -122,6 +122,12 @@ void main() {
             value: entry.value,
             timestamp: recordedAt,
           ),
+        SignalReading(
+          id: 'reaction',
+          type: SignalType.reactionTime,
+          value: 270,
+          timestamp: recordedAt,
+        ),
       ]
       ..checkIns = [
         DailyCheckIn(
@@ -145,6 +151,14 @@ void main() {
       250,
     );
     expect(find.textContaining('This wellness estimate'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('cognitive-score-card')),
+      300,
+    );
+    expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
+    expect(find.textContaining('5/5 cognitive inputs'), findsOneWidget);
+    expect(find.textContaining('First Cognitive Score'), findsOneWidget);
+    expect(find.text('WHAT SHAPED THIS ESTIMATE'), findsOneWidget);
   });
 
   testWidgets('Version 0.6 activity log validates and saves manual data', (

@@ -4,9 +4,9 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.11 — Basic Energy Score (as of 2026-08-01)
+- **Current release:** Version 0.12 — Cognitive Score (as of 2026-08-01)
 
-## Implementation Report (through v0.9)
+## Implementation Report
 
 | Version | Feature | Status |
 | --- | --- | --- |
@@ -23,7 +23,8 @@
 | 0.10 | Daily history (grouping, completion, edit/delete) | Complete |
 | 0.10-a | Firebase Auth + Firestore schema, rules, migration | Complete |
 | 0.11 | Firebase-backed Basic Energy Score | Complete |
-| 0.12+ | Cognitive score, forecast engine, HealthKit, AI coach | Not started |
+| 0.12 | Firebase-backed Cognitive Score + daily comparison | Complete |
+| 0.13+ | Today dashboard, forecast engine, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -46,7 +47,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-01 — **57 tests passed** with Version 0.11 Basic Energy Score
+- Last verified: 2026-08-01 — **64 tests passed** with Version 0.12 Cognitive Score
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -62,6 +63,7 @@
 11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
 12. Firebase foundation (Auth, Firestore schema, rules, migration) - Complete (v0.10-a)
 13. Basic Energy Score (seven explainable factors + daily cloud snapshot) - Complete (v0.11)
+14. Cognitive Score (five explainable factors + previous-day comparison) - Complete (v0.12)
 
 ## Day-to-Day Entries
 
@@ -248,6 +250,44 @@ Score backed by the Version 0.10-a Firebase schema.
   follows the seven roadmap inputs and keeps later-version fields out of its
   cloud write.
 
+### 2026-08-01 — Version 0.12 Cognitive Score
+
+**Branch:** `feature/v0.12-cognitive-score`
+
+**Goal:** Complete Version 0.12 professionally on top of the merged Version
+0.11 and synthetic Cohort Lab work, without breaking either path.
+
+**Results:**
+- Added a bounded 0–100 Cognitive Score with separate explainable contributions
+  for reaction time, recent sleep, same-day study load, mood, and stress.
+- Personalized reaction contribution against up to 14 prior valid reaction
+  tests when available; generic expectations are used only while a personal
+  baseline is still building.
+- Added Cognitive-specific confidence, five-input completeness, drivers, and
+  previous-day comparison without changing Version 0.11 Energy fields.
+- Extended the user-scoped controller workflow to query reaction history and
+  the prior `scoreSnapshots/{yyyy-MM-dd}` document, then merge both scores into
+  today's existing snapshot.
+- Preserved backwards compatibility with Version 0.11 Energy-only documents:
+  a missing Cognitive field is treated as no comparison, never as a score of 0.
+- Promoted Cognitive from preview copy to a polished Today/Insights experience
+  with status, confidence, yesterday change, leading factor points, and clear
+  wellness-only positioning.
+- Kept the merged synthetic Cohort Lab compatible with the new model and added
+  distinct Energy and Cognitive driver views for synthetic-person inspection.
+- Updated `ENGINE_TUNING.md` so cohort tuning no longer implies that screen time
+  is a Version 0.12 Cognitive input.
+- Bumped the app to `0.12.0+13`.
+- `flutter test` passed all **64 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- The current `main` included a newly merged synthetic cohort harness after
+  Version 0.11. Version 0.12 was implemented against that current state and
+  retains all cohort parsing, scoring, persistence, charts, sorting, and tests.
+- Version 0.11 documents intentionally lack a Cognitive field. Schema parsing
+  now records field presence so yesterday comparisons do not show a misleading
+  jump from zero after upgrade.
+
 ---
 
 ## Prompts Used
@@ -345,6 +385,20 @@ records; future readings are ignored; mood and stress contribute independently;
 self-reported energy is not used as a score input; Version 0.12’s cognitive
 field is deliberately not written by the Version 0.11 serializer.
 
+### Feature: Version 0.12 Cognitive Score
+**Prompt:**
+"complete version 0.12, make it profesional,make sure it works out with what i have"
+
+**Result:** Created `feature/v0.12-cognitive-score` from the current merged
+`main`; completed the Firebase-backed, explainable Cognitive Score, shared
+snapshot persistence, previous-day comparison, professional UI, Cohort Lab
+compatibility, and regression coverage.
+
+**Modifications:** Cognitive uses five roadmap inputs and independent metadata;
+reaction time is personalized when history exists; legacy Energy-only snapshots
+remain readable; the existing Energy Score and synthetic cohort functionality
+remain in place.
+
 ---
 
 ## Challenges & Solutions
@@ -379,6 +433,7 @@ field is deliberately not written by the Version 0.11 serializer.
 ## Future Improvements
 - [x] Implement Version 0.10 — fuller Daily History (edit/delete by date)
 - [x] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
-- [ ] Implement Version 0.11+ Energy / Cognitive scores and Today dashboard (query Firebase)
+- [x] Implement Version 0.11 Energy Score and Version 0.12 Cognitive Score (query Firebase)
+- [ ] Implement Version 0.13 Today Dashboard from persisted snapshots
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

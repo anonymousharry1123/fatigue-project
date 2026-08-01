@@ -396,14 +396,14 @@ class _OverviewTab extends StatelessWidget {
             const SizedBox(width: 8),
             _StatCard(
               'Energy',
-              '${s.meanEnergy.toStringAsFixed(0)}',
+              s.meanEnergy.toStringAsFixed(0),
               TonyoColors.mint,
               subtitle: 'median ${s.medianEnergy.toStringAsFixed(0)}',
             ),
             const SizedBox(width: 8),
             _StatCard(
               'Cognitive',
-              '${s.meanCognitive.toStringAsFixed(0)}',
+              s.meanCognitive.toStringAsFixed(0),
               TonyoColors.blue,
               subtitle: 'median ${s.medianCognitive.toStringAsFixed(0)}',
             ),
@@ -610,7 +610,7 @@ class _PeopleTabState extends State<_PeopleTab> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<_PeopleSort>(
-                  value: _sort,
+                  initialValue: _sort,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,

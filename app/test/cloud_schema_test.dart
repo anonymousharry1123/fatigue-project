@@ -87,7 +87,7 @@ void main() {
       expect(cloud.toString().toLowerCase(), isNot(contains('medical')));
     });
 
-    test('Version 0.11 score snapshots round-trip estimate metadata', () {
+    test('Version 0.12 shared score snapshots round-trip both models', () {
       final day = DateTime.utc(2026, 7, 28);
       final calculatedAt = day.add(const Duration(hours: 15));
       final score = scoreSnapshotToCloud(
@@ -99,22 +99,59 @@ void main() {
           day: day,
           calculatedAt: calculatedAt,
           inputCount: 6,
+          cognitiveConfidence: .73,
+          cognitiveInputCount: 4,
+          cognitiveDrivers: const [
+            ScoreDriver('Reaction time', 7, '255 ms vs 270 ms baseline'),
+          ],
+          previousCognitive: 63,
         ),
         day: day,
       );
 
       final restored = scoreSnapshotFromCloud(score);
-      expect(score, isNot(contains('cognitive')));
       expect(
         score.keys,
-        containsAll(['energy', 'confidence', 'drivers', 'day']),
+        containsAll([
+          'energy',
+          'cognitive',
+          'confidence',
+          'cognitiveConfidence',
+          'drivers',
+          'cognitiveDrivers',
+          'previousCognitive',
+          'cognitiveDelta',
+          'day',
+        ]),
       );
       expect(restored.energy, 72);
-      expect(restored.cognitive, 0);
+      expect(restored.cognitive, 68);
+      expect(restored.hasCognitiveScore, isTrue);
+      expect(restored.cognitiveConfidence, .73);
+      expect(restored.cognitiveInputCount, 4);
+      expect(restored.cognitiveDrivers.single.label, 'Reaction time');
+      expect(restored.previousCognitive, 63);
+      expect(restored.cognitiveChange, 5);
       expect(restored.inputCount, 6);
       expect(restored.day, day);
       expect(restored.calculatedAt, calculatedAt);
       expect(restored.drivers.single.label, 'Sleep');
+    });
+
+    test('reads a Version 0.11 Energy-only snapshot without false history', () {
+      final restored = scoreSnapshotFromCloud({
+        'energy': 72,
+        'confidence': .8,
+        'inputCount': 6,
+        'isEstimate': true,
+        'drivers': const [],
+        'day': DateTime.utc(2026, 7, 28),
+      });
+
+      expect(restored.energy, 72);
+      expect(restored.cognitive, 0);
+      expect(restored.hasCognitiveScore, isFalse);
+      expect(restored.cognitiveChange, isNull);
     });
 
     test('reserved collection serializers match roadmap field names', () {

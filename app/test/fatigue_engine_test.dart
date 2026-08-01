@@ -16,7 +16,9 @@ void main() {
     expect(score.energy, inInclusiveRange(0, 100));
     expect(score.cognitive, inInclusiveRange(0, 100));
     expect(score.confidence, inInclusiveRange(0, 1));
+    expect(score.cognitiveConfidence, .95);
     expect(score.inputCount, 7);
+    expect(score.cognitiveInputCount, 5);
     expect(score.isEstimate, isTrue);
     expect(score.drivers.map((driver) => driver.label).toSet(), {
       'Sleep',
@@ -27,6 +29,68 @@ void main() {
       'Mood',
       'Stress',
     });
+    expect(score.cognitiveDrivers.map((driver) => driver.label).toSet(), {
+      'Reaction time',
+      'Sleep',
+      'Study load',
+      'Mood',
+      'Stress',
+    });
+  });
+
+  test('Version 0.12 compares reaction time and the previous daily score', () {
+    const previous = ScoreSnapshot(
+      energy: 70,
+      cognitive: 60,
+      confidence: .8,
+      drivers: [],
+      hasCognitiveScore: true,
+    );
+    final score = FatigueEngine.score(
+      signals: [
+        SignalReading(
+          id: 'reaction-today',
+          type: SignalType.reactionTime,
+          value: 250,
+          timestamp: DateTime(2026, 7, 21, 8),
+        ),
+        SignalReading(
+          id: 'reaction-yesterday',
+          type: SignalType.reactionTime,
+          value: 300,
+          timestamp: DateTime(2026, 7, 10, 8),
+        ),
+      ],
+      checkIns: const [],
+      now: now,
+      previousDay: previous,
+    );
+
+    final reaction = score.cognitiveDrivers.single;
+    expect(reaction.label, 'Reaction time');
+    expect(reaction.contribution, greaterThan(0));
+    expect(reaction.detail, contains('250 ms vs 300 ms baseline'));
+    expect(score.previousCognitive, 60);
+    expect(score.cognitiveChange, score.cognitive - 60);
+  });
+
+  test('legacy Energy-only snapshots do not create a false comparison', () {
+    const previous = ScoreSnapshot(
+      energy: 70,
+      cognitive: 0,
+      confidence: .8,
+      drivers: [],
+      hasCognitiveScore: false,
+    );
+    final score = FatigueEngine.score(
+      signals: const [],
+      checkIns: const [],
+      now: now,
+      previousDay: previous,
+    );
+
+    expect(score.previousCognitive, isNull);
+    expect(score.cognitiveChange, isNull);
   });
 
   test('daily activity values are totaled and future values are excluded', () {
@@ -113,5 +177,7 @@ void main() {
     expect(score.confidence, .2);
     expect(score.energy, inInclusiveRange(0, 100));
     expect(score.cognitive, inInclusiveRange(0, 100));
+    expect(score.cognitiveInputCount, 0);
+    expect(score.cognitiveConfidence, .2);
   });
 }

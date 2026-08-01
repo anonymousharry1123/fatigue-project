@@ -43,12 +43,14 @@ class AppController extends ChangeNotifier {
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
-  ScoreSnapshot? _energyScore;
+  ScoreSnapshot? _scoreSnapshot;
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
   bool get isCloudAuthenticated => _accountAuth.currentSession != null;
   String? get cloudUid => _accountAuth.currentSession?.uid;
+  bool get isScoreLoading => isEnergyScoreLoading;
+  String? get scoreError => energyScoreError;
 
   List<ActivityLogEntry> get activityLogs {
     final grouped = <String, List<SignalReading>>{};
@@ -126,7 +128,8 @@ class AppController extends ChangeNotifier {
   );
 
   ScoreSnapshot get score =>
-      _energyScore ?? FatigueEngine.score(signals: signals, checkIns: checkIns);
+      _scoreSnapshot ??
+      FatigueEngine.score(signals: signals, checkIns: checkIns);
   List<ForecastPoint> forecastFor(DateTime day) =>
       FatigueEngine.forecast(score, day);
   List<ForecastWindow> get windows =>
@@ -145,10 +148,10 @@ class AppController extends ChangeNotifier {
   List<DailyCheckIn> recentCheckIns({int limit = 8}) =>
       CheckInLogic.recentHistory(checkIns, limit: limit);
 
-  /// Recalculates Version 0.11 from a user-scoped cloud query when signed in,
-  /// then persists one deterministic scoreSnapshots/{yyyy-MM-dd} document.
-  /// Local inputs remain a safe offline fallback.
-  Future<void> refreshEnergyScore({DateTime? day, bool notify = true}) async {
+  /// Recalculates the Version 0.11 Energy and Version 0.12 Cognitive Scores
+  /// from user-scoped cloud queries, compares the prior daily snapshot, and
+  /// persists one deterministic scoreSnapshots/{yyyy-MM-dd} document.
+  Future<void> refreshScores({DateTime? day, bool notify = true}) async {
     final currentTime = DateTime.now();
     final target = day ?? currentTime;
     final start = DateTime(target.year, target.month, target.day);
@@ -165,19 +168,35 @@ class AppController extends ChangeNotifier {
     try {
       List<SignalReading> scoringSignals = signals;
       List<DailyCheckIn> scoringCheckIns = checkIns;
+      ScoreSnapshot? previousDay;
       final canUseCloud =
           session != null && repository != null && cloudSyncError == null;
       if (canUseCloud) {
-        scoringSignals = await repository.signalsByRange(
-          session.uid,
-          start: start.subtract(const Duration(days: 6)),
-          end: end,
-        );
-        scoringCheckIns = await repository.checkInsByRange(
-          session.uid,
-          start: start.subtract(const Duration(hours: 36)),
-          end: end,
-        );
+        final queryResults = await Future.wait<Object?>([
+          repository.signalsByRange(
+            session.uid,
+            start: start.subtract(const Duration(days: 6)),
+            end: end,
+          ),
+          repository.reactionBaselineWindow(session.uid, limit: 14),
+          repository.checkInsByRange(
+            session.uid,
+            start: start.subtract(const Duration(hours: 36)),
+            end: end,
+          ),
+          repository.scoreSnapshotForDay(
+            session.uid,
+            start.subtract(const Duration(days: 1)),
+          ),
+        ]);
+        scoringSignals = queryResults[0]! as List<SignalReading>;
+        final reactionHistory = queryResults[1]! as List<SignalReading>;
+        scoringSignals = {
+          for (final signal in scoringSignals) signal.id: signal,
+          for (final signal in reactionHistory) signal.id: signal,
+        }.values.toList();
+        scoringCheckIns = queryResults[2]! as List<DailyCheckIn>;
+        previousDay = queryResults[3] as ScoreSnapshot?;
       } else if (session != null && repository != null) {
         energyScoreError = 'Cloud scoring unavailable · using cached inputs';
       }
@@ -186,14 +205,15 @@ class AppController extends ChangeNotifier {
         checkIns: scoringCheckIns,
         now: calculationTime,
         day: start,
+        previousDay: previousDay,
       );
       if (canUseCloud) {
         await repository.upsertScoreSnapshot(session.uid, snapshot);
       }
-      _energyScore = snapshot;
+      _scoreSnapshot = snapshot;
     } on Object {
       // A network/query failure must not make the wellness estimate disappear.
-      _energyScore = FatigueEngine.score(
+      _scoreSnapshot = FatigueEngine.score(
         signals: signals,
         checkIns: checkIns,
         now: calculationTime,
@@ -205,6 +225,10 @@ class AppController extends ChangeNotifier {
       if (notify) notifyListeners();
     }
   }
+
+  /// Compatibility entry point retained for Version 0.11 callers.
+  Future<void> refreshEnergyScore({DateTime? day, bool notify = true}) =>
+      refreshScores(day: day, notify: notify);
 
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -223,7 +247,7 @@ class AppController extends ChangeNotifier {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
     }
-    if (onboardingComplete) await refreshEnergyScore(notify: false);
+    if (onboardingComplete) await refreshScores(notify: false);
     isReady = true;
     notifyListeners();
   }
@@ -247,7 +271,7 @@ class AppController extends ChangeNotifier {
         await _hydrateOrMigrateCloud();
         if (onboardingComplete) {
           await _writeLocal();
-          await refreshEnergyScore(notify: false);
+          await refreshScores(notify: false);
           notifyListeners();
           return;
         }
@@ -271,7 +295,7 @@ class AppController extends ChangeNotifier {
     await _accountAuth.signIn(email: email, password: password);
     await _hydrateOrMigrateCloud();
     await _writeLocal();
-    if (onboardingComplete) await refreshEnergyScore(notify: false);
+    if (onboardingComplete) await refreshScores(notify: false);
     notifyListeners();
   }
 
@@ -540,7 +564,7 @@ class AppController extends ChangeNotifier {
     profile = const UserProfile();
     signals = [];
     checkIns = [];
-    _energyScore = null;
+    _scoreSnapshot = null;
     energyScoreError = null;
     _recommendationStatuses.clear();
     final preferences = await SharedPreferences.getInstance();
@@ -568,7 +592,7 @@ class AppController extends ChangeNotifier {
     await _writeLocal();
     await _pushCloud();
     if (energyInputsChanged && onboardingComplete) {
-      await refreshEnergyScore();
+      await refreshScores();
     }
   }
 
@@ -647,7 +671,7 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
-    _energyScore = null;
+    _scoreSnapshot = null;
     profile = state.profile;
     accountEmail = state.accountEmail;
     onboardingComplete = state.onboardingComplete;
@@ -662,7 +686,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _restoreLocal(Map<String, dynamic> json) {
-    _energyScore = null;
+    _scoreSnapshot = null;
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
     notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;

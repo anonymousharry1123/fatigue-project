@@ -318,6 +318,11 @@ class ScoreSnapshot {
     required this.cognitive,
     required this.confidence,
     required this.drivers,
+    this.cognitiveConfidence = .2,
+    this.cognitiveDrivers = const [],
+    this.cognitiveInputCount = 0,
+    this.hasCognitiveScore = true,
+    this.previousCognitive,
     this.day,
     this.calculatedAt,
     this.inputCount = 0,
@@ -328,10 +333,18 @@ class ScoreSnapshot {
   final int cognitive;
   final double confidence;
   final List<ScoreDriver> drivers;
+  final double cognitiveConfidence;
+  final List<ScoreDriver> cognitiveDrivers;
+  final int cognitiveInputCount;
+  final bool hasCognitiveScore;
+  final int? previousCognitive;
   final DateTime? day;
   final DateTime? calculatedAt;
   final int inputCount;
   final bool isEstimate;
+
+  int? get cognitiveChange =>
+      previousCognitive == null ? null : cognitive - previousCognitive!;
 }
 
 class ForecastPoint {

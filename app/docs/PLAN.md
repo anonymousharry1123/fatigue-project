@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: August 1, 2026
-Current release: **Version 0.11 — Basic Energy Score**
+Current release: **Version 0.12 — Cognitive Score**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -137,7 +137,7 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
   - `users/{uid}` — profile, account email, prefs, consent flags, `updatedAt`
   - `users/{uid}/signals/{signalId}` — `SignalReading` fields (`type`, `value`, `unit`, `timestamp`, `source`, `quality`, `note`, `groupId`)
   - `users/{uid}/checkIns/{checkInId}` — `DailyCheckIn` fields (`period`, `energy`, `mood`, `stress`, `note`, `timestamp`)
-  - `users/{uid}/scoreSnapshots/{snapshotId}` — reserved for Version 0.11+ (`energy`, `cognitive`, `confidence`, `drivers`, `day`)
+  - `users/{uid}/scoreSnapshots/{snapshotId}` — Version 0.11+ daily scores (`energy`, `cognitive`, per-model confidence/input counts/drivers, previous Cognitive comparison, `day`, `calculatedAt`)
   - `users/{uid}/forecastPoints/{pointId}` — reserved for Version 0.15+ (`time`, `energy`, `uncertainty`)
   - `users/{uid}/recommendations/{recId}` — reserved for Version 0.18+ (`title`, `detail`, `timeLabel`, `category`, `status`, `feedback`)
   - `users/{uid}/riskAlerts/{alertId}` — reserved for Version 0.19+ (`title`, `detail`, `severity`, `dismissed`)
@@ -158,7 +158,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - No Firebase Auth accounts are created for synthetic students
 - Shared tuning checklist: [`ENGINE_TUNING.md`](./ENGINE_TUNING.md)
 
-### Version 0.11 — Basic Energy Score ✅ Current
+### Version 0.11 — Basic Energy Score ✅
 
 - Calculate an explainable 0–100 Energy Score
 - Query Version 0.10-a `signals` and `checkIns` for the target day (and recent window) instead of in-memory fixtures only
@@ -169,14 +169,20 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Refresh the daily snapshot after relevant input changes and expose manual refresh, loading, and offline states
 - Automated tests cover scoring factors, aggregation, circular-input prevention, cloud queries, schema round-trips, daily upserts, controller integration, and UI labeling
 
-## Upcoming Versions
-
-### Version 0.12 — Cognitive Score
+### Version 0.12 — Cognitive Score ✅ Current
 
 - Calculate an explainable 0–100 Cognitive Score
 - Query reaction-time `signals`, sleep, study load, and latest mood/stress `checkIns` from Firestore
 - Compare the result with the previous day’s `scoreSnapshots` document
 - Write cognitive fields onto the same daily snapshot schema from Version 0.10-a
+- Personalize the reaction-time contribution against prior valid reaction tests when a baseline exists
+- Keep Cognitive drivers, confidence, and five-input completeness separate from Energy model metadata
+- Treat Version 0.11 Energy-only documents as valid legacy snapshots without creating a false zero-score comparison
+- Show the estimate, previous-day change, leading contributions, loading/offline state, and wellness-only language in Today and Insights
+- Keep the synthetic Cohort Lab compatible with the shared engine and show separate Energy/Cognitive driver cards
+- Automated tests cover bounds, factors, baselines, legacy snapshots, schema round-trips, shared daily upserts, Firebase-controller integration, previous-day comparison, synthetic scoring, and UI presentation
+
+## Upcoming Versions
 
 ### Version 0.13 — Today Dashboard
 
