@@ -315,11 +315,20 @@ class ScoreSnapshot {
     required this.cognitive,
     required this.confidence,
     required this.drivers,
+    this.day,
+    this.calculatedAt,
+    this.inputCount = 0,
+    this.isEstimate = true,
   });
+
   final int energy;
   final int cognitive;
   final double confidence;
   final List<ScoreDriver> drivers;
+  final DateTime? day;
+  final DateTime? calculatedAt;
+  final int inputCount;
+  final bool isEstimate;
 }
 
 class ForecastPoint {

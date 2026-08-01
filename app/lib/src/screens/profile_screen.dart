@@ -92,7 +92,7 @@ class ProfileScreen extends StatelessWidget {
             children: [
               _ProfileStat(
                 '${controller.score.energy}',
-                'Avg energy',
+                'Est. energy',
                 TonyoColors.mint,
               ),
               const SizedBox(width: 8),

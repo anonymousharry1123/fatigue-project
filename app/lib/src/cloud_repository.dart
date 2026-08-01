@@ -111,12 +111,22 @@ abstract interface class CloudRepository {
     SignalType? type,
   });
 
+  Future<List<DailyCheckIn>> checkInsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  });
+
   Future<DailyCheckIn?> latestCheckIn(String uid);
 
   Future<List<SignalReading>> reactionBaselineWindow(
     String uid, {
     int limit = 14,
   });
+
+  Future<void> upsertScoreSnapshot(String uid, ScoreSnapshot snapshot);
+
+  Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day);
 
   Future<Map<String, Object?>> exportUser(String uid);
   Future<void> deleteUserTree(String uid);
@@ -128,6 +138,7 @@ class MemoryCloudRepository implements CloudRepository {
 
   String? signedInUid;
   final Map<String, CloudUserState> _users = {};
+  final Map<String, Map<String, ScoreSnapshot>> _scores = {};
 
   void seed(String uid, CloudUserState state) {
     _users[uid] = state;
@@ -171,6 +182,23 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<DailyCheckIn>> checkInsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    _authorize(uid);
+    final matches = (_users[uid]?.checkIns ?? const <DailyCheckIn>[])
+        .where(
+          (checkIn) =>
+              !checkIn.timestamp.isBefore(start) &&
+              checkIn.timestamp.isBefore(end),
+        )
+        .toList();
+    return matches..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  @override
   Future<DailyCheckIn?> latestCheckIn(String uid) async {
     _authorize(uid);
     final values = [...?_users[uid]?.checkIns]
@@ -193,11 +221,40 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<void> upsertScoreSnapshot(String uid, ScoreSnapshot snapshot) async {
+    _authorize(uid);
+    final day = snapshot.day;
+    if (day == null) throw ArgumentError('A score snapshot requires a day.');
+    _scores.putIfAbsent(uid, () => {})[scoreSnapshotId(
+      day,
+    )] = scoreSnapshotFromCloud(
+      scoreSnapshotToCloud(snapshot: snapshot, day: day),
+    );
+  }
+
+  @override
+  Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day) async {
+    _authorize(uid);
+    return _scores[uid]?[scoreSnapshotId(day)];
+  }
+
+  @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     _authorize(uid);
     return {
       'uid': uid,
       if (_users[uid] case final state?) ...state.toExportJson(),
+      'reservedCollections': {
+        'scoreSnapshots': {
+          for (final entry in (_scores[uid] ?? const {}).entries)
+            entry.key: _exportSafe(
+              scoreSnapshotToCloud(
+                snapshot: entry.value,
+                day: entry.value.day!,
+              ),
+            ),
+        },
+      },
     };
   }
 
@@ -205,5 +262,20 @@ class MemoryCloudRepository implements CloudRepository {
   Future<void> deleteUserTree(String uid) async {
     _authorize(uid);
     _users.remove(uid);
+    _scores.remove(uid);
   }
 }
+
+String scoreSnapshotId(DateTime day) =>
+    '${day.year.toString().padLeft(4, '0')}-'
+    '${day.month.toString().padLeft(2, '0')}-'
+    '${day.day.toString().padLeft(2, '0')}';
+
+Object? _exportSafe(Object? value) => switch (value) {
+  DateTime dateTime => dateTime.toIso8601String(),
+  Map map => map.map(
+    (key, child) => MapEntry(key.toString(), _exportSafe(child)),
+  ),
+  Iterable iterable => iterable.map(_exportSafe).toList(),
+  _ => value,
+};

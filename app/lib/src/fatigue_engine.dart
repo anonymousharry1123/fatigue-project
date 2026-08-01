@@ -7,109 +7,156 @@ abstract final class FatigueEngine {
     required List<SignalReading> signals,
     required List<DailyCheckIn> checkIns,
     DateTime? now,
+    DateTime? day,
   }) {
     final clock = now ?? DateTime.now();
-    final recent = signals
-        .where((item) => clock.difference(item.timestamp).inHours.abs() <= 36)
+    final target = day ?? clock;
+    final start = DateTime(target.year, target.month, target.day);
+    final end = start.add(const Duration(days: 1));
+    final cutoff = !clock.isBefore(start) && clock.isBefore(end) ? clock : end;
+    final recentStart = start.subtract(const Duration(days: 6));
+    final recent =
+        signals
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(recentStart) &&
+                  item.timestamp.isBefore(end) &&
+                  !item.timestamp.isAfter(cutoff),
+            )
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final targetDay = recent
+        .where((item) => !item.timestamp.isBefore(start))
         .toList();
-    double? value(SignalType type) {
-      final matches = recent.where((item) => item.type == type).toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return matches.isEmpty ? null : matches.first.value;
+
+    double? dailyTotal(SignalType type) {
+      final values = targetDay.where((item) => item.type == type).toList();
+      if (values.isEmpty) return null;
+      return values.fold<double>(0, (sum, item) => sum + item.value);
     }
 
-    final sleep = value(SignalType.sleep);
-    final hydration = value(SignalType.hydration);
-    final exercise = value(SignalType.exercise);
-    final study = value(SignalType.study);
-    final screen = value(SignalType.screenTime);
-    final reaction = value(SignalType.reactionTime);
-    final hrv = value(SignalType.hrv);
-    final restingHr = value(SignalType.restingHeartRate);
-    final latestCheckIn = checkIns.isEmpty
+    final sleepReadings = recent
+        .where((item) => item.type == SignalType.sleep)
+        .take(3)
+        .toList();
+    final sleep = sleepReadings.isEmpty
         ? null
-        : (checkIns.toList()
-                ..sort((a, b) => b.timestamp.compareTo(a.timestamp)))
-              .first;
+        : sleepReadings.fold<double>(0, (sum, item) => sum + item.value) /
+              sleepReadings.length;
+    final hydration = dailyTotal(SignalType.hydration);
+    final exercise = dailyTotal(SignalType.exercise);
+    final study = dailyTotal(SignalType.study);
+    final screen = dailyTotal(SignalType.screenTime);
+    final applicableCheckIns =
+        checkIns
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(
+                    start.subtract(const Duration(hours: 36)),
+                  ) &&
+                  item.timestamp.isBefore(end) &&
+                  !item.timestamp.isAfter(cutoff),
+            )
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final latestCheckIn = applicableCheckIns.firstOrNull;
 
-    var energy = 58.0;
+    // A neutral estimate starts at 60. Every available input contributes an
+    // independently bounded adjustment so the result remains explainable.
+    var energy = 60.0;
     final drivers = <ScoreDriver>[];
     if (sleep != null) {
-      final impact = ((sleep - 7.5) * 8).clamp(-22, 14).toDouble();
+      final impact = ((sleep - 7.5) * 8).clamp(-20, 10).toDouble();
       energy += impact;
       drivers.add(
         ScoreDriver(
           'Sleep',
           impact,
-          '${sleep.toStringAsFixed(1)} hr last night',
+          '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}',
         ),
       );
     }
     if (hydration != null) {
-      final impact = ((hydration - 1.4) * 7).clamp(-8, 7).toDouble();
+      final impact = ((hydration - 2) * 5).clamp(-8, 6).toDouble();
       energy += impact;
       drivers.add(
         ScoreDriver(
           'Hydration',
           impact,
-          '${hydration.toStringAsFixed(1)} L logged',
+          '${hydration.toStringAsFixed(1)} L logged today',
         ),
       );
     }
     if (exercise != null) {
-      final impact = exercise > 1.5
-          ? -8.0
-          : exercise > 0.3
-          ? 4.0
-          : -1.0;
+      final impact = switch (exercise) {
+        < .25 => -2.0,
+        <= 1.5 => 5.0,
+        <= 2.5 => 1.0,
+        _ => -7.0,
+      };
       energy += impact;
       drivers.add(
         ScoreDriver(
-          'Training',
+          'Exercise',
           impact,
-          '${exercise.toStringAsFixed(1)} hr load',
+          '${exercise.toStringAsFixed(1)} hr logged today',
+        ),
+      );
+    }
+    if (study != null) {
+      final impact = study <= 2
+          ? 2.0
+          : (-(study - 4).clamp(0, 4) * 2.5).toDouble();
+      energy += impact;
+      drivers.add(
+        ScoreDriver(
+          'Workload',
+          impact,
+          '${study.toStringAsFixed(1)} hr study load today',
         ),
       );
     }
     if (screen != null) {
-      final impact = (-(screen - 3).clamp(0, 5) * 2.4).toDouble();
+      final impact = ((3 - screen) * 2).clamp(-10, 4).toDouble();
       energy += impact;
       drivers.add(
         ScoreDriver(
           'Screen time',
           impact,
-          '${screen.toStringAsFixed(1)} hr today',
+          '${screen.toStringAsFixed(1)} hr logged today',
         ),
       );
     }
     if (latestCheckIn != null) {
-      final impact =
-          ((latestCheckIn.energy - 5.5) * 2.5 -
-                  (latestCheckIn.stress - 5.5) * 1.5)
-              .clamp(-16, 16)
-              .toDouble();
-      energy += impact;
+      final moodImpact = ((latestCheckIn.mood - 5.5) * 1.8)
+          .clamp(-8, 8)
+          .toDouble();
+      final stressImpact = ((5.5 - latestCheckIn.stress) * 2)
+          .clamp(-9, 9)
+          .toDouble();
+      energy += moodImpact + stressImpact;
       drivers.add(
         ScoreDriver(
-          'Check-in',
-          impact,
-          'Energy ${latestCheckIn.energy.round()}/10 · stress ${latestCheckIn.stress.round()}/10',
+          'Mood',
+          moodImpact,
+          '${latestCheckIn.mood.round()}/10 at latest check-in',
+        ),
+      );
+      drivers.add(
+        ScoreDriver(
+          'Stress',
+          stressImpact,
+          '${latestCheckIn.stress.round()}/10 at latest check-in',
         ),
       );
     }
-    if (hrv != null) {
-      final impact = ((hrv - 48) / 6).clamp(-7, 7).toDouble();
-      energy += impact;
-      drivers.add(ScoreDriver('HRV', impact, '${hrv.round()} ms'));
-    }
-    if (restingHr != null) {
-      final impact = (-(restingHr - 62) / 3).clamp(-7, 7).toDouble();
-      energy += impact;
-      drivers.add(
-        ScoreDriver('Resting HR', impact, '${restingHr.round()} bpm'),
-      );
-    }
 
+    // Cognitive remains a local preview until Version 0.12 and is not written
+    // by the Version 0.11 cloud serializer.
+    final reaction = recent
+        .where((item) => item.type == SignalType.reactionTime)
+        .firstOrNull
+        ?.value;
     var cognitive = 64.0;
     if (reaction != null) cognitive += ((330 - reaction) / 5).clamp(-18, 16);
     if (sleep != null) cognitive += ((sleep - 7.5) * 6).clamp(-16, 12);
@@ -122,27 +169,17 @@ abstract final class FatigueEngine {
     drivers.sort(
       (a, b) => b.contribution.abs().compareTo(a.contribution.abs()),
     );
-    const expected = <SignalType>{
-      SignalType.sleep,
-      SignalType.hydration,
-      SignalType.exercise,
-      SignalType.study,
-      SignalType.screenTime,
-      SignalType.reactionTime,
-    };
-    final present = expected
-        .where((type) => recent.any((item) => item.type == type))
-        .length;
-    final wearableBonus = recent.any((item) => item.type == SignalType.hrv)
-        ? .08
-        : 0;
-    final confidence = (.28 + present / expected.length * .57 + wearableBonus)
-        .clamp(.25, .95);
+    final inputCount = drivers.length.clamp(0, 7);
+    final confidence = (.2 + inputCount / 7 * .75).clamp(.2, .95);
     return ScoreSnapshot(
       energy: energy.round().clamp(0, 100),
       cognitive: cognitive.round().clamp(0, 100),
       confidence: confidence,
-      drivers: drivers.take(6).toList(),
+      drivers: List.unmodifiable(drivers),
+      day: start,
+      calculatedAt: clock,
+      inputCount: inputCount,
+      isEstimate: true,
     );
   }
 
