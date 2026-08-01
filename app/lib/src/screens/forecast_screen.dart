@@ -88,7 +88,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      '${(controller.score.confidence * 100).round()}% fixture confidence',
+                      '${(controller.score.confidence * 100).round()}% input confidence',
                       style: const TextStyle(
                         color: TonyoColors.muted,
                         fontSize: 10,

@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: July 28, 2026  
-Current release: **Version 0.10-a — Firebase Foundation**
+Last updated: August 1, 2026
+Current release: **Version 0.11 — Basic Energy Score**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -128,7 +128,7 @@ Do **not** wait until merge to invent history. Append as work happens.
 - Keep imported and fixture signals read-only
 - Automated tests cover grouping, overnight sleep dates, completion, persistence, editing, deletion, and routing
 
-### Version 0.10-a — Firebase Foundation ✅ Current
+### Version 0.10-a — Firebase Foundation ✅
 
 Set up cloud persistence **before** scoring and forecast work so later versions read and write against a real schema.
 
@@ -158,14 +158,18 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - No Firebase Auth accounts are created for synthetic students
 - Shared tuning checklist: [`ENGINE_TUNING.md`](./ENGINE_TUNING.md)
 
-## Upcoming Versions
-
-### Version 0.11 — Basic Energy Score
+### Version 0.11 — Basic Energy Score ✅ Current
 
 - Calculate an explainable 0–100 Energy Score
 - Query Version 0.10-a `signals` and `checkIns` for the target day (and recent window) instead of in-memory fixtures only
 - Use sleep, exercise, hydration, workload, screen time, mood, and stress from the Firebase schema
 - Persist each result as a `scoreSnapshots` document; clearly label the score as an estimate
+- Aggregate same-day activity values, exclude future readings, and use up to three recent sleep records
+- Derive confidence from the number of available score inputs and retain a local-cache fallback when cloud queries are unavailable
+- Refresh the daily snapshot after relevant input changes and expose manual refresh, loading, and offline states
+- Automated tests cover scoring factors, aggregation, circular-input prevention, cloud queries, schema round-trips, daily upserts, controller integration, and UI labeling
+
+## Upcoming Versions
 
 ### Version 0.12 — Cognitive Score
 

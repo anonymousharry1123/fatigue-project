@@ -87,16 +87,37 @@ void main() {
       expect(cloud.toString().toLowerCase(), isNot(contains('medical')));
     });
 
-    test('reserved collection serializers match roadmap field names', () {
+    test('Version 0.11 score snapshots round-trip estimate metadata', () {
+      final day = DateTime.utc(2026, 7, 28);
+      final calculatedAt = day.add(const Duration(hours: 15));
       final score = scoreSnapshotToCloud(
-        snapshot: const ScoreSnapshot(
+        snapshot: ScoreSnapshot(
           energy: 72,
           cognitive: 68,
           confidence: .8,
-          drivers: [ScoreDriver('Sleep', 8, 'Strong recovery')],
+          drivers: const [ScoreDriver('Sleep', 8, 'Strong recovery')],
+          day: day,
+          calculatedAt: calculatedAt,
+          inputCount: 6,
         ),
-        day: DateTime.utc(2026, 7, 28),
+        day: day,
       );
+
+      final restored = scoreSnapshotFromCloud(score);
+      expect(score, isNot(contains('cognitive')));
+      expect(
+        score.keys,
+        containsAll(['energy', 'confidence', 'drivers', 'day']),
+      );
+      expect(restored.energy, 72);
+      expect(restored.cognitive, 0);
+      expect(restored.inputCount, 6);
+      expect(restored.day, day);
+      expect(restored.calculatedAt, calculatedAt);
+      expect(restored.drivers.single.label, 'Sleep');
+    });
+
+    test('reserved collection serializers match roadmap field names', () {
       final forecast = forecastPointToCloud(
         ForecastPoint(DateTime.utc(2026, 7, 28, 9), 75, 6),
       );
@@ -113,10 +134,6 @@ void main() {
         const RiskAlert('Sleep trend', 'Short sleep', AlertSeverity.caution),
       );
 
-      expect(
-        score.keys,
-        containsAll(['energy', 'cognitive', 'drivers', 'day']),
-      );
       expect(forecast.keys, containsAll(['time', 'energy', 'uncertainty']));
       expect(
         recommendation.keys,

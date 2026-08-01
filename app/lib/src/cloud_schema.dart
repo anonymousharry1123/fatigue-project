@@ -148,14 +148,15 @@ class CloudUserState {
   };
 }
 
-/// Reserved Version 0.11+ score document.
+/// Version 0.11 daily Energy Score document.
 Map<String, Object?> scoreSnapshotToCloud({
   required ScoreSnapshot snapshot,
   required DateTime day,
 }) => {
   'energy': snapshot.energy,
-  'cognitive': snapshot.cognitive,
   'confidence': snapshot.confidence,
+  'inputCount': snapshot.inputCount,
+  'isEstimate': snapshot.isEstimate,
   'drivers': snapshot.drivers
       .map(
         (driver) => {
@@ -166,26 +167,31 @@ Map<String, Object?> scoreSnapshotToCloud({
       )
       .toList(),
   'day': day,
+  'calculatedAt': snapshot.calculatedAt ?? DateTime.now().toUtc(),
   'schemaVersion': cloudSchemaVersion,
 };
 
-ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) {
-  final drivers = ((data['drivers'] as List?) ?? const [])
-      .map(
-        (raw) => ScoreDriver(
-          raw['label'] as String,
-          (raw['contribution'] as num).toDouble(),
-          raw['detail'] as String,
-        ),
-      )
-      .toList();
-  return ScoreSnapshot(
-    energy: (data['energy'] as num).toInt(),
-    cognitive: (data['cognitive'] as num).toInt(),
-    confidence: (data['confidence'] as num).toDouble(),
-    drivers: drivers,
-  );
-}
+ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
+    ScoreSnapshot(
+      energy: (data['energy'] as num).round(),
+      // Reserved for Version 0.12. Older/newer documents remain readable.
+      cognitive: (data['cognitive'] as num?)?.round() ?? 0,
+      confidence: (data['confidence'] as num).toDouble(),
+      inputCount: (data['inputCount'] as num?)?.round() ?? 0,
+      isEstimate: data['isEstimate'] as bool? ?? true,
+      day: cloudDateTime(data['day'], field: 'day'),
+      calculatedAt: data['calculatedAt'] == null
+          ? null
+          : cloudDateTime(data['calculatedAt'], field: 'calculatedAt'),
+      drivers: ((data['drivers'] as List?) ?? const []).map((raw) {
+        final driver = (raw as Map).cast<String, dynamic>();
+        return ScoreDriver(
+          driver['label'] as String,
+          (driver['contribution'] as num).toDouble(),
+          driver['detail'] as String,
+        );
+      }).toList(),
+    );
 
 /// Reserved Version 0.15+ forecast document.
 Map<String, Object?> forecastPointToCloud(ForecastPoint point) => {

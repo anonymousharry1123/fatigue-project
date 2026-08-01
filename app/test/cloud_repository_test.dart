@@ -65,6 +65,31 @@ void main() {
       repository.replaceUser('other-uid', state()),
       throwsStateError,
     );
+    await expectLater(
+      repository.checkInsByRange(
+        'other-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.upsertScoreSnapshot(
+        'other-uid',
+        ScoreSnapshot(
+          energy: 70,
+          cognitive: 0,
+          confidence: .5,
+          drivers: const [],
+          day: day,
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.scoreSnapshotForDay('other-uid', day),
+      throwsStateError,
+    );
     await expectLater(repository.exportUser('other-uid'), throwsStateError);
     await expectLater(repository.deleteUserTree('other-uid'), throwsStateError);
   });
@@ -89,6 +114,49 @@ void main() {
 
     expect(latest?.id, 'evening');
     expect(reactions.single.id, 'reaction-new');
+  });
+
+  test('queries check-ins by score window', () async {
+    final checkIns = await repository.checkInsByRange(
+      'maya-uid',
+      start: day,
+      end: day.add(const Duration(hours: 14)),
+    );
+
+    expect(checkIns.map((value) => value.id), ['morning']);
+  });
+
+  test('upserts one deterministic daily Energy Score snapshot', () async {
+    final calculatedAt = day.add(const Duration(hours: 12));
+    final first = ScoreSnapshot(
+      energy: 71,
+      cognitive: 64,
+      confidence: .74,
+      drivers: const [ScoreDriver('Sleep', 6, '8.2 hr last night')],
+      day: day,
+      calculatedAt: calculatedAt,
+      inputCount: 5,
+    );
+    await repository.upsertScoreSnapshot('maya-uid', first);
+    await repository.upsertScoreSnapshot(
+      'maya-uid',
+      ScoreSnapshot(
+        energy: 76,
+        cognitive: 68,
+        confidence: .84,
+        drivers: const [ScoreDriver('Hydration', 4, '2.8 L logged today')],
+        day: day.add(const Duration(hours: 9)),
+        calculatedAt: calculatedAt.add(const Duration(hours: 1)),
+        inputCount: 6,
+      ),
+    );
+
+    final stored = await repository.scoreSnapshotForDay('maya-uid', day);
+    expect(scoreSnapshotId(day), '2026-07-28');
+    expect(stored?.energy, 76);
+    expect(stored?.inputCount, 6);
+    expect(stored?.isEstimate, isTrue);
+    expect(stored?.cognitive, 0, reason: 'Version 0.12 owns this field.');
   });
 
   test('exports and permanently deletes the authenticated user tree', () async {
