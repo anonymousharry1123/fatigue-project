@@ -340,6 +340,36 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
   }
 }
 
+enum _PeopleSort {
+  idAsc,
+  energyLow,
+  energyHigh,
+  cognitiveLow,
+  cognitiveHigh,
+  sleepLow,
+  sleepHigh,
+  screenHigh,
+  caffeineHigh,
+  studyHigh,
+  stressHigh,
+}
+
+extension on _PeopleSort {
+  String get label => switch (this) {
+    _PeopleSort.idAsc => 'ID ↑',
+    _PeopleSort.energyLow => 'Energy ↑ low',
+    _PeopleSort.energyHigh => 'Energy ↓ high',
+    _PeopleSort.cognitiveLow => 'Cognitive ↑ low',
+    _PeopleSort.cognitiveHigh => 'Cognitive ↓ high',
+    _PeopleSort.sleepLow => 'Sleep ↑ low',
+    _PeopleSort.sleepHigh => 'Sleep ↓ high',
+    _PeopleSort.screenHigh => 'Screen ↓ high',
+    _PeopleSort.caffeineHigh => 'Caffeine ↓ high',
+    _PeopleSort.studyHigh => 'Study ↓ high',
+    _PeopleSort.stressHigh => 'Stress ↓ high',
+  };
+}
+
 class _OverviewTab extends StatelessWidget {
   const _OverviewTab({required this.summary});
 
@@ -482,7 +512,7 @@ class _RelationsTab extends StatelessWidget {
   }
 }
 
-class _PeopleTab extends StatelessWidget {
+class _PeopleTab extends StatefulWidget {
   const _PeopleTab({
     required this.people,
     required this.onQuery,
@@ -492,17 +522,129 @@ class _PeopleTab extends StatelessWidget {
   final ValueChanged<String> onQuery;
 
   @override
+  State<_PeopleTab> createState() => _PeopleTabState();
+}
+
+class _PeopleTabState extends State<_PeopleTab> {
+  _PeopleSort _sort = _PeopleSort.energyLow;
+
+  List<SyntheticPerson> get _sorted {
+    final list = List<SyntheticPerson>.from(widget.people);
+    int cmpNum(num a, num b) => a.compareTo(b);
+    switch (_sort) {
+      case _PeopleSort.idAsc:
+        list.sort(
+          (a, b) => cmpNum(int.tryParse(a.id) ?? 0, int.tryParse(b.id) ?? 0),
+        );
+      case _PeopleSort.energyLow:
+        list.sort((a, b) => cmpNum(a.score.energy, b.score.energy));
+      case _PeopleSort.energyHigh:
+        list.sort((a, b) => cmpNum(b.score.energy, a.score.energy));
+      case _PeopleSort.cognitiveLow:
+        list.sort((a, b) => cmpNum(a.score.cognitive, b.score.cognitive));
+      case _PeopleSort.cognitiveHigh:
+        list.sort((a, b) => cmpNum(b.score.cognitive, a.score.cognitive));
+      case _PeopleSort.sleepLow:
+        list.sort((a, b) => cmpNum(a.avgSleepHours, b.avgSleepHours));
+      case _PeopleSort.sleepHigh:
+        list.sort((a, b) => cmpNum(b.avgSleepHours, a.avgSleepHours));
+      case _PeopleSort.screenHigh:
+        list.sort((a, b) => cmpNum(b.foldedScreenHours, a.foldedScreenHours));
+      case _PeopleSort.caffeineHigh:
+        list.sort((a, b) => cmpNum(b.caffeineDrinks, a.caffeineDrinks));
+      case _PeopleSort.studyHigh:
+        list.sort((a, b) => cmpNum(b.studyHours, a.studyHours));
+      case _PeopleSort.stressHigh:
+        list.sort((a, b) => cmpNum(b.stressLevel, a.stressLevel));
+    }
+    return list;
+  }
+
+  String _metricLine(SyntheticPerson person) {
+    final base = '${person.age} · ${person.gender} · ${person.education}';
+    final focus = switch (_sort) {
+      _PeopleSort.sleepLow || _PeopleSort.sleepHigh =>
+        'sleep ${person.avgSleepHours.toStringAsFixed(1)}h',
+      _PeopleSort.screenHigh =>
+        'screen ${person.foldedScreenHours.toStringAsFixed(1)}h',
+      _PeopleSort.caffeineHigh =>
+        'caffeine ${person.caffeineDrinks.toStringAsFixed(0)}',
+      _PeopleSort.studyHigh =>
+        'study ${person.studyHours.toStringAsFixed(1)}h',
+      _PeopleSort.stressHigh =>
+        'stress ${person.stressLevel.toStringAsFixed(0)}/10',
+      _PeopleSort.cognitiveLow || _PeopleSort.cognitiveHigh =>
+        'C ${person.score.cognitive}',
+      _PeopleSort.energyLow ||
+      _PeopleSort.energyHigh ||
+      _PeopleSort.idAsc =>
+        'E ${person.score.energy}',
+    };
+    return '$base · $focus';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final people = _sorted;
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: TextField(
-            onChanged: onQuery,
+            onChanged: widget.onQuery,
             decoration: const InputDecoration(
               hintText: 'Search id, gender, education',
               prefixIcon: Icon(Icons.search_rounded),
               isDense: true,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              const Text(
+                'Sort',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<_PeopleSort>(
+                  value: _sort,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: [
+                    for (final sort in _PeopleSort.values)
+                      DropdownMenuItem(
+                        value: sort,
+                        child: Text(
+                          sort.label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _sort = value);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Open the first 3 rows as outlier spot-checks for this sort.',
+              style: TextStyle(color: TonyoColors.muted, fontSize: 10),
             ),
           ),
         ),
@@ -543,7 +685,7 @@ class _PeopleTab extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      '${person.age} · ${person.gender} · ${person.education}',
+                                      _metricLine(person),
                                       style: const TextStyle(
                                         color: TonyoColors.muted,
                                         fontSize: 11,
