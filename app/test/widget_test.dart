@@ -2,6 +2,7 @@ import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/demo_data.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/today_dashboard_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,7 +23,7 @@ void main() {
 
   testWidgets('shell exposes all Version 0.5 destinations', (tester) async {
     await tester.pumpWidget(TonyoApp(controller: readyController()));
-    expect(find.textContaining('Morning,'), findsOneWidget);
+    expect(find.textContaining(', Maya'), findsOneWidget);
 
     await tester.tap(
       find.descendant(
@@ -40,7 +41,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Energy Score Model'), findsOneWidget);
+    expect(find.text('Daily Score Models'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
@@ -104,7 +105,7 @@ void main() {
     tester,
   ) async {
     final now = DateTime.now();
-    final recordedAt = now.subtract(const Duration(minutes: 1));
+    final recordedAt = now;
     final controller = AppController()
       ..isReady = true
       ..onboardingComplete = true
@@ -122,6 +123,12 @@ void main() {
             value: entry.value,
             timestamp: recordedAt,
           ),
+        SignalReading(
+          id: 'reaction',
+          type: SignalType.reactionTime,
+          value: 270,
+          timestamp: recordedAt,
+        ),
       ]
       ..checkIns = [
         DailyCheckIn(
@@ -138,6 +145,18 @@ void main() {
 
     expect(find.text('ESTIMATED ENERGY SCORE'), findsOneWidget);
     expect(find.textContaining('7/7 inputs'), findsOneWidget);
+    expect(
+      find.text(TodayDashboardLogic.statusFor(controller.score.energy).label),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('recent-signal-grid')), findsOneWidget);
+    expect(find.text('Today’s signals'), findsOneWidget);
+    expect(find.text('8.0 hr'), findsOneWidget);
+    expect(find.text('2.2 L'), findsOneWidget);
+    expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
+    expect(find.textContaining('5/5 cognitive inputs'), findsOneWidget);
+    expect(find.textContaining('First Cognitive Score'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Today’s score factors'), 250);
     expect(find.text('Today’s score factors'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -145,6 +164,7 @@ void main() {
       250,
     );
     expect(find.textContaining('This wellness estimate'), findsOneWidget);
+    expect(find.text('WHAT SHAPED THIS ESTIMATE'), findsOneWidget);
   });
 
   testWidgets('Version 0.6 activity log validates and saves manual data', (

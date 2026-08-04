@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../models.dart';
 import '../theme.dart';
+import '../today_dashboard_logic.dart';
 import '../widgets/common_widgets.dart';
-import 'coach_screen.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
@@ -12,108 +13,142 @@ class TodayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final score = controller.score;
-    final firstAlert = controller.alerts.firstOrNull;
+    final status = TodayDashboardLogic.statusFor(score.energy);
+    final statusColor = _statusColor(status);
+
     return SafeArea(
       bottom: false,
       child: CustomScrollView(
         key: const PageStorageKey('today-scroll'),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             sliver: SliverList.list(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _dateLabel(),
-                            style: const TextStyle(
-                              color: TonyoColors.muted,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            'Morning, ${controller.profile.name}',
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: TonyoColors.primary.withValues(
-                        alpha: .25,
-                      ),
-                      child: Text(
-                        controller.profile.name.characters.first.toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ],
-                ),
+                _Header(name: controller.profile.name),
                 const SizedBox(height: 18),
                 TonyoCard(
                   key: const Key('energy-score-card'),
                   padding: const EdgeInsets.all(18),
-                  child: Row(
+                  color: const Color(0xFF121622),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ScoreRing(value: score.energy, label: 'Energy'),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'ESTIMATED ENERGY SCORE',
-                              style: TextStyle(
-                                color: TonyoColors.violet,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: .7,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: .14),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: statusColor.withValues(alpha: .28),
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _status(score.energy),
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              _statusDetail(score.energy),
-                              style: const TextStyle(
-                                color: TonyoColors.muted,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: TonyoColors.mint.withValues(alpha: .12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${score.inputCount}/7 inputs · ${(score.confidence * 100).round()}% confidence',
-                                style: const TextStyle(
-                                  color: TonyoColors.mint,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: statusColor,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  status.label.toUpperCase(),
+                                  key: const Key('fatigue-status'),
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: .7,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                          const Spacer(),
+                          Icon(
+                            controller.scoreLoadedFromSnapshot
+                                ? Icons.cloud_done_rounded
+                                : Icons.auto_awesome_rounded,
+                            color: TonyoColors.muted,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            controller.scoreLoadedFromSnapshot
+                                ? 'Saved snapshot'
+                                : 'Live estimate',
+                            style: const TextStyle(
+                              color: TonyoColors.muted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        status.label,
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        status.detail,
+                        style: const TextStyle(
+                          color: TonyoColors.muted,
+                          fontSize: 12,
+                          height: 1.4,
                         ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Divider(color: TonyoColors.border, height: 1),
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _ScoreTile(
+                              value: score.energy,
+                              label: 'Energy',
+                              eyebrow: 'ESTIMATED ENERGY SCORE',
+                              completeness:
+                                  '${score.inputCount}/7 inputs · ${(score.confidence * 100).round()}% confidence',
+                              color: TonyoColors.violet,
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 126,
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                            color: TonyoColors.border,
+                          ),
+                          Expanded(
+                            child: _ScoreTile(
+                              key: const Key('cognitive-score-card'),
+                              value: score.cognitive,
+                              label: 'Cognitive',
+                              eyebrow: 'ESTIMATED COGNITIVE SCORE',
+                              completeness:
+                                  '${score.cognitiveInputCount}/5 cognitive inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                              color: TonyoColors.blue,
+                              comparison: _cognitiveComparison(score),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                if (controller.isEnergyScoreLoading) ...[
+                if (controller.isScoreLoading) ...[
                   const SizedBox(height: 10),
                   const LinearProgressIndicator(
                     minHeight: 2,
@@ -121,168 +156,49 @@ class TodayScreen extends StatelessWidget {
                     backgroundColor: TonyoColors.surfaceRaised,
                   ),
                 ],
-                if (controller.energyScoreError case final error?) ...[
+                if (controller.scoreError case final error?) ...[
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.cloud_off_rounded,
-                        color: TonyoColors.amber,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          error,
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _OfflineNotice(message: error),
                 ],
-                if (firstAlert != null) ...[
-                  const SizedBox(height: 12),
-                  TonyoCard(
-                    color: const Color(0xFF26191C),
-                    child: Row(
-                      children: [
-                        const MetricIcon(
-                          icon: Icons.battery_alert_rounded,
-                          color: TonyoColors.coral,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'PREDICTED DIP',
-                                style: TextStyle(
-                                  color: TonyoColors.amber,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              Text(
-                                firstAlert.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                firstAlert.detail,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: TonyoColors.muted,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                SectionHeader(
-                  'Today’s score factors',
-                  action: controller.isEnergyScoreLoading
-                      ? 'Updating…'
-                      : 'Refresh',
-                  onTap: controller.isEnergyScoreLoading
-                      ? null
-                      : () => controller.refreshEnergyScore(),
-                ),
-                if (score.drivers.isEmpty)
-                  const TonyoCard(
-                    child: Row(
-                      children: [
-                        MetricIcon(
-                          icon: Icons.add_chart_rounded,
-                          color: TonyoColors.violet,
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Log sleep, activity, and a check-in to personalize today’s estimate.',
-                            style: TextStyle(
-                              color: TonyoColors.muted,
-                              fontSize: 12,
+                const SectionHeader('Today’s signals'),
+                LayoutBuilder(
+                  key: const Key('recent-signal-grid'),
+                  builder: (context, constraints) {
+                    final width = (constraints.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: controller.todaySignalSummaries
+                          .map(
+                            (summary) => SizedBox(
+                              width: width,
+                              child: _SignalSummaryCard(summary: summary),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = (constraints.maxWidth - 10) / 2;
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: score.drivers
-                            .take(4)
-                            .map(
-                              (driver) => SizedBox(
-                                width: width,
-                                child: TonyoCard(
-                                  padding: const EdgeInsets.all(13),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          MetricIcon(
-                                            icon: _driverIcon(driver.label),
-                                            color: driver.contribution >= 0
-                                                ? TonyoColors.mint
-                                                : TonyoColors.coral,
-                                            size: 32,
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            '${driver.contribution >= 0 ? '+' : ''}${driver.contribution.round()}',
-                                            style: TextStyle(
-                                              color: driver.contribution >= 0
-                                                  ? TonyoColors.mint
-                                                  : TonyoColors.coral,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 11),
-                                      Text(
-                                        driver.label,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      Text(
-                                        driver.detail,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: TonyoColors.muted,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+                SectionHeader(
+                  'What shaped today',
+                  action: controller.isScoreLoading ? 'Updating…' : 'Refresh',
+                  onTap: controller.isScoreLoading
+                      ? null
+                      : () => controller.refreshScores(forceRecalculate: true),
+                ),
+                _DriverCard(
+                  title: 'Energy factors',
+                  subtitle: 'Today’s score factors',
+                  drivers: score.drivers,
+                  color: TonyoColors.violet,
+                ),
+                const SizedBox(height: 10),
+                _DriverCard(
+                  title: 'Cognitive factors',
+                  subtitle: 'WHAT SHAPED THIS ESTIMATE',
+                  drivers: score.cognitiveDrivers,
+                  color: TonyoColors.blue,
+                ),
                 const SizedBox(height: 12),
                 TonyoCard(
                   key: const Key('energy-score-explanation'),
@@ -299,55 +215,12 @@ class TodayScreen extends StatelessWidget {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'How it works: a neutral baseline is adjusted by sleep, exercise, hydration, workload, screen time, mood, and stress. This wellness estimate is not a medical assessment.',
+                          'This wellness estimate combines recent sleep, activity, reaction, mood, and stress inputs. It supports daily planning and is not a medical assessment.',
                           style: TextStyle(
                             color: TonyoColors.muted,
                             fontSize: 10,
                             height: 1.4,
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SectionHeader(
-                  'Top recommendation',
-                  action: 'Coach',
-                  onTap: () => _openCoach(context),
-                ),
-                _RecommendationPreview(onTap: () => _openCoach(context)),
-                const SectionHeader('Cognitive readiness'),
-                TonyoCard(
-                  child: Row(
-                    children: [
-                      ScoreRing(
-                        value: score.cognitive,
-                        label: 'Focus',
-                        size: 82,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              score.cognitive >= 70
-                                  ? 'Ready for deep work'
-                                  : 'Keep tasks lighter',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            const Text(
-                              'Cognitive scoring is the next model upgrade in Version 0.12.',
-                              style: TextStyle(
-                                color: TonyoColors.muted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ],
@@ -361,31 +234,63 @@ class TodayScreen extends StatelessWidget {
     );
   }
 
-  void _openCoach(BuildContext context) => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const CoachScreen()));
+  static Color _statusColor(TodayFatigueStatus status) => switch (status) {
+    TodayFatigueStatus.fresh => TonyoColors.mint,
+    TodayFatigueStatus.moderate => TonyoColors.amber,
+    TodayFatigueStatus.fatigued => TonyoColors.coral,
+  };
 
-  static String _status(int value) => value >= 72
-      ? 'You’re Fresh'
-      : value >= 52
-      ? 'Steady energy'
-      : 'Recovery first';
-  static String _statusDetail(int value) => value >= 72
-      ? 'Today’s recovery and behavior inputs are trending well.'
-      : value >= 52
-      ? 'A balanced day with room for deliberate recovery.'
-      : 'Today’s inputs support choosing a lower-load day.';
-
-  static IconData _driverIcon(String label) {
-    if (label.contains('Sleep')) return Icons.bedtime_rounded;
-    if (label.contains('Exercise')) return Icons.fitness_center_rounded;
-    if (label.contains('Screen')) return Icons.smartphone_rounded;
-    if (label.contains('Hydration')) return Icons.water_drop_rounded;
-    if (label.contains('Workload')) return Icons.menu_book_rounded;
-    if (label.contains('Mood')) return Icons.mood_rounded;
-    if (label.contains('Stress')) return Icons.psychology_rounded;
-    return Icons.auto_awesome_rounded;
+  static String _cognitiveComparison(ScoreSnapshot score) {
+    final change = score.cognitiveChange;
+    if (change == null) {
+      return 'First Cognitive Score · comparison starts tomorrow';
+    }
+    if (change == 0) return 'No change from yesterday';
+    return '${change > 0 ? '↑' : '↓'} ${change.abs()} points from yesterday';
   }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _dateLabel(),
+              style: const TextStyle(color: TonyoColors.muted, fontSize: 12),
+            ),
+            Text(
+              '${_greeting()}, $name',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+          ],
+        ),
+      ),
+      CircleAvatar(
+        radius: 22,
+        backgroundColor: TonyoColors.primary.withValues(alpha: .22),
+        child: Text(
+          name.trim().isEmpty
+              ? 'T'
+              : name.trim().characters.first.toUpperCase(),
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
+    ],
+  );
+
+  static String _greeting() => switch (DateTime.now().hour) {
+    < 12 => 'Morning',
+    < 17 => 'Afternoon',
+    _ => 'Evening',
+  };
 
   static String _dateLabel() {
     const weekdays = [
@@ -416,55 +321,263 @@ class TodayScreen extends StatelessWidget {
   }
 }
 
-class _RecommendationPreview extends StatelessWidget {
-  const _RecommendationPreview({required this.onTap});
-  final VoidCallback onTap;
+class _ScoreTile extends StatelessWidget {
+  const _ScoreTile({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.eyebrow,
+    required this.completeness,
+    required this.color,
+    this.comparison,
+  });
+
+  final int value;
+  final String label;
+  final String eyebrow;
+  final String completeness;
+  final Color color;
+  final String? comparison;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        eyebrow,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .55,
+        ),
+      ),
+      const SizedBox(height: 8),
+      ScoreRing(value: value, label: label, size: 76),
+      const SizedBox(height: 8),
+      Text(
+        completeness,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: TonyoColors.muted, fontSize: 8.5),
+      ),
+      if (comparison != null) ...[
+        const SizedBox(height: 4),
+        Text(
+          comparison!,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: TonyoColors.mint,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+class _SignalSummaryCard extends StatelessWidget {
+  const _SignalSummaryCard({required this.summary});
+
+  final TodaySignalSummary summary;
+
   @override
   Widget build(BuildContext context) {
-    final item = AppScope.of(context).recommendations.first;
+    final color = _color(summary.type);
     return TonyoCard(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Row(
-          children: [
-            const MetricIcon(
-              icon: Icons.bed_rounded,
-              color: TonyoColors.primary,
+      key: Key('today-signal-${summary.type.name}'),
+      padding: const EdgeInsets.all(13),
+      child: Row(
+        children: [
+          MetricIcon(icon: _icon(summary.type), color: color, size: 34),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  summary.type.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  summary.displayValue,
+                  style: TextStyle(
+                    color: summary.isAvailable ? TonyoColors.text : color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  summary.isAvailable ? 'Logged today' : 'Not logged',
+                  style: const TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 8.5,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static IconData _icon(SignalType type) => switch (type) {
+    SignalType.sleep => Icons.bedtime_rounded,
+    SignalType.hydration => Icons.water_drop_rounded,
+    SignalType.exercise => Icons.fitness_center_rounded,
+    SignalType.study => Icons.menu_book_rounded,
+    SignalType.screenTime => Icons.smartphone_rounded,
+    SignalType.reactionTime => Icons.bolt_rounded,
+    _ => Icons.insights_rounded,
+  };
+
+  static Color _color(SignalType type) => switch (type) {
+    SignalType.sleep => TonyoColors.blue,
+    SignalType.hydration => TonyoColors.mint,
+    SignalType.exercise => TonyoColors.coral,
+    SignalType.study => TonyoColors.amber,
+    SignalType.screenTime => TonyoColors.violet,
+    SignalType.reactionTime => TonyoColors.primary,
+    _ => TonyoColors.muted,
+  };
+}
+
+class _DriverCard extends StatelessWidget {
+  const _DriverCard({
+    required this.title,
+    required this.subtitle,
+    required this.drivers,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<ScoreDriver> drivers;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => TonyoCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            MetricIcon(icon: Icons.insights_rounded, color: color, size: 34),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.timeLabel,
-                    style: const TextStyle(
-                      color: TonyoColors.violet,
-                      fontSize: 10,
+                    subtitle,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 8.5,
                       fontWeight: FontWeight.w900,
+                      letterSpacing: .5,
                     ),
                   ),
                   Text(
-                    item.title,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    item.detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
-                      fontSize: 11,
-                    ),
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: TonyoColors.muted),
           ],
         ),
+        const SizedBox(height: 14),
+        if (drivers.isEmpty)
+          const Text(
+            'Log today’s signals to personalize this estimate.',
+            style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+          )
+        else
+          ...drivers.take(4).map(_DriverRow.new),
+      ],
+    ),
+  );
+}
+
+class _DriverRow extends StatelessWidget {
+  const _DriverRow(this.driver);
+
+  final ScoreDriver driver;
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = driver.contribution >= 0;
+    final color = positive ? TonyoColors.mint : TonyoColors.coral;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  driver.label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  driver.detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${positive ? '+' : ''}${driver.contribution.round()} pts',
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _OfflineNotice extends StatelessWidget {
+  const _OfflineNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const Icon(Icons.cloud_off_rounded, color: TonyoColors.amber, size: 15),
+      const SizedBox(width: 7),
+      Expanded(
+        child: Text(
+          message,
+          style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+        ),
+      ),
+    ],
+  );
 }

@@ -148,14 +148,17 @@ class CloudUserState {
   };
 }
 
-/// Version 0.11 daily Energy Score document.
+/// Version 0.11+ shared daily Energy and Cognitive Score document.
 Map<String, Object?> scoreSnapshotToCloud({
   required ScoreSnapshot snapshot,
   required DateTime day,
 }) => {
   'energy': snapshot.energy,
+  'cognitive': snapshot.cognitive,
   'confidence': snapshot.confidence,
+  'cognitiveConfidence': snapshot.cognitiveConfidence,
   'inputCount': snapshot.inputCount,
+  'cognitiveInputCount': snapshot.cognitiveInputCount,
   'isEstimate': snapshot.isEstimate,
   'drivers': snapshot.drivers
       .map(
@@ -166,6 +169,17 @@ Map<String, Object?> scoreSnapshotToCloud({
         },
       )
       .toList(),
+  'cognitiveDrivers': snapshot.cognitiveDrivers
+      .map(
+        (driver) => {
+          'label': driver.label,
+          'contribution': driver.contribution,
+          'detail': driver.detail,
+        },
+      )
+      .toList(),
+  'previousCognitive': snapshot.previousCognitive,
+  'cognitiveDelta': snapshot.cognitiveChange,
   'day': day,
   'calculatedAt': snapshot.calculatedAt ?? DateTime.now().toUtc(),
   'schemaVersion': cloudSchemaVersion,
@@ -174,16 +188,30 @@ Map<String, Object?> scoreSnapshotToCloud({
 ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
     ScoreSnapshot(
       energy: (data['energy'] as num).round(),
-      // Reserved for Version 0.12. Older/newer documents remain readable.
       cognitive: (data['cognitive'] as num?)?.round() ?? 0,
       confidence: (data['confidence'] as num).toDouble(),
+      cognitiveConfidence:
+          (data['cognitiveConfidence'] as num?)?.toDouble() ?? .2,
       inputCount: (data['inputCount'] as num?)?.round() ?? 0,
+      cognitiveInputCount: (data['cognitiveInputCount'] as num?)?.round() ?? 0,
+      hasCognitiveScore: data.containsKey('cognitive'),
+      previousCognitive: (data['previousCognitive'] as num?)?.round(),
       isEstimate: data['isEstimate'] as bool? ?? true,
       day: cloudDateTime(data['day'], field: 'day'),
       calculatedAt: data['calculatedAt'] == null
           ? null
           : cloudDateTime(data['calculatedAt'], field: 'calculatedAt'),
       drivers: ((data['drivers'] as List?) ?? const []).map((raw) {
+        final driver = (raw as Map).cast<String, dynamic>();
+        return ScoreDriver(
+          driver['label'] as String,
+          (driver['contribution'] as num).toDouble(),
+          driver['detail'] as String,
+        );
+      }).toList(),
+      cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const []).map((
+        raw,
+      ) {
         final driver = (raw as Map).cast<String, dynamic>();
         return ScoreDriver(
           driver['label'] as String,

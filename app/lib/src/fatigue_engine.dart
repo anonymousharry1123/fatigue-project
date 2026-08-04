@@ -8,6 +8,7 @@ abstract final class FatigueEngine {
     required List<DailyCheckIn> checkIns,
     DateTime? now,
     DateTime? day,
+    ScoreSnapshot? previousDay,
   }) {
     final clock = now ?? DateTime.now();
     final target = day ?? clock;
@@ -166,19 +167,91 @@ abstract final class FatigueEngine {
       );
     }
 
-    // Cognitive remains a local preview until Version 0.12 and is not written
-    // by the Version 0.11 cloud serializer.
-    final reaction = recent
+    // Version 0.12 Cognitive Score uses a separate explainable factor list.
+    // Reaction time is personalized against prior valid tests when available.
+    var cognitive = 65.0;
+    final cognitiveDrivers = <ScoreDriver>[];
+    final currentReaction = targetDay
         .where((item) => item.type == SignalType.reactionTime)
-        .firstOrNull
-        ?.value;
-    var cognitive = 64.0;
-    if (reaction != null) cognitive += ((330 - reaction) / 5).clamp(-18, 16);
-    if (sleep != null) cognitive += ((sleep - 7.5) * 6).clamp(-16, 12);
-    if (study != null) cognitive -= ((study - 3).clamp(0, 5) * 3);
+        .firstOrNull;
+    final priorReactions =
+        signals
+            .where(
+              (item) =>
+                  item.type == SignalType.reactionTime &&
+                  item.timestamp.isBefore(start) &&
+                  !item.timestamp.isAfter(cutoff),
+            )
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    if (currentReaction != null) {
+      final baselineReadings = priorReactions.take(14).toList();
+      final baseline = baselineReadings.isEmpty
+          ? null
+          : baselineReadings.fold<double>(0, (sum, item) => sum + item.value) /
+                baselineReadings.length;
+      final impact = baseline == null
+          ? ((330 - currentReaction.value) / 5).clamp(-18, 16).toDouble()
+          : (((baseline - currentReaction.value) / baseline) * 120)
+                .clamp(-18, 18)
+                .toDouble();
+      cognitive += impact;
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Reaction time',
+          impact,
+          baseline == null
+              ? '${currentReaction.value.round()} ms · personal baseline building'
+              : '${currentReaction.value.round()} ms vs ${baseline.round()} ms baseline',
+        ),
+      );
+    }
+    if (sleep != null) {
+      final impact = ((sleep - 7.5) * 6).clamp(-16, 10).toDouble();
+      cognitive += impact;
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Sleep',
+          impact,
+          '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}',
+        ),
+      );
+    }
+    if (study != null) {
+      final impact = study <= 2
+          ? 3.0
+          : (-(study - 4).clamp(0, 4) * 3).toDouble();
+      cognitive += impact;
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Study load',
+          impact,
+          '${study.toStringAsFixed(1)} hr logged today',
+        ),
+      );
+    }
     if (latestCheckIn != null) {
-      cognitive += (latestCheckIn.mood - 5.5) * 1.5;
-      cognitive -= (latestCheckIn.stress - 5.5) * 2;
+      final moodImpact = ((latestCheckIn.mood - 5.5) * 1.5)
+          .clamp(-7, 7)
+          .toDouble();
+      final stressImpact = ((5.5 - latestCheckIn.stress) * 2)
+          .clamp(-9, 9)
+          .toDouble();
+      cognitive += moodImpact + stressImpact;
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Mood',
+          moodImpact,
+          '${latestCheckIn.mood.round()}/10 at latest check-in',
+        ),
+      );
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Stress',
+          stressImpact,
+          '${latestCheckIn.stress.round()}/10 at latest check-in',
+        ),
+      );
     }
 
     drivers.sort(
@@ -186,11 +259,27 @@ abstract final class FatigueEngine {
     );
     final inputCount = drivers.length.clamp(0, 7);
     final confidence = (.2 + inputCount / 7 * .75).clamp(.2, .95);
+    cognitiveDrivers.sort(
+      (a, b) => b.contribution.abs().compareTo(a.contribution.abs()),
+    );
+    final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 5);
+    final cognitiveConfidence = (.2 + cognitiveInputCount / 5 * .75).clamp(
+      .2,
+      .95,
+    );
+    final previousCognitive = previousDay?.hasCognitiveScore == true
+        ? previousDay!.cognitive
+        : null;
     return ScoreSnapshot(
       energy: energy.round().clamp(0, 100),
       cognitive: cognitive.round().clamp(0, 100),
       confidence: confidence,
       drivers: List.unmodifiable(drivers),
+      cognitiveConfidence: cognitiveConfidence,
+      cognitiveDrivers: List.unmodifiable(cognitiveDrivers),
+      cognitiveInputCount: cognitiveInputCount,
+      hasCognitiveScore: true,
+      previousCognitive: previousCognitive,
       day: start,
       calculatedAt: clock,
       inputCount: inputCount,

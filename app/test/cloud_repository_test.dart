@@ -126,7 +126,7 @@ void main() {
     expect(checkIns.map((value) => value.id), ['morning']);
   });
 
-  test('upserts one deterministic daily Energy Score snapshot', () async {
+  test('upserts one shared daily Energy and Cognitive snapshot', () async {
     final calculatedAt = day.add(const Duration(hours: 12));
     final first = ScoreSnapshot(
       energy: 71,
@@ -136,6 +136,11 @@ void main() {
       day: day,
       calculatedAt: calculatedAt,
       inputCount: 5,
+      cognitiveConfidence: .7,
+      cognitiveInputCount: 4,
+      cognitiveDrivers: const [
+        ScoreDriver('Reaction time', 5, '260 ms vs 275 ms baseline'),
+      ],
     );
     await repository.upsertScoreSnapshot('maya-uid', first);
     await repository.upsertScoreSnapshot(
@@ -148,6 +153,10 @@ void main() {
         day: day.add(const Duration(hours: 9)),
         calculatedAt: calculatedAt.add(const Duration(hours: 1)),
         inputCount: 6,
+        cognitiveConfidence: .8,
+        cognitiveInputCount: 4,
+        cognitiveDrivers: const [ScoreDriver('Sleep', 3, '8.0 hr last night')],
+        previousCognitive: 64,
       ),
     );
 
@@ -156,7 +165,11 @@ void main() {
     expect(stored?.energy, 76);
     expect(stored?.inputCount, 6);
     expect(stored?.isEstimate, isTrue);
-    expect(stored?.cognitive, 0, reason: 'Version 0.12 owns this field.');
+    expect(stored?.cognitive, 68);
+    expect(stored?.hasCognitiveScore, isTrue);
+    expect(stored?.cognitiveInputCount, 4);
+    expect(stored?.cognitiveDrivers.single.label, 'Sleep');
+    expect(stored?.cognitiveChange, 4);
   });
 
   test('exports and permanently deletes the authenticated user tree', () async {

@@ -1,8 +1,8 @@
-# FatigueEngine Tuning Loop (Cohort Lab + Version 0.11)
+# FatigueEngine Tuning Loop (Cohort Lab + Versions 0.11–0.12)
 
 Use this checklist whenever you change scoring weights. The synthetic cohort
-(~3000 students) is the shared simulator; Version 0.11’s persisted energy
-snapshots are the live-app path. Keep both aligned.
+(~3000 students) is the shared simulator; Versions 0.11–0.12 persist Energy
+and Cognitive scores through the live-app path. Keep both aligned.
 
 ## Goals
 
@@ -15,8 +15,8 @@ snapshots are the live-app path. Keep both aligned.
 
 1. Branch includes Cohort Lab (`Profile → Developer → Cohort Lab`).
 2. App can load `assets/data/synthetic_students.csv`.
-3. You know which `FatigueEngine` APIs Version 0.11 uses for live energy
-   (usually `score()` / energy snapshot writers in `AppController`).
+3. You know which `FatigueEngine` APIs Versions 0.11–0.12 use for live scores
+   (usually `score()` / shared snapshot writers in `AppController`).
 4. Optional Firebase path: run with
    `--dart-define-from-file=config/firebase_options.json`, signed in, rules
    deployed for `syntheticUsers` / `syntheticCohort`.
@@ -27,10 +27,10 @@ snapshots are the live-app path. Keep both aligned.
 
 - [ ] Open **Cohort Lab → Load CSV** (or **Recompute** if already loaded).
 - [ ] Record Overview: `N`, mean/median **Energy**, mean/median **Cognitive**.
-- [ ] Glance Relations: sleep→energy, screen→cognitive, caffeine→energy.
+- [ ] Glance Relations: sleep→energy/cognitive, screen→energy, caffeine→energy.
 - [ ] Spot-check 3 outlier people via **People → Sort**:
   1. Sort **Sleep ↑ low** → open the first 3 → confirm low sleep pulls energy down and Sleep appears in drivers.
-  2. Sort **Screen ↓ high** → open the first 3 → confirm high folded screen shows up in screen drivers / lower cognitive.
+  2. Sort **Screen ↓ high** → open the first 3 → confirm high folded screen shows up in Energy drivers.
   3. Sort **Caffeine ↓ high** → open the first 3 → confirm caffeine driver sign matches intake (mild + vs excess −).
   Optional extras: **Energy ↑ low**, **Stress ↓ high** if you are tuning check-in weights.
 
@@ -48,11 +48,12 @@ Edit only the relevant block in [`lib/src/fatigue_engine.dart`](../lib/src/fatig
 | Driver | What to touch | Cohort signal to watch |
 |--------|---------------|------------------------|
 | Sleep | sleep → energy (and cognitive sleep term) | Relations → Sleep vs Energy |
-| Screen | screen time penalty | Screen+social vs Cognitive / Energy |
+| Screen | Energy screen-time penalty | Screen+social vs Energy |
 | Exercise | daily load thresholds (CSV uses weekly/7) | Exercise vs Energy |
 | Caffeine | mild + for 0–2 drinks, − for excess | Caffeine vs Energy |
-| Check-in | energy/stress/mood terms | People with high `stress_level` / burnout |
-| Confidence | expected-signal set / present ratio | Overview confidence via person detail |
+| Check-in | Energy and Cognitive mood/stress terms | People with high `stress_level` / burnout |
+| Reaction | Cognitive personal-baseline term | Live fixtures/tests only; CSV has no reaction column |
+| Confidence | per-model input coverage | Overview confidence via person detail |
 
 Do **not** retune hydration/HRV/reaction using this CSV alone — those columns
 are not in the synthetic file (unless you add fixtures).
@@ -74,12 +75,15 @@ are not in the synthetic file (unless you add fixtures).
 - [ ] `flutter test` passes — especially `test/fatigue_engine_test.dart` and
       `test/synthetic_cohort_test.dart`.
 
-### 6. Live app sanity (Version 0.11)
+### 6. Live app sanity (Versions 0.11–0.12)
 
 - [ ] On a normal account with manual sleep/activity/check-in, Today energy
       still looks explainable (drivers match what you logged).
-- [ ] If 0.11 persists `scoreSnapshots`, confirm a new snapshot after logging
-      data (or after the controller’s score refresh path).
+- [ ] Complete a reaction test and confirm Cognitive explains reaction, sleep,
+      study, mood, and stress without mixing in Energy-only drivers.
+- [ ] Confirm `scoreSnapshots` stores both scores after logging data (or after
+      the controller’s score refresh path), with yesterday comparison when a
+      prior Cognitive snapshot exists.
 - [ ] Fixture / empty-signal users still get a bounded score (no NaN / crash).
 
 ### 7. Optional share with teammate
@@ -95,7 +99,7 @@ are not in the synthetic file (unless you add fixtures).
 - [ ] If not → revert the weight, adjust hypothesis, repeat from step 2.
 - [ ] Never combine unrelated UI refactors with a scoring tweak in one commit.
 
-## Joint workflow after merging Cohort Lab + 0.11
+## Joint workflow after merging Cohort Lab + Versions 0.11–0.12
 
 1. Merge this feature into `main` (Cohort Lab side track).
 2. Pull `main` so both of you share the same `FatigueEngine` + CSV asset.
