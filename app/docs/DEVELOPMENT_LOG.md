@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.12 — Cognitive Score (as of 2026-08-01)
+- **Current release:** Version 0.13 — Today Dashboard (as of 2026-08-04)
 
 ## Implementation Report
 
@@ -24,7 +24,8 @@
 | 0.10-a | Firebase Auth + Firestore schema, rules, migration | Complete |
 | 0.11 | Firebase-backed Basic Energy Score | Complete |
 | 0.12 | Firebase-backed Cognitive Score + daily comparison | Complete |
-| 0.13+ | Today dashboard, forecast engine, HealthKit, AI coach | Not started |
+| 0.13 | Snapshot-backed Today dashboard | Complete |
+| 0.14+ | Score drivers, forecast engine, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -47,7 +48,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-01 — **64 tests passed** with Version 0.12 Cognitive Score
+- Last verified: 2026-08-04 — **67 tests passed** with Version 0.13 Today Dashboard
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -64,6 +65,7 @@
 12. Firebase foundation (Auth, Firestore schema, rules, migration) - Complete (v0.10-a)
 13. Basic Energy Score (seven explainable factors + daily cloud snapshot) - Complete (v0.11)
 14. Cognitive Score (five explainable factors + previous-day comparison) - Complete (v0.12)
+15. Today Dashboard (saved scores + fatigue state + daily signals) - Complete (v0.13)
 
 ## Day-to-Day Entries
 
@@ -288,6 +290,37 @@ Score backed by the Version 0.10-a Firebase schema.
   now records field presence so yesterday comparisons do not show a misleading
   jump from zero after upgrade.
 
+### 2026-08-04 — Version 0.13 Today Dashboard
+
+**Branch:** `main`
+
+**Goal:** Complete Version 0.13, verify the app for errors, and make the Today
+experience visually clean.
+
+**Results:**
+- Changed startup scoring to prefer the authenticated user's saved
+  `scoreSnapshots/{yyyy-MM-dd}` document. A missing or legacy Energy-only
+  snapshot falls back to live calculation and a manual refresh forces a fresh
+  calculation.
+- Added a dedicated day-scoped Firestore query for Today signals and six
+  consistent summaries: sleep, hydration, exercise, study, screen time, and
+  reaction time.
+- Added tested Fresh, Moderate, and Fatigued Energy status thresholds.
+- Rebuilt Today around a compact readiness hero, side-by-side Energy/Cognitive
+  scores, a clean two-column signal grid, separate factor cards, offline state,
+  and wellness-only language. Removed forecast/recommendation fixture clutter
+  from the dashboard.
+- Made the greeting time-aware and guarded empty profile initials.
+- Bumped the app to `0.13.0+14` and added controller, logic, and widget coverage.
+- `flutter test` passed all **67 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- Loading an existing snapshot on every refresh would hide newly logged inputs.
+  Startup now reuses saved scores, while data mutations and the Refresh action
+  explicitly recalculate and upsert the daily document.
+- Day summaries must not count future or previous-day readings. The pure
+  dashboard logic applies both calendar-day and current-time cutoffs.
+
 ---
 
 ## Prompts Used
@@ -399,6 +432,17 @@ reaction time is personalized when history exists; legacy Energy-only snapshots
 remain readable; the existing Energy Score and synthetic cohort functionality
 remain in place.
 
+### Feature: Version 0.13 Today Dashboard
+**Prompt:**
+"complete version 0.13, check for error, and make it look clean"
+
+**Result:** Completed the snapshot-backed Today dashboard, day-scoped signal
+summaries, fatigue status model, visual cleanup, release metadata, and automated
+coverage.
+
+**Modifications:** Saved snapshots are preferred on startup; data changes and
+manual refreshes force recalculation so persisted scores never mask new inputs.
+
 ---
 
 ## Challenges & Solutions
@@ -434,6 +478,6 @@ remain in place.
 - [x] Implement Version 0.10 — fuller Daily History (edit/delete by date)
 - [x] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
 - [x] Implement Version 0.11 Energy Score and Version 0.12 Cognitive Score (query Firebase)
-- [ ] Implement Version 0.13 Today Dashboard from persisted snapshots
+- [x] Implement Version 0.13 Today Dashboard from persisted snapshots
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

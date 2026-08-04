@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: August 1, 2026
-Current release: **Version 0.12 — Cognitive Score**
+Current release: **Version 0.13 — Today Dashboard**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -169,7 +169,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Refresh the daily snapshot after relevant input changes and expose manual refresh, loading, and offline states
 - Automated tests cover scoring factors, aggregation, circular-input prevention, cloud queries, schema round-trips, daily upserts, controller integration, and UI labeling
 
-### Version 0.12 — Cognitive Score ✅ Current
+### Version 0.12 — Cognitive Score ✅
 
 - Calculate an explainable 0–100 Cognitive Score
 - Query reaction-time `signals`, sleep, study load, and latest mood/stress `checkIns` from Firestore
@@ -182,13 +182,13 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Keep the synthetic Cohort Lab compatible with the shared engine and show separate Energy/Cognitive driver cards
 - Automated tests cover bounds, factors, baselines, legacy snapshots, schema round-trips, shared daily upserts, Firebase-controller integration, previous-day comparison, synthetic scoring, and UI presentation
 
-## Upcoming Versions
-
-### Version 0.13 — Today Dashboard
+### Version 0.13 — Today Dashboard ✅ Current
 
 - Replace Today fixtures with Energy and Cognitive scores loaded from `scoreSnapshots` (falling back to live calculation when missing)
 - Display Fresh, Moderate, or Fatigued status
 - Show recent-signal summary cards from day-scoped Firestore queries
+
+## Upcoming Versions
 
 ### Version 0.14 — Score Drivers
 

@@ -297,6 +297,86 @@ void main() {
   );
 
   test(
+    'Version 0.13 loads today snapshot and day-scoped signal summaries',
+    () async {
+      final now = DateTime.now();
+      final day = DateTime(now.year, now.month, now.day);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'dashboard-uid',
+          email: 'dashboard@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'dashboard-uid')
+        ..seed(
+          'dashboard-uid',
+          CloudUserState(
+            profile: const UserProfile(name: 'Dashboard Maya'),
+            accountEmail: 'dashboard@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: true,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [
+              SignalReading(
+                id: 'water-morning',
+                type: SignalType.hydration,
+                value: .7,
+                timestamp: day,
+              ),
+              SignalReading(
+                id: 'water-lunch',
+                type: SignalType.hydration,
+                value: 1.2,
+                timestamp: day,
+              ),
+              SignalReading(
+                id: 'old-water',
+                type: SignalType.hydration,
+                value: 4,
+                timestamp: day.subtract(const Duration(hours: 2)),
+              ),
+            ],
+            checkIns: const [],
+          ),
+        );
+      await repository.upsertScoreSnapshot(
+        'dashboard-uid',
+        ScoreSnapshot(
+          energy: 91,
+          cognitive: 87,
+          confidence: .88,
+          drivers: const [ScoreDriver('Sleep', 7, 'Saved driver')],
+          cognitiveConfidence: .82,
+          cognitiveDrivers: const [
+            ScoreDriver('Reaction time', 5, 'Saved driver'),
+          ],
+          inputCount: 6,
+          cognitiveInputCount: 4,
+          day: day,
+          calculatedAt: day.add(const Duration(hours: 6)),
+        ),
+      );
+      final controller = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+
+      await controller.load();
+
+      expect(controller.score.energy, 91);
+      expect(controller.score.cognitive, 87);
+      expect(controller.scoreLoadedFromSnapshot, isTrue);
+      final hydration = controller.todaySignalSummaries.singleWhere(
+        (item) => item.type == SignalType.hydration,
+      );
+      expect(hydration.displayValue, '1.9 L');
+      expect(hydration.readingCount, 2);
+    },
+  );
+
+  test(
     'Version 0.8 stores morning/evening check-ins on a 1–10 scale',
     () async {
       final controller = AppController();

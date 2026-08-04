@@ -148,7 +148,7 @@ class CloudUserState {
   };
 }
 
-/// Version 0.11–0.12 shared daily Energy and Cognitive Score document.
+/// Version 0.11+ shared daily Energy and Cognitive Score document.
 Map<String, Object?> scoreSnapshotToCloud({
   required ScoreSnapshot snapshot,
   required DateTime day,
