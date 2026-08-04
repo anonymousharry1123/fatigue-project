@@ -193,7 +193,9 @@ class AppController extends ChangeNotifier {
         _todaySignals = dashboardResults[1]! as List<SignalReading>;
         if (!forceRecalculate &&
             savedSnapshot != null &&
-            savedSnapshot.hasCognitiveScore) {
+            savedSnapshot.hasCognitiveScore &&
+            savedSnapshot.freshness != null &&
+            savedSnapshot.cognitiveFreshness != null) {
           _scoreSnapshot = savedSnapshot;
           _scoreLoadedFromSnapshot = true;
           return;

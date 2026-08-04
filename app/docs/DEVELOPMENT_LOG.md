@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.13 — Today Dashboard (as of 2026-08-04)
+- **Current release:** Version 0.14 — Score Drivers (as of 2026-08-04)
 
 ## Implementation Report
 
@@ -25,7 +25,8 @@
 | 0.11 | Firebase-backed Basic Energy Score | Complete |
 | 0.12 | Firebase-backed Cognitive Score + daily comparison | Complete |
 | 0.13 | Snapshot-backed Today dashboard | Complete |
-| 0.14+ | Score drivers, forecast engine, HealthKit, AI coach | Not started |
+| 0.14 | Ranked, evidence-aware score drivers | Complete |
+| 0.15+ | Forecast engine, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -48,7 +49,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-04 — **67 tests passed** with Version 0.13 Today Dashboard
+- Last verified: 2026-08-04 — **71 tests passed** with Version 0.14 Score Drivers
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -66,6 +67,7 @@
 13. Basic Energy Score (seven explainable factors + daily cloud snapshot) - Complete (v0.11)
 14. Cognitive Score (five explainable factors + previous-day comparison) - Complete (v0.12)
 15. Today Dashboard (saved scores + fatigue state + daily signals) - Complete (v0.13)
+16. Score Drivers (ranked contributions + evidence-aware confidence) - Complete (v0.14)
 
 ## Day-to-Day Entries
 
@@ -321,6 +323,43 @@ experience visually clean.
 - Day summaries must not count future or previous-day readings. The pure
   dashboard logic applies both calendar-day and current-time cutoffs.
 
+### 2026-08-04 — Version 0.14 Score Drivers
+
+**Branch:** `main`
+
+**Goal:** Complete Version 0.14 with a professional, evidence-backed driver
+experience on top of the uncommitted Version 0.13 work.
+
+**Results:**
+- Ranked supporting contributions from strongest to weakest and reducing
+  contributions from largest penalty to smallest, separately for Energy and
+  Cognitive models.
+- Added plain-language explanations plus representative evidence timestamps,
+  source labels, and per-driver freshness to the daily snapshot schema.
+- Replaced count-only confidence with a bounded calculation combining input
+  completeness and average evidence freshness. HealthKit, manual, and model
+  sources receive explicit reliability weights alongside stored data quality.
+- Removed caffeine from Energy driver scoring so Version 0.14 uses exactly the
+  seven Version 0.11 roadmap inputs.
+- Rebuilt Insights as a real driver report with model confidence panels,
+  coverage/freshness breakdowns, ranked supporting/reducing sections, and
+  evidence chips. Removed the fixture pattern cards scheduled for Version 0.21.
+- Updated Today to show freshness beside confidence and separate supporting
+  from reducing factors.
+- Advanced the Firestore schema marker to Version 2. Older score snapshots stay
+  readable; snapshots without freshness metadata recalculate and upgrade on
+  the next signed-in launch.
+- Bumped the app to `0.14.0+15`.
+- `flutter test` passed all **71 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- Existing 0.13 snapshots contain valid scores but no freshness evidence.
+  Treating them as current would leave the 0.14 report incomplete, so startup
+  detects missing freshness fields, recalculates, and upserts the same daily ID.
+- Completeness alone overstates confidence when records are old. The updated
+  formula retains the 20% low-data floor while combining 55% coverage weight
+  and 20% freshness weight above that baseline.
+
 ---
 
 ## Prompts Used
@@ -443,6 +482,18 @@ coverage.
 **Modifications:** Saved snapshots are preferred on startup; data changes and
 manual refreshes force recalculation so persisted scores never mask new inputs.
 
+### Feature: Version 0.14 Score Drivers
+**Prompt:**
+"complete 0.14 now, make it professional"
+
+**Result:** Completed ranked positive/negative drivers, stored evidence
+metadata, freshness-aware confidence, professional Today/Insights presentation,
+backward-compatible snapshot upgrades, and regression coverage.
+
+**Modifications:** Confidence now combines completeness with recency, source,
+and quality. Caffeine is excluded to preserve the exact seven Version 0.11
+Energy inputs named by the roadmap.
+
 ---
 
 ## Challenges & Solutions
@@ -479,5 +530,6 @@ manual refreshes force recalculation so persisted scores never mask new inputs.
 - [x] Implement Version 0.10-a — Firebase Auth + Firestore schema, Security Rules, local migration
 - [x] Implement Version 0.11 Energy Score and Version 0.12 Cognitive Score (query Firebase)
 - [x] Implement Version 0.13 Today Dashboard from persisted snapshots
+- [x] Implement Version 0.14 ranked Score Drivers and freshness confidence
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

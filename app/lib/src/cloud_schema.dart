@@ -1,7 +1,7 @@
 import 'models.dart';
 
-/// Firestore schema version introduced in Version 0.10-a.
-const int cloudSchemaVersion = 1;
+/// Firestore schema version. Version 2 adds evidence-aware score drivers.
+const int cloudSchemaVersion = 2;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -157,6 +157,8 @@ Map<String, Object?> scoreSnapshotToCloud({
   'cognitive': snapshot.cognitive,
   'confidence': snapshot.confidence,
   'cognitiveConfidence': snapshot.cognitiveConfidence,
+  'freshness': snapshot.freshness,
+  'cognitiveFreshness': snapshot.cognitiveFreshness,
   'inputCount': snapshot.inputCount,
   'cognitiveInputCount': snapshot.cognitiveInputCount,
   'isEstimate': snapshot.isEstimate,
@@ -166,6 +168,10 @@ Map<String, Object?> scoreSnapshotToCloud({
           'label': driver.label,
           'contribution': driver.contribution,
           'detail': driver.detail,
+          'explanation': driver.explanation,
+          'freshness': driver.freshness,
+          'source': driver.source?.name,
+          'evidenceAt': driver.evidenceAt,
         },
       )
       .toList(),
@@ -175,6 +181,10 @@ Map<String, Object?> scoreSnapshotToCloud({
           'label': driver.label,
           'contribution': driver.contribution,
           'detail': driver.detail,
+          'explanation': driver.explanation,
+          'freshness': driver.freshness,
+          'source': driver.source?.name,
+          'evidenceAt': driver.evidenceAt,
         },
       )
       .toList(),
@@ -192,6 +202,8 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
       confidence: (data['confidence'] as num).toDouble(),
       cognitiveConfidence:
           (data['cognitiveConfidence'] as num?)?.toDouble() ?? .2,
+      freshness: (data['freshness'] as num?)?.toDouble(),
+      cognitiveFreshness: (data['cognitiveFreshness'] as num?)?.toDouble(),
       inputCount: (data['inputCount'] as num?)?.round() ?? 0,
       cognitiveInputCount: (data['cognitiveInputCount'] as num?)?.round() ?? 0,
       hasCognitiveScore: data.containsKey('cognitive'),
@@ -207,6 +219,14 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
           driver['label'] as String,
           (driver['contribution'] as num).toDouble(),
           driver['detail'] as String,
+          explanation: (driver['explanation'] as String?) ?? '',
+          freshness: (driver['freshness'] as num?)?.toDouble(),
+          source: driver['source'] == null
+              ? null
+              : SignalSource.values.byName(driver['source'] as String),
+          evidenceAt: driver['evidenceAt'] == null
+              ? null
+              : cloudDateTime(driver['evidenceAt'], field: 'evidenceAt'),
         );
       }).toList(),
       cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const []).map((
@@ -217,6 +237,14 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
           driver['label'] as String,
           (driver['contribution'] as num).toDouble(),
           driver['detail'] as String,
+          explanation: (driver['explanation'] as String?) ?? '',
+          freshness: (driver['freshness'] as num?)?.toDouble(),
+          source: driver['source'] == null
+              ? null
+              : SignalSource.values.byName(driver['source'] as String),
+          evidenceAt: driver['evidenceAt'] == null
+              ? null
+              : cloudDateTime(driver['evidenceAt'], field: 'evidenceAt'),
         );
       }).toList(),
     );

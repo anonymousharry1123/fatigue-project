@@ -167,6 +167,66 @@ void main() {
     expect(find.text('WHAT SHAPED THIS ESTIMATE'), findsOneWidget);
   });
 
+  testWidgets('Version 0.14 presents ranked drivers and confidence evidence', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final controller = AppController()
+      ..isReady = true
+      ..onboardingComplete = true
+      ..signals = [
+        for (final entry in const {
+          SignalType.sleep: 5.0,
+          SignalType.hydration: 3.0,
+          SignalType.study: 7.0,
+          SignalType.exercise: 1.0,
+          SignalType.screenTime: 8.0,
+          SignalType.reactionTime: 245.0,
+        }.entries)
+          SignalReading(
+            id: entry.key.name,
+            type: entry.key,
+            value: entry.value,
+            timestamp: now,
+            source: SignalSource.healthKit,
+          ),
+      ]
+      ..checkIns = [
+        DailyCheckIn(
+          id: 'today',
+          timestamp: now,
+          energy: 7,
+          mood: 9,
+          stress: 8,
+        ),
+      ];
+    await controller.refreshEnergyScore();
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SegmentedButton<int>),
+        matching: find.text('Insights'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Daily Score Models'), findsOneWidget);
+    expect(find.textContaining('100% coverage'), findsWidgets);
+    expect(find.textContaining('% fresh'), findsWidgets);
+    await tester.scrollUntilVisible(find.text('SUPPORTING TODAY'), 250);
+    expect(find.text('SUPPORTING TODAY'), findsWidgets);
+    expect(find.text('REDUCING TODAY'), findsWidgets);
+    expect(find.textContaining('recovery range'), findsWidgets);
+  });
+
   testWidgets('Version 0.6 activity log validates and saves manual data', (
     tester,
   ) async {

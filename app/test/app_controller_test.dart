@@ -354,6 +354,8 @@ void main() {
           ],
           inputCount: 6,
           cognitiveInputCount: 4,
+          freshness: .86,
+          cognitiveFreshness: .81,
           day: day,
           calculatedAt: day.add(const Duration(hours: 6)),
         ),
@@ -375,6 +377,62 @@ void main() {
       expect(hydration.readingCount, 2);
     },
   );
+
+  test('Version 0.14 upgrades snapshots without freshness metadata', () async {
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day);
+    final auth = MemoryAccountAuth(
+      session: const AccountSession(
+        uid: 'upgrade-uid',
+        email: 'upgrade@example.com',
+      ),
+    );
+    final repository = MemoryCloudRepository(signedInUid: 'upgrade-uid')
+      ..seed(
+        'upgrade-uid',
+        CloudUserState(
+          profile: const UserProfile(name: 'Upgrade Maya'),
+          accountEmail: 'upgrade@example.com',
+          onboardingComplete: true,
+          notificationsEnabled: true,
+          outcomeConsent: false,
+          healthAuthorized: false,
+          migrationVersion: localMigrationVersion,
+          signals: [
+            SignalReading(
+              id: 'sleep',
+              type: SignalType.sleep,
+              value: 8,
+              timestamp: now,
+            ),
+          ],
+          checkIns: const [],
+        ),
+      );
+    await repository.upsertScoreSnapshot(
+      'upgrade-uid',
+      ScoreSnapshot(
+        energy: 99,
+        cognitive: 99,
+        confidence: .95,
+        drivers: const [],
+        day: day,
+      ),
+    );
+    final controller = AppController(
+      accountAuth: auth,
+      cloudRepository: repository,
+    );
+
+    await controller.load();
+
+    final upgraded = await repository.scoreSnapshotForDay('upgrade-uid', day);
+    expect(controller.score.energy, isNot(99));
+    expect(controller.scoreLoadedFromSnapshot, isFalse);
+    expect(controller.score.freshness, isNotNull);
+    expect(upgraded?.freshness, isNotNull);
+    expect(upgraded?.drivers.single.explanation, isNotEmpty);
+  });
 
   test(
     'Version 0.8 stores morning/evening check-ins on a 1–10 scale',

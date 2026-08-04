@@ -306,10 +306,27 @@ class UserProfile {
 }
 
 class ScoreDriver {
-  const ScoreDriver(this.label, this.contribution, this.detail);
+  const ScoreDriver(
+    this.label,
+    this.contribution,
+    this.detail, {
+    this.explanation = '',
+    this.freshness,
+    this.source,
+    this.evidenceAt,
+  });
+
   final String label;
   final double contribution;
   final String detail;
+  final String explanation;
+  final double? freshness;
+  final SignalSource? source;
+  final DateTime? evidenceAt;
+
+  bool get isPositive => contribution > .01;
+  bool get isNegative => contribution < -.01;
+  bool get isNeutral => !isPositive && !isNegative;
 }
 
 class ScoreSnapshot {
@@ -327,6 +344,8 @@ class ScoreSnapshot {
     this.calculatedAt,
     this.inputCount = 0,
     this.isEstimate = true,
+    this.freshness,
+    this.cognitiveFreshness,
   });
 
   final int energy;
@@ -342,9 +361,28 @@ class ScoreSnapshot {
   final DateTime? calculatedAt;
   final int inputCount;
   final bool isEstimate;
+  final double? freshness;
+  final double? cognitiveFreshness;
 
   int? get cognitiveChange =>
       previousCognitive == null ? null : cognitive - previousCognitive!;
+  double get completeness => (inputCount / 7).clamp(0, 1);
+  double get cognitiveCompleteness => (cognitiveInputCount / 5).clamp(0, 1);
+  List<ScoreDriver> get energyPositiveDrivers =>
+      drivers.where((driver) => driver.isPositive).toList(growable: false);
+  List<ScoreDriver> get energyNegativeDrivers =>
+      drivers.where((driver) => driver.isNegative).toList(growable: false);
+  List<ScoreDriver> get energyNeutralDrivers =>
+      drivers.where((driver) => driver.isNeutral).toList(growable: false);
+  List<ScoreDriver> get cognitivePositiveDrivers => cognitiveDrivers
+      .where((driver) => driver.isPositive)
+      .toList(growable: false);
+  List<ScoreDriver> get cognitiveNegativeDrivers => cognitiveDrivers
+      .where((driver) => driver.isNegative)
+      .toList(growable: false);
+  List<ScoreDriver> get cognitiveNeutralDrivers => cognitiveDrivers
+      .where((driver) => driver.isNeutral)
+      .toList(growable: false);
 }
 
 class ForecastPoint {

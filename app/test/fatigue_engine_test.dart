@@ -16,7 +16,10 @@ void main() {
     expect(score.energy, inInclusiveRange(0, 100));
     expect(score.cognitive, inInclusiveRange(0, 100));
     expect(score.confidence, inInclusiveRange(0, 1));
-    expect(score.cognitiveConfidence, .95);
+    expect(score.cognitiveConfidence, lessThanOrEqualTo(.95));
+    expect(score.cognitiveConfidence, greaterThan(.85));
+    expect(score.freshness, inInclusiveRange(0, 1));
+    expect(score.cognitiveFreshness, inInclusiveRange(0, 1));
     expect(score.inputCount, 7);
     expect(score.cognitiveInputCount, 5);
     expect(score.isEstimate, isTrue);
@@ -179,5 +182,115 @@ void main() {
     expect(score.cognitive, inInclusiveRange(0, 100));
     expect(score.cognitiveInputCount, 0);
     expect(score.cognitiveConfidence, .2);
+  });
+
+  test('Version 0.14 ranks positive and negative drivers independently', () {
+    final score = FatigueEngine.score(
+      signals: [
+        for (final entry in const {
+          SignalType.sleep: 5.0,
+          SignalType.hydration: 3.0,
+          SignalType.exercise: 1.0,
+          SignalType.study: 7.0,
+          SignalType.screenTime: 8.0,
+          SignalType.reactionTime: 245.0,
+        }.entries)
+          SignalReading(
+            id: entry.key.name,
+            type: entry.key,
+            value: entry.value,
+            timestamp: now,
+            source: SignalSource.healthKit,
+          ),
+      ],
+      checkIns: [
+        DailyCheckIn(
+          id: 'check-in',
+          timestamp: now,
+          energy: 7,
+          mood: 9,
+          stress: 8,
+        ),
+      ],
+      now: now,
+    );
+
+    expect(score.energyPositiveDrivers, isNotEmpty);
+    expect(score.energyNegativeDrivers, isNotEmpty);
+    expect(
+      score.energyPositiveDrivers.map((driver) => driver.contribution),
+      orderedEquals(
+        [...score.energyPositiveDrivers.map((driver) => driver.contribution)]
+          ..sort((left, right) => right.compareTo(left)),
+      ),
+    );
+    expect(
+      score.energyNegativeDrivers.map((driver) => driver.contribution),
+      orderedEquals(
+        [...score.energyNegativeDrivers.map((driver) => driver.contribution)]
+          ..sort(),
+      ),
+    );
+    expect(
+      score.drivers.every((driver) => driver.explanation.isNotEmpty),
+      isTrue,
+    );
+    expect(score.drivers.every((driver) => driver.freshness != null), isTrue);
+    expect(
+      score.drivers.singleWhere((driver) => driver.label == 'Hydration').source,
+      SignalSource.healthKit,
+    );
+  });
+
+  test('Version 0.14 confidence falls as evidence becomes stale', () {
+    final late = DateTime(2026, 7, 21, 23);
+
+    ScoreSnapshot calculate({required bool fresh}) {
+      final activityTime = fresh ? late : DateTime(2026, 7, 21);
+      final sleepTime = fresh ? late : DateTime(2026, 7, 15);
+      final checkInTime = fresh ? late : DateTime(2026, 7, 20, 13);
+      return FatigueEngine.score(
+        signals: [
+          for (final entry in const {
+            SignalType.hydration: 2.0,
+            SignalType.exercise: 1.0,
+            SignalType.study: 3.0,
+            SignalType.screenTime: 3.0,
+          }.entries)
+            SignalReading(
+              id: entry.key.name,
+              type: entry.key,
+              value: entry.value,
+              timestamp: activityTime,
+              source: fresh ? SignalSource.healthKit : SignalSource.model,
+            ),
+          SignalReading(
+            id: 'sleep',
+            type: SignalType.sleep,
+            value: 7.5,
+            timestamp: sleepTime,
+            source: fresh ? SignalSource.healthKit : SignalSource.model,
+          ),
+        ],
+        checkIns: [
+          DailyCheckIn(
+            id: 'check-in',
+            timestamp: checkInTime,
+            energy: 7,
+            mood: 7,
+            stress: 4,
+          ),
+        ],
+        now: late,
+      );
+    }
+
+    final fresh = calculate(fresh: true);
+    final stale = calculate(fresh: false);
+
+    expect(fresh.inputCount, stale.inputCount);
+    expect(fresh.completeness, stale.completeness);
+    expect(fresh.freshness, greaterThan(stale.freshness!));
+    expect(fresh.confidence, greaterThan(stale.confidence));
   });
 }
