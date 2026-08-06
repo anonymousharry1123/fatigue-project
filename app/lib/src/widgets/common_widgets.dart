@@ -199,9 +199,30 @@ class ForecastPainter extends CustomPainter {
       final y = chart.top + chart.height * i / 3;
       canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), gridPaint);
     }
-    Offset offset(int index) => Offset(
+    Offset offsetFor(int index, double energy) => Offset(
       chart.left + chart.width * index / (points.length - 1),
-      chart.bottom - chart.height * points[index].energy / 110,
+      chart.bottom - chart.height * energy.clamp(0, 100) / 110,
+    );
+    Offset offset(int index) => offsetFor(index, points[index].energy);
+    final uncertaintyBand = Path();
+    for (var index = 0; index < points.length; index++) {
+      final point = points[index];
+      final upper = offsetFor(index, point.energy + point.uncertainty);
+      if (index == 0) {
+        uncertaintyBand.moveTo(upper.dx, upper.dy);
+      } else {
+        uncertaintyBand.lineTo(upper.dx, upper.dy);
+      }
+    }
+    for (var index = points.length - 1; index >= 0; index--) {
+      final point = points[index];
+      final lower = offsetFor(index, point.energy - point.uncertainty);
+      uncertaintyBand.lineTo(lower.dx, lower.dy);
+    }
+    uncertaintyBand.close();
+    canvas.drawPath(
+      uncertaintyBand,
+      Paint()..color = TonyoColors.violet.withValues(alpha: .1),
     );
     final path = Path()..moveTo(offset(0).dx, offset(0).dy);
     for (var i = 1; i < points.length; i++) {

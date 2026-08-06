@@ -30,11 +30,12 @@ abstract final class FatigueEngine {
         .where((item) => !item.timestamp.isBefore(start))
         .toList();
 
-    double? dailyTotal(SignalType type) {
-      final values = targetDay.where((item) => item.type == type).toList();
-      if (values.isEmpty) return null;
-      return values.fold<double>(0, (sum, item) => sum + item.value);
-    }
+    List<SignalReading> readingsFor(SignalType type) =>
+        targetDay.where((item) => item.type == type).toList();
+
+    double? totalOf(List<SignalReading> readings) => readings.isEmpty
+        ? null
+        : readings.fold<double>(0, (sum, item) => sum + item.value);
 
     final sleepReadings = recent
         .where((item) => item.type == SignalType.sleep)
@@ -44,10 +45,14 @@ abstract final class FatigueEngine {
         ? null
         : sleepReadings.fold<double>(0, (sum, item) => sum + item.value) /
               sleepReadings.length;
-    final hydration = dailyTotal(SignalType.hydration);
-    final exercise = dailyTotal(SignalType.exercise);
-    final study = dailyTotal(SignalType.study);
-    final screen = dailyTotal(SignalType.screenTime);
+    final hydrationReadings = readingsFor(SignalType.hydration);
+    final exerciseReadings = readingsFor(SignalType.exercise);
+    final studyReadings = readingsFor(SignalType.study);
+    final screenReadings = readingsFor(SignalType.screenTime);
+    final hydration = totalOf(hydrationReadings);
+    final exercise = totalOf(exerciseReadings);
+    final study = totalOf(studyReadings);
+    final screen = totalOf(screenReadings);
     final applicableCheckIns =
         checkIns
             .where(
@@ -70,10 +75,13 @@ abstract final class FatigueEngine {
       final impact = ((sleep - 7.5) * 8).clamp(-20, 10).toDouble();
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Sleep',
           impact,
           '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}',
+          readings: sleepReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(days: 7),
         ),
       );
     }
@@ -81,10 +89,13 @@ abstract final class FatigueEngine {
       final impact = ((hydration - 2) * 5).clamp(-8, 6).toDouble();
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Hydration',
           impact,
           '${hydration.toStringAsFixed(1)} L logged today',
+          readings: hydrationReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -97,10 +108,13 @@ abstract final class FatigueEngine {
       };
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Exercise',
           impact,
           '${exercise.toStringAsFixed(1)} hr logged today',
+          readings: exerciseReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -110,10 +124,13 @@ abstract final class FatigueEngine {
           : (-(study - 4).clamp(0, 4) * 2.5).toDouble();
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Workload',
           impact,
           '${study.toStringAsFixed(1)} hr study load today',
+          readings: studyReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -121,25 +138,13 @@ abstract final class FatigueEngine {
       final impact = ((3 - screen) * 2).clamp(-10, 4).toDouble();
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Screen time',
           impact,
           '${screen.toStringAsFixed(1)} hr logged today',
-        ),
-      );
-    }
-    final caffeine = dailyTotal(SignalType.caffeine);
-    if (caffeine != null) {
-      // Mild lift for 0–2 drinks; excess caffeine drains recovery estimate.
-      final impact = caffeine <= 2
-          ? (caffeine * 1.5).clamp(0, 3).toDouble()
-          : (-(caffeine - 2) * 2.2).clamp(-10, 0).toDouble();
-      energy += impact;
-      drivers.add(
-        ScoreDriver(
-          'Caffeine',
-          impact,
-          '${caffeine.toStringAsFixed(0)} drinks today',
+          readings: screenReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -152,17 +157,21 @@ abstract final class FatigueEngine {
           .toDouble();
       energy += moodImpact + stressImpact;
       drivers.add(
-        ScoreDriver(
+        _checkInDriver(
           'Mood',
           moodImpact,
           '${latestCheckIn.mood.round()}/10 at latest check-in',
+          checkIn: latestCheckIn,
+          cutoff: cutoff,
         ),
       );
       drivers.add(
-        ScoreDriver(
+        _checkInDriver(
           'Stress',
           stressImpact,
           '${latestCheckIn.stress.round()}/10 at latest check-in',
+          checkIn: latestCheckIn,
+          cutoff: cutoff,
         ),
       );
     }
@@ -197,12 +206,15 @@ abstract final class FatigueEngine {
                 .toDouble();
       cognitive += impact;
       cognitiveDrivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Reaction time',
           impact,
           baseline == null
               ? '${currentReaction.value.round()} ms · personal baseline building'
               : '${currentReaction.value.round()} ms vs ${baseline.round()} ms baseline',
+          readings: [currentReaction],
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -210,10 +222,13 @@ abstract final class FatigueEngine {
       final impact = ((sleep - 7.5) * 6).clamp(-16, 10).toDouble();
       cognitive += impact;
       cognitiveDrivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Sleep',
           impact,
           '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}',
+          readings: sleepReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(days: 7),
         ),
       );
     }
@@ -223,10 +238,13 @@ abstract final class FatigueEngine {
           : (-(study - 4).clamp(0, 4) * 3).toDouble();
       cognitive += impact;
       cognitiveDrivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Study load',
           impact,
           '${study.toStringAsFixed(1)} hr logged today',
+          readings: studyReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -239,33 +257,40 @@ abstract final class FatigueEngine {
           .toDouble();
       cognitive += moodImpact + stressImpact;
       cognitiveDrivers.add(
-        ScoreDriver(
+        _checkInDriver(
           'Mood',
           moodImpact,
           '${latestCheckIn.mood.round()}/10 at latest check-in',
+          checkIn: latestCheckIn,
+          cutoff: cutoff,
         ),
       );
       cognitiveDrivers.add(
-        ScoreDriver(
+        _checkInDriver(
           'Stress',
           stressImpact,
           '${latestCheckIn.stress.round()}/10 at latest check-in',
+          checkIn: latestCheckIn,
+          cutoff: cutoff,
         ),
       );
     }
 
-    drivers.sort(
-      (a, b) => b.contribution.abs().compareTo(a.contribution.abs()),
-    );
+    _rankDrivers(drivers);
     final inputCount = drivers.length.clamp(0, 7);
-    final confidence = (.2 + inputCount / 7 * .75).clamp(.2, .95);
-    cognitiveDrivers.sort(
-      (a, b) => b.contribution.abs().compareTo(a.contribution.abs()),
+    final freshness = _averageFreshness(drivers);
+    final confidence = _confidence(
+      inputCount: inputCount,
+      expectedInputs: 7,
+      freshness: freshness,
     );
+    _rankDrivers(cognitiveDrivers);
     final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 5);
-    final cognitiveConfidence = (.2 + cognitiveInputCount / 5 * .75).clamp(
-      .2,
-      .95,
+    final cognitiveFreshness = _averageFreshness(cognitiveDrivers);
+    final cognitiveConfidence = _confidence(
+      inputCount: cognitiveInputCount,
+      expectedInputs: 5,
+      freshness: cognitiveFreshness,
     );
     final previousCognitive = previousDay?.hasCognitiveScore == true
         ? previousDay!.cognitive
@@ -284,24 +309,411 @@ abstract final class FatigueEngine {
       calculatedAt: clock,
       inputCount: inputCount,
       isEstimate: true,
+      freshness: freshness,
+      cognitiveFreshness: cognitiveFreshness,
     );
   }
 
-  static List<ForecastPoint> forecast(ScoreSnapshot score, DateTime day) {
-    final start = DateTime(day.year, day.month, day.day, 6);
-    return List.generate(17, (index) {
-      final hour = 6 + index;
-      final circadian = 13 * math.sin(((hour - 7) / 15) * math.pi);
-      final afternoonDip = 18 * math.exp(-math.pow((hour - 16.5) / 2.0, 2));
-      final rebound = 6 * math.exp(-math.pow((hour - 20.5) / 1.7, 2));
-      final energy = (score.energy + circadian - afternoonDip + rebound)
-          .clamp(12, 96)
-          .toDouble();
-      return ForecastPoint(
-        start.add(Duration(hours: index)),
-        energy,
-        (100 - score.confidence * 100) * (.7 + index / 50),
+  static ScoreDriver _signalDriver(
+    String label,
+    double contribution,
+    String detail, {
+    required List<SignalReading> readings,
+    required DateTime cutoff,
+    required Duration maximumAge,
+  }) {
+    final sorted = [...readings]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return ScoreDriver(
+      label,
+      contribution,
+      detail,
+      explanation: _explanation(label, contribution),
+      freshness: _signalFreshness(
+        sorted,
+        cutoff: cutoff,
+        maximumAge: maximumAge,
+      ),
+      source: sorted.firstOrNull?.source,
+      evidenceAt: sorted.firstOrNull?.timestamp,
+    );
+  }
+
+  static ScoreDriver _checkInDriver(
+    String label,
+    double contribution,
+    String detail, {
+    required DailyCheckIn checkIn,
+    required DateTime cutoff,
+  }) => ScoreDriver(
+    label,
+    contribution,
+    detail,
+    explanation: _explanation(label, contribution),
+    freshness: _timeFreshness(
+      checkIn.timestamp,
+      cutoff: cutoff,
+      maximumAge: const Duration(hours: 36),
+    ),
+    evidenceAt: checkIn.timestamp,
+  );
+
+  static double _signalFreshness(
+    List<SignalReading> readings, {
+    required DateTime cutoff,
+    required Duration maximumAge,
+  }) {
+    if (readings.isEmpty) return 0;
+    final total = readings.fold<double>(0, (sum, reading) {
+      final recency = _timeFreshness(
+        reading.timestamp,
+        cutoff: cutoff,
+        maximumAge: maximumAge,
       );
+      final sourceWeight = switch (reading.source) {
+        SignalSource.healthKit => 1.0,
+        SignalSource.manual => .95,
+        SignalSource.model => .8,
+      };
+      return sum + recency * sourceWeight * reading.quality.clamp(0, 1);
+    });
+    return (total / readings.length).clamp(0, 1);
+  }
+
+  static double _timeFreshness(
+    DateTime timestamp, {
+    required DateTime cutoff,
+    required Duration maximumAge,
+  }) {
+    final age = cutoff.difference(timestamp);
+    if (age.isNegative) return 0;
+    final ageRatio = age.inMinutes / maximumAge.inMinutes;
+    return (.15 + .85 * (1 - ageRatio).clamp(0, 1)).clamp(0, 1);
+  }
+
+  static double _averageFreshness(List<ScoreDriver> drivers) {
+    if (drivers.isEmpty) return 0;
+    return drivers.fold<double>(
+          0,
+          (sum, driver) => sum + (driver.freshness ?? 0),
+        ) /
+        drivers.length;
+  }
+
+  static double _confidence({
+    required int inputCount,
+    required int expectedInputs,
+    required double freshness,
+  }) {
+    final completeness = (inputCount / expectedInputs).clamp(0, 1);
+    return (.2 + completeness * .55 + freshness * .2).clamp(.2, .95);
+  }
+
+  static void _rankDrivers(List<ScoreDriver> drivers) {
+    drivers.sort((left, right) {
+      final leftGroup = left.isPositive
+          ? 0
+          : left.isNegative
+          ? 1
+          : 2;
+      final rightGroup = right.isPositive
+          ? 0
+          : right.isNegative
+          ? 1
+          : 2;
+      if (leftGroup != rightGroup) return leftGroup.compareTo(rightGroup);
+      if (left.isPositive) {
+        return right.contribution.compareTo(left.contribution);
+      }
+      if (left.isNegative) {
+        return left.contribution.compareTo(right.contribution);
+      }
+      return left.label.compareTo(right.label);
+    });
+  }
+
+  static String _explanation(String label, double contribution) {
+    final positive = contribution > .01;
+    final negative = contribution < -.01;
+    return switch (label) {
+      'Sleep' =>
+        positive
+            ? 'Recent sleep duration supported recovery and readiness.'
+            : negative
+            ? 'Recent sleep duration was below the model’s recovery range.'
+            : 'Recent sleep duration was close to the neutral range.',
+      'Hydration' =>
+        positive
+            ? 'Logged hydration was above the model’s daily reference level.'
+            : negative
+            ? 'Logged hydration was below the model’s daily reference level.'
+            : 'Logged hydration was close to the daily reference level.',
+      'Exercise' =>
+        positive
+            ? 'Today’s movement was within the model’s supportive range.'
+            : negative
+            ? 'Today’s training load was outside the model’s recovery range.'
+            : 'Today’s movement had a neutral estimated effect.',
+      'Workload' || 'Study load' =>
+        positive
+            ? 'Study load stayed within a manageable range for today.'
+            : negative
+            ? 'A heavier study load reduced the current readiness estimate.'
+            : 'Study load was close to the model’s neutral range.',
+      'Screen time' =>
+        positive
+            ? 'Lower screen exposure supported today’s recovery estimate.'
+            : negative
+            ? 'Higher screen exposure reduced today’s recovery estimate.'
+            : 'Screen exposure was close to the model’s neutral range.',
+      'Reaction time' =>
+        positive
+            ? 'Reaction performance was faster than the current reference.'
+            : negative
+            ? 'Reaction performance was slower than the current reference.'
+            : 'Reaction performance was close to the current reference.',
+      'Mood' =>
+        positive
+            ? 'The latest mood check-in supported the readiness estimate.'
+            : negative
+            ? 'The latest mood check-in reduced the readiness estimate.'
+            : 'The latest mood check-in had a neutral estimated effect.',
+      'Stress' =>
+        positive
+            ? 'Lower reported stress supported the readiness estimate.'
+            : negative
+            ? 'Higher reported stress reduced the readiness estimate.'
+            : 'Reported stress was close to the neutral range.',
+      _ =>
+        positive
+            ? '$label supported today’s estimate.'
+            : negative
+            ? '$label reduced today’s estimate.'
+            : '$label had a neutral estimated effect.',
+    };
+  }
+
+  /// Generates one point per waking hour from the user's known evidence.
+  ///
+  /// The model deliberately remains deterministic and explainable: the daily
+  /// score provides the anchor, while recent sleep timing shifts the circadian
+  /// curve, accumulated study/exercise adds workload, and hydration/check-ins
+  /// influence recovery. Uncertainty rises when evidence is incomplete, stale,
+  /// or farther into the future.
+  static List<ForecastPoint> forecast(
+    ScoreSnapshot score,
+    DateTime day, {
+    List<SignalReading> signals = const [],
+    List<DailyCheckIn> checkIns = const [],
+    UserProfile profile = const UserProfile(),
+    DateTime? generatedAt,
+  }) {
+    final targetDay = DateTime(day.year, day.month, day.day);
+    final clock = generatedAt ?? DateTime.now();
+    final usualWakeHour = profile.wakeHour.isFinite
+        ? profile.wakeHour.clamp(4.0, 11.0)
+        : 7.0;
+    final usualBedHour = profile.bedHour.isFinite
+        ? profile.bedHour.clamp(20.0, 25.0)
+        : 23.0;
+    final evidenceCutoff =
+        clock.isBefore(targetDay.add(const Duration(days: 1)))
+        ? clock
+        : targetDay.add(const Duration(days: 1));
+    final recentStart = targetDay.subtract(const Duration(days: 7));
+    final recentSignals =
+        signals
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(recentStart) &&
+                  !item.timestamp.isAfter(evidenceCutoff) &&
+                  item.value.isFinite,
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    final recentCheckIns =
+        checkIns
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(recentStart) &&
+                  !item.timestamp.isAfter(evidenceCutoff) &&
+                  item.energy.isFinite &&
+                  item.mood.isFinite &&
+                  item.stress.isFinite,
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+
+    List<SignalReading> readings(SignalType type) => recentSignals
+        .where((item) => item.type == type)
+        .toList(growable: false);
+
+    double? average(Iterable<double> values) {
+      final items = values.toList(growable: false);
+      return items.isEmpty
+          ? null
+          : items.reduce((left, right) => left + right) / items.length;
+    }
+
+    double circularHourAverage(Iterable<double> values) {
+      final normalized = values
+          .map((value) => value < 12 ? value + 24 : value)
+          .toList(growable: false);
+      return average(normalized) ?? usualBedHour;
+    }
+
+    final sleepReadings = readings(SignalType.sleep).take(3).toList();
+    final bedtimeReadings = readings(SignalType.bedtime).take(5).toList();
+    final sleepHours = average(sleepReadings.map((item) => item.value));
+    final observedBedtime = bedtimeReadings.isEmpty
+        ? null
+        : circularHourAverage(bedtimeReadings.map((item) => item.value));
+    final observedWake = sleepReadings.isEmpty
+        ? null
+        : average(
+            sleepReadings.map(
+              (item) => item.timestamp.hour + item.timestamp.minute / 60,
+            ),
+          );
+
+    // Blend recent observations with the saved schedule so a single unusual
+    // night can adjust, but not completely overturn, the user's rhythm.
+    final wakeHour = observedWake == null
+        ? usualWakeHour
+        : usualWakeHour * .4 + observedWake * .6;
+    final bedtime = observedBedtime == null
+        ? usualBedHour
+        : usualBedHour * .4 + observedBedtime * .6;
+    final scheduleShift = ((bedtime - usualBedHour) * .2).clamp(-1.0, 1.0);
+    final circadianWake = wakeHour + scheduleShift;
+
+    final forecastStartHour = usualWakeHour.round();
+    // A daily Firestore query owns one calendar day. Bedtimes after midnight
+    // are represented by the final 11 PM point instead of leaking documents
+    // into the following day's range.
+    final forecastEndHour = usualBedHour.round().clamp(
+      forecastStartHour + 10,
+      23,
+    );
+
+    final sameDaySignals = recentSignals
+        .where(
+          (item) =>
+              !item.timestamp.isBefore(targetDay) &&
+              item.timestamp.isBefore(targetDay.add(const Duration(days: 1))),
+        )
+        .toList();
+    double modeledDailyTotal(SignalType type) {
+      final sameDay = sameDaySignals
+          .where((item) => item.type == type)
+          .toList();
+      if (sameDay.isNotEmpty) {
+        return sameDay.fold(0, (sum, item) => sum + item.value);
+      }
+      final byDay = <String, double>{};
+      for (final item in readings(type)) {
+        final key =
+            '${item.timestamp.year}-${item.timestamp.month}-${item.timestamp.day}';
+        byDay.update(
+          key,
+          (value) => value + item.value,
+          ifAbsent: () => item.value,
+        );
+      }
+      return average(byDay.values.take(3)) ?? 0;
+    }
+
+    final studyHours = modeledDailyTotal(SignalType.study);
+    final exerciseHours = modeledDailyTotal(SignalType.exercise);
+    final hydrationLiters = modeledDailyTotal(SignalType.hydration);
+    final latestCheckIn = recentCheckIns.firstOrNull;
+    final sleepAdjustment = sleepHours == null
+        ? 0.0
+        : ((sleepHours - 7.5) * 3.2).clamp(-8.0, 5.0);
+    final checkInAdjustment = latestCheckIn == null
+        ? 0.0
+        : ((latestCheckIn.energy - 5.5) * 1.1 +
+                  (latestCheckIn.mood - 5.5) * .45 -
+                  (latestCheckIn.stress - 5.5) * .65)
+              .clamp(-8.0, 8.0);
+    final hydrationAdjustment = hydrationLiters == 0
+        ? 0.0
+        : ((hydrationLiters - 2) * 1.8).clamp(-3.0, 3.0);
+    final workload = studyHours + exerciseHours * 1.4;
+
+    final evidenceGroups = <bool>[
+      sleepReadings.isNotEmpty,
+      bedtimeReadings.isNotEmpty,
+      readings(SignalType.study).isNotEmpty ||
+          readings(SignalType.exercise).isNotEmpty,
+      readings(SignalType.hydration).isNotEmpty || latestCheckIn != null,
+    ];
+    final coverage = evidenceGroups.where((present) => present).length / 4;
+    const forecastSignalTypes = {
+      SignalType.sleep,
+      SignalType.bedtime,
+      SignalType.study,
+      SignalType.exercise,
+      SignalType.hydration,
+    };
+    final newestEvidence =
+        <DateTime>[
+          ...recentSignals
+              .where((item) => forecastSignalTypes.contains(item.type))
+              .map((item) => item.timestamp),
+          ...recentCheckIns.map((item) => item.timestamp),
+        ].fold<DateTime?>(
+          null,
+          (latest, value) =>
+              latest == null || value.isAfter(latest) ? value : latest,
+        );
+    final evidenceAgeHours = newestEvidence == null
+        ? 168.0
+        : math.max(0, clock.difference(newestEvidence).inMinutes / 60);
+    final freshness = (1 - evidenceAgeHours / 168).clamp(0.0, 1.0);
+    final modelConfidence =
+        (score.confidence * .55 + coverage * .25 + freshness * .2).clamp(
+          .2,
+          .95,
+        );
+
+    return List.generate(forecastEndHour - forecastStartHour + 1, (index) {
+      final hour = forecastStartHour + index;
+      final time = targetDay.add(Duration(hours: hour));
+      final hoursAwake = hour - circadianWake;
+      final circadian =
+          10 * math.sin(2 * math.pi * (hour - (circadianWake - 2)) / 24);
+      final sleepInertia = 7 * math.exp(-math.pow(hoursAwake / 1.15, 2));
+      final afternoonDip =
+          12 * math.exp(-math.pow((hoursAwake - 8.5) / 1.8, 2));
+      final rebound = 5 * math.exp(-math.pow((hoursAwake - 12.5) / 2.0, 2));
+      final lateDayDecline = math.max(0, hoursAwake - 14) * 1.5;
+      final workloadProgress = ((hoursAwake - 4) / 9).clamp(0.0, 1.0);
+      final workloadPenalty =
+          math.max(0, workload - 3) * 1.35 * workloadProgress;
+      final moderateMovementRecovery = exerciseHours > 0 && exerciseHours <= 1.5
+          ? 2.0 * math.exp(-math.pow((hoursAwake - 11) / 3.0, 2))
+          : 0.0;
+      final energy =
+          (score.energy +
+                  sleepAdjustment +
+                  checkInAdjustment +
+                  hydrationAdjustment +
+                  circadian -
+                  sleepInertia -
+                  afternoonDip +
+                  rebound -
+                  lateDayDecline -
+                  workloadPenalty +
+                  moderateMovementRecovery)
+              .clamp(5.0, 98.0);
+      final horizonHours = math.max(0, time.difference(clock).inMinutes / 60);
+      final uncertainty =
+          (5 + (1 - modelConfidence) * 24 + horizonHours / 24 * 2.5).clamp(
+            5.0,
+            35.0,
+          );
+      return ForecastPoint(time, energy, uncertainty, updatedAt: clock);
     });
   }
 

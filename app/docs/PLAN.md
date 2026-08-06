@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: August 1, 2026
-Current release: **Version 0.13 — Today Dashboard**
+Last updated: August 6, 2026
+Current release: **Version 0.16 — Forecast Screen**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -138,7 +138,7 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
   - `users/{uid}/signals/{signalId}` — `SignalReading` fields (`type`, `value`, `unit`, `timestamp`, `source`, `quality`, `note`, `groupId`)
   - `users/{uid}/checkIns/{checkInId}` — `DailyCheckIn` fields (`period`, `energy`, `mood`, `stress`, `note`, `timestamp`)
   - `users/{uid}/scoreSnapshots/{snapshotId}` — Version 0.11+ daily scores (`energy`, `cognitive`, per-model confidence/input counts/drivers, previous Cognitive comparison, `day`, `calculatedAt`)
-  - `users/{uid}/forecastPoints/{pointId}` — reserved for Version 0.15+ (`time`, `energy`, `uncertainty`)
+  - `users/{uid}/forecastPoints/{pointId}` — hourly forecasts (`time`, `energy`, `uncertainty`, `updatedAt`)
   - `users/{uid}/recommendations/{recId}` — reserved for Version 0.18+ (`title`, `detail`, `timeLabel`, `category`, `status`, `feedback`)
   - `users/{uid}/riskAlerts/{alertId}` — reserved for Version 0.19+ (`title`, `detail`, `severity`, `dismissed`)
 - Enforce privacy with Security Rules: users may only `read`/`write` documents under their own `uid`; deny list/collection-group access across users
@@ -182,31 +182,31 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Keep the synthetic Cohort Lab compatible with the shared engine and show separate Energy/Cognitive driver cards
 - Automated tests cover bounds, factors, baselines, legacy snapshots, schema round-trips, shared daily upserts, Firebase-controller integration, previous-day comparison, synthetic scoring, and UI presentation
 
-### Version 0.13 — Today Dashboard ✅ Current
+### Version 0.13 — Today Dashboard ✅
 
 - Replace Today fixtures with Energy and Cognitive scores loaded from `scoreSnapshots` (falling back to live calculation when missing)
 - Display Fresh, Moderate, or Fatigued status
 - Show recent-signal summary cards from day-scoped Firestore queries
 
-## Upcoming Versions
-
-### Version 0.14 — Score Drivers
+### Version 0.14 — Score Drivers ✅
 
 - Rank positive and negative score contributions using the same inputs Version 0.11 queried from Firebase
 - Explain each contribution
 - Calculate confidence from signal completeness and freshness (document `timestamp` / `source` fields from the Version 0.10-a schema)
 
-### Version 0.15 — Forecast Engine
+### Version 0.15 — Forecast Engine ✅
 
 - Generate hourly energy estimates from Firebase-backed signals and check-ins
 - Incorporate sleep timing, circadian rhythm, workload, and recovery
 - Return uncertainty with each forecast point and persist points under `forecastPoints`
 
-### Version 0.16 — Forecast Screen
+### Version 0.16 — Forecast Screen ✅ Current
 
 - Replace the Forecast preview with calculated Today and Tomorrow curves read from `forecastPoints` queries
 - Add daily summaries to the Week view
 - Handle missing and low-confidence data (empty query windows, stale `updatedAt`)
+
+## Upcoming Versions
 
 ### Version 0.17 — Key Windows
 
@@ -327,7 +327,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - `SignalReading`: measurement type, value, unit, timestamp, source, and quality → Firestore `users/{uid}/signals/{id}`
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
-- `ForecastPoint`: predicted energy, timestamp, and uncertainty → `users/{uid}/forecastPoints/{id}`
+- `ForecastPoint`: predicted energy, timestamp, uncertainty, and forecast `updatedAt` → `users/{uid}/forecastPoints/{id}`
 - `ForecastWindow`: peak, crash, or recovery period (derived; may be stored or computed from `forecastPoints`)
 - `Recommendation`: action, timing, priority, evidence, and feedback → `users/{uid}/recommendations/{id}`
 - `RiskAlert`: warning category, severity, evidence, and dismissal state → `users/{uid}/riskAlerts/{id}`

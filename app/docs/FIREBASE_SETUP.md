@@ -65,8 +65,8 @@ All persisted cloud data lives below the authenticated user's document:
 users/{uid}
 ├── signals/{signalId}
 ├── checkIns/{checkInId}
-├── scoreSnapshots/{snapshotId}       (reserved)
-├── forecastPoints/{pointId}          (reserved)
+├── scoreSnapshots/{snapshotId}       (daily scores)
+├── forecastPoints/{pointId}          (hourly forecasts + updatedAt)
 ├── recommendations/{recId}           (reserved)
 └── riskAlerts/{alertId}               (reserved)
 ```
@@ -96,6 +96,7 @@ by Firebase Authentication.
 - Optional `SignalType` filtering
 - Latest check-in
 - Reaction-time baseline windows
+- Hourly forecast range reads and day-scoped replacement
 - Full user export and recursive user-tree deletion
 
 The `signals(type, timestamp)` compound index is declared in

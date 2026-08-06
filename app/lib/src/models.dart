@@ -306,10 +306,27 @@ class UserProfile {
 }
 
 class ScoreDriver {
-  const ScoreDriver(this.label, this.contribution, this.detail);
+  const ScoreDriver(
+    this.label,
+    this.contribution,
+    this.detail, {
+    this.explanation = '',
+    this.freshness,
+    this.source,
+    this.evidenceAt,
+  });
+
   final String label;
   final double contribution;
   final String detail;
+  final String explanation;
+  final double? freshness;
+  final SignalSource? source;
+  final DateTime? evidenceAt;
+
+  bool get isPositive => contribution > .01;
+  bool get isNegative => contribution < -.01;
+  bool get isNeutral => !isPositive && !isNegative;
 }
 
 class ScoreSnapshot {
@@ -327,6 +344,8 @@ class ScoreSnapshot {
     this.calculatedAt,
     this.inputCount = 0,
     this.isEstimate = true,
+    this.freshness,
+    this.cognitiveFreshness,
   });
 
   final int energy;
@@ -342,16 +361,108 @@ class ScoreSnapshot {
   final DateTime? calculatedAt;
   final int inputCount;
   final bool isEstimate;
+  final double? freshness;
+  final double? cognitiveFreshness;
 
   int? get cognitiveChange =>
       previousCognitive == null ? null : cognitive - previousCognitive!;
+  double get completeness => (inputCount / 7).clamp(0, 1);
+  double get cognitiveCompleteness => (cognitiveInputCount / 5).clamp(0, 1);
+  List<ScoreDriver> get energyPositiveDrivers =>
+      drivers.where((driver) => driver.isPositive).toList(growable: false);
+  List<ScoreDriver> get energyNegativeDrivers =>
+      drivers.where((driver) => driver.isNegative).toList(growable: false);
+  List<ScoreDriver> get energyNeutralDrivers =>
+      drivers.where((driver) => driver.isNeutral).toList(growable: false);
+  List<ScoreDriver> get cognitivePositiveDrivers => cognitiveDrivers
+      .where((driver) => driver.isPositive)
+      .toList(growable: false);
+  List<ScoreDriver> get cognitiveNegativeDrivers => cognitiveDrivers
+      .where((driver) => driver.isNegative)
+      .toList(growable: false);
+  List<ScoreDriver> get cognitiveNeutralDrivers => cognitiveDrivers
+      .where((driver) => driver.isNeutral)
+      .toList(growable: false);
 }
 
 class ForecastPoint {
-  const ForecastPoint(this.time, this.energy, this.uncertainty);
+  const ForecastPoint(
+    this.time,
+    this.energy,
+    this.uncertainty, {
+    this.updatedAt,
+  });
   final DateTime time;
   final double energy;
   final double uncertainty;
+  final DateTime? updatedAt;
+}
+
+class ForecastDaySummary {
+  const ForecastDaySummary({
+    required this.day,
+    required this.averageEnergy,
+    required this.lowEnergy,
+    required this.peakEnergy,
+    required this.peakTime,
+    required this.averageUncertainty,
+    required this.updatedAt,
+  });
+
+  final DateTime day;
+  final double averageEnergy;
+  final double lowEnergy;
+  final double peakEnergy;
+  final DateTime peakTime;
+  final double averageUncertainty;
+  final DateTime? updatedAt;
+
+  bool get isLowConfidence => averageUncertainty >= 18;
+
+  bool isStaleAt(
+    DateTime now, {
+    Duration maximumAge = const Duration(hours: 12),
+  }) {
+    final calculated = updatedAt;
+    return calculated == null || now.difference(calculated) > maximumAge;
+  }
+
+  factory ForecastDaySummary.fromPoints(
+    DateTime day,
+    List<ForecastPoint> points,
+  ) {
+    if (points.isEmpty) {
+      throw ArgumentError('A daily forecast summary requires points.');
+    }
+    final peak = points.reduce(
+      (left, right) => left.energy >= right.energy ? left : right,
+    );
+    final low = points.reduce(
+      (left, right) => left.energy <= right.energy ? left : right,
+    );
+    final updatedValues = points
+        .map((point) => point.updatedAt)
+        .whereType<DateTime>()
+        .toList();
+    final updatedAt = updatedValues.length != points.length
+        ? null
+        : updatedValues.reduce(
+            (left, right) => left.isBefore(right) ? left : right,
+          );
+    return ForecastDaySummary(
+      day: DateTime(day.year, day.month, day.day),
+      averageEnergy:
+          points.fold<double>(0, (sum, point) => sum + point.energy) /
+          points.length,
+      lowEnergy: low.energy,
+      peakEnergy: peak.energy,
+      peakTime: peak.time,
+      averageUncertainty:
+          points.fold<double>(0, (sum, point) => sum + point.uncertainty) /
+          points.length,
+      updatedAt: updatedAt,
+    );
+  }
 }
 
 enum ForecastWindowType { peak, crash, recovery }

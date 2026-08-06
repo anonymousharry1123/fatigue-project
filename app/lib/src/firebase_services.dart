@@ -308,6 +308,59 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<ForecastPoint>> forecastPointsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final snapshot = await _user(uid)
+        .collection('forecastPoints')
+        .where('time', isGreaterThanOrEqualTo: start)
+        .where('time', isLessThan: end)
+        .orderBy('time')
+        .get();
+    return snapshot.docs
+        .map(
+          (document) =>
+              forecastPointFromCloud(_normalizeDates(document.data())),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> replaceForecastPoints(
+    String uid, {
+    required DateTime day,
+    required List<ForecastPoint> points,
+  }) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    if (points.any(
+      (point) => point.time.isBefore(start) || !point.time.isBefore(end),
+    )) {
+      throw ArgumentError(
+        'Every forecast point must belong to the target day.',
+      );
+    }
+    final collection = _user(uid).collection('forecastPoints');
+    final existing = await collection
+        .where('time', isGreaterThanOrEqualTo: start)
+        .where('time', isLessThan: end)
+        .get();
+    final desired = {
+      for (final point in points) forecastPointId(point.time): point,
+    };
+    final batch = _firestore.batch();
+    for (final document in existing.docs) {
+      if (!desired.containsKey(document.id)) batch.delete(document.reference);
+    }
+    for (final entry in desired.entries) {
+      batch.set(collection.doc(entry.key), forecastPointToCloud(entry.value));
+    }
+    await batch.commit();
+  }
+
+  @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     final state = await readUser(uid);
     final export = <String, Object?>{
