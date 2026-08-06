@@ -142,10 +142,14 @@ abstract final class FatigueEngine {
           'Screen time',
           impact,
           '${screen.toStringAsFixed(1)} hr logged today',
+          readings: screenReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
-    final caffeine = dailyTotal(SignalType.caffeine);
+    final caffeineReadings = readingsFor(SignalType.caffeine);
+    final caffeine = totalOf(caffeineReadings);
     if (caffeine != null) {
       // Mild lift for 0–2 drinks; excess caffeine drains recovery estimate.
       final impact = caffeine <= 2
@@ -153,10 +157,13 @@ abstract final class FatigueEngine {
           : (-(caffeine - 2) * 3).clamp(-15, 0).toDouble();
       energy += impact;
       drivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Caffeine',
           impact,
           '${caffeine.toStringAsFixed(0)} drinks today',
+          readings: caffeineReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -265,10 +272,13 @@ abstract final class FatigueEngine {
       final impact = ((3 - screen) * 2.5).clamp(-14, 4).toDouble();
       cognitive += impact;
       cognitiveDrivers.add(
-        ScoreDriver(
+        _signalDriver(
           'Screen time',
           impact,
           '${screen.toStringAsFixed(1)} hr logged today',
+          readings: screenReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
         ),
       );
     }
@@ -313,7 +323,7 @@ abstract final class FatigueEngine {
     final cognitiveFreshness = _averageFreshness(cognitiveDrivers);
     final cognitiveConfidence = _confidence(
       inputCount: cognitiveInputCount,
-      expectedInputs: 5,
+      expectedInputs: 6,
       freshness: cognitiveFreshness,
     );
     final previousCognitive = previousDay?.hasCognitiveScore == true

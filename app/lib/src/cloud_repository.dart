@@ -258,6 +258,9 @@ class MemoryCloudRepository implements CloudRepository {
   Future<void> clearScoreSnapshots(String uid) async {
     _authorize(uid);
     _scores.remove(uid);
+  }
+
+  @override
   Future<List<ForecastPoint>> forecastPointsByRange(
     String uid, {
     required DateTime start,

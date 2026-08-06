@@ -319,6 +319,9 @@ class FirestoreCloudRepository implements CloudRepository {
       }
       await batch.commit();
     }
+  }
+
+  @override
   Future<List<ForecastPoint>> forecastPointsByRange(
     String uid, {
     required DateTime start,

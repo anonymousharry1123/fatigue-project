@@ -98,9 +98,9 @@ class InsightsScreen extends StatelessWidget {
                 'Complete a reaction test, sleep or activity log, and check-in to explain cognitive readiness.',
           ),
           const SizedBox(height: 14),
-          const TonyoCard(
-            color: Color(0xFF111722),
-            padding: EdgeInsets.all(14),
+          TonyoCard(
+            color: const Color(0xFF111722),
+            padding: const EdgeInsets.all(14),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -119,8 +119,8 @@ class InsightsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                SizedBox(width: 10),
-                Expanded(
+                const SizedBox(width: 10),
+                const Expanded(
                   child: Text(
                     'Confidence combines input coverage with the age, source, and quality of supporting records. Contributions are associations used by this wellness model—not medical findings or proof of cause.',
                     style: TextStyle(
