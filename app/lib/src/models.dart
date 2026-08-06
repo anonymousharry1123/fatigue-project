@@ -160,6 +160,38 @@ class SleepLogEntry {
   Duration get duration => wakeTime.difference(bedtime);
   double get durationHours => duration.inMinutes / 60;
 
+  /// Places bedtime and wake on one overnight sleep using wake's calendar day
+  /// as the anchor (the morning you woke up).
+  ///
+  /// Time pickers keep the previous widget date when only the clock changes, so
+  /// picking 1:00 AM on a "yesterday 11 PM" field would otherwise stay on
+  /// yesterday and inflate duration to ~31 hours against today's wake.
+  static (DateTime bedtime, DateTime wakeTime) normalizeOvernightPair({
+    required DateTime bedtime,
+    required DateTime wakeTime,
+  }) {
+    final wake = DateTime(
+      wakeTime.year,
+      wakeTime.month,
+      wakeTime.day,
+      wakeTime.hour,
+      wakeTime.minute,
+    );
+    var bed = DateTime(
+      wake.year,
+      wake.month,
+      wake.day,
+      bedtime.hour,
+      bedtime.minute,
+    );
+    // Evening bedtimes (e.g. 23:00) fall after wake on the same calendar day,
+    // so they belong to the previous evening.
+    if (!bed.isBefore(wake)) {
+      bed = bed.subtract(const Duration(days: 1));
+    }
+    return (bed, wake);
+  }
+
   static String? validationMessage({
     required DateTime bedtime,
     required DateTime wakeTime,

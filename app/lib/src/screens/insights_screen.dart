@@ -104,10 +104,20 @@ class InsightsScreen extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  color: TonyoColors.blue,
-                  size: 19,
+                Row(
+                  children: [
+                    const MetricIcon(
+                      icon: Icons.psychology_rounded,
+                      color: TonyoColors.blue,
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        '${score.cognitiveInputCount}/6 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
                 ),
                 SizedBox(width: 10),
                 Expanded(

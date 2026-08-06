@@ -72,7 +72,7 @@ abstract final class FatigueEngine {
     var energy = 60.0;
     final drivers = <ScoreDriver>[];
     if (sleep != null) {
-      final impact = ((sleep - 7.5) * 8).clamp(-20, 10).toDouble();
+      final impact = ((sleep - 7.5) * 12).clamp(-30, 20).toDouble();
       energy += impact;
       drivers.add(
         _signalDriver(
@@ -135,16 +135,28 @@ abstract final class FatigueEngine {
       );
     }
     if (screen != null) {
-      final impact = ((3 - screen) * 2).clamp(-10, 4).toDouble();
+      final impact = ((3 - screen) * 2).clamp(-16, 4).toDouble();
       energy += impact;
       drivers.add(
         _signalDriver(
           'Screen time',
           impact,
           '${screen.toStringAsFixed(1)} hr logged today',
-          readings: screenReadings,
-          cutoff: cutoff,
-          maximumAge: const Duration(hours: 24),
+        ),
+      );
+    }
+    final caffeine = dailyTotal(SignalType.caffeine);
+    if (caffeine != null) {
+      // Mild lift for 0–2 drinks; excess caffeine drains recovery estimate.
+      final impact = caffeine <= 2
+          ? (caffeine * 1.5).clamp(0, 3).toDouble()
+          : (-(caffeine - 2) * 3).clamp(-15, 0).toDouble();
+      energy += impact;
+      drivers.add(
+        ScoreDriver(
+          'Caffeine',
+          impact,
+          '${caffeine.toStringAsFixed(0)} drinks today',
         ),
       );
     }
@@ -219,7 +231,7 @@ abstract final class FatigueEngine {
       );
     }
     if (sleep != null) {
-      final impact = ((sleep - 7.5) * 6).clamp(-16, 10).toDouble();
+      final impact = ((sleep - 7.5) * 8).clamp(-16, 10).toDouble();
       cognitive += impact;
       cognitiveDrivers.add(
         _signalDriver(
@@ -245,6 +257,18 @@ abstract final class FatigueEngine {
           readings: studyReadings,
           cutoff: cutoff,
           maximumAge: const Duration(hours: 24),
+        ),
+      );
+    }
+    if (screen != null) {
+      // Folded screen+social competes with focus; keep mild use near-neutral.
+      final impact = ((3 - screen) * 2.5).clamp(-14, 4).toDouble();
+      cognitive += impact;
+      cognitiveDrivers.add(
+        ScoreDriver(
+          'Screen time',
+          impact,
+          '${screen.toStringAsFixed(1)} hr logged today',
         ),
       );
     }
@@ -285,7 +309,7 @@ abstract final class FatigueEngine {
       freshness: freshness,
     );
     _rankDrivers(cognitiveDrivers);
-    final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 5);
+    final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 6);
     final cognitiveFreshness = _averageFreshness(cognitiveDrivers);
     final cognitiveConfidence = _confidence(
       inputCount: cognitiveInputCount,

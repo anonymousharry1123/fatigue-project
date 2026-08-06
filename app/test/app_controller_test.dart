@@ -191,6 +191,37 @@ void main() {
     expect(auth.currentSession, isNull);
   });
 
+  test('clearTrackingData wipes logs but keeps the signed-in account', () async {
+    final auth = MemoryAccountAuth();
+    final repository = MemoryCloudRepository(signedInUid: 'test-uid');
+    final controller = AppController(
+      accountAuth: auth,
+      cloudRepository: repository,
+    );
+    await controller.load();
+    await controller.completeOnboarding(
+      const UserProfile(name: 'Fresh start'),
+      email: 'fresh@example.com',
+      password: 'secure-pass',
+    );
+    await controller.addCheckIn(energy: 6, mood: 6, stress: 4);
+    await controller.addSignal(SignalType.hydration, 2.0);
+    expect(controller.checkIns, isNotEmpty);
+    expect(controller.signals, isNotEmpty);
+
+    await controller.clearTrackingData();
+
+    expect(controller.onboardingComplete, isTrue);
+    expect(controller.accountEmail, 'fresh@example.com');
+    expect(controller.profile.name, 'Fresh start');
+    expect(controller.checkIns, isEmpty);
+    expect(controller.signals, isEmpty);
+    expect(auth.currentSession, isNotNull);
+    final cloud = await repository.readUser('test-uid');
+    expect(cloud?.checkIns, isEmpty);
+    expect(cloud?.signals, isEmpty);
+  });
+
   test(
     'Versions 0.11–0.12 query cloud inputs and update one daily snapshot',
     () async {
@@ -277,7 +308,7 @@ void main() {
 
       final persisted = await repository.scoreSnapshotForDay('score-uid', now);
       expect(controller.score.inputCount, 7);
-      expect(controller.score.cognitiveInputCount, 5);
+      expect(controller.score.cognitiveInputCount, 6);
       expect(controller.score.previousCognitive, 62);
       expect(
         controller.score.cognitiveDrivers
@@ -290,7 +321,7 @@ void main() {
       expect(persisted, isNotNull);
       expect(persisted?.energy, controller.score.energy);
       expect(persisted?.cognitive, controller.score.cognitive);
-      expect(persisted?.cognitiveDrivers, hasLength(5));
+      expect(persisted?.cognitiveDrivers, hasLength(6));
       expect(persisted?.previousCognitive, 62);
       expect(persisted?.drivers, hasLength(7));
     },
