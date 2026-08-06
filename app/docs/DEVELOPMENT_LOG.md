@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.14 — Score Drivers (as of 2026-08-04)
+- **Current release:** Version 0.16 — Forecast Screen (as of 2026-08-06)
 
 ## Implementation Report
 
@@ -26,7 +26,9 @@
 | 0.12 | Firebase-backed Cognitive Score + daily comparison | Complete |
 | 0.13 | Snapshot-backed Today dashboard | Complete |
 | 0.14 | Ranked, evidence-aware score drivers | Complete |
-| 0.15+ | Forecast engine, HealthKit, AI coach | Not started |
+| 0.15 | Firebase-backed hourly forecast engine | Complete |
+| 0.16 | Persisted Today/Tomorrow/Week Forecast screen | Complete |
+| 0.17+ | Key windows, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -49,7 +51,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-04 — **71 tests passed** with Version 0.14 Score Drivers
+- Last verified: 2026-08-06 — **79 tests passed** with Version 0.16 Forecast Screen; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -68,6 +70,8 @@
 14. Cognitive Score (five explainable factors + previous-day comparison) - Complete (v0.12)
 15. Today Dashboard (saved scores + fatigue state + daily signals) - Complete (v0.13)
 16. Score Drivers (ranked contributions + evidence-aware confidence) - Complete (v0.14)
+17. Forecast Engine (hourly estimates + uncertainty + cloud persistence) - Complete (v0.15)
+18. Forecast Screen (saved daily curves + calculated Week summaries + data states) - Complete (v0.16)
 
 ## Day-to-Day Entries
 
@@ -360,9 +364,103 @@ experience on top of the uncommitted Version 0.13 work.
   formula retains the 20% low-data floor while combining 55% coverage weight
   and 20% freshness weight above that baseline.
 
+### 2026-08-06 — Version 0.15 Forecast Engine
+
+**Branch:** `feature/v0.12-cognitive-score`
+
+**Goal:** Complete Version 0.15, find errors, and improve the forecast
+experience without pulling Version 0.16 screen scope forward.
+
+**Results:**
+- Replaced the fixture curve with a deterministic hourly model anchored to the
+  daily Energy Score and informed by recent sleep duration/timing, the saved
+  wake/bed schedule, circadian rhythm, study and exercise workload, hydration,
+  and mood/stress/energy check-ins.
+- Added uncertainty per point based on score confidence, evidence coverage,
+  freshness, and forecast horizon. Missing data keeps a bounded fallback curve
+  instead of breaking the experience.
+- Added authenticated Firestore range queries and day-scoped replacement for
+  `users/{uid}/forecastPoints/{yyyy-MM-dd-HH-mm}`. Today and Tomorrow are
+  generated, saved, and reloaded; local inputs remain the offline fallback.
+- Activated forecast schema parsing/validation and advanced the schema marker
+  to Version 3. Export and permanent deletion now include persisted forecasts.
+- Connected the existing Forecast preview to the generated curve, typical
+  uncertainty, refresh action, and honest cloud/local status. Full screen and
+  key-window work remain scheduled for Versions 0.16 and 0.17.
+- Bumped the app to `0.15.0+16` and added engine, schema, repository, and
+  controller regression coverage.
+- `flutter test` passed all **76 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- Profiles encode after-midnight bedtimes as hour 24–25. Allowing those hours
+  into a calendar-day replacement would make Today documents appear in
+  Tomorrow's query, so persisted daily curves stop at 11 PM.
+- Tomorrow has no same-day activity yet. The engine uses recent daily workload
+  and recovery averages when target-day values are absent rather than treating
+  every future day as zero workload.
+
+### 2026-08-06 — Version 0.16 Forecast Screen
+
+**Branch:** `feature/v0.12-cognitive-score`
+
+**Goal:** Complete Version 0.16 by replacing the remaining forecast previews
+with persisted daily curves, calculated weekly summaries, and resilient data
+states.
+
+**Results:**
+- Expanded forecast generation and range loading from Today/Tomorrow to seven
+  days, retaining hourly private Firestore documents and local fallback.
+- Added `updatedAt` to each forecast point and advanced the schema marker to
+  Version 4. Complete forecast ranges older than 12 hours are regenerated from
+  current inputs instead of silently reused.
+- Rebuilt Today and Tomorrow around persisted hourly points, a visible
+  uncertainty band, peak/average/range summaries, update provenance, and model
+  input context.
+- Replaced the hard-coded Week bars with seven calculated daily summaries:
+  average energy, low-to-peak range, peak time, and average uncertainty.
+- Added explicit loading, empty, partial-week, offline, stale, and
+  low-confidence states with actionable refresh controls.
+- Removed the premature key-window cards from Forecast; data-backed window
+  identification remains correctly scoped to Version 0.17.
+- Bumped the app to `0.16.0+17` and added summary, seven-day persistence,
+  freshness-refresh, empty-state, and Week-view regression coverage.
+- `flutter test` passed all **79 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- A partially rewritten forecast batch could contain mixed `updatedAt` values.
+  Daily freshness uses the oldest point timestamp and treats any missing
+  timestamp as stale, preventing one new point from masking an old curve.
+- The old Week chart used fixed score offsets and therefore looked calculated
+  while containing no forecast data. It now derives every bar and row directly
+  from the loaded seven-day range.
+
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.15 Forecast Engine
+**Prompt:**
+"complete 0.15, look for errors, and make it better"
+
+**Result:** Completed a Firebase-backed hourly forecast engine with
+signal-aware energy estimates, uncertainty, deterministic private persistence,
+offline fallback, refreshed forecast status UI, and regression coverage.
+
+**Modifications:** Kept Version 0.16 Week/empty-state screen work and Version
+0.17 key-window detection out of scope; constrained after-midnight profiles to
+calendar-day persistence boundaries.
+
+### Screen: Version 0.16 Forecast Screen
+**Prompt:**
+"complete .16"
+
+**Result:** Completed a private, persisted seven-day Forecast experience with
+Today/Tomorrow uncertainty curves, calculated Week summaries, freshness-aware
+reloads, and professional missing/low-confidence/offline states.
+
+**Modifications:** Added per-point `updatedAt` metadata and a 12-hour freshness
+window; removed fixture Week values and deferred true key-window detection to
+Version 0.17 as planned.
 
 ### Feature: Versions 0.8 & 0.9 check-in and reaction test
 **Prompt:**
@@ -531,5 +629,7 @@ Energy inputs named by the roadmap.
 - [x] Implement Version 0.11 Energy Score and Version 0.12 Cognitive Score (query Firebase)
 - [x] Implement Version 0.13 Today Dashboard from persisted snapshots
 - [x] Implement Version 0.14 ranked Score Drivers and freshness confidence
+- [x] Implement Version 0.15 hourly Forecast Engine and private persistence
+- [x] Implement Version 0.16 persisted Forecast screen and Week summaries
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

@@ -1,7 +1,7 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 2 adds evidence-aware score drivers.
-const int cloudSchemaVersion = 2;
+/// Firestore schema version. Version 4 adds forecast freshness metadata.
+const int cloudSchemaVersion = 4;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -249,13 +249,35 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
       }).toList(),
     );
 
-/// Reserved Version 0.15+ forecast document.
+/// Version 0.15 hourly forecast document.
 Map<String, Object?> forecastPointToCloud(ForecastPoint point) => {
   'time': point.time,
   'energy': point.energy,
   'uncertainty': point.uncertainty,
+  'updatedAt': point.updatedAt ?? DateTime.now().toUtc(),
   'schemaVersion': cloudSchemaVersion,
 };
+
+ForecastPoint forecastPointFromCloud(Map<String, dynamic> data) {
+  final energy = (data['energy'] as num).toDouble();
+  final uncertainty = (data['uncertainty'] as num).toDouble();
+  if (!energy.isFinite || energy < 0 || energy > 100) {
+    throw const FormatException('Forecast energy must be between 0 and 100.');
+  }
+  if (!uncertainty.isFinite || uncertainty < 0 || uncertainty > 100) {
+    throw const FormatException(
+      'Forecast uncertainty must be between 0 and 100.',
+    );
+  }
+  return ForecastPoint(
+    cloudDateTime(data['time'], field: 'time'),
+    energy,
+    uncertainty,
+    updatedAt: data['updatedAt'] == null
+        ? null
+        : cloudDateTime(data['updatedAt'], field: 'updatedAt'),
+  );
+}
 
 /// Reserved Version 0.18+ recommendation document.
 Map<String, Object?> recommendationToCloud(

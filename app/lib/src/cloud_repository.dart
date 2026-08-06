@@ -128,6 +128,19 @@ abstract interface class CloudRepository {
 
   Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day);
 
+  Future<List<ForecastPoint>> forecastPointsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  });
+
+  /// Replaces only the target day's hourly points. Other days are retained.
+  Future<void> replaceForecastPoints(
+    String uid, {
+    required DateTime day,
+    required List<ForecastPoint> points,
+  });
+
   Future<Map<String, Object?>> exportUser(String uid);
   Future<void> deleteUserTree(String uid);
 }
@@ -139,6 +152,7 @@ class MemoryCloudRepository implements CloudRepository {
   String? signedInUid;
   final Map<String, CloudUserState> _users = {};
   final Map<String, Map<String, ScoreSnapshot>> _scores = {};
+  final Map<String, Map<String, ForecastPoint>> _forecasts = {};
 
   void seed(String uid, CloudUserState state) {
     _users[uid] = state;
@@ -239,6 +253,48 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<ForecastPoint>> forecastPointsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    _authorize(uid);
+    final points = (_forecasts[uid]?.values ?? const <ForecastPoint>[])
+        .where(
+          (point) => !point.time.isBefore(start) && point.time.isBefore(end),
+        )
+        .toList();
+    return points..sort((left, right) => left.time.compareTo(right.time));
+  }
+
+  @override
+  Future<void> replaceForecastPoints(
+    String uid, {
+    required DateTime day,
+    required List<ForecastPoint> points,
+  }) async {
+    _authorize(uid);
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    if (points.any(
+      (point) => point.time.isBefore(start) || !point.time.isBefore(end),
+    )) {
+      throw ArgumentError(
+        'Every forecast point must belong to the target day.',
+      );
+    }
+    final stored = _forecasts.putIfAbsent(uid, () => {});
+    stored.removeWhere(
+      (_, point) => !point.time.isBefore(start) && point.time.isBefore(end),
+    );
+    for (final point in points) {
+      stored[forecastPointId(point.time)] = forecastPointFromCloud(
+        forecastPointToCloud(point),
+      );
+    }
+  }
+
+  @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     _authorize(uid);
     return {
@@ -254,6 +310,10 @@ class MemoryCloudRepository implements CloudRepository {
               ),
             ),
         },
+        'forecastPoints': {
+          for (final entry in (_forecasts[uid] ?? const {}).entries)
+            entry.key: _exportSafe(forecastPointToCloud(entry.value)),
+        },
       },
     };
   }
@@ -263,6 +323,7 @@ class MemoryCloudRepository implements CloudRepository {
     _authorize(uid);
     _users.remove(uid);
     _scores.remove(uid);
+    _forecasts.remove(uid);
   }
 }
 
@@ -270,6 +331,11 @@ String scoreSnapshotId(DateTime day) =>
     '${day.year.toString().padLeft(4, '0')}-'
     '${day.month.toString().padLeft(2, '0')}-'
     '${day.day.toString().padLeft(2, '0')}';
+
+String forecastPointId(DateTime time) =>
+    '${scoreSnapshotId(time)}-'
+    '${time.hour.toString().padLeft(2, '0')}-'
+    '${time.minute.toString().padLeft(2, '0')}';
 
 Object? _exportSafe(Object? value) => switch (value) {
   DateTime dateTime => dateTime.toIso8601String(),

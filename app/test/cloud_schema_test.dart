@@ -177,9 +177,18 @@ void main() {
       expect(restored.cognitiveChange, isNull);
     });
 
-    test('reserved collection serializers match roadmap field names', () {
+    test('derived collection serializers match roadmap field names', () {
+      final forecastUpdatedAt = DateTime.utc(2026, 7, 28, 8, 30);
       final forecast = forecastPointToCloud(
-        ForecastPoint(DateTime.utc(2026, 7, 28, 9), 75, 6),
+        ForecastPoint(
+          DateTime.utc(2026, 7, 28, 9),
+          75,
+          6,
+          updatedAt: forecastUpdatedAt,
+        ),
+      );
+      final restoredForecast = forecastPointFromCloud(
+        forecast.cast<String, dynamic>(),
       );
       final recommendation = recommendationToCloud(
         const Recommendation(
@@ -194,12 +203,30 @@ void main() {
         const RiskAlert('Sleep trend', 'Short sleep', AlertSeverity.caution),
       );
 
-      expect(forecast.keys, containsAll(['time', 'energy', 'uncertainty']));
+      expect(
+        forecast.keys,
+        containsAll(['time', 'energy', 'uncertainty', 'updatedAt']),
+      );
+      expect(restoredForecast.time, DateTime.utc(2026, 7, 28, 9));
+      expect(restoredForecast.energy, 75);
+      expect(restoredForecast.uncertainty, 6);
+      expect(restoredForecast.updatedAt, forecastUpdatedAt);
       expect(
         recommendation.keys,
         containsAll(['title', 'detail', 'status', 'feedback']),
       );
       expect(alert.keys, containsAll(['title', 'severity', 'dismissed']));
+    });
+
+    test('rejects invalid persisted forecast values', () {
+      expect(
+        () => forecastPointFromCloud({
+          'time': DateTime.utc(2026, 7, 28, 9),
+          'energy': 101,
+          'uncertainty': 6,
+        }),
+        throwsFormatException,
+      );
     });
   });
 }

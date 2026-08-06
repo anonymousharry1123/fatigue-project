@@ -1,5 +1,6 @@
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
+import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/demo_data.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/today_dashboard_logic.dart';
@@ -225,6 +226,84 @@ void main() {
     expect(find.text('SUPPORTING TODAY'), findsWidgets);
     expect(find.text('REDUCING TODAY'), findsWidgets);
     expect(find.textContaining('recovery range'), findsWidgets);
+  });
+
+  testWidgets('Version 0.16 presents uncertainty and forecast provenance', (
+    tester,
+  ) async {
+    await tester.pumpWidget(TonyoApp(controller: readyController()));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Limited confidence'), findsOneWidget);
+    expect(find.byTooltip('Refresh forecast'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Calculated on this device'),
+      250,
+    );
+    expect(find.textContaining('Calculated on this device'), findsOneWidget);
+    expect(find.textContaining('fixture data'), findsNothing);
+  });
+
+  testWidgets('Version 0.16 Week view uses calculated daily summaries', (
+    tester,
+  ) async {
+    await tester.pumpWidget(TonyoApp(controller: readyController()));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SegmentedButton<int>),
+        matching: find.text('Week'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('7-DAY OUTLOOK'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Daily summaries'), 250);
+    expect(find.text('Daily summaries'), findsOneWidget);
+    expect(find.textContaining('Peak '), findsWidgets);
+  });
+
+  testWidgets('Version 0.16 handles an empty authenticated forecast range', (
+    tester,
+  ) async {
+    final controller =
+        AppController(
+            accountAuth: MemoryAccountAuth(
+              session: const AccountSession(
+                uid: 'empty-forecast',
+                email: 'empty@example.com',
+              ),
+            ),
+            cloudRepository: MemoryCloudRepository(
+              signedInUid: 'empty-forecast',
+            ),
+          )
+          ..isReady = true
+          ..onboardingComplete = true;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No forecast available'), findsOneWidget);
+    expect(find.text('Build forecast'), findsOneWidget);
   });
 
   testWidgets('Version 0.6 activity log validates and saves manual data', (

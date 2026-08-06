@@ -435,6 +435,133 @@ void main() {
   });
 
   test(
+    'Version 0.16 persists and reloads a seven-day forecast range',
+    () async {
+      final now = DateTime.now();
+      final day = DateTime(now.year, now.month, now.day);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'forecast-uid',
+          email: 'forecast@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'forecast-uid')
+        ..seed(
+          'forecast-uid',
+          CloudUserState(
+            profile: const UserProfile(name: 'Forecast Maya'),
+            accountEmail: 'forecast@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: true,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [
+              SignalReading(
+                id: 'sleep',
+                type: SignalType.sleep,
+                value: 8,
+                timestamp: now,
+              ),
+              SignalReading(
+                id: 'bedtime',
+                type: SignalType.bedtime,
+                value: 23,
+                timestamp: now,
+              ),
+              SignalReading(
+                id: 'study',
+                type: SignalType.study,
+                value: 3,
+                timestamp: now,
+              ),
+            ],
+            checkIns: [
+              DailyCheckIn(
+                id: 'check-in',
+                timestamp: now,
+                energy: 7,
+                mood: 7,
+                stress: 3,
+              ),
+            ],
+          ),
+        );
+      final first = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await first.load();
+
+      final persisted = await repository.forecastPointsByRange(
+        'forecast-uid',
+        start: day,
+        end: day.add(const Duration(days: 7)),
+      );
+      expect(persisted, hasLength(119));
+      expect(first.forecastFor(day), hasLength(17));
+      expect(first.forecastSummariesFor(day), hasLength(7));
+      expect(persisted.every((point) => point.updatedAt != null), isTrue);
+      expect(first.forecastLoadedFromCloud, isFalse);
+      expect(first.forecastError, isNull);
+
+      final restored = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await restored.load();
+
+      expect(restored.forecastLoadedFromCloud, isTrue);
+      expect(restored.forecastFor(day), hasLength(17));
+      expect(restored.forecastSummariesFor(day), hasLength(7));
+      expect(
+        restored.forecastFor(day).first.energy,
+        first.forecastFor(day).first.energy,
+      );
+
+      final staleAt = now.subtract(const Duration(hours: 13));
+      for (var index = 0; index < AppController.forecastDayCount; index++) {
+        final targetDay = day.add(Duration(days: index));
+        final targetPoints = persisted
+            .where(
+              (point) =>
+                  point.time.year == targetDay.year &&
+                  point.time.month == targetDay.month &&
+                  point.time.day == targetDay.day,
+            )
+            .map(
+              (point) => ForecastPoint(
+                point.time,
+                99,
+                point.uncertainty,
+                updatedAt: staleAt,
+              ),
+            )
+            .toList();
+        await repository.replaceForecastPoints(
+          'forecast-uid',
+          day: targetDay,
+          points: targetPoints,
+        );
+      }
+      final refreshed = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await refreshed.load();
+
+      expect(refreshed.forecastLoadedFromCloud, isFalse);
+      expect(refreshed.forecastFor(day).first.energy, isNot(99));
+      expect(
+        refreshed
+            .forecastSummariesFor(day)
+            .every((summary) => !summary.isStaleAt(DateTime.now())),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'Version 0.8 stores morning/evening check-ins on a 1–10 scale',
     () async {
       final controller = AppController();

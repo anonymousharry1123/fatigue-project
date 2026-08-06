@@ -493,21 +493,227 @@ abstract final class FatigueEngine {
     };
   }
 
-  static List<ForecastPoint> forecast(ScoreSnapshot score, DateTime day) {
-    final start = DateTime(day.year, day.month, day.day, 6);
-    return List.generate(17, (index) {
-      final hour = 6 + index;
-      final circadian = 13 * math.sin(((hour - 7) / 15) * math.pi);
-      final afternoonDip = 18 * math.exp(-math.pow((hour - 16.5) / 2.0, 2));
-      final rebound = 6 * math.exp(-math.pow((hour - 20.5) / 1.7, 2));
-      final energy = (score.energy + circadian - afternoonDip + rebound)
-          .clamp(12, 96)
-          .toDouble();
-      return ForecastPoint(
-        start.add(Duration(hours: index)),
-        energy,
-        (100 - score.confidence * 100) * (.7 + index / 50),
-      );
+  /// Generates one point per waking hour from the user's known evidence.
+  ///
+  /// The model deliberately remains deterministic and explainable: the daily
+  /// score provides the anchor, while recent sleep timing shifts the circadian
+  /// curve, accumulated study/exercise adds workload, and hydration/check-ins
+  /// influence recovery. Uncertainty rises when evidence is incomplete, stale,
+  /// or farther into the future.
+  static List<ForecastPoint> forecast(
+    ScoreSnapshot score,
+    DateTime day, {
+    List<SignalReading> signals = const [],
+    List<DailyCheckIn> checkIns = const [],
+    UserProfile profile = const UserProfile(),
+    DateTime? generatedAt,
+  }) {
+    final targetDay = DateTime(day.year, day.month, day.day);
+    final clock = generatedAt ?? DateTime.now();
+    final usualWakeHour = profile.wakeHour.isFinite
+        ? profile.wakeHour.clamp(4.0, 11.0)
+        : 7.0;
+    final usualBedHour = profile.bedHour.isFinite
+        ? profile.bedHour.clamp(20.0, 25.0)
+        : 23.0;
+    final evidenceCutoff =
+        clock.isBefore(targetDay.add(const Duration(days: 1)))
+        ? clock
+        : targetDay.add(const Duration(days: 1));
+    final recentStart = targetDay.subtract(const Duration(days: 7));
+    final recentSignals =
+        signals
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(recentStart) &&
+                  !item.timestamp.isAfter(evidenceCutoff) &&
+                  item.value.isFinite,
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    final recentCheckIns =
+        checkIns
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(recentStart) &&
+                  !item.timestamp.isAfter(evidenceCutoff) &&
+                  item.energy.isFinite &&
+                  item.mood.isFinite &&
+                  item.stress.isFinite,
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+
+    List<SignalReading> readings(SignalType type) => recentSignals
+        .where((item) => item.type == type)
+        .toList(growable: false);
+
+    double? average(Iterable<double> values) {
+      final items = values.toList(growable: false);
+      return items.isEmpty
+          ? null
+          : items.reduce((left, right) => left + right) / items.length;
+    }
+
+    double circularHourAverage(Iterable<double> values) {
+      final normalized = values
+          .map((value) => value < 12 ? value + 24 : value)
+          .toList(growable: false);
+      return average(normalized) ?? usualBedHour;
+    }
+
+    final sleepReadings = readings(SignalType.sleep).take(3).toList();
+    final bedtimeReadings = readings(SignalType.bedtime).take(5).toList();
+    final sleepHours = average(sleepReadings.map((item) => item.value));
+    final observedBedtime = bedtimeReadings.isEmpty
+        ? null
+        : circularHourAverage(bedtimeReadings.map((item) => item.value));
+    final observedWake = sleepReadings.isEmpty
+        ? null
+        : average(
+            sleepReadings.map(
+              (item) => item.timestamp.hour + item.timestamp.minute / 60,
+            ),
+          );
+
+    // Blend recent observations with the saved schedule so a single unusual
+    // night can adjust, but not completely overturn, the user's rhythm.
+    final wakeHour = observedWake == null
+        ? usualWakeHour
+        : usualWakeHour * .4 + observedWake * .6;
+    final bedtime = observedBedtime == null
+        ? usualBedHour
+        : usualBedHour * .4 + observedBedtime * .6;
+    final scheduleShift = ((bedtime - usualBedHour) * .2).clamp(-1.0, 1.0);
+    final circadianWake = wakeHour + scheduleShift;
+
+    final forecastStartHour = usualWakeHour.round();
+    // A daily Firestore query owns one calendar day. Bedtimes after midnight
+    // are represented by the final 11 PM point instead of leaking documents
+    // into the following day's range.
+    final forecastEndHour = usualBedHour.round().clamp(
+      forecastStartHour + 10,
+      23,
+    );
+
+    final sameDaySignals = recentSignals
+        .where(
+          (item) =>
+              !item.timestamp.isBefore(targetDay) &&
+              item.timestamp.isBefore(targetDay.add(const Duration(days: 1))),
+        )
+        .toList();
+    double modeledDailyTotal(SignalType type) {
+      final sameDay = sameDaySignals
+          .where((item) => item.type == type)
+          .toList();
+      if (sameDay.isNotEmpty) {
+        return sameDay.fold(0, (sum, item) => sum + item.value);
+      }
+      final byDay = <String, double>{};
+      for (final item in readings(type)) {
+        final key =
+            '${item.timestamp.year}-${item.timestamp.month}-${item.timestamp.day}';
+        byDay.update(
+          key,
+          (value) => value + item.value,
+          ifAbsent: () => item.value,
+        );
+      }
+      return average(byDay.values.take(3)) ?? 0;
+    }
+
+    final studyHours = modeledDailyTotal(SignalType.study);
+    final exerciseHours = modeledDailyTotal(SignalType.exercise);
+    final hydrationLiters = modeledDailyTotal(SignalType.hydration);
+    final latestCheckIn = recentCheckIns.firstOrNull;
+    final sleepAdjustment = sleepHours == null
+        ? 0.0
+        : ((sleepHours - 7.5) * 3.2).clamp(-8.0, 5.0);
+    final checkInAdjustment = latestCheckIn == null
+        ? 0.0
+        : ((latestCheckIn.energy - 5.5) * 1.1 +
+                  (latestCheckIn.mood - 5.5) * .45 -
+                  (latestCheckIn.stress - 5.5) * .65)
+              .clamp(-8.0, 8.0);
+    final hydrationAdjustment = hydrationLiters == 0
+        ? 0.0
+        : ((hydrationLiters - 2) * 1.8).clamp(-3.0, 3.0);
+    final workload = studyHours + exerciseHours * 1.4;
+
+    final evidenceGroups = <bool>[
+      sleepReadings.isNotEmpty,
+      bedtimeReadings.isNotEmpty,
+      readings(SignalType.study).isNotEmpty ||
+          readings(SignalType.exercise).isNotEmpty,
+      readings(SignalType.hydration).isNotEmpty || latestCheckIn != null,
+    ];
+    final coverage = evidenceGroups.where((present) => present).length / 4;
+    const forecastSignalTypes = {
+      SignalType.sleep,
+      SignalType.bedtime,
+      SignalType.study,
+      SignalType.exercise,
+      SignalType.hydration,
+    };
+    final newestEvidence =
+        <DateTime>[
+          ...recentSignals
+              .where((item) => forecastSignalTypes.contains(item.type))
+              .map((item) => item.timestamp),
+          ...recentCheckIns.map((item) => item.timestamp),
+        ].fold<DateTime?>(
+          null,
+          (latest, value) =>
+              latest == null || value.isAfter(latest) ? value : latest,
+        );
+    final evidenceAgeHours = newestEvidence == null
+        ? 168.0
+        : math.max(0, clock.difference(newestEvidence).inMinutes / 60);
+    final freshness = (1 - evidenceAgeHours / 168).clamp(0.0, 1.0);
+    final modelConfidence =
+        (score.confidence * .55 + coverage * .25 + freshness * .2).clamp(
+          .2,
+          .95,
+        );
+
+    return List.generate(forecastEndHour - forecastStartHour + 1, (index) {
+      final hour = forecastStartHour + index;
+      final time = targetDay.add(Duration(hours: hour));
+      final hoursAwake = hour - circadianWake;
+      final circadian =
+          10 * math.sin(2 * math.pi * (hour - (circadianWake - 2)) / 24);
+      final sleepInertia = 7 * math.exp(-math.pow(hoursAwake / 1.15, 2));
+      final afternoonDip =
+          12 * math.exp(-math.pow((hoursAwake - 8.5) / 1.8, 2));
+      final rebound = 5 * math.exp(-math.pow((hoursAwake - 12.5) / 2.0, 2));
+      final lateDayDecline = math.max(0, hoursAwake - 14) * 1.5;
+      final workloadProgress = ((hoursAwake - 4) / 9).clamp(0.0, 1.0);
+      final workloadPenalty =
+          math.max(0, workload - 3) * 1.35 * workloadProgress;
+      final moderateMovementRecovery = exerciseHours > 0 && exerciseHours <= 1.5
+          ? 2.0 * math.exp(-math.pow((hoursAwake - 11) / 3.0, 2))
+          : 0.0;
+      final energy =
+          (score.energy +
+                  sleepAdjustment +
+                  checkInAdjustment +
+                  hydrationAdjustment +
+                  circadian -
+                  sleepInertia -
+                  afternoonDip +
+                  rebound -
+                  lateDayDecline -
+                  workloadPenalty +
+                  moderateMovementRecovery)
+              .clamp(5.0, 98.0);
+      final horizonHours = math.max(0, time.difference(clock).inMinutes / 60);
+      final uncertainty =
+          (5 + (1 - modelConfidence) * 24 + horizonHours / 24 * 2.5).clamp(
+            5.0,
+            35.0,
+          );
+      return ForecastPoint(time, energy, uncertainty, updatedAt: clock);
     });
   }
 
