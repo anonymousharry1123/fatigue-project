@@ -120,8 +120,11 @@ class TodayScreen extends StatelessWidget {
                               value: score.energy,
                               label: 'Energy',
                               eyebrow: 'ESTIMATED ENERGY SCORE',
-                              completeness:
-                                  '${score.inputCount}/7 inputs · ${(score.confidence * 100).round()}% confidence',
+                              completeness: _confidenceLine(
+                                '${score.inputCount}/7 inputs',
+                                score.confidence,
+                                score.freshness,
+                              ),
                               color: TonyoColors.violet,
                             ),
                           ),
@@ -137,8 +140,11 @@ class TodayScreen extends StatelessWidget {
                               value: score.cognitive,
                               label: 'Cognitive',
                               eyebrow: 'ESTIMATED COGNITIVE SCORE',
-                              completeness:
-                                  '${score.cognitiveInputCount}/6 cognitive inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                              completeness: _confidenceLine(
+                                '${score.cognitiveInputCount}/5 cognitive inputs',
+                                score.cognitiveConfidence,
+                                score.cognitiveFreshness,
+                              ),
                               color: TonyoColors.blue,
                               comparison: _cognitiveComparison(score),
                             ),
@@ -248,6 +254,13 @@ class TodayScreen extends StatelessWidget {
     if (change == 0) return 'No change from yesterday';
     return '${change > 0 ? '↑' : '↓'} ${change.abs()} points from yesterday';
   }
+
+  static String _confidenceLine(
+    String coverage,
+    double confidence,
+    double? freshness,
+  ) =>
+      '$coverage · ${(confidence * 100).round()}% confidence${freshness == null ? '' : ' · ${(freshness * 100).round()}% fresh'}';
 }
 
 class _Header extends StatelessWidget {
@@ -502,9 +515,54 @@ class _DriverCard extends StatelessWidget {
             'Log today’s signals to personalize this estimate.',
             style: TextStyle(color: TonyoColors.muted, fontSize: 11),
           )
-        else
-          ...drivers.take(4).map(_DriverRow.new),
+        else ...[
+          if (drivers.any((driver) => driver.isPositive)) ...[
+            const _TodayDriverLabel(
+              label: 'SUPPORTING',
+              color: TonyoColors.mint,
+            ),
+            ...drivers
+                .where((driver) => driver.isPositive)
+                .take(2)
+                .map(_DriverRow.new),
+          ],
+          if (drivers.any((driver) => driver.isNegative)) ...[
+            const _TodayDriverLabel(
+              label: 'REDUCING',
+              color: TonyoColors.coral,
+            ),
+            ...drivers
+                .where((driver) => driver.isNegative)
+                .take(2)
+                .map(_DriverRow.new),
+          ],
+          if (drivers.every((driver) => driver.isNeutral)) ...[
+            const _TodayDriverLabel(label: 'NEUTRAL', color: TonyoColors.muted),
+            ...drivers.take(2).map(_DriverRow.new),
+          ],
+        ],
       ],
+    ),
+  );
+}
+
+class _TodayDriverLabel extends StatelessWidget {
+  const _TodayDriverLabel({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: color,
+        fontSize: 8,
+        fontWeight: FontWeight.w900,
+        letterSpacing: .6,
+      ),
     ),
   );
 }
@@ -516,8 +574,11 @@ class _DriverRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final positive = driver.contribution >= 0;
-    final color = positive ? TonyoColors.mint : TonyoColors.coral;
+    final color = driver.isPositive
+        ? TonyoColors.mint
+        : driver.isNegative
+        ? TonyoColors.coral
+        : TonyoColors.muted;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -549,7 +610,7 @@ class _DriverRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${positive ? '+' : ''}${driver.contribution.round()} pts',
+            '${driver.isPositive ? '+' : ''}${driver.contribution.round()} pts',
             style: TextStyle(
               color: color,
               fontSize: 10,

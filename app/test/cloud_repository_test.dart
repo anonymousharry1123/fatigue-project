@@ -90,6 +90,14 @@ void main() {
       repository.scoreSnapshotForDay('other-uid', day),
       throwsStateError,
     );
+    await expectLater(
+      repository.forecastPointsByRange(
+        'other-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      ),
+      throwsStateError,
+    );
     await expectLater(repository.exportUser('other-uid'), throwsStateError);
     await expectLater(repository.deleteUserTree('other-uid'), throwsStateError);
   });
@@ -172,12 +180,61 @@ void main() {
     expect(stored?.cognitiveChange, 4);
   });
 
+  test('replaces one forecast day while retaining adjacent days', () async {
+    final tomorrow = day.add(const Duration(days: 1));
+    await repository.replaceForecastPoints(
+      'maya-uid',
+      day: day,
+      points: [
+        ForecastPoint(day.add(const Duration(hours: 7)), 70, 8),
+        ForecastPoint(day.add(const Duration(hours: 8)), 74, 8.5),
+      ],
+    );
+    await repository.replaceForecastPoints(
+      'maya-uid',
+      day: tomorrow,
+      points: [ForecastPoint(tomorrow.add(const Duration(hours: 7)), 68, 11)],
+    );
+    await repository.replaceForecastPoints(
+      'maya-uid',
+      day: day,
+      points: [ForecastPoint(day.add(const Duration(hours: 9)), 76, 7)],
+    );
+
+    final stored = await repository.forecastPointsByRange(
+      'maya-uid',
+      start: day,
+      end: tomorrow.add(const Duration(days: 1)),
+    );
+    expect(stored, hasLength(2));
+    expect(stored.first.time, day.add(const Duration(hours: 9)));
+    expect(stored.last.time, tomorrow.add(const Duration(hours: 7)));
+    expect(forecastPointId(stored.first.time), '2026-07-28-09-00');
+  });
+
   test('exports and permanently deletes the authenticated user tree', () async {
+    await repository.replaceForecastPoints(
+      'maya-uid',
+      day: day,
+      points: [ForecastPoint(day.add(const Duration(hours: 8)), 72, 9)],
+    );
     final exported = await repository.exportUser('maya-uid');
     expect(exported['uid'], 'maya-uid');
     expect(exported['signals'], hasLength(3));
+    expect(
+      (exported['reservedCollections'] as Map)['forecastPoints'],
+      hasLength(1),
+    );
 
     await repository.deleteUserTree('maya-uid');
     expect(await repository.readUser('maya-uid'), isNull);
+    expect(
+      await repository.forecastPointsByRange(
+        'maya-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      ),
+      isEmpty,
+    );
   });
 }

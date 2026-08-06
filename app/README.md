@@ -39,6 +39,20 @@ flutter run -d edge --web-port=7357 --dart-define-from-file=config/firebase_opti
 ```
 
 VS Code launch configs under `../.vscode/launch.json` already set `--web-port=7357`.
+Version 0.14 ranks supporting and reducing score drivers, explains each
+contribution in plain language, and calculates confidence from both input
+coverage and evidence freshness. Driver timestamps, sources, and freshness are
+stored with the private daily snapshot and remain backward-compatible.
+
+Version 0.15 generates hourly Today and Tomorrow energy forecasts from recent
+sleep timing, circadian rhythm, workload, hydration, recovery, and check-ins.
+Every point carries uncertainty and is stored under the authenticated user's
+private `forecastPoints` collection, with a deterministic offline fallback.
+
+Version 0.16 turns Forecast into a persisted seven-day view. Today and
+Tomorrow show hourly curves with uncertainty bands, while Week summarizes each
+day's average, range, peak time, and confidence. Empty, stale, low-confidence,
+loading, and offline states are handled explicitly.
 
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.

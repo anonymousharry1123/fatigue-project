@@ -24,6 +24,8 @@ class AppController extends ChangeNotifier {
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth();
 
   static const _storageKey = 'tonyo_state_v1';
+  static const forecastDayCount = 7;
+  static const forecastFreshnessWindow = Duration(hours: 12);
   final HealthService _healthService;
   final AccountAuth _accountAuth;
   final CloudRepository? cloudRepository;
@@ -37,16 +39,20 @@ class AppController extends ChangeNotifier {
   bool isSyncing = false;
   bool isCloudSyncing = false;
   bool isEnergyScoreLoading = false;
+  bool isForecastLoading = false;
   DateTime? lastSync;
   String? accountEmail;
   String? cloudSyncError;
   String? energyScoreError;
+  String? forecastError;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
   ScoreSnapshot? _scoreSnapshot;
   List<SignalReading> _todaySignals = [];
   bool _scoreLoadedFromSnapshot = false;
+  bool _forecastLoadedFromCloud = false;
+  final Map<String, List<ForecastPoint>> _forecastsByDay = {};
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
@@ -55,6 +61,7 @@ class AppController extends ChangeNotifier {
   bool get isScoreLoading => isEnergyScoreLoading;
   String? get scoreError => energyScoreError;
   bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
+  bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -140,9 +147,40 @@ class AppController extends ChangeNotifier {
       _scoreSnapshot ??
       FatigueEngine.score(signals: signals, checkIns: checkIns);
   List<ForecastPoint> forecastFor(DateTime day) =>
-      FatigueEngine.forecast(score, day);
-  List<ForecastWindow> get windows =>
-      FatigueEngine.windows(forecastFor(DateTime.now()), score);
+      _forecastsByDay[_dayKey(day)] ??
+      FatigueEngine.forecast(
+        score,
+        day,
+        signals: signals,
+        checkIns: checkIns,
+        profile: profile,
+      );
+  List<ForecastPoint> forecastDataFor(DateTime day) {
+    final saved = _forecastsByDay[_dayKey(day)];
+    if (saved != null) return saved;
+    if (isCloudAuthenticated && forecastError == null) return const [];
+    return forecastFor(day);
+  }
+
+  List<ForecastDaySummary> forecastSummariesFor(
+    DateTime start, {
+    int dayCount = forecastDayCount,
+  }) {
+    final firstDay = DateTime(start.year, start.month, start.day);
+    final summaries = <ForecastDaySummary>[];
+    for (var index = 0; index < dayCount; index++) {
+      final day = firstDay.add(Duration(days: index));
+      final points = forecastDataFor(day);
+      if (points.isNotEmpty) {
+        summaries.add(ForecastDaySummary.fromPoints(day, points));
+      }
+    }
+    return summaries;
+  }
+
+  List<ForecastWindow> windowsFor(DateTime day) =>
+      FatigueEngine.windows(forecastFor(day), score);
+  List<ForecastWindow> get windows => windowsFor(DateTime.now());
   List<RiskAlert> get alerts => FatigueEngine.alerts(signals, checkIns, score);
   List<Recommendation> get recommendations =>
       FatigueEngine.recommendations(windows, score)
@@ -193,7 +231,9 @@ class AppController extends ChangeNotifier {
         _todaySignals = dashboardResults[1]! as List<SignalReading>;
         if (!forceRecalculate &&
             savedSnapshot != null &&
-            savedSnapshot.hasCognitiveScore) {
+            savedSnapshot.hasCognitiveScore &&
+            savedSnapshot.freshness != null &&
+            savedSnapshot.cognitiveFreshness != null) {
           _scoreSnapshot = savedSnapshot;
           _scoreLoadedFromSnapshot = true;
           return;
@@ -274,6 +314,101 @@ class AppController extends ChangeNotifier {
   Future<void> refreshEnergyScore({DateTime? day, bool notify = true}) =>
       refreshScores(day: day, notify: notify, forceRecalculate: true);
 
+  /// Loads or regenerates Today and Tomorrow hourly forecasts. Authenticated
+  /// users read and write their private forecastPoints collection; local and
+  /// failed-cloud sessions retain the same deterministic offline model.
+  Future<void> refreshForecasts({
+    DateTime? day,
+    bool notify = true,
+    bool forceRecalculate = false,
+  }) async {
+    final clock = DateTime.now();
+    final target = day ?? clock;
+    final firstDay = DateTime(target.year, target.month, target.day);
+    final days = List.generate(
+      forecastDayCount,
+      (index) => firstDay.add(Duration(days: index)),
+    );
+    final rangeEnd = days.last.add(const Duration(days: 1));
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+
+    isForecastLoading = true;
+    forecastError = null;
+    if (notify) notifyListeners();
+    try {
+      if (session != null && repository != null) {
+        if (!forceRecalculate) {
+          final saved = await repository.forecastPointsByRange(
+            session.uid,
+            start: firstDay,
+            end: rangeEnd,
+          );
+          final savedByDay = _groupForecasts(saved);
+          if (days.every((targetDay) {
+            final points = savedByDay[_dayKey(targetDay)] ?? const [];
+            return _isCompleteForecast(points, targetDay) &&
+                !ForecastDaySummary.fromPoints(
+                  targetDay,
+                  points,
+                ).isStaleAt(clock, maximumAge: forecastFreshnessWindow);
+          })) {
+            _forecastsByDay.addAll(savedByDay);
+            _forecastLoadedFromCloud = true;
+            return;
+          }
+        }
+
+        final inputs = await Future.wait<Object>([
+          repository.signalsByRange(
+            session.uid,
+            start: firstDay.subtract(const Duration(days: 7)),
+            end: rangeEnd,
+          ),
+          repository.checkInsByRange(
+            session.uid,
+            start: firstDay.subtract(const Duration(days: 7)),
+            end: rangeEnd,
+          ),
+        ]);
+        final forecastSignals = inputs[0] as List<SignalReading>;
+        final forecastCheckIns = inputs[1] as List<DailyCheckIn>;
+        final generated = {
+          for (final targetDay in days)
+            _dayKey(targetDay): FatigueEngine.forecast(
+              score,
+              targetDay,
+              signals: forecastSignals,
+              checkIns: forecastCheckIns,
+              profile: profile,
+              generatedAt: clock,
+            ),
+        };
+        await Future.wait([
+          for (final targetDay in days)
+            repository.replaceForecastPoints(
+              session.uid,
+              day: targetDay,
+              points: generated[_dayKey(targetDay)]!,
+            ),
+        ]);
+        _forecastsByDay.addAll(generated);
+        _forecastLoadedFromCloud = false;
+        return;
+      }
+
+      _generateLocalForecasts(days, generatedAt: clock);
+      _forecastLoadedFromCloud = false;
+    } on Object {
+      _generateLocalForecasts(days, generatedAt: clock);
+      _forecastLoadedFromCloud = false;
+      forecastError = 'Cloud forecast unavailable · using cached inputs';
+    } finally {
+      isForecastLoading = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString(_storageKey);
@@ -299,7 +434,10 @@ class AppController extends ChangeNotifier {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
     }
-    if (onboardingComplete) await refreshScores(notify: false);
+    if (onboardingComplete) {
+      await refreshScores(notify: false);
+      await refreshForecasts(notify: false);
+    }
     isReady = true;
     notifyListeners();
   }
@@ -324,6 +462,7 @@ class AppController extends ChangeNotifier {
         if (onboardingComplete) {
           await _writeLocal();
           await refreshScores(notify: false);
+          await refreshForecasts(notify: false);
           notifyListeners();
           return;
         }
@@ -347,7 +486,10 @@ class AppController extends ChangeNotifier {
     await _accountAuth.signIn(email: email, password: password);
     await _hydrateOrMigrateCloud();
     await _writeLocal();
-    if (onboardingComplete) await refreshScores(notify: false);
+    if (onboardingComplete) {
+      await refreshScores(notify: false);
+      await refreshForecasts(notify: false);
+    }
     notifyListeners();
   }
 
@@ -359,7 +501,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> updateProfile(UserProfile value) async {
     profile = value;
-    await _commit();
+    await _commit(forecastInputsChanged: true);
   }
 
   Future<void> addSignal(SignalType type, double value, {String? note}) async {
@@ -640,7 +782,10 @@ class AppController extends ChangeNotifier {
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;
+    _forecastsByDay.clear();
+    _forecastLoadedFromCloud = false;
     energyScoreError = null;
+    forecastError = null;
     _recommendationStatuses.clear();
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_storageKey);
@@ -662,12 +807,18 @@ class AppController extends ChangeNotifier {
     ),
   };
 
-  Future<void> _commit({bool energyInputsChanged = false}) async {
+  Future<void> _commit({
+    bool energyInputsChanged = false,
+    bool forecastInputsChanged = false,
+  }) async {
     notifyListeners();
     await _writeLocal();
     await _pushCloud();
     if (energyInputsChanged && onboardingComplete) {
       await refreshScores(forceRecalculate: true);
+    }
+    if ((energyInputsChanged || forecastInputsChanged) && onboardingComplete) {
+      await refreshForecasts(forceRecalculate: true);
     }
   }
 
@@ -749,6 +900,8 @@ class AppController extends ChangeNotifier {
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;
+    _forecastsByDay.clear();
+    _forecastLoadedFromCloud = false;
     profile = state.profile;
     accountEmail = state.accountEmail;
     onboardingComplete = state.onboardingComplete;
@@ -766,6 +919,8 @@ class AppController extends ChangeNotifier {
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;
+    _forecastsByDay.clear();
+    _forecastLoadedFromCloud = false;
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
     notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;
@@ -808,4 +963,54 @@ class AppController extends ChangeNotifier {
       left.year == right.year &&
       left.month == right.month &&
       left.day == right.day;
+
+  void _generateLocalForecasts(
+    List<DateTime> days, {
+    required DateTime generatedAt,
+  }) {
+    for (final day in days) {
+      _forecastsByDay[_dayKey(day)] = FatigueEngine.forecast(
+        score,
+        day,
+        signals: signals,
+        checkIns: checkIns,
+        profile: profile,
+        generatedAt: generatedAt,
+      );
+    }
+  }
+
+  static Map<String, List<ForecastPoint>> _groupForecasts(
+    List<ForecastPoint> points,
+  ) {
+    final grouped = <String, List<ForecastPoint>>{};
+    for (final point in points) {
+      grouped.putIfAbsent(_dayKey(point.time), () => []).add(point);
+    }
+    for (final values in grouped.values) {
+      values.sort((left, right) => left.time.compareTo(right.time));
+    }
+    return grouped;
+  }
+
+  bool _isCompleteForecast(List<ForecastPoint> points, DateTime day) {
+    final startHour = profile.wakeHour.isFinite
+        ? profile.wakeHour.round().clamp(4, 11)
+        : 7;
+    final endHour = profile.bedHour.isFinite
+        ? profile.bedHour.round().clamp(startHour + 10, 23)
+        : 23;
+    if (points.length != endHour - startHour + 1) return false;
+    for (var index = 0; index < points.length; index++) {
+      if (points[index].time != day.add(Duration(hours: startHour + index))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static String _dayKey(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-'
+      '${day.month.toString().padLeft(2, '0')}-'
+      '${day.day.toString().padLeft(2, '0')}';
 }

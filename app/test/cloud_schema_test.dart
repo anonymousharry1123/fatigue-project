@@ -87,7 +87,7 @@ void main() {
       expect(cloud.toString().toLowerCase(), isNot(contains('medical')));
     });
 
-    test('Version 0.12 shared score snapshots round-trip both models', () {
+    test('Version 0.14 score snapshots round-trip driver evidence', () {
       final day = DateTime.utc(2026, 7, 28);
       final calculatedAt = day.add(const Duration(hours: 15));
       final score = scoreSnapshotToCloud(
@@ -95,7 +95,17 @@ void main() {
           energy: 72,
           cognitive: 68,
           confidence: .8,
-          drivers: const [ScoreDriver('Sleep', 8, 'Strong recovery')],
+          drivers: [
+            ScoreDriver(
+              'Sleep',
+              8,
+              'Strong recovery',
+              explanation: 'Recent sleep supported recovery.',
+              freshness: .91,
+              source: SignalSource.healthKit,
+              evidenceAt: calculatedAt.subtract(const Duration(hours: 7)),
+            ),
+          ],
           day: day,
           calculatedAt: calculatedAt,
           inputCount: 6,
@@ -105,6 +115,8 @@ void main() {
             ScoreDriver('Reaction time', 7, '255 ms vs 270 ms baseline'),
           ],
           previousCognitive: 63,
+          freshness: .84,
+          cognitiveFreshness: .79,
         ),
         day: day,
       );
@@ -117,6 +129,8 @@ void main() {
           'cognitive',
           'confidence',
           'cognitiveConfidence',
+          'freshness',
+          'cognitiveFreshness',
           'drivers',
           'cognitiveDrivers',
           'previousCognitive',
@@ -136,6 +150,15 @@ void main() {
       expect(restored.day, day);
       expect(restored.calculatedAt, calculatedAt);
       expect(restored.drivers.single.label, 'Sleep');
+      expect(restored.freshness, .84);
+      expect(restored.cognitiveFreshness, .79);
+      expect(restored.drivers.single.explanation, contains('supported'));
+      expect(restored.drivers.single.freshness, .91);
+      expect(restored.drivers.single.source, SignalSource.healthKit);
+      expect(
+        restored.drivers.single.evidenceAt,
+        calculatedAt.subtract(const Duration(hours: 7)),
+      );
     });
 
     test('reads a Version 0.11 Energy-only snapshot without false history', () {
@@ -154,9 +177,18 @@ void main() {
       expect(restored.cognitiveChange, isNull);
     });
 
-    test('reserved collection serializers match roadmap field names', () {
+    test('derived collection serializers match roadmap field names', () {
+      final forecastUpdatedAt = DateTime.utc(2026, 7, 28, 8, 30);
       final forecast = forecastPointToCloud(
-        ForecastPoint(DateTime.utc(2026, 7, 28, 9), 75, 6),
+        ForecastPoint(
+          DateTime.utc(2026, 7, 28, 9),
+          75,
+          6,
+          updatedAt: forecastUpdatedAt,
+        ),
+      );
+      final restoredForecast = forecastPointFromCloud(
+        forecast.cast<String, dynamic>(),
       );
       final recommendation = recommendationToCloud(
         const Recommendation(
@@ -171,12 +203,30 @@ void main() {
         const RiskAlert('Sleep trend', 'Short sleep', AlertSeverity.caution),
       );
 
-      expect(forecast.keys, containsAll(['time', 'energy', 'uncertainty']));
+      expect(
+        forecast.keys,
+        containsAll(['time', 'energy', 'uncertainty', 'updatedAt']),
+      );
+      expect(restoredForecast.time, DateTime.utc(2026, 7, 28, 9));
+      expect(restoredForecast.energy, 75);
+      expect(restoredForecast.uncertainty, 6);
+      expect(restoredForecast.updatedAt, forecastUpdatedAt);
       expect(
         recommendation.keys,
         containsAll(['title', 'detail', 'status', 'feedback']),
       );
       expect(alert.keys, containsAll(['title', 'severity', 'dismissed']));
+    });
+
+    test('rejects invalid persisted forecast values', () {
+      expect(
+        () => forecastPointFromCloud({
+          'time': DateTime.utc(2026, 7, 28, 9),
+          'energy': 101,
+          'uncertainty': 6,
+        }),
+        throwsFormatException,
+      );
     });
   });
 }
