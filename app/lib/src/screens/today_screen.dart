@@ -138,7 +138,7 @@ class TodayScreen extends StatelessWidget {
                               label: 'Cognitive',
                               eyebrow: 'ESTIMATED COGNITIVE SCORE',
                               completeness:
-                                  '${score.cognitiveInputCount}/5 cognitive inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                                  '${score.cognitiveInputCount}/6 cognitive inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
                               color: TonyoColors.blue,
                               comparison: _cognitiveComparison(score),
                             ),

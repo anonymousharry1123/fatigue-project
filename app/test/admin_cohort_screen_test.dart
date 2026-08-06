@@ -20,6 +20,7 @@ void main() {
 
     expect(find.text('Cohort Lab'), findsOneWidget);
     expect(find.text('Load CSV'), findsOneWidget);
+    expect(find.text('Freeze baseline'), findsOneWidget);
     expect(
       find.text('Load the synthetic CSV to see score distributions.'),
       findsOneWidget,

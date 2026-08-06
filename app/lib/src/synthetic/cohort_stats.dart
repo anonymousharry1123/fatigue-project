@@ -41,6 +41,8 @@ class CohortSummary {
     required this.byEducation,
     required this.byGender,
     required this.sleepVsEnergy,
+    required this.sleepVsCognitive,
+    required this.screenVsEnergy,
     required this.screenVsCognitive,
     required this.studyVsCognitive,
     required this.exerciseVsEnergy,
@@ -57,6 +59,8 @@ class CohortSummary {
   final List<CohortGroupStat> byEducation;
   final List<CohortGroupStat> byGender;
   final List<CohortScatterPoint> sleepVsEnergy;
+  final List<CohortScatterPoint> sleepVsCognitive;
+  final List<CohortScatterPoint> screenVsEnergy;
   final List<CohortScatterPoint> screenVsCognitive;
   final List<CohortScatterPoint> studyVsCognitive;
   final List<CohortScatterPoint> exerciseVsEnergy;
@@ -109,6 +113,25 @@ class CohortSummary {
     'updatedAt': DateTime.now().toUtc().toIso8601String(),
   };
 
+  /// Local freeze for Relations before/after compare (survives hot restart).
+  Map<String, Object?> toBaselineJson() => {
+    ...toCloud(),
+    'sleepVsEnergy': _encodeScatter(sleepVsEnergy),
+    'sleepVsCognitive': _encodeScatter(sleepVsCognitive),
+    'screenVsEnergy': _encodeScatter(screenVsEnergy),
+    'screenVsCognitive': _encodeScatter(screenVsCognitive),
+    'studyVsCognitive': _encodeScatter(studyVsCognitive),
+    'exerciseVsEnergy': _encodeScatter(exerciseVsEnergy),
+    'caffeineVsEnergy': _encodeScatter(caffeineVsEnergy),
+  };
+
+  static List<Map<String, Object?>> _encodeScatter(
+    List<CohortScatterPoint> points,
+  ) =>
+      points
+          .map((point) => {'x': point.x, 'y': point.y, 'id': point.id})
+          .toList();
+
   factory CohortSummary.fromCloud(Map<String, dynamic> data) {
     List<CohortHistogramBin> hist(String key) =>
         ((data[key] as List?) ?? const [])
@@ -131,6 +154,16 @@ class CohortSummary {
               ),
             )
             .toList();
+    List<CohortScatterPoint> scatter(String key) =>
+        ((data[key] as List?) ?? const [])
+            .map(
+              (raw) => CohortScatterPoint(
+                (raw['x'] as num).toDouble(),
+                (raw['y'] as num).toDouble(),
+                raw['id'] as String? ?? '',
+              ),
+            )
+            .toList();
     return CohortSummary(
       n: (data['n'] as num?)?.toInt() ?? 0,
       meanEnergy: (data['meanEnergy'] as num?)?.toDouble() ?? 0,
@@ -141,11 +174,13 @@ class CohortSummary {
       cognitiveHistogram: hist('cognitiveHistogram'),
       byEducation: groups('byEducation'),
       byGender: groups('byGender'),
-      sleepVsEnergy: const [],
-      screenVsCognitive: const [],
-      studyVsCognitive: const [],
-      exerciseVsEnergy: const [],
-      caffeineVsEnergy: const [],
+      sleepVsEnergy: scatter('sleepVsEnergy'),
+      sleepVsCognitive: scatter('sleepVsCognitive'),
+      screenVsEnergy: scatter('screenVsEnergy'),
+      screenVsCognitive: scatter('screenVsCognitive'),
+      studyVsCognitive: scatter('studyVsCognitive'),
+      exerciseVsEnergy: scatter('exerciseVsEnergy'),
+      caffeineVsEnergy: scatter('caffeineVsEnergy'),
     );
   }
 }
@@ -167,6 +202,8 @@ abstract final class CohortStats {
         byEducation: [],
         byGender: [],
         sleepVsEnergy: [],
+        sleepVsCognitive: [],
+        screenVsEnergy: [],
         screenVsCognitive: [],
         studyVsCognitive: [],
         exerciseVsEnergy: [],
@@ -192,6 +229,18 @@ abstract final class CohortStats {
       sleepVsEnergy: sampleScatter(
         people,
         (p) => p.avgSleepHours,
+        (p) => p.score.energy.toDouble(),
+        sample: scatterSample,
+      ),
+      sleepVsCognitive: sampleScatter(
+        people,
+        (p) => p.avgSleepHours,
+        (p) => p.score.cognitive.toDouble(),
+        sample: scatterSample,
+      ),
+      screenVsEnergy: sampleScatter(
+        people,
+        (p) => p.foldedScreenHours,
         (p) => p.score.energy.toDouble(),
         sample: scatterSample,
       ),

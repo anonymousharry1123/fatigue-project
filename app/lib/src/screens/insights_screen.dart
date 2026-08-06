@@ -150,7 +150,7 @@ class InsightsScreen extends StatelessWidget {
                     const SizedBox(width: 11),
                     Expanded(
                       child: Text(
-                        '${score.cognitiveInputCount}/5 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                        '${score.cognitiveInputCount}/6 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ),
