@@ -66,7 +66,7 @@ users/{uid}
 ├── signals/{signalId}
 ├── checkIns/{checkInId}
 ├── scoreSnapshots/{snapshotId}       (daily scores)
-├── forecastPoints/{pointId}          (hourly forecasts + updatedAt)
+├── forecastPoints/{pointId}          (hourly forecasts + updatedAt + evidence IDs)
 ├── recommendations/{recId}           (reserved)
 └── riskAlerts/{alertId}               (reserved)
 ```

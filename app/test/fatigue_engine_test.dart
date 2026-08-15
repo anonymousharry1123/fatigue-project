@@ -231,6 +231,15 @@ void main() {
     );
     expect(recovered.every((point) => point.updatedAt == now), isTrue);
     expect(
+      recovered.every(
+        (point) =>
+            point.signalEvidenceIds.contains('sleep') &&
+            point.signalEvidenceIds.contains('study') &&
+            point.checkInEvidenceIds.contains('ready'),
+      ),
+      isTrue,
+    );
+    expect(
       recovered
           .skip(1)
           .indexed
@@ -332,6 +341,78 @@ void main() {
     expect(summary.averageUncertainty, 19);
     expect(summary.isLowConfidence, isTrue);
     expect(summary.isStaleAt(now), isTrue);
+  });
+
+  test('Version 0.17 derives key windows from linked forecast evidence', () {
+    const score = ScoreSnapshot(
+      energy: 70,
+      cognitive: 72,
+      confidence: .8,
+      drivers: [],
+    );
+    final signals = [
+      SignalReading(
+        id: 'sleep-linked',
+        type: SignalType.sleep,
+        value: 8.2,
+        timestamp: now.subtract(const Duration(hours: 2)),
+      ),
+      SignalReading(
+        id: 'study-linked',
+        type: SignalType.study,
+        value: 4.5,
+        timestamp: now.subtract(const Duration(hours: 1)),
+      ),
+      SignalReading(
+        id: 'hydration-unlinked',
+        type: SignalType.hydration,
+        value: 2.5,
+        timestamp: now,
+      ),
+    ];
+    final checkIns = [
+      DailyCheckIn(
+        id: 'check-in-linked',
+        timestamp: now,
+        energy: 7,
+        mood: 8,
+        stress: 4,
+      ),
+    ];
+    const energy = [70.0, 82.0, 78.0, 68.0, 52.0, 58.0, 67.0, 61.0];
+    final points = [
+      for (var index = 0; index < energy.length; index++)
+        ForecastPoint(
+          DateTime(now.year, now.month, now.day, 9 + index),
+          energy[index],
+          7,
+          updatedAt: now,
+          signalEvidenceIds: const ['sleep-linked', 'study-linked'],
+          checkInEvidenceIds: const ['check-in-linked'],
+        ),
+    ];
+
+    final windows = FatigueEngine.windows(
+      points,
+      score,
+      signals: signals,
+      checkIns: checkIns,
+    );
+    ForecastWindow window(ForecastWindowType type) =>
+        windows.singleWhere((item) => item.type == type);
+
+    expect(window(ForecastWindowType.peak).energy, 82);
+    expect(window(ForecastWindowType.crash).energy, 52);
+    expect(window(ForecastWindowType.recovery).energy, 67);
+    expect(
+      window(ForecastWindowType.peak).evidence.map((item) => item.id),
+      containsAll(['sleep-linked', 'check-in-linked']),
+    );
+    expect(window(ForecastWindowType.crash).reason, contains('study'));
+    expect(
+      windows.expand((item) => item.evidence).map((item) => item.id),
+      isNot(contains('hydration-unlinked')),
+    );
   });
 
   test('missing signals lower confidence without breaking scores', () {

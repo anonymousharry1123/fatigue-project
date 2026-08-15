@@ -22,6 +22,9 @@ class _ForecastScreenState extends State<ForecastScreen> {
     final today = DateTime.now();
     final selectedDay = today.add(Duration(days: _range == 1 ? 1 : 0));
     final points = controller.forecastDataFor(selectedDay);
+    final windows = _range == 2
+        ? const <ForecastWindow>[]
+        : controller.windowsFor(selectedDay);
     final week = controller.forecastSummariesFor(today);
 
     return SafeArea(
@@ -93,6 +96,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
             _DailyForecast(
               day: selectedDay,
               points: points,
+              windows: windows,
               loading: controller.isForecastLoading,
               sourceLabel: _sourceLabel(controller),
               onRetry: () =>
@@ -122,6 +126,7 @@ class _DailyForecast extends StatelessWidget {
   const _DailyForecast({
     required this.day,
     required this.points,
+    required this.windows,
     required this.loading,
     required this.sourceLabel,
     required this.onRetry,
@@ -129,6 +134,7 @@ class _DailyForecast extends StatelessWidget {
 
   final DateTime day;
   final List<ForecastPoint> points;
+  final List<ForecastWindow> windows;
   final bool loading;
   final String sourceLabel;
   final VoidCallback onRetry;
@@ -260,6 +266,13 @@ class _DailyForecast extends StatelessWidget {
             ],
           ),
         ),
+        const SectionHeader('Key windows'),
+        ...windows.map(
+          (window) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ForecastWindowCard(window: window),
+          ),
+        ),
         const SectionHeader('What shapes this curve'),
         const TonyoCard(
           child: Column(
@@ -285,6 +298,202 @@ class _DailyForecast extends StatelessWidget {
                 color: TonyoColors.violet,
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ForecastWindowCard extends StatelessWidget {
+  const _ForecastWindowCard({required this.window});
+
+  final ForecastWindow window;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = switch (window.type) {
+      ForecastWindowType.peak => (
+        title: 'Peak focus',
+        icon: Icons.center_focus_strong_rounded,
+        color: TonyoColors.mint,
+      ),
+      ForecastWindowType.crash => (
+        title: 'Predicted crash',
+        icon: Icons.trending_down_rounded,
+        color: TonyoColors.coral,
+      ),
+      ForecastWindowType.recovery => (
+        title: 'Recovery window',
+        icon: Icons.battery_charging_full_rounded,
+        color: TonyoColors.blue,
+      ),
+    };
+    return TonyoCard(
+      key: Key('forecast-window-${window.type.name}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              MetricIcon(icon: style.icon, color: style.color),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      style.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${formatHour(window.start)}–${formatHour(window.end)}',
+                      style: TextStyle(
+                        color: style.color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: style.color.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${window.energy}',
+                  style: TextStyle(
+                    color: style.color,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          Text(
+            window.reason,
+            style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: TonyoColors.border, height: 1),
+          const SizedBox(height: 10),
+          if (window.evidence.isEmpty)
+            const Row(
+              children: [
+                Icon(
+                  Icons.link_off_rounded,
+                  color: TonyoColors.muted,
+                  size: 16,
+                ),
+                SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'No linked signal or check-in documents available.',
+                    style: TextStyle(color: TonyoColors.muted, fontSize: 9),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            const Text(
+              'LINKED EVIDENCE',
+              style: TextStyle(
+                color: TonyoColors.muted,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final evidence in window.evidence) ...[
+              _ForecastEvidenceRow(evidence: evidence, accent: style.color),
+              if (evidence != window.evidence.last)
+                const Divider(height: 18, color: TonyoColors.border),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ForecastEvidenceRow extends StatelessWidget {
+  const _ForecastEvidenceRow({required this.evidence, required this.accent});
+
+  final ForecastEvidence evidence;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSignal = evidence.kind == ForecastEvidenceKind.signal;
+    final icon = evidence.signalType == null
+        ? Icons.mood_rounded
+        : iconForSignal(evidence.signalType!);
+    final kindLabel = isSignal ? 'Linked signal' : 'Linked check-in';
+    final source = switch (evidence.source) {
+      SignalSource.healthKit => 'HealthKit',
+      SignalSource.model => 'Model',
+      SignalSource.manual => 'Manual',
+      null => 'Manual',
+    };
+    return Row(
+      key: Key('forecast-evidence-${evidence.kind.name}-${evidence.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: accent, size: 17),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                evidence.label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                evidence.detail,
+                style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+              ),
+              Text(
+                '$source · ${formatDate(evidence.timestamp)} at ${formatHour(evidence.timestamp)}',
+                style: const TextStyle(color: TonyoColors.muted, fontSize: 8),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: '$kindLabel document ${evidence.id}',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              kindLabel,
+              style: TextStyle(
+                color: accent,
+                fontSize: 7,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
       ],

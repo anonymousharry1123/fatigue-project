@@ -251,6 +251,66 @@ void main() {
     expect(find.textContaining('fixture data'), findsNothing);
   });
 
+  testWidgets('Version 0.17 presents three key windows with linked evidence', (
+    tester,
+  ) async {
+    final now = DateTime.now().subtract(const Duration(minutes: 5));
+    final controller = AppController()
+      ..isReady = true
+      ..onboardingComplete = true
+      ..signals = [
+        for (final entry in const {
+          SignalType.sleep: 8.0,
+          SignalType.bedtime: 23.0,
+          SignalType.hydration: 2.4,
+          SignalType.study: 4.0,
+          SignalType.exercise: .75,
+        }.entries)
+          SignalReading(
+            id: '${entry.key.name}-live',
+            type: entry.key,
+            value: entry.value,
+            timestamp: now,
+          ),
+      ]
+      ..checkIns = [
+        DailyCheckIn(
+          id: 'check-in-live',
+          timestamp: now,
+          energy: 7,
+          mood: 8,
+          stress: 4,
+        ),
+      ];
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Key windows'), 250);
+    expect(find.text('Key windows'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('forecast-window-peak')),
+      250,
+    );
+    expect(find.text('Peak focus'), findsOneWidget);
+    expect(find.text('LINKED EVIDENCE'), findsWidgets);
+    expect(
+      find.byKey(const Key('forecast-evidence-signal-sleep-live')),
+      findsWidgets,
+    );
+    await tester.scrollUntilVisible(find.text('Predicted crash'), 250);
+    expect(find.text('Predicted crash'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Recovery window'), 250);
+    expect(find.text('Recovery window'), findsOneWidget);
+    expect(find.textContaining('Linked signal'), findsWidgets);
+    expect(find.textContaining('Linked check-in'), findsWidgets);
+  });
+
   testWidgets('Version 0.16 Week view uses calculated daily summaries', (
     tester,
   ) async {

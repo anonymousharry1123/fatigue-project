@@ -185,6 +185,8 @@ void main() {
           75,
           6,
           updatedAt: forecastUpdatedAt,
+          signalEvidenceIds: const ['sleep-1', 'hydration-1'],
+          checkInEvidenceIds: const ['check-in-1'],
         ),
       );
       final restoredForecast = forecastPointFromCloud(
@@ -205,12 +207,21 @@ void main() {
 
       expect(
         forecast.keys,
-        containsAll(['time', 'energy', 'uncertainty', 'updatedAt']),
+        containsAll([
+          'time',
+          'energy',
+          'uncertainty',
+          'updatedAt',
+          'signalEvidenceIds',
+          'checkInEvidenceIds',
+        ]),
       );
       expect(restoredForecast.time, DateTime.utc(2026, 7, 28, 9));
       expect(restoredForecast.energy, 75);
       expect(restoredForecast.uncertainty, 6);
       expect(restoredForecast.updatedAt, forecastUpdatedAt);
+      expect(restoredForecast.signalEvidenceIds, ['sleep-1', 'hydration-1']);
+      expect(restoredForecast.checkInEvidenceIds, ['check-in-1']);
       expect(
         recommendation.keys,
         containsAll(['title', 'detail', 'status', 'feedback']),
@@ -227,6 +238,17 @@ void main() {
         }),
         throwsFormatException,
       );
+    });
+
+    test('reads legacy forecasts without evidence links', () {
+      final restored = forecastPointFromCloud({
+        'time': DateTime.utc(2026, 7, 28, 9),
+        'energy': 75,
+        'uncertainty': 6,
+      });
+
+      expect(restored.signalEvidenceIds, isEmpty);
+      expect(restored.checkInEvidenceIds, isEmpty);
     });
   });
 }

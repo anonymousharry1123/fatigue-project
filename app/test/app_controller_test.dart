@@ -502,6 +502,14 @@ void main() {
       expect(first.forecastFor(day), hasLength(17));
       expect(first.forecastSummariesFor(day), hasLength(7));
       expect(persisted.every((point) => point.updatedAt != null), isTrue);
+      expect(
+        persisted.every(
+          (point) =>
+              point.signalEvidenceIds.contains('sleep') &&
+              point.checkInEvidenceIds.contains('check-in'),
+        ),
+        isTrue,
+      );
       expect(first.forecastLoadedFromCloud, isFalse);
       expect(first.forecastError, isNull);
 
@@ -514,6 +522,13 @@ void main() {
       expect(restored.forecastLoadedFromCloud, isTrue);
       expect(restored.forecastFor(day), hasLength(17));
       expect(restored.forecastSummariesFor(day), hasLength(7));
+      expect(
+        restored
+            .windowsFor(day)
+            .expand((window) => window.evidence)
+            .map((evidence) => evidence.id),
+        containsAll(['sleep', 'check-in']),
+      );
       expect(
         restored.forecastFor(day).first.energy,
         first.forecastFor(day).first.energy,

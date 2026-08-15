@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.16 — Forecast Screen (as of 2026-08-06)
+- **Current release:** Version 0.17 — Key Windows (as of 2026-08-15)
 
 ## Implementation Report
 
@@ -28,7 +28,8 @@
 | 0.14 | Ranked, evidence-aware score drivers | Complete |
 | 0.15 | Firebase-backed hourly forecast engine | Complete |
 | 0.16 | Persisted Today/Tomorrow/Week Forecast screen | Complete |
-| 0.17+ | Key windows, HealthKit, AI coach | Not started |
+| 0.17 | Forecast-derived key windows + linked evidence | Complete |
+| 0.18+ | Recommendations, warnings, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -51,7 +52,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-06 — **79 tests passed** with Version 0.16 Forecast Screen; static analysis clean
+- Last verified: 2026-08-15 — **82 tests passed** with Version 0.17 Key Windows; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -72,6 +73,7 @@
 16. Score Drivers (ranked contributions + evidence-aware confidence) - Complete (v0.14)
 17. Forecast Engine (hourly estimates + uncertainty + cloud persistence) - Complete (v0.15)
 18. Forecast Screen (saved daily curves + calculated Week summaries + data states) - Complete (v0.16)
+19. Key Windows (forecast-derived focus/crash/recovery + linked evidence) - Complete (v0.17)
 
 ## Day-to-Day Entries
 
@@ -434,6 +436,41 @@ states.
   while containing no forecast data. It now derives every bar and row directly
   from the loaded seven-day range.
 
+### 2026-08-15 — Version 0.17 Key Windows
+
+**Branch:** `main`
+
+**Goal:** Complete Version 0.17 with forecast-derived peak-focus,
+predicted-crash, and recovery windows whose explanations trace back to the
+private signals and check-ins actually used by the forecast.
+
+**Results:**
+- Added exact `signalEvidenceIds` and `checkInEvidenceIds` to hourly
+  `forecastPoints` documents and advanced the schema marker to Version 5.
+  Older forecast documents remain readable with empty evidence-link lists.
+- Refactored daily workload aggregation to retain the IDs behind the selected
+  sleep, bedtime, study, exercise, hydration, and latest check-in inputs.
+- Replaced the generic extrema prototype with confidence-adjusted peak
+  selection, afternoon decline/rebound detection, bounded time windows, and
+  deterministic behavior for short or incomplete curves.
+- Resolved only IDs linked from the forecast documents into user-facing
+  evidence. Unlinked records are never presented as support for a window.
+- Added professional Key Windows cards to Today and Tomorrow with time ranges,
+  predicted energy, plain-language reasons, source/timestamp provenance, and
+  explicit legacy/no-link states.
+- Bumped the app to `0.17.0+18` and added schema, engine, controller, and widget
+  regression coverage.
+- `flutter test` passed all **82 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- A saved curve alone can identify extrema but cannot truthfully explain which
+  user records shaped it. Evidence IDs are therefore stored with every hourly
+  point, while display details are resolved from the user's own cached/cloud
+  records instead of duplicating wellness data into forecast documents.
+- A naïve post-1-PM minimum often selects the final bedtime decline as the
+  “crash.” The detector now scores prior decline plus subsequent rebound and
+  excludes the terminal point so the window describes a meaningful dip.
+
 ---
 
 ## Prompts Used
@@ -461,6 +498,19 @@ reloads, and professional missing/low-confidence/offline states.
 **Modifications:** Added per-point `updatedAt` metadata and a 12-hour freshness
 window; removed fixture Week values and deferred true key-window detection to
 Version 0.17 as planned.
+
+### Feature: Version 0.17 Key Windows
+**Prompt:**
+"version 0.17"
+
+**Result:** Completed forecast-derived peak-focus, predicted-crash, and
+recovery windows with exact Firestore signal/check-in evidence links,
+plain-language provenance cards, backward-compatible schema handling, and
+regression coverage.
+
+**Modifications:** Stored document IDs rather than duplicated signal values;
+resolved only linked records; treated legacy forecasts without link arrays as
+valid but explicitly unsupported by recent linked evidence.
 
 ### Feature: Versions 0.8 & 0.9 check-in and reaction test
 **Prompt:**
@@ -616,6 +666,14 @@ Energy inputs named by the roadmap.
 **Solution:** Build semantic activity/sleep items first, suppress their grouped raw signals, and assign sleep by wake date.
 **Prompt used:** Version 0.10 Daily History prompt.
 
+### Challenge 5: Forecast extrema lacked trustworthy provenance
+**Problem:** A window could be derived from hourly energy points, but generic
+score-driver copy could imply support from a record the forecast did not use.
+**Solution:** Persist exact evidence document IDs on forecast points and resolve
+only those IDs into the window cards; legacy points show an explicit no-link
+state.
+**Prompt used:** Version 0.17 Key Windows prompt.
+
 ## What I Learned
 - Fixture-backed UI previews are not “done” until data is validated, persisted, and covered by tests (`PLAN.md` release rules).
 - Extracting pure helpers (`CheckInLogic`, `ReactionTestLogic`) makes feature behavior easy to unit test without driving the full UI.
@@ -631,5 +689,6 @@ Energy inputs named by the roadmap.
 - [x] Implement Version 0.14 ranked Score Drivers and freshness confidence
 - [x] Implement Version 0.15 hourly Forecast Engine and private persistence
 - [x] Implement Version 0.16 persisted Forecast screen and Week summaries
+- [x] Implement Version 0.17 forecast-derived Key Windows with linked evidence
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

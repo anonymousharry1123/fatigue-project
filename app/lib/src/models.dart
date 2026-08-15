@@ -501,8 +501,7 @@ class ForecastWindow {
     this.energy,
     this.reason, {
     this.evidence = const [],
-  }
-  );
+  });
   final ForecastWindowType type;
   final DateTime start;
   final DateTime end;

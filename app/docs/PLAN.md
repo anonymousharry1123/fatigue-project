@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: August 6, 2026
-Current release: **Version 0.16 — Forecast Screen**
+Last updated: August 15, 2026
+Current release: **Version 0.17 — Key Windows**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -200,18 +200,18 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Incorporate sleep timing, circadian rhythm, workload, and recovery
 - Return uncertainty with each forecast point and persist points under `forecastPoints`
 
-### Version 0.16 — Forecast Screen ✅ Current
+### Version 0.16 — Forecast Screen ✅
 
 - Replace the Forecast preview with calculated Today and Tomorrow curves read from `forecastPoints` queries
 - Add daily summaries to the Week view
 - Handle missing and low-confidence data (empty query windows, stale `updatedAt`)
 
-## Upcoming Versions
-
-### Version 0.17 — Key Windows
+### Version 0.17 — Key Windows ✅ Current
 
 - Identify peak-focus, predicted-crash, and recovery windows from forecast documents
 - Explain the signals supporting each window using linked `signals` / `checkIns` evidence IDs where available
+
+## Upcoming Versions
 
 ### Version 0.18 — Basic Recommendations
 
@@ -327,7 +327,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - `SignalReading`: measurement type, value, unit, timestamp, source, and quality → Firestore `users/{uid}/signals/{id}`
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
-- `ForecastPoint`: predicted energy, timestamp, uncertainty, and forecast `updatedAt` → `users/{uid}/forecastPoints/{id}`
+- `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
 - `ForecastWindow`: peak, crash, or recovery period (derived; may be stored or computed from `forecastPoints`)
 - `Recommendation`: action, timing, priority, evidence, and feedback → `users/{uid}/recommendations/{id}`
 - `RiskAlert`: warning category, severity, evidence, and dismissal state → `users/{uid}/riskAlerts/{id}`

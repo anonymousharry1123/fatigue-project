@@ -603,29 +603,40 @@ abstract final class FatigueEngine {
               item.timestamp.isBefore(targetDay.add(const Duration(days: 1))),
         )
         .toList();
-    double modeledDailyTotal(SignalType type) {
+    ({double total, List<SignalReading> evidence}) modeledDailyTotal(
+      SignalType type,
+    ) {
       final sameDay = sameDaySignals
           .where((item) => item.type == type)
           .toList();
       if (sameDay.isNotEmpty) {
-        return sameDay.fold(0, (sum, item) => sum + item.value);
+        return (
+          total: sameDay.fold<double>(0, (sum, item) => sum + item.value),
+          evidence: sameDay,
+        );
       }
-      final byDay = <String, double>{};
+      final byDay = <String, List<SignalReading>>{};
       for (final item in readings(type)) {
         final key =
             '${item.timestamp.year}-${item.timestamp.month}-${item.timestamp.day}';
-        byDay.update(
-          key,
-          (value) => value + item.value,
-          ifAbsent: () => item.value,
-        );
+        byDay.putIfAbsent(key, () => []).add(item);
       }
-      return average(byDay.values.take(3)) ?? 0;
+      final selectedDays = byDay.values.take(3).toList(growable: false);
+      final totals = selectedDays.map(
+        (items) => items.fold<double>(0, (sum, item) => sum + item.value),
+      );
+      return (
+        total: average(totals) ?? 0,
+        evidence: selectedDays.expand((items) => items).toList(growable: false),
+      );
     }
 
-    final studyHours = modeledDailyTotal(SignalType.study);
-    final exerciseHours = modeledDailyTotal(SignalType.exercise);
-    final hydrationLiters = modeledDailyTotal(SignalType.hydration);
+    final studyModel = modeledDailyTotal(SignalType.study);
+    final exerciseModel = modeledDailyTotal(SignalType.exercise);
+    final hydrationModel = modeledDailyTotal(SignalType.hydration);
+    final studyHours = studyModel.total;
+    final exerciseHours = exerciseModel.total;
+    final hydrationLiters = hydrationModel.total;
     final latestCheckIn = recentCheckIns.firstOrNull;
     final sleepAdjustment = sleepHours == null
         ? 0.0
@@ -676,6 +687,22 @@ abstract final class FatigueEngine {
           .2,
           .95,
         );
+    final linkedSignals = <String, SignalReading>{};
+    for (final signal in [
+      ...sleepReadings,
+      ...bedtimeReadings,
+      ...studyModel.evidence,
+      ...exerciseModel.evidence,
+      ...hydrationModel.evidence,
+    ]) {
+      if (signal.id.isNotEmpty) {
+        linkedSignals.putIfAbsent(signal.id, () => signal);
+      }
+    }
+    final signalEvidenceIds = linkedSignals.keys.toList(growable: false);
+    final checkInEvidenceIds = latestCheckIn == null || latestCheckIn.id.isEmpty
+        ? const <String>[]
+        : <String>[latestCheckIn.id];
 
     return List.generate(forecastEndHour - forecastStartHour + 1, (index) {
       final hour = forecastStartHour + index;
@@ -713,52 +740,284 @@ abstract final class FatigueEngine {
             5.0,
             35.0,
           );
-      return ForecastPoint(time, energy, uncertainty, updatedAt: clock);
+      return ForecastPoint(
+        time,
+        energy,
+        uncertainty,
+        updatedAt: clock,
+        signalEvidenceIds: signalEvidenceIds,
+        checkInEvidenceIds: checkInEvidenceIds,
+      );
     });
   }
 
   static List<ForecastWindow> windows(
     List<ForecastPoint> points,
-    ScoreSnapshot score,
-  ) {
+    ScoreSnapshot score, {
+    List<SignalReading> signals = const [],
+    List<DailyCheckIn> checkIns = const [],
+  }) {
     if (points.isEmpty) return const [];
-    final peak = points.reduce((a, b) => a.energy > b.energy ? a : b);
-    final crashCandidates = points
-        .where((point) => point.time.hour >= 13)
-        .toList();
-    final crash = crashCandidates.reduce((a, b) => a.energy < b.energy ? a : b);
-    final recoveryCandidates = points
-        .where((point) => point.time.isAfter(crash.time))
-        .toList();
+    final ordered = [...points]
+      ..sort((left, right) => left.time.compareTo(right.time));
+    final crashIndex = _crashIndex(ordered);
+    final peakCandidates = ordered.take(math.max(1, crashIndex)).toList();
+    final peak = peakCandidates.reduce(
+      (left, right) =>
+          left.energy - left.uncertainty * .15 >=
+              right.energy - right.uncertainty * .15
+          ? left
+          : right,
+    );
+    final crash = ordered[crashIndex];
+    final recoveryCandidates = ordered.skip(crashIndex + 1).toList();
     final recovery = recoveryCandidates.isEmpty
-        ? points.last
-        : recoveryCandidates.reduce((a, b) => a.energy > b.energy ? a : b);
+        ? crash
+        : recoveryCandidates.reduce(
+            (left, right) =>
+                left.energy - left.uncertainty * .1 >=
+                    right.energy - right.uncertainty * .1
+                ? left
+                : right,
+          );
+    final peakEvidence = _windowEvidence(
+      ForecastWindowType.peak,
+      ordered,
+      signals,
+      checkIns,
+    );
+    final crashEvidence = _windowEvidence(
+      ForecastWindowType.crash,
+      ordered,
+      signals,
+      checkIns,
+    );
+    final recoveryEvidence = _windowEvidence(
+      ForecastWindowType.recovery,
+      ordered,
+      signals,
+      checkIns,
+    );
+    final firstTime = ordered.first.time;
+    final endLimit = ordered.last.time.add(const Duration(hours: 1));
     return [
       ForecastWindow(
         ForecastWindowType.peak,
-        peak.time.subtract(const Duration(minutes: 45)),
-        peak.time.add(const Duration(minutes: 75)),
+        _notBefore(peak.time.subtract(const Duration(minutes: 30)), firstTime),
+        _notAfter(peak.time.add(const Duration(minutes: 90)), endLimit),
         peak.energy.round(),
-        'Best focus window based on today’s recovery signals',
+        _windowReason(ForecastWindowType.peak, peakEvidence, score),
+        evidence: peakEvidence,
       ),
       ForecastWindow(
         ForecastWindowType.crash,
-        crash.time.subtract(const Duration(minutes: 45)),
-        crash.time.add(const Duration(minutes: 45)),
+        _notBefore(crash.time.subtract(const Duration(minutes: 30)), firstTime),
+        _notAfter(crash.time.add(const Duration(minutes: 60)), endLimit),
         crash.energy.round(),
-        score.drivers.isEmpty
-            ? 'Expected circadian dip'
-            : '${score.drivers.first.label} and circadian load compound',
+        _windowReason(ForecastWindowType.crash, crashEvidence, score),
+        evidence: crashEvidence,
       ),
       ForecastWindow(
         ForecastWindowType.recovery,
-        recovery.time.subtract(const Duration(minutes: 30)),
-        recovery.time.add(const Duration(minutes: 60)),
+        _notBefore(
+          recovery.time.subtract(const Duration(minutes: 30)),
+          firstTime,
+        ),
+        _notAfter(recovery.time.add(const Duration(minutes: 60)), endLimit),
         recovery.energy.round(),
-        'A lighter workload supports a gradual rebound',
+        _windowReason(ForecastWindowType.recovery, recoveryEvidence, score),
+        evidence: recoveryEvidence,
       ),
     ];
   }
+
+  static int _crashIndex(List<ForecastPoint> points) {
+    if (points.length < 3) {
+      return points.indexWhere(
+        (point) =>
+            point.energy == points.map((item) => item.energy).reduce(math.min),
+      );
+    }
+    final candidates = <int>[
+      for (var index = 1; index < points.length - 1; index++)
+        if (points[index].time.hour >= 12) index,
+    ];
+    if (candidates.isEmpty) {
+      return points.indexWhere(
+        (point) =>
+            point.energy == points.map((item) => item.energy).reduce(math.min),
+      );
+    }
+    var bestIndex = candidates.first;
+    var bestScore = double.negativeInfinity;
+    for (final index in candidates) {
+      final priorStart = math.max(0, index - 4);
+      final priorHigh = points
+          .sublist(priorStart, index)
+          .map((point) => point.energy)
+          .reduce(math.max);
+      final followingEnd = math.min(points.length, index + 4);
+      final followingHigh = points
+          .sublist(index + 1, followingEnd)
+          .map((point) => point.energy)
+          .fold<double>(points[index].energy, math.max);
+      final decline = priorHigh - points[index].energy;
+      final rebound = followingHigh - points[index].energy;
+      final score =
+          decline +
+          math.max(0, rebound) * .65 -
+          points[index].uncertainty * .08;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+    return bestIndex;
+  }
+
+  static List<ForecastEvidence> _windowEvidence(
+    ForecastWindowType type,
+    List<ForecastPoint> points,
+    List<SignalReading> signals,
+    List<DailyCheckIn> checkIns,
+  ) {
+    final linkedSignalIds = points
+        .expand((point) => point.signalEvidenceIds)
+        .toSet();
+    final linkedCheckInIds = points
+        .expand((point) => point.checkInEvidenceIds)
+        .toSet();
+    if (linkedSignalIds.isEmpty && linkedCheckInIds.isEmpty) return const [];
+
+    final signalPriority = switch (type) {
+      ForecastWindowType.peak => const {
+        SignalType.sleep: 0,
+        SignalType.hydration: 1,
+        SignalType.bedtime: 2,
+        SignalType.exercise: 4,
+        SignalType.study: 5,
+      },
+      ForecastWindowType.crash => const {
+        SignalType.study: 0,
+        SignalType.exercise: 1,
+        SignalType.sleep: 3,
+        SignalType.bedtime: 4,
+        SignalType.hydration: 5,
+      },
+      ForecastWindowType.recovery => const {
+        SignalType.hydration: 0,
+        SignalType.exercise: 1,
+        SignalType.sleep: 3,
+        SignalType.bedtime: 4,
+        SignalType.study: 5,
+      },
+    };
+    final candidates = <({int priority, ForecastEvidence evidence})>[];
+    final seenTypes = <SignalType>{};
+    final linkedSignals =
+        signals.where((signal) => linkedSignalIds.contains(signal.id)).toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    for (final signal in linkedSignals) {
+      if (!seenTypes.add(signal.type)) continue;
+      candidates.add((
+        priority: signalPriority[signal.type] ?? 9,
+        evidence: ForecastEvidence(
+          id: signal.id,
+          kind: ForecastEvidenceKind.signal,
+          label: signal.type.label,
+          detail: _signalEvidenceDetail(signal),
+          timestamp: signal.timestamp,
+          signalType: signal.type,
+          source: signal.source,
+        ),
+      ));
+    }
+    final linkedCheckIns =
+        checkIns
+            .where((checkIn) => linkedCheckInIds.contains(checkIn.id))
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    if (linkedCheckIns.firstOrNull case final checkIn?) {
+      candidates.add((
+        priority: switch (type) {
+          ForecastWindowType.peak => 1,
+          ForecastWindowType.crash => 2,
+          ForecastWindowType.recovery => 2,
+        },
+        evidence: ForecastEvidence(
+          id: checkIn.id,
+          kind: ForecastEvidenceKind.checkIn,
+          label: '${checkIn.period.label} check-in',
+          detail:
+              'Energy ${checkIn.energy.round()}/10 · mood ${checkIn.mood.round()}/10 · stress ${checkIn.stress.round()}/10',
+          timestamp: checkIn.timestamp,
+        ),
+      ));
+    }
+    candidates.sort((left, right) {
+      final priority = left.priority.compareTo(right.priority);
+      if (priority != 0) return priority;
+      return right.evidence.timestamp.compareTo(left.evidence.timestamp);
+    });
+    return candidates
+        .take(3)
+        .map((candidate) => candidate.evidence)
+        .toList(growable: false);
+  }
+
+  static String _windowReason(
+    ForecastWindowType type,
+    List<ForecastEvidence> evidence,
+    ScoreSnapshot score,
+  ) {
+    if (evidence.isEmpty) {
+      final confidence = score.confidence < .5 ? 'lower-confidence ' : '';
+      return switch (type) {
+        ForecastWindowType.peak =>
+          'The saved curve’s strongest ${confidence}energy period; no linked recent evidence was available.',
+        ForecastWindowType.crash =>
+          'A modeled circadian decline in the saved curve; no linked recent evidence was available.',
+        ForecastWindowType.recovery =>
+          'The strongest post-dip rebound in the saved curve; no linked recent evidence was available.',
+      };
+    }
+    final labels = evidence
+        .take(2)
+        .map((item) => item.label.toLowerCase())
+        .join(' and ');
+    return switch (type) {
+      ForecastWindowType.peak =>
+        'Linked $labels support the strongest focus period in this forecast.',
+      ForecastWindowType.crash =>
+        'Linked $labels combine with the modeled circadian dip here.',
+      ForecastWindowType.recovery =>
+        'Linked $labels inform the strongest rebound after the predicted dip.',
+    };
+  }
+
+  static String _signalEvidenceDetail(SignalReading signal) =>
+      switch (signal.type) {
+        SignalType.bedtime => 'Bedtime ${_decimalHour(signal.value)}',
+        SignalType.sleep => '${signal.value.toStringAsFixed(1)} hr duration',
+        SignalType.hydration => '${signal.value.toStringAsFixed(1)} L logged',
+        SignalType.study => '${signal.value.toStringAsFixed(1)} hr study load',
+        SignalType.exercise => '${signal.value.toStringAsFixed(1)} hr exercise',
+        _ => '${signal.value.toStringAsFixed(1)} ${signal.type.unit}',
+      };
+
+  static String _decimalHour(double value) {
+    final totalMinutes = ((value % 24) * 60).round() % (24 * 60);
+    final hour24 = totalMinutes ~/ 60;
+    final minute = totalMinutes % 60;
+    final hour = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    return '$hour:${minute.toString().padLeft(2, '0')} ${hour24 >= 12 ? 'PM' : 'AM'}';
+  }
+
+  static DateTime _notBefore(DateTime value, DateTime minimum) =>
+      value.isBefore(minimum) ? minimum : value;
+
+  static DateTime _notAfter(DateTime value, DateTime maximum) =>
+      value.isAfter(maximum) ? maximum : value;
 
   static List<Recommendation> recommendations(
     List<ForecastWindow> windows,

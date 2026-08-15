@@ -178,16 +178,21 @@ class AppController extends ChangeNotifier {
     return summaries;
   }
 
-  List<ForecastWindow> windowsFor(DateTime day) =>
-      FatigueEngine.windows(forecastFor(day), score);
+  List<ForecastWindow> windowsFor(DateTime day) => FatigueEngine.windows(
+    forecastDataFor(day),
+    score,
+    signals: signals,
+    checkIns: checkIns,
+  );
   List<ForecastWindow> get windows => windowsFor(DateTime.now());
   List<RiskAlert> get alerts => FatigueEngine.alerts(signals, checkIns, score);
-  List<Recommendation> get recommendations =>
-      FatigueEngine.recommendations(windows, score)
-          .map(
-            (item) => item.copyWith(status: _recommendationStatuses[item.id]),
-          )
-          .toList();
+  List<Recommendation> get recommendations {
+    final currentWindows = windows;
+    if (currentWindows.isEmpty) return const [];
+    return FatigueEngine.recommendations(currentWindows, score)
+        .map((item) => item.copyWith(status: _recommendationStatuses[item.id]))
+        .toList();
+  }
 
   /// Personal reaction baseline from prior valid tests (Version 0.9).
   double? get reactionBaseline => ReactionTestLogic.baselineMs(signals);
