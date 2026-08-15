@@ -72,8 +72,29 @@ users/{uid}
 ```
 
 The user document stores profile fields, account email, preferences, consent
-flags, schema/migration versions, and `updatedAt`. Passwords are handled only
-by Firebase Authentication.
+flags, schema/migration versions, and `updatedAt`. Version 0.20 stores explicit
+notification consent plus separate lower-energy/recovery choices in `prefs`:
+`notificationsEnabled`, `crashNotificationsEnabled`,
+`recoveryNotificationsEnabled`, and `notificationPreferencesVersion`.
+Passwords are handled only by Firebase Authentication.
+
+Older documents without notification preference Version 1 are treated as not
+opted in, even if a legacy preview build stored `notificationsEnabled: true`.
+This prevents a placeholder default from becoming notification consent.
+
+## Version 0.20 local notification delivery
+
+Notification timing and pending deliveries remain on the user's device; only
+the preferences and the already-private forecast/risk inputs sync through
+Firestore. Android uses inexact alarms and restores scheduled items after boot
+without requesting exact-alarm access. iOS registers the app notification-center
+delegate. macOS and Windows use the plugin's native scheduler. Web and Linux
+show the setting as unavailable because reliable scheduled delivery is not
+supported there.
+
+Permission is requested only after the user turns on **Profile → Forecast
+alerts**. Tonyo cancels its own pending guidance on opt-out, sign-out, and data
+reset while preserving unrelated app notifications.
 
 ## Migration and offline behavior
 

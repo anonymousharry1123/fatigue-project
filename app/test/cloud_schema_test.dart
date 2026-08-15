@@ -81,6 +81,12 @@ void main() {
 
       expect((cloud['profile'] as Map)['name'], 'Jordan');
       expect((cloud['prefs'] as Map)['notificationsEnabled'], isFalse);
+      expect(
+        (cloud['prefs'] as Map)['notificationPreferencesVersion'],
+        notificationPreferencesVersion,
+      );
+      expect((cloud['prefs'] as Map)['crashNotificationsEnabled'], isTrue);
+      expect((cloud['prefs'] as Map)['recoveryNotificationsEnabled'], isTrue);
       expect((cloud['consentFlags'] as Map)['outcomeCollection'], isTrue);
       expect(cloud['localMigrationVersion'], localMigrationVersion);
       expect(cloud.toString().toLowerCase(), isNot(contains('password')));

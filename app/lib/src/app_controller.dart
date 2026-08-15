@@ -12,6 +12,8 @@ import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
 import 'models.dart';
+import 'notification_logic.dart';
+import 'notification_service.dart';
 import 'reaction_test_logic.dart';
 import 'today_dashboard_logic.dart';
 
@@ -19,20 +21,25 @@ class AppController extends ChangeNotifier {
   AppController({
     HealthService? healthService,
     AccountAuth? accountAuth,
+    NotificationService? notificationService,
     this.cloudRepository,
   }) : _healthService = healthService ?? const HealthService(),
-       _accountAuth = accountAuth ?? const LocalOnlyAccountAuth();
+       _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
+       _notificationService = notificationService ?? LocalNotificationService();
 
   static const _storageKey = 'tonyo_state_v1';
   static const forecastDayCount = 7;
   static const forecastFreshnessWindow = Duration(hours: 12);
   final HealthService _healthService;
   final AccountAuth _accountAuth;
+  final NotificationService _notificationService;
   final CloudRepository? cloudRepository;
 
   bool isReady = false;
   bool onboardingComplete = false;
-  bool notificationsEnabled = true;
+  bool notificationsEnabled = false;
+  bool crashNotificationsEnabled = true;
+  bool recoveryNotificationsEnabled = true;
   bool outcomeConsent = false;
   bool healthAvailable = false;
   bool healthAuthorized = false;
@@ -41,12 +48,16 @@ class AppController extends ChangeNotifier {
   bool isEnergyScoreLoading = false;
   bool isForecastLoading = false;
   bool isGuidanceLoading = false;
+  bool isNotificationSyncing = false;
   DateTime? lastSync;
   String? accountEmail;
   String? cloudSyncError;
   String? energyScoreError;
   String? forecastError;
   String? guidanceError;
+  String? notificationError;
+  NotificationPermissionState notificationPermission =
+      NotificationPermissionState.unknown;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
@@ -60,6 +71,9 @@ class AppController extends ChangeNotifier {
   final Set<String> _dismissedRiskAlertIds = {};
   List<Recommendation> _recommendations = [];
   List<RiskAlert> _riskAlerts = [];
+  NotificationPlan _notificationPlan = const NotificationPlan(
+    state: NotificationPlanState.disabled,
+  );
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
   bool get isCloudAuthenticated => _accountAuth.currentSession != null;
@@ -69,6 +83,17 @@ class AppController extends ChangeNotifier {
   bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
   bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
   bool get guidanceSavedToCloud => _guidanceSavedToCloud;
+  bool get notificationSchedulingSupported =>
+      _notificationService.supportsScheduling;
+  NotificationPlan get notificationPlan => _notificationPlan;
+  int get scheduledNotificationCount =>
+      notificationPermission == NotificationPermissionState.granted
+      ? _notificationPlan.notifications.length
+      : 0;
+  GuidanceNotification? get nextScheduledNotification =>
+      scheduledNotificationCount == 0
+      ? null
+      : _notificationPlan.notifications.first;
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -525,6 +550,52 @@ class AppController extends ChangeNotifier {
       guidanceError = 'Cloud guidance unavailable · using cached inputs';
     } finally {
       isGuidanceLoading = false;
+      if (notificationsEnabled) {
+        await refreshNotifications(notify: false);
+      }
+      if (notify) notifyListeners();
+    }
+  }
+
+  Future<void> refreshNotifications({bool notify = true}) async {
+    isNotificationSyncing = true;
+    notificationError = null;
+    if (notify) notifyListeners();
+
+    try {
+      final now = DateTime.now();
+      _notificationPlan = NotificationLogic.build(
+        now: now,
+        points: forecastDataFor(now),
+        windows: windowsFor(now),
+        riskAlerts: _riskAlerts,
+        enabled: notificationsEnabled,
+        crashEnabled: crashNotificationsEnabled,
+        recoveryEnabled: recoveryNotificationsEnabled,
+      );
+      if (!notificationsEnabled) {
+        notificationPermission = NotificationPermissionState.unknown;
+        return;
+      }
+      if (!_notificationService.supportsScheduling) {
+        notificationPermission = NotificationPermissionState.unavailable;
+        notificationError = 'Scheduled alerts are unavailable on this device.';
+        return;
+      }
+      notificationPermission = await _notificationService.permissionStatus();
+      if (notificationPermission != NotificationPermissionState.granted) {
+        await _notificationService.cancelGuidance();
+        notificationError =
+            notificationPermission == NotificationPermissionState.denied
+            ? 'Notifications are blocked in system settings.'
+            : 'Notification permission is required.';
+        return;
+      }
+      await _notificationService.reconcile(_notificationPlan.notifications);
+    } on Object {
+      notificationError = 'Notification schedule unavailable · try again';
+    } finally {
+      isNotificationSyncing = false;
       if (notify) notifyListeners();
     }
   }
@@ -617,8 +688,17 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    try {
+      await _notificationService.cancelGuidance();
+    } on Object {
+      // Signing out must still succeed if the platform scheduler is unavailable.
+    }
     await _accountAuth.signOut();
     cloudSyncError = null;
+    _notificationPlan = const NotificationPlan(
+      state: NotificationPlanState.disabled,
+    );
+    notificationPermission = NotificationPermissionState.unknown;
     notifyListeners();
   }
 
@@ -827,18 +907,76 @@ class AppController extends ChangeNotifier {
     await _writeLocal();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
-    if (session == null || repository == null) return;
-    try {
-      await repository.setRiskAlertDismissed(session.uid, id, dismissed: true);
-    } on Object {
-      guidanceError = 'Alert dismissed on this device · cloud update pending';
-      notifyListeners();
+    if (session != null && repository != null) {
+      try {
+        await repository.setRiskAlertDismissed(
+          session.uid,
+          id,
+          dismissed: true,
+        );
+      } on Object {
+        guidanceError = 'Alert dismissed on this device · cloud update pending';
+        notifyListeners();
+      }
     }
+    await refreshNotifications();
   }
 
-  Future<void> setNotifications(bool value) async {
-    notificationsEnabled = value;
+  Future<NotificationPermissionState> setNotifications(bool value) async {
+    if (!value) {
+      notificationsEnabled = false;
+      notificationError = null;
+      notificationPermission = NotificationPermissionState.unknown;
+      _notificationPlan = const NotificationPlan(
+        state: NotificationPlanState.disabled,
+      );
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        notificationError = 'Could not clear scheduled alerts.';
+      }
+      await _commit();
+      return notificationPermission;
+    }
+
+    isNotificationSyncing = true;
+    notificationError = null;
+    notifyListeners();
+    try {
+      notificationPermission = await _notificationService.requestPermission();
+      notificationsEnabled =
+          notificationPermission == NotificationPermissionState.granted;
+      if (!notificationsEnabled) {
+        notificationError = switch (notificationPermission) {
+          NotificationPermissionState.unavailable =>
+            'Scheduled alerts are unavailable on this device.',
+          NotificationPermissionState.denied =>
+            'Notifications are blocked in system settings.',
+          _ => 'Notification permission was not granted.',
+        };
+      }
+    } on Object {
+      notificationsEnabled = false;
+      notificationPermission = NotificationPermissionState.unknown;
+      notificationError = 'Could not request notification permission.';
+    } finally {
+      isNotificationSyncing = false;
+    }
     await _commit();
+    if (notificationsEnabled) await refreshNotifications();
+    return notificationPermission;
+  }
+
+  Future<void> setCrashNotifications(bool value) async {
+    crashNotificationsEnabled = value;
+    await _commit();
+    await refreshNotifications();
+  }
+
+  Future<void> setRecoveryNotifications(bool value) async {
+    recoveryNotificationsEnabled = value;
+    await _commit();
+    await refreshNotifications();
   }
 
   Future<void> setOutcomeConsent(bool value) async {
@@ -920,8 +1058,21 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    try {
+      await _notificationService.cancelGuidance();
+    } on Object {
+      // Local reset still proceeds when platform notification APIs fail.
+    }
     onboardingComplete = false;
-    notificationsEnabled = true;
+    notificationsEnabled = false;
+    crashNotificationsEnabled = true;
+    recoveryNotificationsEnabled = true;
+    isNotificationSyncing = false;
+    notificationError = null;
+    notificationPermission = NotificationPermissionState.unknown;
+    _notificationPlan = const NotificationPlan(
+      state: NotificationPlanState.disabled,
+    );
     outcomeConsent = false;
     healthAuthorized = false;
     lastSync = null;
@@ -950,6 +1101,9 @@ class AppController extends ChangeNotifier {
   Map<String, Object?> _json() => {
     'onboardingComplete': onboardingComplete,
     'notificationsEnabled': notificationsEnabled,
+    'crashNotificationsEnabled': crashNotificationsEnabled,
+    'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
+    'notificationPreferencesVersion': notificationPreferencesVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
     'accountEmail': accountEmail,
@@ -1045,6 +1199,9 @@ class AppController extends ChangeNotifier {
     accountEmail: _accountAuth.currentSession?.email ?? accountEmail ?? '',
     onboardingComplete: onboardingComplete,
     notificationsEnabled: notificationsEnabled,
+    crashNotificationsEnabled: crashNotificationsEnabled,
+    recoveryNotificationsEnabled: recoveryNotificationsEnabled,
+    notificationPrefsVersion: notificationPreferencesVersion,
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
     lastSync: lastSync,
@@ -1072,7 +1229,16 @@ class AppController extends ChangeNotifier {
     profile = state.profile;
     accountEmail = state.accountEmail;
     onboardingComplete = state.onboardingComplete;
-    notificationsEnabled = state.notificationsEnabled;
+    notificationsEnabled =
+        state.notificationPrefsVersion >= notificationPreferencesVersion &&
+        state.notificationsEnabled;
+    crashNotificationsEnabled = state.crashNotificationsEnabled;
+    recoveryNotificationsEnabled = state.recoveryNotificationsEnabled;
+    notificationPermission = NotificationPermissionState.unknown;
+    notificationError = null;
+    _notificationPlan = const NotificationPlan(
+      state: NotificationPlanState.disabled,
+    );
     outcomeConsent = state.outcomeConsent;
     healthAuthorized = state.healthAuthorized;
     lastSync = state.lastSync;
@@ -1094,7 +1260,20 @@ class AppController extends ChangeNotifier {
     _recommendationStatuses.clear();
     _dismissedRiskAlertIds.clear();
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
-    notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
+    final notificationPrefsVersion =
+        (json['notificationPreferencesVersion'] as num?)?.round() ?? 0;
+    notificationsEnabled =
+        notificationPrefsVersion >= notificationPreferencesVersion &&
+        (json['notificationsEnabled'] as bool? ?? false);
+    crashNotificationsEnabled =
+        json['crashNotificationsEnabled'] as bool? ?? true;
+    recoveryNotificationsEnabled =
+        json['recoveryNotificationsEnabled'] as bool? ?? true;
+    notificationPermission = NotificationPermissionState.unknown;
+    notificationError = null;
+    _notificationPlan = const NotificationPlan(
+      state: NotificationPlanState.disabled,
+    );
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;
     healthAuthorized = json['healthAuthorized'] as bool? ?? false;
     accountEmail = json['accountEmail'] as String?;

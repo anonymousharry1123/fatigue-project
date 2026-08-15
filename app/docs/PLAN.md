@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: August 15, 2026
-Current release: **Version 0.19 — Fatigue Warnings**
+Current release: **Version 0.20 — Notifications**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -217,19 +217,19 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Match recommendations to forecast windows
 - Ground every recommendation in recent Firestore data and store rows in `recommendations`
 
-### Version 0.19 — Fatigue Warnings ✅ Current
+### Version 0.19 — Fatigue Warnings ✅
 
 - Detect sustained sleep debt, possible training overreaching, and sustained low-energy / high-stress patterns without diagnosis
 - Query multi-day `signals` and `checkIns` ranges via Version 0.10-a helpers
 - Persist dismissible alerts in `riskAlerts` under the user document
 
-## Upcoming Versions
-
-### Version 0.20 — Notifications
+### Version 0.20 — Notifications ✅ Current
 
 - Add opt-in crash and recovery alerts driven by `riskAlerts` / forecast windows
 - Store notification prefs on `users/{uid}`; never send content that implies diagnosis
 - Suppress duplicate and low-confidence alerts using Firestore fields (`dismissed`, freshness)
+
+## Upcoming Versions
 
 ### Version 0.21 — Insights Dashboard
 

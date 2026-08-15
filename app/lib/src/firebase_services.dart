@@ -128,6 +128,8 @@ class FirestoreCloudRepository implements CloudRepository {
     if (!profileSnapshot.exists) return null;
     final data = profileSnapshot.data()!;
     final prefs = (data['prefs'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final notificationPrefsVersion =
+        (prefs['notificationPreferencesVersion'] as num?)?.round() ?? 0;
     final consent =
         (data['consentFlags'] as Map?)?.cast<String, dynamic>() ?? const {};
     final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
@@ -138,7 +140,14 @@ class FirestoreCloudRepository implements CloudRepository {
       ),
       accountEmail: data['accountEmail'] as String,
       onboardingComplete: data['onboardingComplete'] as bool? ?? true,
-      notificationsEnabled: prefs['notificationsEnabled'] as bool? ?? true,
+      notificationsEnabled:
+          notificationPrefsVersion >= notificationPreferencesVersion &&
+          (prefs['notificationsEnabled'] as bool? ?? false),
+      crashNotificationsEnabled:
+          prefs['crashNotificationsEnabled'] as bool? ?? true,
+      recoveryNotificationsEnabled:
+          prefs['recoveryNotificationsEnabled'] as bool? ?? true,
+      notificationPrefsVersion: notificationPrefsVersion,
       outcomeConsent: consent['outcomeCollection'] as bool? ?? false,
       healthAuthorized: prefs['healthAuthorized'] as bool? ?? false,
       lastSync: _dateTimeOrNull(data['lastHealthSync']),
@@ -167,6 +176,9 @@ class FirestoreCloudRepository implements CloudRepository {
         email: state.accountEmail,
         onboardingComplete: state.onboardingComplete,
         notificationsEnabled: state.notificationsEnabled,
+        crashNotificationsEnabled: state.crashNotificationsEnabled,
+        recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
+        notificationPrefsVersion: state.notificationPrefsVersion,
         outcomeConsent: state.outcomeConsent,
         healthAuthorized: state.healthAuthorized,
         lastSync: state.lastSync,

@@ -1,7 +1,9 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 6 activates grounded guidance records.
-const int cloudSchemaVersion = 6;
+/// Firestore schema version. Version 7 activates explicit notification opt-in.
+const int cloudSchemaVersion = 7;
+
+const int notificationPreferencesVersion = 1;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -72,6 +74,9 @@ Map<String, Object?> profileToCloud({
   required String email,
   required bool onboardingComplete,
   required bool notificationsEnabled,
+  bool crashNotificationsEnabled = true,
+  bool recoveryNotificationsEnabled = true,
+  int notificationPrefsVersion = notificationPreferencesVersion,
   required bool outcomeConsent,
   required bool healthAuthorized,
   DateTime? lastSync,
@@ -82,6 +87,9 @@ Map<String, Object?> profileToCloud({
   'accountEmail': email,
   'prefs': {
     'notificationsEnabled': notificationsEnabled,
+    'crashNotificationsEnabled': crashNotificationsEnabled,
+    'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
+    'notificationPreferencesVersion': notificationPrefsVersion,
     'healthAuthorized': healthAuthorized,
   },
   'consentFlags': {
@@ -107,12 +115,18 @@ class CloudUserState {
     required this.checkIns,
     this.lastSync,
     this.migrationVersion = 0,
+    this.crashNotificationsEnabled = true,
+    this.recoveryNotificationsEnabled = true,
+    this.notificationPrefsVersion = 0,
   });
 
   final UserProfile profile;
   final String accountEmail;
   final bool onboardingComplete;
   final bool notificationsEnabled;
+  final bool crashNotificationsEnabled;
+  final bool recoveryNotificationsEnabled;
+  final int notificationPrefsVersion;
   final bool outcomeConsent;
   final bool healthAuthorized;
   final DateTime? lastSync;
@@ -125,6 +139,9 @@ class CloudUserState {
     accountEmail: accountEmail,
     onboardingComplete: onboardingComplete,
     notificationsEnabled: notificationsEnabled,
+    crashNotificationsEnabled: crashNotificationsEnabled,
+    recoveryNotificationsEnabled: recoveryNotificationsEnabled,
+    notificationPrefsVersion: notificationPrefsVersion,
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
     lastSync: lastSync,
@@ -139,6 +156,9 @@ class CloudUserState {
     'accountEmail': accountEmail,
     'onboardingComplete': onboardingComplete,
     'notificationsEnabled': notificationsEnabled,
+    'crashNotificationsEnabled': crashNotificationsEnabled,
+    'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
+    'notificationPreferencesVersion': notificationPrefsVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
     'lastSync': lastSync?.toIso8601String(),

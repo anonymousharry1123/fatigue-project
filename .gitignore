@@ -86,6 +86,7 @@ app.*.map.json
 **/ios/**/.generated/
 **/ios/**/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
+**/ios/**/xcshareddata/swiftpm/
 
 # Keep Xcode's shared defaults
 !**/ios/**/default.mode1v3
@@ -98,6 +99,7 @@ app.*.map.json
 **/macos/Flutter/ephemeral/
 **/macos/**/Pods/
 **/macos/**/dgph
+**/macos/**/xcshareddata/swiftpm/
 *.xcuserstate
 **/xcuserdata/
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../app.dart';
 import '../app_controller.dart';
 import '../models.dart';
+import '../notification_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'admin/admin_cohort_screen.dart';
@@ -173,9 +174,8 @@ class ProfileScreen extends StatelessWidget {
           _SettingTile(
             icon: Icons.notifications_outlined,
             title: 'Forecast alerts',
-            subtitle: 'Preview only in Version 0.5.1',
-            onTap: () =>
-                _preview(context, 'Notifications arrive in Version 0.20.'),
+            subtitle: _notificationSubtitle(controller),
+            onTap: () => _notifications(context),
           ),
           _SettingTile(
             icon: Icons.privacy_tip_outlined,
@@ -215,6 +215,29 @@ class ProfileScreen extends StatelessWidget {
     );
     return matches.isEmpty ? '—' : matches.first.value.toStringAsFixed(1);
   }
+
+  static String _notificationSubtitle(AppController controller) {
+    if (!controller.notificationSchedulingSupported) {
+      return 'Unavailable on this platform';
+    }
+    if (!controller.notificationsEnabled) return 'Off · explicit opt-in';
+    if (controller.isNotificationSyncing) return 'Updating schedule…';
+    if (controller.notificationError != null) {
+      return controller.notificationError!;
+    }
+    final count = controller.scheduledNotificationCount;
+    return count == 0
+        ? 'On · no eligible forecast windows'
+        : 'On · $count ${count == 1 ? 'alert' : 'alerts'} scheduled';
+  }
+
+  static void _notifications(BuildContext context) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: TonyoColors.surface,
+        builder: (_) => const _NotificationSheet(),
+      );
 
   static Future<void> _editProfile(
     BuildContext context,
@@ -535,6 +558,179 @@ class ProfileScreen extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _NotificationSheet extends StatelessWidget {
+  const _NotificationSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Forecast alerts',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Opt in to private reminders based on fresh, higher-confidence forecast windows. Tonyo suppresses stale, uncertain, past, and dismissed guidance.',
+              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: TonyoColors.blue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.health_and_safety_outlined,
+                    color: TonyoColors.blue,
+                    size: 20,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Wellness guidance only. Notification text never presents a diagnosis.',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              key: const Key('notification-master-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Allow forecast alerts'),
+              subtitle: Text(
+                controller.notificationSchedulingSupported
+                    ? 'Permission is requested only when you turn this on.'
+                    : 'Scheduled alerts are not supported on this platform.',
+                style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              value: controller.notificationsEnabled,
+              onChanged:
+                  !controller.notificationSchedulingSupported ||
+                      controller.isNotificationSyncing
+                  ? null
+                  : (value) async {
+                      await controller.setNotifications(value);
+                    },
+            ),
+            const Divider(),
+            SwitchListTile(
+              key: const Key('notification-crash-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Lower-energy heads-up'),
+              subtitle: const Text(
+                'A gentle reminder about 15 minutes before an eligible window.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              value: controller.crashNotificationsEnabled,
+              onChanged:
+                  controller.notificationsEnabled &&
+                      !controller.isNotificationSyncing
+                  ? controller.setCrashNotifications
+                  : null,
+            ),
+            SwitchListTile(
+              key: const Key('notification-recovery-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Recovery-window reminder'),
+              subtitle: const Text(
+                'A check-in prompt when the forecast starts to recover.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              value: controller.recoveryNotificationsEnabled,
+              onChanged:
+                  controller.notificationsEnabled &&
+                      !controller.isNotificationSyncing
+                  ? controller.setRecoveryNotifications
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            _NotificationStatus(controller: controller),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationStatus extends StatelessWidget {
+  const _NotificationStatus({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = controller.notificationError;
+    final next = controller.nextScheduledNotification;
+    final status = error ?? _statusText(controller.notificationPlan.state);
+    final detail = next == null
+        ? status
+        : '${controller.scheduledNotificationCount} scheduled · next ${_clock(next.scheduledAt)}';
+    final color = error == null ? TonyoColors.mint : TonyoColors.amber;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            error == null ? Icons.schedule_rounded : Icons.info_outline_rounded,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(detail, style: const TextStyle(fontSize: 11))),
+        ],
+      ),
+    );
+  }
+
+  static String _statusText(NotificationPlanState state) => switch (state) {
+    NotificationPlanState.ready => 'Eligible forecast alerts are scheduled.',
+    NotificationPlanState.disabled => 'Forecast alerts are off.',
+    NotificationPlanState.missingForecast =>
+      'No forecast is available, so nothing is scheduled.',
+    NotificationPlanState.staleForecast =>
+      'The forecast is stale, so alerts are suppressed.',
+    NotificationPlanState.lowConfidence =>
+      'Forecast confidence is low, so alerts are suppressed.',
+    NotificationPlanState.noFutureWindows =>
+      'No eligible future windows are available today.',
+  };
+
+  static String _clock(DateTime value) {
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${value.hour >= 12 ? 'PM' : 'AM'}';
+  }
 }
 
 class _ProfileStat extends StatelessWidget {

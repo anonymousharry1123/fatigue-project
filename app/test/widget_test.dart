@@ -3,6 +3,7 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/demo_data.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/notification_service.dart';
 import 'package:app/src/today_dashboard_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,8 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  AppController readyController() {
-    final controller = AppController()
+  AppController readyController({NotificationService? notificationService}) {
+    final controller = AppController(notificationService: notificationService)
       ..isReady = true
       ..onboardingComplete = true
       ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
@@ -60,6 +61,36 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     expect(find.text('Connected data sources'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.20 exposes explicit forecast alert controls', (
+    tester,
+  ) async {
+    final notifications = _WidgetNotificationService();
+    final controller = readyController(notificationService: notifications);
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Forecast alerts'), 200);
+    await tester.tap(find.text('Forecast alerts'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('notification-master-switch')), findsOneWidget);
+    expect(find.textContaining('Permission is requested only'), findsOneWidget);
+    expect(find.textContaining('never presents a diagnosis'), findsOneWidget);
+    expect(controller.notificationsEnabled, isFalse);
+
+    await tester.tap(find.byKey(const Key('notification-master-switch')));
+    await tester.pumpAndSettle();
+
+    expect(notifications.permissionRequests, 1);
+    expect(controller.notificationsEnabled, isTrue);
+    expect(find.byKey(const Key('notification-crash-switch')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('notification-crash-switch')));
+    await tester.pumpAndSettle();
+    expect(controller.crashNotificationsEnabled, isFalse);
   });
 
   testWidgets('additional designs open from Add and Today', (tester) async {
@@ -652,4 +683,27 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+class _WidgetNotificationService implements NotificationService {
+  int permissionRequests = 0;
+
+  @override
+  bool get supportsScheduling => true;
+
+  @override
+  Future<void> cancelGuidance() async {}
+
+  @override
+  Future<NotificationPermissionState> permissionStatus() async =>
+      NotificationPermissionState.granted;
+
+  @override
+  Future<void> reconcile(List<GuidanceNotification> notifications) async {}
+
+  @override
+  Future<NotificationPermissionState> requestPermission() async {
+    permissionRequests += 1;
+    return NotificationPermissionState.granted;
+  }
 }

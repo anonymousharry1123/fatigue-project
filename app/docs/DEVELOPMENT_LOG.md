@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.19 — Fatigue Warnings (as of 2026-08-15)
+- **Current release:** Version 0.20 — Notifications (as of 2026-08-15)
 
 ## Implementation Report
 
@@ -31,7 +31,8 @@
 | 0.17 | Forecast-derived key windows + linked evidence | Complete |
 | 0.18 | Grounded, forecast-timed basic recommendations | Complete |
 | 0.19 | Multi-day, dismissible wellness-pattern warnings | Complete |
-| 0.20+ | Notifications, Insights trends, HealthKit, AI coach | Not started |
+| 0.20 | Opt-in, confidence-gated forecast notifications | Complete |
+| 0.21+ | Insights trends, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -54,7 +55,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-15 — **93 tests passed** for Version 0.19; static analysis clean
+- Last verified: 2026-08-15 — **101 tests passed** for Version 0.20; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -78,6 +79,7 @@
 19. Key Windows (forecast-derived focus/crash/recovery + linked evidence) - Complete (v0.17)
 20. Basic Recommendations (five grounded actions matched to forecast windows) - Complete (v0.18)
 21. Fatigue Warnings (seven-day wellness-pattern detection + dismissal) - Complete (v0.19)
+22. Notifications (explicit consent + confidence/freshness-gated local scheduling) - Complete (v0.20)
 
 ## Day-to-Day Entries
 
@@ -533,9 +535,70 @@ Coach experience rather than fixture-backed previews.
   controller reads existing daily alerts first, reapplies their dismissal
   state to stable IDs, and only then replaces the day's stored set.
 
+### 2026-08-15 — Version 0.20 Notifications
+
+**Branch:** `main`
+
+**Goal:** Complete explicit opt-in lower-energy and recovery notifications,
+connect them to the private forecast/risk data, and finish the native delivery,
+settings, migration, and regression work.
+
+**Results:**
+- Added Android, iOS, macOS, and Windows local scheduling through
+  `flutter_local_notifications`, with timezone-aware one-shot delivery and
+  Android boot restoration using inexact alarms.
+- Added a pure notification planner that schedules lower-energy guidance 15
+  minutes before an eligible crash window and recovery guidance at the start of
+  an eligible recovery window.
+- Suppressed all delivery for missing, older-than-12-hour, future-dated,
+  low-confidence, or already-past forecasts. Stable per-day IDs and full
+  reconciliation prevent duplicate Tonyo alerts.
+- Excluded dismissed `riskAlerts` from notification context and used only
+  generic, wellness-oriented notification copy; alert titles/details never
+  leave the app in a push body and no copy implies a diagnosis.
+- Replaced the Profile preview with explicit master consent, separate alert
+  category controls, permission/error status, and a next-scheduled summary.
+- Stored consent and category preferences locally and in `users/{uid}.prefs`
+  with `notificationPreferencesVersion: 1`; legacy preview defaults are treated
+  as off so they cannot silently become user consent.
+- Cancelled Tonyo-managed pending guidance on opt-out, sign-out, and reset;
+  web/Linux clearly report scheduled alerts as unavailable.
+- Bumped the app to `0.20.0+21` and the Firestore schema marker to Version 7.
+- `flutter test` passed all **101 tests**; `flutter analyze` reported no issues.
+- `flutter build macos --debug` completed successfully with native notification
+  registration linked.
+
+**Major issues:**
+- The Version 0.19 `notificationsEnabled` value defaulted on even though its UI
+  was only a preview. A versioned preference gate now requires a fresh explicit
+  Version 0.20 opt-in before any permission request or scheduling.
+- Scheduled web notifications are not supported reliably by the chosen Flutter
+  package. The service declares web/Linux unavailable instead of pretending a
+  preference will produce delivery.
+- Android build validation could not start because this machine has no Android
+  SDK; iOS simulator validation reached Xcode but the iOS platform is not
+  installed. Both are recorded as toolchain gaps; macOS native build validation
+  succeeded.
+- Refreshing guidance can change the eligible risk context. Notification
+  reconciliation now follows each guidance refresh and alert dismissal so only
+  the current deterministic schedule remains pending.
+
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.20 Notifications
+**Prompt:**
+"complete .20"
+
+**Result:** Completed explicit opt-in, native forecast notifications with
+freshness/confidence/dismissal suppression, private preference sync,
+non-diagnostic content, profile controls, migration safety, and end-to-end
+coverage.
+
+**Modifications:** Legacy preview preferences do not count as consent;
+Android uses inexact scheduling without exact-alarm permission; reliable
+scheduled delivery is marked unavailable on web/Linux.
 
 ### Feature: Versions 0.18 and 0.19
 **Prompt:**
@@ -778,5 +841,6 @@ state.
 - [x] Implement Version 0.17 forecast-derived Key Windows with linked evidence
 - [x] Implement Version 0.18 grounded, forecast-timed Basic Recommendations
 - [x] Implement Version 0.19 multi-day, dismissible Fatigue Warnings
+- [x] Implement Version 0.20 opt-in, confidence-gated Notifications
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history
