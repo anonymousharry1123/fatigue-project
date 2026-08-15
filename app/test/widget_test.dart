@@ -43,6 +43,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Daily Score Models'), 250);
     expect(find.text('Daily Score Models'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
@@ -91,6 +92,75 @@ void main() {
     await tester.tap(find.byKey(const Key('notification-crash-switch')));
     await tester.pumpAndSettle();
     expect(controller.crashNotificationsEnabled, isFalse);
+  });
+
+  testWidgets('Version 0.21 presents private calculated weekly insights', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final controller = AppController()
+      ..isReady = true
+      ..onboardingComplete = true
+      ..signals = [
+        for (var index = 0; index < 7; index++) ...[
+          SignalReading(
+            id: 'insight-sleep-$index',
+            type: SignalType.sleep,
+            value: 6.5 + index * .2,
+            timestamp: today.subtract(Duration(days: 6 - index)),
+          ),
+          SignalReading(
+            id: 'insight-study-$index',
+            type: SignalType.study,
+            value: 1 + index * .5,
+            timestamp: today.subtract(Duration(days: 6 - index)),
+          ),
+          SignalReading(
+            id: 'insight-exercise-$index',
+            type: SignalType.exercise,
+            value: .4 + index * .1,
+            timestamp: today.subtract(Duration(days: 6 - index)),
+          ),
+        ],
+      ];
+    await controller.refreshInsights();
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Forecast'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SegmentedButton<int>),
+        matching: find.text('Insights'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('7-day overview'), findsOneWidget);
+    expect(find.text('Avg sleep'), findsOneWidget);
+    expect(find.textContaining('no cohort comparisons'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('insights-daily-trend')),
+      220,
+    );
+    expect(find.byKey(const Key('insights-daily-trend')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('insight-metric-sleep')));
+    await tester.pump();
+    expect(find.textContaining('Latest logged sleep duration'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('insights-associations')),
+      220,
+    );
+    expect(
+      find.textContaining('do not establish that one behavior caused'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('additional designs open from Add and Today', (tester) async {
@@ -250,6 +320,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('Daily Score Models'), 250);
     expect(find.text('Daily Score Models'), findsOneWidget);
     expect(find.textContaining('100% coverage'), findsWidgets);
     expect(find.textContaining('% fresh'), findsWidgets);

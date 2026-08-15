@@ -11,6 +11,7 @@ import 'daily_history_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
+import 'insights_logic.dart';
 import 'models.dart';
 import 'notification_logic.dart';
 import 'notification_service.dart';
@@ -49,6 +50,7 @@ class AppController extends ChangeNotifier {
   bool isForecastLoading = false;
   bool isGuidanceLoading = false;
   bool isNotificationSyncing = false;
+  bool isInsightsLoading = false;
   DateTime? lastSync;
   String? accountEmail;
   String? cloudSyncError;
@@ -56,6 +58,7 @@ class AppController extends ChangeNotifier {
   String? forecastError;
   String? guidanceError;
   String? notificationError;
+  String? insightsError;
   NotificationPermissionState notificationPermission =
       NotificationPermissionState.unknown;
   UserProfile profile = const UserProfile();
@@ -66,6 +69,7 @@ class AppController extends ChangeNotifier {
   bool _scoreLoadedFromSnapshot = false;
   bool _forecastLoadedFromCloud = false;
   bool _guidanceSavedToCloud = false;
+  bool insightsLoadedFromCloud = false;
   final Map<String, List<ForecastPoint>> _forecastsByDay = {};
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
   final Set<String> _dismissedRiskAlertIds = {};
@@ -74,6 +78,7 @@ class AppController extends ChangeNotifier {
   NotificationPlan _notificationPlan = const NotificationPlan(
     state: NotificationPlanState.disabled,
   );
+  InsightsSnapshot? _insightsSnapshot;
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
   bool get isCloudAuthenticated => _accountAuth.currentSession != null;
@@ -83,6 +88,13 @@ class AppController extends ChangeNotifier {
   bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
   bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
   bool get guidanceSavedToCloud => _guidanceSavedToCloud;
+  InsightsSnapshot get insightsSnapshot =>
+      _insightsSnapshot ??
+      InsightsLogic.build(
+        now: DateTime.now(),
+        signals: const [],
+        checkIns: const [],
+      );
   bool get notificationSchedulingSupported =>
       _notificationService.supportsScheduling;
   NotificationPlan get notificationPlan => _notificationPlan;
@@ -600,6 +612,61 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshInsights({DateTime? day, bool notify = true}) async {
+    final clock = day ?? DateTime.now();
+    final targetDay = DateTime(clock.year, clock.month, clock.day);
+    final rangeStart = targetDay.subtract(
+      const Duration(days: InsightsLogic.queryLookbackDays - 1),
+    );
+    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+
+    isInsightsLoading = true;
+    insightsError = null;
+    if (notify) notifyListeners();
+    try {
+      if (session != null && repository != null) {
+        final values = await Future.wait<Object>([
+          repository.signalsByRange(
+            session.uid,
+            start: rangeStart,
+            end: rangeEnd,
+          ),
+          repository.checkInsByRange(
+            session.uid,
+            start: rangeStart,
+            end: rangeEnd,
+          ),
+        ]);
+        _insightsSnapshot = InsightsLogic.build(
+          now: clock,
+          signals: values[0] as List<SignalReading>,
+          checkIns: values[1] as List<DailyCheckIn>,
+        );
+        insightsLoadedFromCloud = true;
+        return;
+      }
+      _insightsSnapshot = InsightsLogic.build(
+        now: clock,
+        signals: signals,
+        checkIns: checkIns,
+      );
+      insightsLoadedFromCloud = false;
+    } on Object {
+      _insightsSnapshot = InsightsLogic.build(
+        now: clock,
+        signals: signals,
+        checkIns: checkIns,
+      );
+      insightsLoadedFromCloud = false;
+      insightsError = 'Cloud insights unavailable · using cached entries';
+    } finally {
+      isInsightsLoading = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString(_storageKey);
@@ -629,6 +696,7 @@ class AppController extends ChangeNotifier {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
       await refreshGuidance(notify: false);
+      await refreshInsights(notify: false);
     }
     isReady = true;
     notifyListeners();
@@ -656,6 +724,7 @@ class AppController extends ChangeNotifier {
           await refreshScores(notify: false);
           await refreshForecasts(notify: false);
           await refreshGuidance(notify: false);
+          await refreshInsights(notify: false);
           notifyListeners();
           return;
         }
@@ -683,6 +752,7 @@ class AppController extends ChangeNotifier {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
       await refreshGuidance(notify: false);
+      await refreshInsights(notify: false);
     }
     notifyListeners();
   }
@@ -695,6 +765,7 @@ class AppController extends ChangeNotifier {
     }
     await _accountAuth.signOut();
     cloudSyncError = null;
+    insightsLoadedFromCloud = false;
     _notificationPlan = const NotificationPlan(
       state: NotificationPlanState.disabled,
     );
@@ -1093,6 +1164,10 @@ class AppController extends ChangeNotifier {
     _recommendations = [];
     _riskAlerts = [];
     _guidanceSavedToCloud = false;
+    _insightsSnapshot = null;
+    isInsightsLoading = false;
+    insightsLoadedFromCloud = false;
+    insightsError = null;
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_storageKey);
     notifyListeners();
@@ -1130,6 +1205,9 @@ class AppController extends ChangeNotifier {
     if ((energyInputsChanged || forecastInputsChanged) && onboardingComplete) {
       await refreshForecasts(forceRecalculate: true);
       await refreshGuidance();
+    }
+    if (energyInputsChanged && onboardingComplete) {
+      await refreshInsights();
     }
   }
 
@@ -1222,6 +1300,9 @@ class AppController extends ChangeNotifier {
     _recommendations = [];
     _riskAlerts = [];
     _guidanceSavedToCloud = false;
+    _insightsSnapshot = null;
+    insightsLoadedFromCloud = false;
+    insightsError = null;
     if (!sameAccount) {
       _recommendationStatuses.clear();
       _dismissedRiskAlertIds.clear();
@@ -1257,6 +1338,9 @@ class AppController extends ChangeNotifier {
     _recommendations = [];
     _riskAlerts = [];
     _guidanceSavedToCloud = false;
+    _insightsSnapshot = null;
+    insightsLoadedFromCloud = false;
+    insightsError = null;
     _recommendationStatuses.clear();
     _dismissedRiskAlertIds.clear();
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;

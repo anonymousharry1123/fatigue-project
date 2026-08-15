@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.20 — Notifications (as of 2026-08-15)
+- **Current release:** Version 0.21 — Insights Dashboard (as of 2026-08-15)
 
 ## Implementation Report
 
@@ -32,7 +32,8 @@
 | 0.18 | Grounded, forecast-timed basic recommendations | Complete |
 | 0.19 | Multi-day, dismissible wellness-pattern warnings | Complete |
 | 0.20 | Opt-in, confidence-gated forecast notifications | Complete |
-| 0.21+ | Insights trends, HealthKit, AI coach | Not started |
+| 0.21 | Private calculated daily/weekly Insights dashboard | Complete |
+| 0.22+ | HealthKit, heart/sleep sync, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -55,7 +56,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-15 — **101 tests passed** for Version 0.20; static analysis clean
+- Last verified: 2026-08-15 — **107 tests passed** for Version 0.21; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -80,6 +81,7 @@
 20. Basic Recommendations (five grounded actions matched to forecast windows) - Complete (v0.18)
 21. Fatigue Warnings (seven-day wellness-pattern detection + dismissal) - Complete (v0.19)
 22. Notifications (explicit consent + confidence/freshness-gated local scheduling) - Complete (v0.20)
+23. Insights Dashboard (private daily charts + weekly comparison + non-causal associations) - Complete (v0.21)
 
 ## Day-to-Day Entries
 
@@ -583,9 +585,58 @@ settings, migration, and regression work.
   reconciliation now follows each guidance refresh and alert dismissal so only
   the current deterministic schedule remains pending.
 
+### 2026-08-15 — Version 0.21 Insights Dashboard
+
+**Branch:** `main`
+
+**Goal:** Replace the remaining Insights preview with calculated private daily
+and weekly trends sourced from the existing owner-scoped Firestore data.
+
+**Results:**
+- Added a pure Insights aggregation layer that displays the current seven days
+  chronologically and compares them with the prior seven days.
+- Aggregated latest nightly sleep, daily training totals, and daily study totals
+  from the user's date-range `signals`, while recalculating daily Energy and
+  Cognitive wellness estimates from the same private inputs.
+- Queried 20 days for authenticated users: 14 displayed/comparison days plus
+  six earlier context days required by the existing rolling score model. No new
+  collection, cross-user query, Security Rule, or schema version was needed.
+- Added responsive overview cards, prior-week deltas, selectable Energy/sleep/
+  training/study daily charts, explicit missing-data states, loading/offline
+  notices, and a private-source summary.
+- Added Pearson model-association summaries only when at least three matched
+  days have sufficient variation. Every association is labeled as model output,
+  not proof of cause; no cohort or other-user comparisons are performed.
+- Insights refreshes after startup/sign-in and relevant input mutations, with a
+  manual refresh control and local-cache fallback when cloud queries fail.
+- Bumped the app to `0.21.0+22`; Firestore remains at schema Version 7 because
+  the dashboard derives from existing records.
+- `flutter test` passed all **107 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- Treating an unlogged day as zero would invent behavior. Daily metrics retain
+  `null` for missing categories; an explicitly stored zero remains a real zero.
+- Multiple sleep rows on one day should not be summed into an impossible night.
+  Insights uses the latest valid sleep-duration row for that calendar day.
+- Correlations over sparse model-derived data can look more certain than they
+  are. Associations require three varied matched days, report sample size, and
+  use non-causal wording in both logic and UI.
+
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.21 Insights Dashboard
+**Prompt:**
+"complete .21"
+
+**Result:** Completed the calculated, owner-scoped Insights dashboard with
+daily charts, prior-week summaries, model-association safeguards, cloud/cache
+states, automatic refresh, and end-to-end coverage.
+
+**Modifications:** Used existing `signals` and `checkIns` rather than adding a
+new analytics collection. Missing days remain blank, and associations are
+sample-gated and explicitly non-causal.
 
 ### Feature: Version 0.20 Notifications
 **Prompt:**
@@ -842,5 +893,6 @@ state.
 - [x] Implement Version 0.18 grounded, forecast-timed Basic Recommendations
 - [x] Implement Version 0.19 multi-day, dismissible Fatigue Warnings
 - [x] Implement Version 0.20 opt-in, confidence-gated Notifications
+- [x] Implement Version 0.21 private calculated Insights Dashboard
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

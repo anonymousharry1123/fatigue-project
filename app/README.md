@@ -78,5 +78,12 @@ from notification context, and keeps all notification copy non-diagnostic.
 Master and per-alert preferences sync under the private `users/{uid}.prefs`
 map; scheduled delivery is available on Android, iOS, macOS, and Windows.
 
+Version 0.21 promotes Insights into a calculated private dashboard. It queries
+only the signed-in user's date-range signals and check-ins, compares the latest
+seven days with the prior seven, charts daily Energy, sleep, training, and study
+patterns, and summarizes model associations only when enough varied matched
+days exist. Missing entries remain missing, and all association copy explicitly
+avoids causal or medical claims.
+
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.

@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: August 15, 2026
-Current release: **Version 0.20 — Notifications**
+Current release: **Version 0.21 — Insights Dashboard**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -223,19 +223,19 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Query multi-day `signals` and `checkIns` ranges via Version 0.10-a helpers
 - Persist dismissible alerts in `riskAlerts` under the user document
 
-### Version 0.20 — Notifications ✅ Current
+### Version 0.20 — Notifications ✅
 
 - Add opt-in crash and recovery alerts driven by `riskAlerts` / forecast windows
 - Store notification prefs on `users/{uid}`; never send content that implies diagnosis
 - Suppress duplicate and low-confidence alerts using Firestore fields (`dismissed`, freshness)
 
-## Upcoming Versions
-
-### Version 0.21 — Insights Dashboard
+### Version 0.21 — Insights Dashboard ✅ Current
 
 - Promote the Insights preview into calculated daily and weekly trends
 - Aggregate sleep, training, and study from date-range `signals` queries
 - Explain model associations without presenting them as proven causes; do not expose other users’ data
+
+## Upcoming Versions
 
 ### Version 0.22 — HealthKit Permissions
 

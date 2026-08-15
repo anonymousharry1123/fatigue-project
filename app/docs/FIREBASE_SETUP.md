@@ -120,10 +120,18 @@ reset while preserving unrelated app notifications.
 - Hourly forecast range reads and day-scoped replacement
 - Daily recommendation and risk-alert reads/replacement
 - Risk-alert dismissal and guidance cleanup
+- Version 0.21 owner-scoped date ranges for private daily/weekly Insights
 - Full user export and recursive user-tree deletion
 
 The `signals(type, timestamp)` compound index is declared in
 `firestore.indexes.json`.
+
+Version 0.21 does not add a collection or broaden Security Rules. Insights
+queries up to 20 days of the authenticated user's existing `signals` and
+`checkIns`; the app displays the latest seven days, compares the prior seven,
+and retains six earlier days only as score-model context. Aggregates and
+association summaries are calculated on the client and are not shared across
+users or persisted as cohort analytics.
 
 ## Synthetic Cohort Lab
 
