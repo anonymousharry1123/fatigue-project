@@ -1,7 +1,7 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 4 adds forecast freshness metadata.
-const int cloudSchemaVersion = 4;
+/// Firestore schema version. Version 5 links forecasts to supporting evidence.
+const int cloudSchemaVersion = 5;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -249,12 +249,15 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
       }).toList(),
     );
 
-/// Version 0.15 hourly forecast document.
+/// Version 0.15+ hourly forecast document. Version 0.17 adds the exact signal
+/// and check-in document IDs used by the deterministic forecast.
 Map<String, Object?> forecastPointToCloud(ForecastPoint point) => {
   'time': point.time,
   'energy': point.energy,
   'uncertainty': point.uncertainty,
   'updatedAt': point.updatedAt ?? DateTime.now().toUtc(),
+  'signalEvidenceIds': point.signalEvidenceIds,
+  'checkInEvidenceIds': point.checkInEvidenceIds,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -276,7 +279,23 @@ ForecastPoint forecastPointFromCloud(Map<String, dynamic> data) {
     updatedAt: data['updatedAt'] == null
         ? null
         : cloudDateTime(data['updatedAt'], field: 'updatedAt'),
+    signalEvidenceIds: _cloudStringList(
+      data['signalEvidenceIds'],
+      field: 'signalEvidenceIds',
+    ),
+    checkInEvidenceIds: _cloudStringList(
+      data['checkInEvidenceIds'],
+      field: 'checkInEvidenceIds',
+    ),
   );
+}
+
+List<String> _cloudStringList(Object? value, {required String field}) {
+  if (value == null) return const [];
+  if (value is! List || value.any((item) => item is! String)) {
+    throw FormatException('$field must be a list of document IDs.');
+  }
+  return value.cast<String>().toSet().toList(growable: false);
 }
 
 /// Reserved Version 0.18+ recommendation document.

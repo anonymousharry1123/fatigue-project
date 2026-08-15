@@ -391,11 +391,15 @@ class ForecastPoint {
     this.energy,
     this.uncertainty, {
     this.updatedAt,
+    this.signalEvidenceIds = const [],
+    this.checkInEvidenceIds = const [],
   });
   final DateTime time;
   final double energy;
   final double uncertainty;
   final DateTime? updatedAt;
+  final List<String> signalEvidenceIds;
+  final List<String> checkInEvidenceIds;
 }
 
 class ForecastDaySummary {
@@ -467,19 +471,44 @@ class ForecastDaySummary {
 
 enum ForecastWindowType { peak, crash, recovery }
 
+enum ForecastEvidenceKind { signal, checkIn }
+
+class ForecastEvidence {
+  const ForecastEvidence({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.detail,
+    required this.timestamp,
+    this.signalType,
+    this.source,
+  });
+
+  final String id;
+  final ForecastEvidenceKind kind;
+  final String label;
+  final String detail;
+  final DateTime timestamp;
+  final SignalType? signalType;
+  final SignalSource? source;
+}
+
 class ForecastWindow {
   const ForecastWindow(
     this.type,
     this.start,
     this.end,
     this.energy,
-    this.reason,
+    this.reason, {
+    this.evidence = const [],
+  }
   );
   final ForecastWindowType type;
   final DateTime start;
   final DateTime end;
   final int energy;
   final String reason;
+  final List<ForecastEvidence> evidence;
 }
 
 enum RecommendationStatus { suggested, accepted, completed, dismissed }
