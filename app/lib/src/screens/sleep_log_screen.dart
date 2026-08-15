@@ -36,8 +36,13 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final logs = controller.sleepLogs;
-    final previewEnd = _normalizedWakeTime;
-    final previewDuration = previewEnd.difference(_bedtime);
+    final normalized = SleepLogEntry.normalizeOvernightPair(
+      bedtime: _bedtime,
+      wakeTime: _wakeTime,
+    );
+    final previewBedtime = normalized.$1;
+    final previewWake = normalized.$2;
+    final previewDuration = previewWake.difference(previewBedtime);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sleep Log'),
@@ -77,7 +82,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         child: _TimeButton(
                           key: const Key('wake-time-button'),
                           label: 'Wake time',
-                          time: previewEnd,
+                          time: previewWake,
                           icon: Icons.wb_sunny_rounded,
                           onTap: () => _pickTime(isBedtime: false),
                         ),
@@ -222,10 +227,6 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     );
   }
 
-  DateTime get _normalizedWakeTime => _wakeTime.isAfter(_bedtime)
-      ? _wakeTime
-      : _wakeTime.add(const Duration(days: 1));
-
   Future<void> _pickTime({required bool isBedtime}) async {
     final current = isBedtime ? _bedtime : _wakeTime;
     final picked = await showTimePicker(
@@ -241,18 +242,26 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
         picked.hour,
         picked.minute,
       );
-      if (isBedtime) {
-        _bedtime = updated;
-      } else {
-        _wakeTime = updated;
-      }
+      final nextBedtime = isBedtime ? updated : _bedtime;
+      final nextWake = isBedtime ? _wakeTime : updated;
+      final normalized = SleepLogEntry.normalizeOvernightPair(
+        bedtime: nextBedtime,
+        wakeTime: nextWake,
+      );
+      _bedtime = normalized.$1;
+      _wakeTime = normalized.$2;
     });
   }
 
   Future<void> _save() async {
-    final end = _normalizedWakeTime;
-    final validation = SleepLogEntry.validationMessage(
+    final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: _bedtime,
+      wakeTime: _wakeTime,
+    );
+    final start = normalized.$1;
+    final end = normalized.$2;
+    final validation = SleepLogEntry.validationMessage(
+      bedtime: start,
       wakeTime: end,
       quality: _quality,
     );
@@ -265,7 +274,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     setState(() => _saving = true);
     await AppScope.of(context).addSleep(
       id: _editingId,
-      bedtime: _bedtime,
+      bedtime: start,
       wakeTime: end,
       quality: _quality,
     );

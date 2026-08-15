@@ -155,7 +155,7 @@ void main() {
     expect(find.text('8.0 hr'), findsOneWidget);
     expect(find.text('2.2 L'), findsOneWidget);
     expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
-    expect(find.textContaining('5/5 cognitive inputs'), findsOneWidget);
+    expect(find.textContaining('6/6 cognitive inputs'), findsOneWidget);
     expect(find.textContaining('First Cognitive Score'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Today’s score factors'), 250);
     expect(find.text('Today’s score factors'), findsOneWidget);

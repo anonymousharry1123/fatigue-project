@@ -128,6 +128,8 @@ abstract interface class CloudRepository {
 
   Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day);
 
+  /// Deletes all persisted scoreSnapshots under the user (keeps profile).
+  Future<void> clearScoreSnapshots(String uid);
   Future<List<ForecastPoint>> forecastPointsByRange(
     String uid, {
     required DateTime start,
@@ -250,6 +252,12 @@ class MemoryCloudRepository implements CloudRepository {
   Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day) async {
     _authorize(uid);
     return _scores[uid]?[scoreSnapshotId(day)];
+  }
+
+  @override
+  Future<void> clearScoreSnapshots(String uid) async {
+    _authorize(uid);
+    _scores.remove(uid);
   }
 
   @override

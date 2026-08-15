@@ -420,11 +420,19 @@ class AppController extends ChangeNotifier {
     if (raw != null) {
       try {
         _restoreLocal(jsonDecode(raw) as Map<String, dynamic>);
-      } on Object {
+      } on Object catch (error) {
+        // Keep whatever defaults we have; do not treat a parse failure as a
+        // fresh install silently — log so web/debug storage issues are visible.
+        debugPrint('Tonyo failed to restore local cache: $error');
         onboardingComplete = false;
         signals = [];
         checkIns = [];
       }
+    } else {
+      debugPrint(
+        'Tonyo local cache empty (key $_storageKey). '
+        'On Flutter web, use a fixed --web-port so localhost storage persists.',
+      );
     }
     healthAvailable = await _healthService.isAvailable();
     if (isCloudAuthenticated) {
@@ -580,15 +588,19 @@ class AppController extends ChangeNotifier {
     required DateTime wakeTime,
     required double quality,
   }) async {
-    var end = wakeTime;
-    if (!end.isAfter(bedtime)) end = end.add(const Duration(days: 1));
-    final validation = SleepLogEntry.validationMessage(
+    final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: bedtime,
+      wakeTime: wakeTime,
+    );
+    final start = normalized.$1;
+    final end = normalized.$2;
+    final validation = SleepLogEntry.validationMessage(
+      bedtime: start,
       wakeTime: end,
       quality: quality,
     );
     if (validation != null) throw ArgumentError(validation);
-    final hours = end.difference(bedtime).inMinutes / 60;
+    final hours = end.difference(start).inMinutes / 60;
     final groupId = id ?? 'sleep-${DateTime.now().microsecondsSinceEpoch}';
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(0, [
@@ -599,15 +611,14 @@ class AppController extends ChangeNotifier {
         value: hours,
         timestamp: end,
         quality: quality / 5,
-        note:
-            '${_clock(bedtime)}–${_clock(end)} · quality ${quality.round()}/5',
+        note: '${_clock(start)}–${_clock(end)} · quality ${quality.round()}/5',
       ),
       SignalReading(
         id: '$groupId-bedtime',
         groupId: groupId,
         type: SignalType.bedtime,
-        value: bedtime.hour + bedtime.minute / 60,
-        timestamp: bedtime,
+        value: start.hour + start.minute / 60,
+        timestamp: start,
       ),
     ]);
     await _commit(energyInputsChanged: true);
@@ -731,6 +742,24 @@ class AppController extends ChangeNotifier {
     if (session == null || repository == null) return exportJson();
     final exported = await repository.exportUser(session.uid);
     return const JsonEncoder.withIndent('  ').convert(exported);
+  }
+
+  /// Clears signals, check-ins, and score snapshots but keeps the account and
+  /// profile so the user can start a fresh manual tracking period.
+  Future<void> clearTrackingData() async {
+    signals = [];
+    checkIns = [];
+    _scoreSnapshot = null;
+    _todaySignals = [];
+    _scoreLoadedFromSnapshot = false;
+    energyScoreError = null;
+    _recommendationStatuses.clear();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      await repository.clearScoreSnapshots(session.uid);
+    }
+    await _commit(energyInputsChanged: true);
   }
 
   /// Permanently removes all documents under users/{uid}, deletes the Firebase

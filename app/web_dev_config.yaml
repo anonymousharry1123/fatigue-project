@@ -1,0 +1,4 @@
+# Fixed port so SharedPreferences / local cache persist across `flutter run -d edge`.
+# See: https://docs.flutter.dev/platform-integration/web/web-dev-config-file
+server:
+  port: 7357

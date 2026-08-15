@@ -176,7 +176,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Compare the result with the previous day’s `scoreSnapshots` document
 - Write cognitive fields onto the same daily snapshot schema from Version 0.10-a
 - Personalize the reaction-time contribution against prior valid reaction tests when a baseline exists
-- Keep Cognitive drivers, confidence, and five-input completeness separate from Energy model metadata
+- Keep Cognitive drivers, confidence, and six-input completeness separate from Energy model metadata
 - Treat Version 0.11 Energy-only documents as valid legacy snapshots without creating a false zero-score comparison
 - Show the estimate, previous-day change, leading contributions, loading/offline state, and wellness-only language in Today and Insights
 - Keep the synthetic Cohort Lab compatible with the shared engine and show separate Energy/Cognitive driver cards

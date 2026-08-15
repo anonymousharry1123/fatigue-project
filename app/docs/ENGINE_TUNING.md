@@ -4,6 +4,8 @@ Use this checklist whenever you change scoring weights. The synthetic cohort
 (~3000 students) is the shared simulator; Versions 0.11–0.12 persist Energy
 and Cognitive scores through the live-app path. Keep both aligned.
 
+Record each attempt in [`ENGINE_TUNING_LOG.md`](./ENGINE_TUNING_LOG.md).
+
 ## Goals
 
 - Change one driver family at a time (sleep, screen, exercise, caffeine, check-in).
@@ -28,6 +30,7 @@ and Cognitive scores through the live-app path. Keep both aligned.
 - [ ] Open **Cohort Lab → Load CSV** (or **Recompute** if already loaded).
 - [ ] Record Overview: `N`, mean/median **Energy**, mean/median **Cognitive**.
 - [ ] Glance Relations: sleep→energy/cognitive, screen→energy, caffeine→energy.
+- [ ] Tap **Freeze baseline** so Relations keeps a Before pane across hot restart.
 - [ ] Spot-check 3 outlier people via **People → Sort**:
   1. Sort **Sleep ↑ low** → open the first 3 → confirm low sleep pulls energy down and Sleep appears in drivers.
   2. Sort **Screen ↓ high** → open the first 3 → confirm high folded screen shows up in Energy drivers.
@@ -47,8 +50,8 @@ Edit only the relevant block in [`lib/src/fatigue_engine.dart`](../lib/src/fatig
 
 | Driver | What to touch | Cohort signal to watch |
 |--------|---------------|------------------------|
-| Sleep | sleep → energy (and cognitive sleep term) | Relations → Sleep vs Energy |
-| Screen | Energy screen-time penalty | Screen+social vs Energy |
+| Sleep | sleep → energy (and cognitive sleep term) | Relations → Sleep vs Energy / Cognitive |
+| Screen | Energy screen-time penalty; Cognitive folded screen+social term | Screen+social vs Energy / Cognitive |
 | Exercise | daily load thresholds (CSV uses weekly/7) | Exercise vs Energy |
 | Caffeine | mild + for 0–2 drinks, − for excess | Caffeine vs Energy |
 | Check-in | Energy and Cognitive mood/stress terms | People with high `stress_level` / burnout |
@@ -61,10 +64,12 @@ are not in the synthetic file (unless you add fixtures).
 ### 4. Recompute
 
 - [ ] Hot restart or relaunch if needed.
-- [ ] Cohort Lab → **Recompute**.
-- [ ] Compare new mean/median energy & cognitive to the baseline.
+- [ ] Cohort Lab → **Recompute** (frozen baseline stays; live plots update).
+- [ ] Relations: compare **Before** vs **After** on the shared axis scale.
+- [ ] Compare new mean/median energy & cognitive to the baseline (Overview also shows freeze → live).
 - [ ] Confirm the target scatter moved in the hypothesized direction.
 - [ ] Confirm other scatters did not wildly invert (no “fix everything”).
+- [ ] **Clear baseline** when starting a new tuning attempt.
 
 ### 5. Guardrails (fail the change if any fail)
 

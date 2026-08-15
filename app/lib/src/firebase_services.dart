@@ -308,6 +308,20 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<void> clearScoreSnapshots(String uid) async {
+    final collection = _user(uid).collection('scoreSnapshots');
+    while (true) {
+      final page = await collection.limit(100).get();
+      if (page.docs.isEmpty) break;
+      final batch = _firestore.batch();
+      for (final document in page.docs) {
+        batch.delete(document.reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
   Future<List<ForecastPoint>> forecastPointsByRange(
     String uid, {
     required DateTime start,

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app_controller.dart';
 import '../../synthetic/cohort_repository.dart';
@@ -24,9 +25,12 @@ class AdminCohortScreen extends StatefulWidget {
 
 class _AdminCohortScreenState extends State<AdminCohortScreen>
     with SingleTickerProviderStateMixin {
+  static const _baselinePrefsKey = 'tonyo_cohort_relations_baseline_v1';
+
   late final TabController _tabs;
   List<SyntheticPerson> _people = const [];
   CohortSummary? _summary;
+  CohortSummary? _baselineSummary;
   String? _status;
   String? _error;
   bool _busy = false;
@@ -37,12 +41,62 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _restoreBaseline();
   }
 
   @override
   void dispose() {
     _tabs.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreBaseline() async {
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString(_baselinePrefsKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final baseline = CohortSummary.fromCloud(
+        Map<String, dynamic>.from(decoded),
+      );
+      if (!mounted) return;
+      setState(() => _baselineSummary = baseline);
+    } catch (_) {
+      // Ignore corrupt baseline freeze.
+    }
+  }
+
+  Future<void> _freezeBaseline() async {
+    final summary = _summary;
+    if (summary == null || summary.n == 0) {
+      setState(() => _error = 'Load/Recompute the cohort before freezing.');
+      return;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _baselinePrefsKey,
+      jsonEncode(summary.toBaselineJson()),
+    );
+    if (!mounted) return;
+    setState(() {
+      _baselineSummary = summary;
+      _error = null;
+      _status =
+          'Frozen Relations baseline · E ${summary.meanEnergy.toStringAsFixed(0)} / '
+          'C ${summary.meanCognitive.toStringAsFixed(0)} '
+          '(survives hot restart)';
+    });
+  }
+
+  Future<void> _clearBaseline() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_baselinePrefsKey);
+    if (!mounted) return;
+    setState(() {
+      _baselineSummary = null;
+      _status = 'Cleared Relations baseline';
+    });
   }
 
   Future<void> _loadAsset() async {
@@ -271,6 +325,16 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
                   child: const Text('Recompute'),
                 ),
                 FilledButton.tonal(
+                  onPressed: _busy || _summary == null ? null : _freezeBaseline,
+                  child: const Text('Freeze baseline'),
+                ),
+                TextButton(
+                  onPressed: _busy || _baselineSummary == null
+                      ? null
+                      : _clearBaseline,
+                  child: const Text('Clear baseline'),
+                ),
+                FilledButton.tonal(
                   onPressed: _busy ? null : _publish,
                   child: const Text('Publish'),
                 ),
@@ -325,8 +389,8 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
             child: TabBarView(
               controller: _tabs,
               children: [
-                _OverviewTab(summary: summary),
-                _RelationsTab(summary: summary),
+                _OverviewTab(summary: summary, baseline: _baselineSummary),
+                _RelationsTab(summary: summary, baseline: _baselineSummary),
                 _PeopleTab(
                   people: _filtered,
                   onQuery: (value) => setState(() => _query = value),
@@ -371,9 +435,10 @@ extension on _PeopleSort {
 }
 
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.summary});
+  const _OverviewTab({required this.summary, this.baseline});
 
   final CohortSummary? summary;
+  final CohortSummary? baseline;
 
   @override
   Widget build(BuildContext context) {
@@ -387,9 +452,30 @@ class _OverviewTab extends StatelessWidget {
       );
     }
     final s = summary!;
+    final b = baseline;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
+        if (b != null && b.n > 0) ...[
+          TonyoCard(
+            child: Text(
+              'Baseline freeze · Energy ${b.meanEnergy.toStringAsFixed(0)}'
+              ' (med ${b.medianEnergy.toStringAsFixed(0)}) → '
+              '${s.meanEnergy.toStringAsFixed(0)}'
+              ' (med ${s.medianEnergy.toStringAsFixed(0)}) · '
+              'Cognitive ${b.meanCognitive.toStringAsFixed(0)}'
+              ' (med ${b.medianCognitive.toStringAsFixed(0)}) → '
+              '${s.meanCognitive.toStringAsFixed(0)}'
+              ' (med ${s.medianCognitive.toStringAsFixed(0)})',
+              style: const TextStyle(
+                color: TonyoColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Row(
           children: [
             _StatCard('N', '${s.n}', TonyoColors.primary),
@@ -445,9 +531,10 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _RelationsTab extends StatelessWidget {
-  const _RelationsTab({required this.summary});
+  const _RelationsTab({required this.summary, this.baseline});
 
   final CohortSummary? summary;
+  final CohortSummary? baseline;
 
   @override
   Widget build(BuildContext context) {
@@ -460,54 +547,167 @@ class _RelationsTab extends StatelessWidget {
       );
     }
     final s = summary!;
+    final b = baseline;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        TonyoCard(
-          child: CohortScatterChart(
-            points: s.sleepVsEnergy,
-            xLabel: 'Sleep (hr)',
-            yLabel: 'Energy',
-            color: TonyoColors.mint,
+        if (b != null && b.n > 0)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Before = frozen baseline · After = live Recompute. '
+              'Axes share the same scale for each pair.',
+              style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+            ),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Tip: Freeze baseline, edit FatigueEngine, hot restart, '
+              'Recompute — then compare Before/After here.',
+              style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+            ),
           ),
+        _RelationCompareCard(
+          live: s.sleepVsEnergy,
+          frozen: b?.sleepVsEnergy,
+          xLabel: 'Sleep (hr)',
+          yLabel: 'Energy',
+          color: TonyoColors.mint,
         ),
         const SizedBox(height: 12),
-        TonyoCard(
-          child: CohortScatterChart(
-            points: s.screenVsCognitive,
-            xLabel: 'Screen+social (hr)',
-            yLabel: 'Cognitive',
-            color: TonyoColors.violet,
-          ),
+        _RelationCompareCard(
+          live: s.sleepVsCognitive,
+          frozen: b?.sleepVsCognitive,
+          xLabel: 'Sleep (hr)',
+          yLabel: 'Cognitive',
+          color: TonyoColors.blue,
         ),
         const SizedBox(height: 12),
-        TonyoCard(
-          child: CohortScatterChart(
-            points: s.studyVsCognitive,
-            xLabel: 'Study (hr)',
-            yLabel: 'Cognitive',
-            color: TonyoColors.blue,
-          ),
+        _RelationCompareCard(
+          live: s.screenVsEnergy,
+          frozen: b?.screenVsEnergy,
+          xLabel: 'Screen+social (hr)',
+          yLabel: 'Energy',
+          color: TonyoColors.coral,
         ),
         const SizedBox(height: 12),
-        TonyoCard(
-          child: CohortScatterChart(
-            points: s.exerciseVsEnergy,
-            xLabel: 'Exercise daily (hr)',
-            yLabel: 'Energy',
-            color: TonyoColors.coral,
-          ),
+        _RelationCompareCard(
+          live: s.screenVsCognitive,
+          frozen: b?.screenVsCognitive,
+          xLabel: 'Screen+social (hr)',
+          yLabel: 'Cognitive',
+          color: TonyoColors.violet,
         ),
         const SizedBox(height: 12),
-        TonyoCard(
-          child: CohortScatterChart(
-            points: s.caffeineVsEnergy,
-            xLabel: 'Caffeine (drinks)',
-            yLabel: 'Energy',
-            color: TonyoColors.amber,
-          ),
+        _RelationCompareCard(
+          live: s.studyVsCognitive,
+          frozen: b?.studyVsCognitive,
+          xLabel: 'Study (hr)',
+          yLabel: 'Cognitive',
+          color: TonyoColors.blue,
+        ),
+        const SizedBox(height: 12),
+        _RelationCompareCard(
+          live: s.exerciseVsEnergy,
+          frozen: b?.exerciseVsEnergy,
+          xLabel: 'Exercise daily (hr)',
+          yLabel: 'Energy',
+          color: TonyoColors.coral,
+        ),
+        const SizedBox(height: 12),
+        _RelationCompareCard(
+          live: s.caffeineVsEnergy,
+          frozen: b?.caffeineVsEnergy,
+          xLabel: 'Caffeine (drinks)',
+          yLabel: 'Energy',
+          color: TonyoColors.amber,
         ),
       ],
+    );
+  }
+}
+
+class _RelationCompareCard extends StatelessWidget {
+  const _RelationCompareCard({
+    required this.live,
+    required this.frozen,
+    required this.xLabel,
+    required this.yLabel,
+    required this.color,
+  });
+
+  final List<CohortScatterPoint> live;
+  final List<CohortScatterPoint>? frozen;
+  final String xLabel;
+  final String yLabel;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final before = frozen;
+    if (before == null || before.isEmpty) {
+      return TonyoCard(
+        child: CohortScatterChart(
+          points: live,
+          xLabel: xLabel,
+          yLabel: yLabel,
+          color: color,
+        ),
+      );
+    }
+
+    final domain = CohortScatterChart.sharedDomain(before, live);
+    final charts = [
+      CohortScatterChart(
+        points: before,
+        xLabel: xLabel,
+        yLabel: yLabel,
+        badge: 'Before',
+        color: TonyoColors.muted,
+        height: 170,
+        fixedMinX: domain.minX,
+        fixedMaxX: domain.maxX,
+        fixedMinY: domain.minY,
+        fixedMaxY: domain.maxY,
+      ),
+      CohortScatterChart(
+        points: live,
+        xLabel: xLabel,
+        yLabel: yLabel,
+        badge: 'After',
+        color: color,
+        height: 170,
+        fixedMinX: domain.minX,
+        fixedMaxX: domain.maxX,
+        fixedMinY: domain.minY,
+        fixedMaxY: domain.maxY,
+      ),
+    ];
+
+    return TonyoCard(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 720) {
+            return Column(
+              children: [
+                charts[0],
+                const SizedBox(height: 12),
+                charts[1],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: charts[0]),
+              const SizedBox(width: 12),
+              Expanded(child: charts[1]),
+            ],
+          );
+        },
+      ),
     );
   }
 }

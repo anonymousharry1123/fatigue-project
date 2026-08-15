@@ -426,6 +426,63 @@ class ProfileScreen extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(
+                Icons.restart_alt_rounded,
+                color: TonyoColors.amber,
+              ),
+              title: const Text('Reset tracking data'),
+              subtitle: const Text(
+                'Clear check-ins, activity, sleep, and scores. Keep account.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              onTap: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('Reset tracking data?'),
+                    content: const Text(
+                      'This clears your check-ins, signals (activity, sleep, reaction, etc.), and saved energy score snapshots so you can start a blank manual tracking period.\n\nYour account, profile, and login stay. This cannot be undone.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('Reset tracking'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true) return;
+                try {
+                  await controller.clearTrackingData();
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Tracking data cleared. You can start logging from blank.',
+                        ),
+                      ),
+                    );
+                  }
+                } on Object {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Reset could not finish. Check your connection and retry.',
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
                 Icons.delete_outline_rounded,
                 color: TonyoColors.coral,
               ),

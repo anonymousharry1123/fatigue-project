@@ -22,6 +22,23 @@ saved daily Energy and Cognitive scores when available, calculates them live
 when missing, labels the day Fresh, Moderate, or Fatigued, and summarizes six
 day-scoped signals from the private user collection.
 
+### Flutter web persistence (Edge / Chrome)
+
+SharedPreferences on web is stored per origin (`http://localhost:<port>`). A
+plain `flutter run -d edge` often picks a **new port** each launch, which looks
+like a wiped cache and sends you through onboarding again. Use a fixed port:
+
+```sh
+flutter run -d edge --web-port=7357
+```
+
+With Firebase:
+
+```sh
+flutter run -d edge --web-port=7357 --dart-define-from-file=config/firebase_options.json
+```
+
+VS Code launch configs under `../.vscode/launch.json` already set `--web-port=7357`.
 Version 0.14 ranks supporting and reducing score drivers, explains each
 contribution in plain language, and calculates confidence from both input
 coverage and evidence freshness. Driver timestamps, sources, and freshness are
