@@ -60,5 +60,16 @@ from the saved hourly forecast. Forecast documents retain the exact private
 signal and check-in IDs used by the model, and each window resolves those links
 into plain-language evidence without exposing unrelated records.
 
+Version 0.18 turns those windows into a grounded daily plan for study,
+hydration, a short nap, recovery, and exercise. Every action has a stable daily
+ID, a forecast-window time, and links to the recent private signals or check-ins
+that support it; authenticated plans are persisted in `recommendations`.
+
+Version 0.19 adds dismissible wellness flags for multi-day short sleep,
+possible training overreaching alongside lower estimated energy, and recurring
+low-energy/high-stress check-ins. The detector uses only the authenticated
+user's last seven days, stores evidence-linked rows in `riskAlerts`, and avoids
+diagnostic claims.
+
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.

@@ -191,36 +191,39 @@ void main() {
     expect(auth.currentSession, isNull);
   });
 
-  test('clearTrackingData wipes logs but keeps the signed-in account', () async {
-    final auth = MemoryAccountAuth();
-    final repository = MemoryCloudRepository(signedInUid: 'test-uid');
-    final controller = AppController(
-      accountAuth: auth,
-      cloudRepository: repository,
-    );
-    await controller.load();
-    await controller.completeOnboarding(
-      const UserProfile(name: 'Fresh start'),
-      email: 'fresh@example.com',
-      password: 'secure-pass',
-    );
-    await controller.addCheckIn(energy: 6, mood: 6, stress: 4);
-    await controller.addSignal(SignalType.hydration, 2.0);
-    expect(controller.checkIns, isNotEmpty);
-    expect(controller.signals, isNotEmpty);
+  test(
+    'clearTrackingData wipes logs but keeps the signed-in account',
+    () async {
+      final auth = MemoryAccountAuth();
+      final repository = MemoryCloudRepository(signedInUid: 'test-uid');
+      final controller = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await controller.load();
+      await controller.completeOnboarding(
+        const UserProfile(name: 'Fresh start'),
+        email: 'fresh@example.com',
+        password: 'secure-pass',
+      );
+      await controller.addCheckIn(energy: 6, mood: 6, stress: 4);
+      await controller.addSignal(SignalType.hydration, 2.0);
+      expect(controller.checkIns, isNotEmpty);
+      expect(controller.signals, isNotEmpty);
 
-    await controller.clearTrackingData();
+      await controller.clearTrackingData();
 
-    expect(controller.onboardingComplete, isTrue);
-    expect(controller.accountEmail, 'fresh@example.com');
-    expect(controller.profile.name, 'Fresh start');
-    expect(controller.checkIns, isEmpty);
-    expect(controller.signals, isEmpty);
-    expect(auth.currentSession, isNotNull);
-    final cloud = await repository.readUser('test-uid');
-    expect(cloud?.checkIns, isEmpty);
-    expect(cloud?.signals, isEmpty);
-  });
+      expect(controller.onboardingComplete, isTrue);
+      expect(controller.accountEmail, 'fresh@example.com');
+      expect(controller.profile.name, 'Fresh start');
+      expect(controller.checkIns, isEmpty);
+      expect(controller.signals, isEmpty);
+      expect(auth.currentSession, isNotNull);
+      final cloud = await repository.readUser('test-uid');
+      expect(cloud?.checkIns, isEmpty);
+      expect(cloud?.signals, isEmpty);
+    },
+  );
 
   test(
     'Versions 0.11–0.12 query cloud inputs and update one daily snapshot',
@@ -603,6 +606,123 @@ void main() {
             .forecastSummariesFor(day)
             .every((summary) => !summary.isStaleAt(DateTime.now())),
         isTrue,
+      );
+    },
+  );
+
+  test(
+    'Versions 0.18–0.19 persist grounded guidance and alert dismissal',
+    () async {
+      final now = DateTime.now();
+      final day = DateTime(now.year, now.month, now.day);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'guidance-uid',
+          email: 'guidance@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'guidance-uid')
+        ..seed(
+          'guidance-uid',
+          CloudUserState(
+            profile: const UserProfile(name: 'Guidance Maya'),
+            accountEmail: 'guidance@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: true,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [
+              for (var index = 0; index < 4; index++)
+                SignalReading(
+                  id: 'short-sleep-$index',
+                  type: SignalType.sleep,
+                  value: 5.4,
+                  timestamp: now.subtract(Duration(days: index)),
+                ),
+              SignalReading(
+                id: 'bedtime',
+                type: SignalType.bedtime,
+                value: 1,
+                timestamp: now.subtract(const Duration(hours: 6)),
+              ),
+              for (var index = 0; index < 3; index++)
+                SignalReading(
+                  id: 'exercise-$index',
+                  type: SignalType.exercise,
+                  value: 2.5,
+                  timestamp: now.subtract(Duration(days: index)),
+                ),
+              SignalReading(
+                id: 'study',
+                type: SignalType.study,
+                value: 6,
+                timestamp: now.subtract(const Duration(hours: 2)),
+              ),
+              SignalReading(
+                id: 'hydration',
+                type: SignalType.hydration,
+                value: .7,
+                timestamp: now.subtract(const Duration(hours: 1)),
+              ),
+            ],
+            checkIns: [
+              for (var index = 0; index < 3; index++)
+                DailyCheckIn(
+                  id: 'strained-$index',
+                  timestamp: now.subtract(Duration(days: index)),
+                  energy: 3,
+                  mood: 4,
+                  stress: 9,
+                ),
+            ],
+          ),
+        );
+      final first = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+
+      await first.load();
+
+      final persistedRecommendations = await repository.recommendationsForDay(
+        'guidance-uid',
+        day,
+      );
+      final persistedAlerts = await repository.riskAlertsForDay(
+        'guidance-uid',
+        day,
+      );
+      expect(first.recommendations, hasLength(5));
+      expect(first.recommendations.every((item) => item.isGrounded), isTrue);
+      expect(persistedRecommendations, hasLength(5));
+      expect(persistedAlerts.map((item) => item.category).toSet(), {
+        RiskAlertCategory.sleepDebt,
+        RiskAlertCategory.trainingLoad,
+        RiskAlertCategory.fatigueStress,
+      });
+      expect(first.guidanceSavedToCloud, isTrue);
+      expect(first.guidanceError, isNull);
+
+      final dismissedId = persistedAlerts.first.id;
+      await first.dismissRiskAlert(dismissedId);
+      expect(first.alerts.map((item) => item.id), isNot(contains(dismissedId)));
+
+      final restored = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await restored.load();
+
+      expect(
+        restored.allAlerts
+            .singleWhere((item) => item.id == dismissedId)
+            .dismissed,
+        isTrue,
+      );
+      expect(
+        restored.alerts.map((item) => item.id),
+        isNot(contains(dismissedId)),
       );
     },
   );

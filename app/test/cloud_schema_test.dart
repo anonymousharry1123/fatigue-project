@@ -193,16 +193,40 @@ void main() {
         forecast.cast<String, dynamic>(),
       );
       final recommendation = recommendationToCloud(
-        const Recommendation(
+        Recommendation(
           id: 'rec-1',
           title: 'Hydrate',
           detail: 'Drink water',
-          timeLabel: 'Now',
-          category: 'recovery',
+          timeLabel: '1:30 PM',
+          category: 'Hydration',
+          priority: RecommendationPriority.important,
+          windowType: ForecastWindowType.crash,
+          scheduledAt: DateTime.utc(2026, 7, 28, 13, 30),
+          day: DateTime.utc(2026, 7, 28),
+          generatedAt: forecastUpdatedAt,
+          signalEvidenceIds: const ['hydration-1'],
+          checkInEvidenceIds: const ['check-in-1'],
         ),
       );
       final alert = riskAlertToCloud(
-        const RiskAlert('Sleep trend', 'Short sleep', AlertSeverity.caution),
+        RiskAlert(
+          'Sleep trend',
+          'Short sleep',
+          AlertSeverity.caution,
+          id: 'alert-1',
+          category: RiskAlertCategory.sleepDebt,
+          day: DateTime.utc(2026, 7, 28),
+          detectedAt: forecastUpdatedAt,
+          signalEvidenceIds: const ['sleep-1'],
+        ),
+      );
+      final restoredRecommendation = recommendationFromCloud(
+        'rec-1',
+        recommendation.cast<String, dynamic>(),
+      );
+      final restoredAlert = riskAlertFromCloud(
+        'alert-1',
+        alert.cast<String, dynamic>(),
       );
 
       expect(
@@ -224,9 +248,40 @@ void main() {
       expect(restoredForecast.checkInEvidenceIds, ['check-in-1']);
       expect(
         recommendation.keys,
-        containsAll(['title', 'detail', 'status', 'feedback']),
+        containsAll([
+          'title',
+          'detail',
+          'status',
+          'priority',
+          'windowType',
+          'scheduledAt',
+          'day',
+          'generatedAt',
+          'signalEvidenceIds',
+          'checkInEvidenceIds',
+          'feedback',
+        ]),
       );
-      expect(alert.keys, containsAll(['title', 'severity', 'dismissed']));
+      expect(restoredRecommendation.windowType, ForecastWindowType.crash);
+      expect(restoredRecommendation.priority, RecommendationPriority.important);
+      expect(restoredRecommendation.signalEvidenceIds, ['hydration-1']);
+      expect(restoredRecommendation.checkInEvidenceIds, ['check-in-1']);
+      expect(
+        alert.keys,
+        containsAll([
+          'title',
+          'severity',
+          'category',
+          'dismissed',
+          'day',
+          'detectedAt',
+          'signalEvidenceIds',
+          'checkInEvidenceIds',
+        ]),
+      );
+      expect(restoredAlert.category, RiskAlertCategory.sleepDebt);
+      expect(restoredAlert.signalEvidenceIds, ['sleep-1']);
+      expect(restoredAlert.dismissed, isFalse);
     });
 
     test('rejects invalid persisted forecast values', () {

@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
 Last updated: August 15, 2026
-Current release: **Version 0.17 — Key Windows**
+Current release: **Version 0.19 — Fatigue Warnings**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -139,8 +139,8 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
   - `users/{uid}/checkIns/{checkInId}` — `DailyCheckIn` fields (`period`, `energy`, `mood`, `stress`, `note`, `timestamp`)
   - `users/{uid}/scoreSnapshots/{snapshotId}` — Version 0.11+ daily scores (`energy`, `cognitive`, per-model confidence/input counts/drivers, previous Cognitive comparison, `day`, `calculatedAt`)
   - `users/{uid}/forecastPoints/{pointId}` — hourly forecasts (`time`, `energy`, `uncertainty`, `updatedAt`)
-  - `users/{uid}/recommendations/{recId}` — reserved for Version 0.18+ (`title`, `detail`, `timeLabel`, `category`, `status`, `feedback`)
-  - `users/{uid}/riskAlerts/{alertId}` — reserved for Version 0.19+ (`title`, `detail`, `severity`, `dismissed`)
+  - `users/{uid}/recommendations/{recId}` — Version 0.18+ grounded guidance (`title`, `detail`, `timeLabel`, `category`, `status`, priority/window timing, evidence IDs, `feedback`)
+  - `users/{uid}/riskAlerts/{alertId}` — Version 0.19+ wellness flags (`title`, `detail`, `severity`, category/day/evidence IDs, `dismissed`)
 - Enforce privacy with Security Rules: users may only `read`/`write` documents under their own `uid`; deny list/collection-group access across users
 - Use Firebase Auth for accounts (no passwords stored in Firestore); keep wellness-only copy and no medical claims in stored metadata
 - Migrate existing SharedPreferences state into Firestore on first signed-in launch; keep a local cache for offline demoability
@@ -206,24 +206,24 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Add daily summaries to the Week view
 - Handle missing and low-confidence data (empty query windows, stale `updatedAt`)
 
-### Version 0.17 — Key Windows ✅ Current
+### Version 0.17 — Key Windows ✅
 
 - Identify peak-focus, predicted-crash, and recovery windows from forecast documents
 - Explain the signals supporting each window using linked `signals` / `checkIns` evidence IDs where available
 
-## Upcoming Versions
-
-### Version 0.18 — Basic Recommendations
+### Version 0.18 — Basic Recommendations ✅
 
 - Recommend study, nap, exercise, hydration, and recovery times
 - Match recommendations to forecast windows
 - Ground every recommendation in recent Firestore data and store rows in `recommendations`
 
-### Version 0.19 — Fatigue Warnings
+### Version 0.19 — Fatigue Warnings ✅ Current
 
 - Detect sustained sleep debt, possible training overreaching, and sustained low-energy / high-stress patterns without diagnosis
 - Query multi-day `signals` and `checkIns` ranges via Version 0.10-a helpers
 - Persist dismissible alerts in `riskAlerts` under the user document
+
+## Upcoming Versions
 
 ### Version 0.20 — Notifications
 

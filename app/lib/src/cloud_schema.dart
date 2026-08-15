@@ -1,7 +1,7 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 5 links forecasts to supporting evidence.
-const int cloudSchemaVersion = 5;
+/// Firestore schema version. Version 6 activates grounded guidance records.
+const int cloudSchemaVersion = 6;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -298,7 +298,7 @@ List<String> _cloudStringList(Object? value, {required String field}) {
   return value.cast<String>().toSet().toList(growable: false);
 }
 
-/// Reserved Version 0.18+ recommendation document.
+/// Version 0.18 grounded recommendation document.
 Map<String, Object?> recommendationToCloud(
   Recommendation recommendation, {
   Object? feedback,
@@ -308,18 +308,85 @@ Map<String, Object?> recommendationToCloud(
   'timeLabel': recommendation.timeLabel,
   'category': recommendation.category,
   'status': recommendation.status.name,
+  'priority': recommendation.priority.name,
+  'windowType': recommendation.windowType?.name,
+  'scheduledAt': recommendation.scheduledAt,
+  'day': recommendation.day,
+  'generatedAt': recommendation.generatedAt,
+  'signalEvidenceIds': recommendation.signalEvidenceIds,
+  'checkInEvidenceIds': recommendation.checkInEvidenceIds,
   'feedback': feedback,
   'schemaVersion': cloudSchemaVersion,
 };
 
-/// Reserved Version 0.19+ risk-alert document.
-Map<String, Object?> riskAlertToCloud(
-  RiskAlert alert, {
-  bool dismissed = false,
-}) => {
+Recommendation recommendationFromCloud(String id, Map<String, dynamic> data) =>
+    Recommendation(
+      id: id,
+      title: data['title'] as String,
+      detail: data['detail'] as String,
+      timeLabel: data['timeLabel'] as String,
+      category: data['category'] as String,
+      status: RecommendationStatus.values.byName(
+        (data['status'] as String?) ?? RecommendationStatus.suggested.name,
+      ),
+      priority: RecommendationPriority.values.byName(
+        (data['priority'] as String?) ?? RecommendationPriority.routine.name,
+      ),
+      windowType: data['windowType'] == null
+          ? null
+          : ForecastWindowType.values.byName(data['windowType'] as String),
+      scheduledAt: data['scheduledAt'] == null
+          ? null
+          : cloudDateTime(data['scheduledAt'], field: 'scheduledAt'),
+      day: data['day'] == null
+          ? null
+          : cloudDateTime(data['day'], field: 'day'),
+      generatedAt: data['generatedAt'] == null
+          ? null
+          : cloudDateTime(data['generatedAt'], field: 'generatedAt'),
+      signalEvidenceIds: _cloudStringList(
+        data['signalEvidenceIds'],
+        field: 'signalEvidenceIds',
+      ),
+      checkInEvidenceIds: _cloudStringList(
+        data['checkInEvidenceIds'],
+        field: 'checkInEvidenceIds',
+      ),
+    );
+
+/// Version 0.19 dismissible wellness-pattern alert document.
+Map<String, Object?> riskAlertToCloud(RiskAlert alert, {bool? dismissed}) => {
   'title': alert.title,
   'detail': alert.detail,
   'severity': alert.severity.name,
-  'dismissed': dismissed,
+  'category': alert.category.name,
+  'dismissed': dismissed ?? alert.dismissed,
+  'day': alert.day,
+  'detectedAt': alert.detectedAt,
+  'signalEvidenceIds': alert.signalEvidenceIds,
+  'checkInEvidenceIds': alert.checkInEvidenceIds,
   'schemaVersion': cloudSchemaVersion,
 };
+
+RiskAlert riskAlertFromCloud(String id, Map<String, dynamic> data) => RiskAlert(
+  data['title'] as String,
+  data['detail'] as String,
+  AlertSeverity.values.byName(data['severity'] as String),
+  id: id,
+  category: RiskAlertCategory.values.byName(
+    (data['category'] as String?) ?? RiskAlertCategory.fatigueStress.name,
+  ),
+  dismissed: data['dismissed'] as bool? ?? false,
+  day: data['day'] == null ? null : cloudDateTime(data['day'], field: 'day'),
+  detectedAt: data['detectedAt'] == null
+      ? null
+      : cloudDateTime(data['detectedAt'], field: 'detectedAt'),
+  signalEvidenceIds: _cloudStringList(
+    data['signalEvidenceIds'],
+    field: 'signalEvidenceIds',
+  ),
+  checkInEvidenceIds: _cloudStringList(
+    data['checkInEvidenceIds'],
+    field: 'checkInEvidenceIds',
+  ),
+);

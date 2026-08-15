@@ -40,11 +40,13 @@ class AppController extends ChangeNotifier {
   bool isCloudSyncing = false;
   bool isEnergyScoreLoading = false;
   bool isForecastLoading = false;
+  bool isGuidanceLoading = false;
   DateTime? lastSync;
   String? accountEmail;
   String? cloudSyncError;
   String? energyScoreError;
   String? forecastError;
+  String? guidanceError;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
@@ -52,8 +54,12 @@ class AppController extends ChangeNotifier {
   List<SignalReading> _todaySignals = [];
   bool _scoreLoadedFromSnapshot = false;
   bool _forecastLoadedFromCloud = false;
+  bool _guidanceSavedToCloud = false;
   final Map<String, List<ForecastPoint>> _forecastsByDay = {};
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
+  final Set<String> _dismissedRiskAlertIds = {};
+  List<Recommendation> _recommendations = [];
+  List<RiskAlert> _riskAlerts = [];
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
   bool get isCloudAuthenticated => _accountAuth.currentSession != null;
@@ -62,6 +68,7 @@ class AppController extends ChangeNotifier {
   String? get scoreError => energyScoreError;
   bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
   bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
+  bool get guidanceSavedToCloud => _guidanceSavedToCloud;
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -185,14 +192,11 @@ class AppController extends ChangeNotifier {
     checkIns: checkIns,
   );
   List<ForecastWindow> get windows => windowsFor(DateTime.now());
-  List<RiskAlert> get alerts => FatigueEngine.alerts(signals, checkIns, score);
-  List<Recommendation> get recommendations {
-    final currentWindows = windows;
-    if (currentWindows.isEmpty) return const [];
-    return FatigueEngine.recommendations(currentWindows, score)
-        .map((item) => item.copyWith(status: _recommendationStatuses[item.id]))
-        .toList();
-  }
+  List<RiskAlert> get alerts =>
+      List.unmodifiable(_riskAlerts.where((alert) => !alert.dismissed));
+  List<RiskAlert> get allAlerts => List.unmodifiable(_riskAlerts);
+  List<Recommendation> get recommendations =>
+      List.unmodifiable(_recommendations);
 
   /// Personal reaction baseline from prior valid tests (Version 0.9).
   double? get reactionBaseline => ReactionTestLogic.baselineMs(signals);
@@ -414,6 +418,117 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// Builds Versions 0.18–0.19 guidance from a seven-day, user-scoped input
+  /// range, then replaces today's private recommendation and alert documents.
+  Future<void> refreshGuidance({DateTime? day, bool notify = true}) async {
+    final clock = DateTime.now();
+    final target = day ?? clock;
+    final targetDay = DateTime(target.year, target.month, target.day);
+    final rangeStart = targetDay.subtract(const Duration(days: 6));
+    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+
+    isGuidanceLoading = true;
+    guidanceError = null;
+    if (notify) notifyListeners();
+
+    void derive({
+      required List<SignalReading> sourceSignals,
+      required List<DailyCheckIn> sourceCheckIns,
+      List<Recommendation> savedRecommendations = const [],
+      List<RiskAlert> savedAlerts = const [],
+    }) {
+      final windowValues = FatigueEngine.windows(
+        forecastDataFor(targetDay),
+        score,
+        signals: sourceSignals,
+        checkIns: sourceCheckIns,
+      );
+      final savedStatuses = {
+        for (final item in savedRecommendations) item.id: item.status,
+      };
+      _recommendations =
+          FatigueEngine.recommendations(
+            windowValues,
+            score,
+            day: targetDay,
+            generatedAt: clock,
+          ).map((item) {
+            final status =
+                savedStatuses[item.id] ?? _recommendationStatuses[item.id];
+            if (status != null) _recommendationStatuses[item.id] = status;
+            return item.copyWith(status: status);
+          }).toList();
+
+      final savedDismissals = {
+        for (final item in savedAlerts) item.id: item.dismissed,
+      };
+      _riskAlerts =
+          FatigueEngine.alerts(
+            sourceSignals,
+            sourceCheckIns,
+            score,
+            now: clock,
+            day: targetDay,
+          ).map((item) {
+            final dismissed =
+                savedDismissals[item.id] == true ||
+                _dismissedRiskAlertIds.contains(item.id);
+            if (dismissed) _dismissedRiskAlertIds.add(item.id);
+            return item.copyWith(dismissed: dismissed);
+          }).toList();
+    }
+
+    try {
+      if (session != null && repository != null) {
+        final values = await Future.wait<Object>([
+          repository.signalsByRange(
+            session.uid,
+            start: rangeStart,
+            end: rangeEnd,
+          ),
+          repository.checkInsByRange(
+            session.uid,
+            start: rangeStart,
+            end: rangeEnd,
+          ),
+          repository.recommendationsForDay(session.uid, targetDay),
+          repository.riskAlertsForDay(session.uid, targetDay),
+        ]);
+        derive(
+          sourceSignals: values[0] as List<SignalReading>,
+          sourceCheckIns: values[1] as List<DailyCheckIn>,
+          savedRecommendations: values[2] as List<Recommendation>,
+          savedAlerts: values[3] as List<RiskAlert>,
+        );
+        await Future.wait([
+          repository.replaceRecommendationsForDay(
+            session.uid,
+            day: targetDay,
+            recommendations: _recommendations,
+          ),
+          repository.replaceRiskAlertsForDay(
+            session.uid,
+            day: targetDay,
+            alerts: _riskAlerts,
+          ),
+        ]);
+        _guidanceSavedToCloud = true;
+        return;
+      }
+      derive(sourceSignals: signals, sourceCheckIns: checkIns);
+      _guidanceSavedToCloud = false;
+    } on Object {
+      derive(sourceSignals: signals, sourceCheckIns: checkIns);
+      _guidanceSavedToCloud = false;
+      guidanceError = 'Cloud guidance unavailable · using cached inputs';
+    } finally {
+      isGuidanceLoading = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString(_storageKey);
@@ -442,6 +557,7 @@ class AppController extends ChangeNotifier {
     if (onboardingComplete) {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
+      await refreshGuidance(notify: false);
     }
     isReady = true;
     notifyListeners();
@@ -468,6 +584,7 @@ class AppController extends ChangeNotifier {
           await _writeLocal();
           await refreshScores(notify: false);
           await refreshForecasts(notify: false);
+          await refreshGuidance(notify: false);
           notifyListeners();
           return;
         }
@@ -494,6 +611,7 @@ class AppController extends ChangeNotifier {
     if (onboardingComplete) {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
+      await refreshGuidance(notify: false);
     }
     notifyListeners();
   }
@@ -693,7 +811,29 @@ class AppController extends ChangeNotifier {
     RecommendationStatus status,
   ) async {
     _recommendationStatuses[id] = status;
+    _recommendations = _recommendations
+        .map((item) => item.id == id ? item.copyWith(status: status) : item)
+        .toList();
     await _commit();
+  }
+
+  Future<void> dismissRiskAlert(String id) async {
+    _dismissedRiskAlertIds.add(id);
+    _riskAlerts = _riskAlerts
+        .map((item) => item.id == id ? item.copyWith(dismissed: true) : item)
+        .toList();
+    guidanceError = null;
+    notifyListeners();
+    await _writeLocal();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session == null || repository == null) return;
+    try {
+      await repository.setRiskAlertDismissed(session.uid, id, dismissed: true);
+    } on Object {
+      guidanceError = 'Alert dismissed on this device · cloud update pending';
+      notifyListeners();
+    }
   }
 
   Future<void> setNotifications(bool value) async {
@@ -754,10 +894,15 @@ class AppController extends ChangeNotifier {
     _scoreLoadedFromSnapshot = false;
     energyScoreError = null;
     _recommendationStatuses.clear();
+    _dismissedRiskAlertIds.clear();
+    _recommendations = [];
+    _riskAlerts = [];
+    guidanceError = null;
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
       await repository.clearScoreSnapshots(session.uid);
+      await repository.clearGuidance(session.uid);
     }
     await _commit(energyInputsChanged: true);
   }
@@ -791,7 +936,12 @@ class AppController extends ChangeNotifier {
     _forecastLoadedFromCloud = false;
     energyScoreError = null;
     forecastError = null;
+    guidanceError = null;
     _recommendationStatuses.clear();
+    _dismissedRiskAlertIds.clear();
+    _recommendations = [];
+    _riskAlerts = [];
+    _guidanceSavedToCloud = false;
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_storageKey);
     notifyListeners();
@@ -810,6 +960,7 @@ class AppController extends ChangeNotifier {
     'recommendationStatuses': _recommendationStatuses.map(
       (key, value) => MapEntry(key, value.name),
     ),
+    'dismissedRiskAlertIds': _dismissedRiskAlertIds.toList(),
   };
 
   Future<void> _commit({
@@ -824,6 +975,7 @@ class AppController extends ChangeNotifier {
     }
     if ((energyInputsChanged || forecastInputsChanged) && onboardingComplete) {
       await refreshForecasts(forceRecalculate: true);
+      await refreshGuidance();
     }
   }
 
@@ -902,11 +1054,21 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    final sameAccount =
+        accountEmail?.trim().toLowerCase() ==
+        state.accountEmail.trim().toLowerCase();
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;
     _forecastsByDay.clear();
     _forecastLoadedFromCloud = false;
+    _recommendations = [];
+    _riskAlerts = [];
+    _guidanceSavedToCloud = false;
+    if (!sameAccount) {
+      _recommendationStatuses.clear();
+      _dismissedRiskAlertIds.clear();
+    }
     profile = state.profile;
     accountEmail = state.accountEmail;
     onboardingComplete = state.onboardingComplete;
@@ -926,6 +1088,11 @@ class AppController extends ChangeNotifier {
     _scoreLoadedFromSnapshot = false;
     _forecastsByDay.clear();
     _forecastLoadedFromCloud = false;
+    _recommendations = [];
+    _riskAlerts = [];
+    _guidanceSavedToCloud = false;
+    _recommendationStatuses.clear();
+    _dismissedRiskAlertIds.clear();
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
     notificationsEnabled = json['notificationsEnabled'] as bool? ?? true;
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;
@@ -957,6 +1124,9 @@ class AppController extends ChangeNotifier {
         entry.value as String,
       );
     }
+    _dismissedRiskAlertIds.addAll(
+      ((json['dismissedRiskAlertIds'] as List?) ?? const []).cast<String>(),
+    );
   }
 
   static String _clock(DateTime value) {

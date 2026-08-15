@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.17 — Key Windows (as of 2026-08-15)
+- **Current release:** Version 0.19 — Fatigue Warnings (as of 2026-08-15)
 
 ## Implementation Report
 
@@ -29,7 +29,9 @@
 | 0.15 | Firebase-backed hourly forecast engine | Complete |
 | 0.16 | Persisted Today/Tomorrow/Week Forecast screen | Complete |
 | 0.17 | Forecast-derived key windows + linked evidence | Complete |
-| 0.18+ | Recommendations, warnings, HealthKit, AI coach | Not started |
+| 0.18 | Grounded, forecast-timed basic recommendations | Complete |
+| 0.19 | Multi-day, dismissible wellness-pattern warnings | Complete |
+| 0.20+ | Notifications, Insights trends, HealthKit, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -52,7 +54,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-15 — **86 tests passed** after reconciling Version 0.17 with the latest `origin/main`; static analysis clean
+- Last verified: 2026-08-15 — **93 tests passed** for Version 0.19; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -74,6 +76,8 @@
 17. Forecast Engine (hourly estimates + uncertainty + cloud persistence) - Complete (v0.15)
 18. Forecast Screen (saved daily curves + calculated Week summaries + data states) - Complete (v0.16)
 19. Key Windows (forecast-derived focus/crash/recovery + linked evidence) - Complete (v0.17)
+20. Basic Recommendations (five grounded actions matched to forecast windows) - Complete (v0.18)
+21. Fatigue Warnings (seven-day wellness-pattern detection + dismissal) - Complete (v0.19)
 
 ## Day-to-Day Entries
 
@@ -492,9 +496,58 @@ verify and synchronize `main`.
 suite exposed a runtime layout assertion and a stale five-input denominator
 that static analysis could not detect.
 
+### 2026-08-15 — Versions 0.18 and 0.19 guidance
+
+**Branch:** `main`
+
+**Goal:** Complete the grounded Basic Recommendations and non-diagnostic
+Fatigue Warnings releases together, with private persistence and a production
+Coach experience rather than fixture-backed previews.
+
+**Results:**
+- Added five stable daily actions for study, hydration, a short nap, recovery,
+  and exercise. Each action is scheduled against a peak, crash, or recovery
+  window and is omitted when the window has no linked recent evidence.
+- Activated the private `recommendations` collection with day, schedule,
+  priority, window type, generation time, evidence IDs, and backward-compatible
+  serializers. Refreshes replace only the selected day.
+- Added seven-day detection for short sleep across multiple nights, possible
+  training overreaching when load overlaps with lower estimated energy, and
+  low-energy/high-stress check-ins across multiple days.
+- Activated the private `riskAlerts` collection with stable daily IDs,
+  categories, severity, evidence links, and cloud-persisted dismissal.
+- Replaced the Coach fixture preview and unsupported energy-uplift claim with
+  real guidance, evidence provenance, cloud/offline state, dismissible wellness
+  flags, empty/error/loading states, and explicit non-diagnostic language.
+- Extended export, tracking-data cleanup, and permanent account deletion to
+  both guidance collections; advanced the Firestore schema marker to Version 6.
+- Bumped the app to `0.19.0+20` and added engine, schema, repository,
+  controller, and widget regression coverage.
+- `flutter test` passed all **93 tests**; `flutter analyze` reported no issues.
+
+**Major issues:**
+- A repeated log is not necessarily a sustained pattern. Sleep and strained
+  check-ins are deduplicated by calendar day before thresholds are evaluated;
+  training separately requires load on at least three distinct days.
+- Recalculating alerts could accidentally resurrect a dismissed row. The
+  controller reads existing daily alerts first, reapplies their dismissal
+  state to stable IDs, and only then replaces the day's stored set.
+
 ---
 
 ## Prompts Used
+
+### Feature: Versions 0.18 and 0.19
+**Prompt:**
+"complete .18 and .19 take your time"
+
+**Result:** Completed evidence-grounded, forecast-timed recommendations and
+seven-day wellness-pattern warnings with user-scoped persistence, dismissal,
+professional Coach presentation, and end-to-end regression coverage.
+
+**Modifications:** Alerts are explicitly non-diagnostic and require patterns
+across distinct days. Recommendation feedback/actions remain scoped to Version
+0.30; this release activates the stable rows and read/dismiss experience.
 
 ### Feature: Version 0.15 Forecast Engine
 **Prompt:**
@@ -723,5 +776,7 @@ state.
 - [x] Implement Version 0.15 hourly Forecast Engine and private persistence
 - [x] Implement Version 0.16 persisted Forecast screen and Week summaries
 - [x] Implement Version 0.17 forecast-derived Key Windows with linked evidence
+- [x] Implement Version 0.18 grounded, forecast-timed Basic Recommendations
+- [x] Implement Version 0.19 multi-day, dismissible Fatigue Warnings
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

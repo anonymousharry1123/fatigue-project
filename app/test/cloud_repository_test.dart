@@ -98,6 +98,18 @@ void main() {
       ),
       throwsStateError,
     );
+    await expectLater(
+      repository.recommendationsForDay('other-uid', day),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.riskAlertsForDay('other-uid', day),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.setRiskAlertDismissed('other-uid', 'alert-1', dismissed: true),
+      throwsStateError,
+    );
     await expectLater(repository.exportUser('other-uid'), throwsStateError);
     await expectLater(repository.deleteUserTree('other-uid'), throwsStateError);
   });
@@ -211,6 +223,90 @@ void main() {
     expect(stored.last.time, tomorrow.add(const Duration(hours: 7)));
     expect(forecastPointId(stored.first.time), '2026-07-28-09-00');
   });
+
+  test(
+    'persists grounded recommendations and dismissible daily alerts',
+    () async {
+      final tomorrow = day.add(const Duration(days: 1));
+      Recommendation recommendation(String id, DateTime targetDay) =>
+          Recommendation(
+            id: id,
+            title: 'Hydrate',
+            detail: 'Before the dip',
+            timeLabel: '1:30 PM',
+            category: 'Hydration',
+            windowType: ForecastWindowType.crash,
+            scheduledAt: targetDay.add(const Duration(hours: 13, minutes: 30)),
+            day: targetDay,
+            generatedAt: targetDay.add(const Duration(hours: 8)),
+            signalEvidenceIds: const ['hydration'],
+          );
+      RiskAlert alert(String id, DateTime targetDay) => RiskAlert(
+        'Short-sleep pattern',
+        'Three recent short nights',
+        AlertSeverity.caution,
+        id: id,
+        category: RiskAlertCategory.sleepDebt,
+        day: targetDay,
+        detectedAt: targetDay.add(const Duration(hours: 8)),
+        signalEvidenceIds: const ['sleep-1', 'sleep-2', 'sleep-3'],
+      );
+
+      await repository.replaceRecommendationsForDay(
+        'maya-uid',
+        day: tomorrow,
+        recommendations: [recommendation('tomorrow-rec', tomorrow)],
+      );
+      await repository.replaceRecommendationsForDay(
+        'maya-uid',
+        day: day,
+        recommendations: [
+          recommendation('morning-rec', day),
+          recommendation('replacement-rec', day),
+        ],
+      );
+      await repository.replaceRecommendationsForDay(
+        'maya-uid',
+        day: day,
+        recommendations: [recommendation('replacement-rec', day)],
+      );
+      await repository.replaceRiskAlertsForDay(
+        'maya-uid',
+        day: day,
+        alerts: [alert('alert-1', day)],
+      );
+      await repository.setRiskAlertDismissed(
+        'maya-uid',
+        'alert-1',
+        dismissed: true,
+      );
+
+      final recommendations = await repository.recommendationsForDay(
+        'maya-uid',
+        day,
+      );
+      final tomorrowRecommendations = await repository.recommendationsForDay(
+        'maya-uid',
+        tomorrow,
+      );
+      final alerts = await repository.riskAlertsForDay('maya-uid', day);
+      final exported = await repository.exportUser('maya-uid');
+
+      expect(recommendations.map((item) => item.id), ['replacement-rec']);
+      expect(recommendations.single.signalEvidenceIds, ['hydration']);
+      expect(tomorrowRecommendations.single.id, 'tomorrow-rec');
+      expect(alerts.single.dismissed, isTrue);
+      expect(alerts.single.category, RiskAlertCategory.sleepDebt);
+      expect(
+        (exported['reservedCollections'] as Map)['recommendations'],
+        hasLength(2),
+      );
+      expect(
+        (exported['reservedCollections'] as Map)['riskAlerts'],
+        hasLength(1),
+      );
+    },
+  );
 
   test('exports and permanently deletes the authenticated user tree', () async {
     await repository.replaceForecastPoints(

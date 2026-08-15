@@ -417,6 +417,221 @@ void main() {
     );
   });
 
+  test('Version 0.18 grounds five actions in forecast windows', () {
+    final day = DateTime(2026, 7, 21);
+    final generatedAt = DateTime(2026, 7, 21, 8);
+    ForecastEvidence evidence(String id, String label, SignalType type) =>
+        ForecastEvidence(
+          id: id,
+          kind: ForecastEvidenceKind.signal,
+          label: label,
+          detail: 'Recent $label entry',
+          timestamp: generatedAt,
+          signalType: type,
+          source: SignalSource.manual,
+        );
+    final windows = [
+      ForecastWindow(
+        ForecastWindowType.peak,
+        day.add(const Duration(hours: 9)),
+        day.add(const Duration(hours: 11)),
+        82,
+        'Peak focus',
+        evidence: [evidence('sleep-1', 'Sleep', SignalType.sleep)],
+      ),
+      ForecastWindow(
+        ForecastWindowType.crash,
+        day.add(const Duration(hours: 14)),
+        day.add(const Duration(hours: 15, minutes: 30)),
+        48,
+        'Predicted crash',
+        evidence: [evidence('study-1', 'Study', SignalType.study)],
+      ),
+      ForecastWindow(
+        ForecastWindowType.recovery,
+        day.add(const Duration(hours: 17)),
+        day.add(const Duration(hours: 18, minutes: 30)),
+        68,
+        'Recovery',
+        evidence: [evidence('hydration-1', 'Hydration', SignalType.hydration)],
+      ),
+    ];
+
+    final recommendations = FatigueEngine.recommendations(
+      windows,
+      const ScoreSnapshot(
+        energy: 58,
+        cognitive: 65,
+        confidence: .8,
+        drivers: [],
+      ),
+      day: day,
+      generatedAt: generatedAt,
+    );
+
+    expect(recommendations, hasLength(5));
+    expect(recommendations.map((item) => item.category).toSet(), {
+      'Study',
+      'Hydration',
+      'Nap',
+      'Recovery',
+      'Training',
+    });
+    expect(recommendations.every((item) => item.isGrounded), isTrue);
+    expect(recommendations.every((item) => item.day == day), isTrue);
+    expect(
+      recommendations.every((item) => item.id.startsWith('2026-07-21-')),
+      isTrue,
+    );
+    expect(
+      recommendations
+          .singleWhere((item) => item.category == 'Hydration')
+          .scheduledAt,
+      day.add(const Duration(hours: 13, minutes: 30)),
+    );
+    expect(
+      recommendations
+          .singleWhere((item) => item.category == 'Study')
+          .windowType,
+      ForecastWindowType.peak,
+    );
+  });
+
+  test('Version 0.18 omits recommendations without linked evidence', () {
+    final day = DateTime(2026, 7, 21);
+    final windows = ForecastWindowType.values
+        .map(
+          (type) => ForecastWindow(
+            type,
+            day.add(Duration(hours: 9 + type.index * 3)),
+            day.add(Duration(hours: 10 + type.index * 3)),
+            70,
+            'No evidence',
+          ),
+        )
+        .toList();
+
+    final recommendations = FatigueEngine.recommendations(
+      windows,
+      const ScoreSnapshot(
+        energy: 70,
+        cognitive: 70,
+        confidence: .4,
+        drivers: [],
+      ),
+      day: day,
+    );
+
+    expect(recommendations, isEmpty);
+  });
+
+  test(
+    'Version 0.19 flags sustained patterns from only the last seven days',
+    () {
+      final target = DateTime(2026, 7, 21, 20);
+      final signals = <SignalReading>[
+        for (var index = 0; index < 4; index++)
+          SignalReading(
+            id: 'short-sleep-$index',
+            type: SignalType.sleep,
+            value: 5.5 + index * .1,
+            timestamp: target.subtract(Duration(days: index, hours: 12)),
+          ),
+        for (var index = 0; index < 3; index++)
+          SignalReading(
+            id: 'exercise-$index',
+            type: SignalType.exercise,
+            value: 2.25,
+            timestamp: target.subtract(Duration(days: index, hours: 4)),
+          ),
+        SignalReading(
+          id: 'old-short-sleep',
+          type: SignalType.sleep,
+          value: 3,
+          timestamp: target.subtract(const Duration(days: 8)),
+        ),
+      ];
+      final checkIns = [
+        for (var index = 0; index < 3; index++)
+          DailyCheckIn(
+            id: 'strained-$index',
+            timestamp: target.subtract(Duration(days: index, hours: 2)),
+            energy: 3,
+            mood: 4,
+            stress: 8,
+          ),
+      ];
+
+      final alerts = FatigueEngine.alerts(
+        signals,
+        checkIns,
+        const ScoreSnapshot(
+          energy: 55,
+          cognitive: 58,
+          confidence: .8,
+          drivers: [],
+        ),
+        now: target,
+        day: target,
+      );
+
+      expect(alerts, hasLength(3));
+      expect(alerts.map((alert) => alert.category).toSet(), {
+        RiskAlertCategory.sleepDebt,
+        RiskAlertCategory.trainingLoad,
+        RiskAlertCategory.fatigueStress,
+      });
+      expect(
+        alerts.every((alert) => alert.id.startsWith('2026-07-21-')),
+        isTrue,
+      );
+      expect(
+        alerts.expand((alert) => alert.signalEvidenceIds),
+        isNot(contains('old-short-sleep')),
+      );
+      expect(alerts.every((alert) => alert.evidence.isNotEmpty), isTrue);
+      expect(
+        alerts.map((alert) => alert.detail.toLowerCase()).join(' '),
+        isNot(anyOf(contains('diagnos'), contains('disease'))),
+      );
+    },
+  );
+
+  test('Version 0.19 does not treat same-day duplicates as sustained', () {
+    final target = DateTime(2026, 7, 21, 20);
+    final alerts = FatigueEngine.alerts(
+      [
+        for (var index = 0; index < 3; index++)
+          SignalReading(
+            id: 'same-day-sleep-$index',
+            type: SignalType.sleep,
+            value: 5,
+            timestamp: DateTime(2026, 7, 21, 7, index),
+          ),
+      ],
+      [
+        for (var index = 0; index < 3; index++)
+          DailyCheckIn(
+            id: 'same-day-check-in-$index',
+            timestamp: DateTime(2026, 7, 21, 8 + index),
+            energy: 3,
+            mood: 4,
+            stress: 8,
+          ),
+      ],
+      const ScoreSnapshot(
+        energy: 50,
+        cognitive: 55,
+        confidence: .8,
+        drivers: [],
+      ),
+      now: target,
+      day: target,
+    );
+
+    expect(alerts, isEmpty);
+  });
+
   test('missing signals lower confidence without breaking scores', () {
     final score = FatigueEngine.score(
       signals: const [],

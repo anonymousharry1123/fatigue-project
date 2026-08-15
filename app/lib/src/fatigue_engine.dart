@@ -1055,95 +1055,287 @@ abstract final class FatigueEngine {
 
   static List<Recommendation> recommendations(
     List<ForecastWindow> windows,
-    ScoreSnapshot score,
-  ) {
-    String time(ForecastWindowType type) {
-      final window = windows.firstWhere((item) => item.type == type);
-      return _hour(window.start);
+    ScoreSnapshot score, {
+    DateTime? day,
+    DateTime? generatedAt,
+  }) {
+    final byType = {for (final window in windows) window.type: window};
+    if (!ForecastWindowType.values.every(byType.containsKey)) return const [];
+    final target = day ?? windows.first.start;
+    final targetDay = DateTime(target.year, target.month, target.day);
+    final clock = generatedAt ?? DateTime.now();
+
+    Recommendation? build({
+      required String slug,
+      required String title,
+      required String detail,
+      required String category,
+      required ForecastWindowType windowType,
+      required DateTime scheduledAt,
+      RecommendationPriority priority = RecommendationPriority.routine,
+    }) {
+      final window = byType[windowType]!;
+      final evidence = window.evidence
+          .where((item) => item.id.isNotEmpty)
+          .toList(growable: false);
+      if (evidence.isEmpty) return null;
+      final evidenceLabels = evidence
+          .map((item) => item.label)
+          .toSet()
+          .take(2)
+          .join(' and ');
+      return Recommendation(
+        id: '${_dayIdentifier(targetDay)}-$slug',
+        title: title,
+        detail:
+            '$detail Timed to the ${_windowLabel(windowType)} window using linked $evidenceLabels data.',
+        timeLabel: _hour(scheduledAt),
+        category: category,
+        priority: priority,
+        windowType: windowType,
+        scheduledAt: scheduledAt,
+        day: targetDay,
+        generatedAt: clock,
+        signalEvidenceIds: evidence
+            .where((item) => item.kind == ForecastEvidenceKind.signal)
+            .map((item) => item.id)
+            .toSet()
+            .toList(growable: false),
+        checkInEvidenceIds: evidence
+            .where((item) => item.kind == ForecastEvidenceKind.checkIn)
+            .map((item) => item.id)
+            .toSet()
+            .toList(growable: false),
+        evidence: evidence,
+      );
     }
 
-    final items = <Recommendation>[
-      Recommendation(
-        id: 'focus',
+    final peak = byType[ForecastWindowType.peak]!;
+    final crash = byType[ForecastWindowType.crash]!;
+    final recovery = byType[ForecastWindowType.recovery]!;
+    final hydrationTime = _notBefore(
+      crash.start.subtract(const Duration(minutes: 30)),
+      targetDay,
+    );
+    final items = <Recommendation?>[
+      build(
+        slug: 'study',
         title: 'Protect a 60-minute focus block',
         detail:
-            'Your highest predicted energy and cognitive readiness overlap here.',
-        timeLabel: time(ForecastWindowType.peak),
+            'Use the strongest predicted energy stretch for demanding study.',
         category: 'Study',
+        windowType: ForecastWindowType.peak,
+        scheduledAt: peak.start,
+        priority: RecommendationPriority.important,
       ),
-      Recommendation(
-        id: 'dip',
-        title: score.energy < 58
-            ? 'Take a 20-minute recovery nap'
-            : 'Use the dip for lighter work',
+      build(
+        slug: 'hydration',
+        title: 'Hydrate before the predicted dip',
         detail:
-            'A short reset is better aligned with the predicted afternoon dip.',
-        timeLabel: time(ForecastWindowType.crash),
-        category: 'Recovery',
+            'Pair a normal hydration break with the transition into lower energy.',
+        category: 'Hydration',
+        windowType: ForecastWindowType.crash,
+        scheduledAt: hydrationTime,
       ),
-      Recommendation(
-        id: 'training',
+      build(
+        slug: 'nap',
+        title: 'Try a 20-minute recovery nap',
+        detail:
+            'Keep the nap brief and use the lowest predicted-energy period.',
+        category: 'Nap',
+        windowType: ForecastWindowType.crash,
+        scheduledAt: crash.start,
+        priority: score.energy < 62
+            ? RecommendationPriority.important
+            : RecommendationPriority.routine,
+      ),
+      build(
+        slug: 'recovery',
+        title: 'Protect a low-demand recovery block',
+        detail:
+            'Reduce task intensity while the forecast moves out of its lowest stretch.',
+        category: 'Recovery',
+        windowType: ForecastWindowType.crash,
+        scheduledAt: crash.end,
+        priority: score.energy < 62
+            ? RecommendationPriority.important
+            : RecommendationPriority.routine,
+      ),
+      build(
+        slug: 'exercise',
         title: score.energy > 70
-            ? 'Train with normal intensity'
-            : 'Taper today’s training load',
+            ? 'Place exercise in the rebound'
+            : 'Keep exercise light in the rebound',
         detail: score.energy > 70
-            ? 'Recovery signals support your planned session.'
-            : 'Lower intensity protects recovery while readiness rebuilds.',
-        timeLabel: time(ForecastWindowType.recovery),
+            ? 'The post-dip rise is the better fit for today’s planned movement.'
+            : 'Lower intensity supports recovery while estimated readiness rebuilds.',
         category: 'Training',
+        windowType: ForecastWindowType.recovery,
+        scheduledAt: recovery.start,
       ),
     ];
-    return items;
+    final grounded = items.whereType<Recommendation>().toList()
+      ..sort((left, right) => left.scheduledAt!.compareTo(right.scheduledAt!));
+    return List.unmodifiable(grounded);
   }
 
   static List<RiskAlert> alerts(
     List<SignalReading> signals,
     List<DailyCheckIn> checkIns,
-    ScoreSnapshot score,
-  ) {
+    ScoreSnapshot score, {
+    DateTime? now,
+    DateTime? day,
+  }) {
+    final clock = now ?? DateTime.now();
+    final target = day ?? clock;
+    final targetDay = DateTime(target.year, target.month, target.day);
+    final rangeStart = targetDay.subtract(const Duration(days: 6));
+    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final cutoff = clock.isBefore(rangeEnd) ? clock : rangeEnd;
+    final recentSignals =
+        signals
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(rangeStart) &&
+                  item.timestamp.isBefore(rangeEnd) &&
+                  !item.timestamp.isAfter(cutoff),
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    final recentCheckIns =
+        checkIns
+            .where(
+              (item) =>
+                  !item.timestamp.isBefore(rangeStart) &&
+                  item.timestamp.isBefore(rangeEnd) &&
+                  !item.timestamp.isAfter(cutoff),
+            )
+            .toList()
+          ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
     final alerts = <RiskAlert>[];
-    final recentSleep = signals
-        .where((item) => item.type == SignalType.sleep)
-        .take(4)
-        .toList();
-    if (recentSleep.length >= 2 &&
-        recentSleep.take(3).every((item) => item.value < 6.5)) {
+    final sleepByDay = <String, SignalReading>{};
+    for (final item in recentSignals.where(
+      (item) => item.type == SignalType.sleep,
+    )) {
+      sleepByDay.putIfAbsent(_dayIdentifier(item.timestamp), () => item);
+    }
+    final recentSleep = sleepByDay.values.take(5).toList();
+    final shortSleep = recentSleep.where((item) => item.value < 6.5).toList();
+    if (recentSleep.length >= 3 && shortSleep.length >= 3) {
       alerts.add(
-        const RiskAlert(
-          'Sleep debt building',
-          'Several short nights are lowering the recovery estimate.',
+        RiskAlert(
+          'Short-sleep pattern',
+          '${shortSleep.length} of the last ${recentSleep.length} logged nights were below 6.5 hours. Consider prioritizing a consistent sleep opportunity.',
           AlertSeverity.caution,
+          id: '${_dayIdentifier(targetDay)}-sleep-debt',
+          category: RiskAlertCategory.sleepDebt,
+          day: targetDay,
+          detectedAt: clock,
+          signalEvidenceIds: shortSleep
+              .map((item) => item.id)
+              .toList(growable: false),
+          evidence: shortSleep
+              .map(_forecastEvidenceFromSignal)
+              .take(4)
+              .toList(growable: false),
         ),
       );
     }
-    final exercise = signals
+    final exercise = recentSignals
         .where((item) => item.type == SignalType.exercise)
-        .take(5)
-        .fold<double>(0, (sum, item) => sum + item.value);
-    if (exercise > 6 && score.energy < 60) {
+        .toList();
+    final exerciseDays = exercise
+        .map((item) => _dayIdentifier(item.timestamp))
+        .toSet();
+    final exerciseTotal = exercise.fold<double>(
+      0,
+      (sum, item) => sum + item.value,
+    );
+    if (exerciseDays.length >= 3 && exerciseTotal >= 6 && score.energy < 62) {
       alerts.add(
-        const RiskAlert(
-          'Recovery may be lagging',
-          'Recent training load and lower energy suggest an easier session.',
+        RiskAlert(
+          'Possible training overreaching',
+          '${exerciseTotal.toStringAsFixed(1)} hours of exercise across ${exerciseDays.length} recent days overlaps with a lower Energy estimate. This can be a cue to consider a lighter session and more recovery.',
           AlertSeverity.high,
+          id: '${_dayIdentifier(targetDay)}-training-load',
+          category: RiskAlertCategory.trainingLoad,
+          day: targetDay,
+          detectedAt: clock,
+          signalEvidenceIds: exercise
+              .map((item) => item.id)
+              .toList(growable: false),
+          evidence: exercise
+              .map(_forecastEvidenceFromSignal)
+              .take(4)
+              .toList(growable: false),
         ),
       );
     }
-    final strained = checkIns
-        .take(5)
-        .where((item) => item.stress >= 7 && item.energy <= 4)
-        .length;
-    if (strained >= 3) {
+    final strainedByDay = <String, DailyCheckIn>{};
+    for (final item in recentCheckIns.where(
+      (item) => item.stress >= 7 && item.energy <= 4,
+    )) {
+      strainedByDay.putIfAbsent(_dayIdentifier(item.timestamp), () => item);
+    }
+    final strained = strainedByDay.values.toList();
+    if (strained.length >= 3) {
       alerts.add(
-        const RiskAlert(
-          'Sustained fatigue pattern',
-          'Repeated low-energy, high-stress check-ins deserve recovery time and support.',
+        RiskAlert(
+          'Sustained strain pattern',
+          '${strained.length} recent days combined low energy with high stress. Consider recovery time and support from a trusted person if the pattern continues.',
           AlertSeverity.high,
+          id: '${_dayIdentifier(targetDay)}-fatigue-stress',
+          category: RiskAlertCategory.fatigueStress,
+          day: targetDay,
+          detectedAt: clock,
+          checkInEvidenceIds: strained
+              .map((item) => item.id)
+              .toList(growable: false),
+          evidence: strained
+              .map(_forecastEvidenceFromCheckIn)
+              .take(4)
+              .toList(growable: false),
         ),
       );
     }
-    return alerts;
+    alerts.sort(
+      (left, right) => right.severity.index.compareTo(left.severity.index),
+    );
+    return List.unmodifiable(alerts);
   }
+
+  static ForecastEvidence _forecastEvidenceFromSignal(SignalReading signal) =>
+      ForecastEvidence(
+        id: signal.id,
+        kind: ForecastEvidenceKind.signal,
+        label: signal.type.label,
+        detail: _signalEvidenceDetail(signal),
+        timestamp: signal.timestamp,
+        signalType: signal.type,
+        source: signal.source,
+      );
+
+  static ForecastEvidence _forecastEvidenceFromCheckIn(
+    DailyCheckIn checkIn,
+  ) => ForecastEvidence(
+    id: checkIn.id,
+    kind: ForecastEvidenceKind.checkIn,
+    label: '${checkIn.period.label} check-in',
+    detail:
+        'Energy ${checkIn.energy.round()}/10 · mood ${checkIn.mood.round()}/10 · stress ${checkIn.stress.round()}/10',
+    timestamp: checkIn.timestamp,
+  );
+
+  static String _windowLabel(ForecastWindowType type) => switch (type) {
+    ForecastWindowType.peak => 'peak-focus',
+    ForecastWindowType.crash => 'predicted-crash',
+    ForecastWindowType.recovery => 'recovery',
+  };
+
+  static String _dayIdentifier(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-'
+      '${day.month.toString().padLeft(2, '0')}-'
+      '${day.day.toString().padLeft(2, '0')}';
 
   static String _hour(DateTime date) {
     final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;

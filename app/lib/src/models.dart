@@ -544,6 +544,8 @@ class ForecastWindow {
 
 enum RecommendationStatus { suggested, accepted, completed, dismissed }
 
+enum RecommendationPriority { routine, important }
+
 class Recommendation {
   const Recommendation({
     required this.id,
@@ -552,6 +554,14 @@ class Recommendation {
     required this.timeLabel,
     required this.category,
     this.status = RecommendationStatus.suggested,
+    this.priority = RecommendationPriority.routine,
+    this.windowType,
+    this.scheduledAt,
+    this.day,
+    this.generatedAt,
+    this.signalEvidenceIds = const [],
+    this.checkInEvidenceIds = const [],
+    this.evidence = const [],
   });
   final String id;
   final String title;
@@ -559,22 +569,82 @@ class Recommendation {
   final String timeLabel;
   final String category;
   final RecommendationStatus status;
+  final RecommendationPriority priority;
+  final ForecastWindowType? windowType;
+  final DateTime? scheduledAt;
+  final DateTime? day;
+  final DateTime? generatedAt;
+  final List<String> signalEvidenceIds;
+  final List<String> checkInEvidenceIds;
+  final List<ForecastEvidence> evidence;
 
-  Recommendation copyWith({RecommendationStatus? status}) => Recommendation(
+  bool get isGrounded =>
+      signalEvidenceIds.isNotEmpty || checkInEvidenceIds.isNotEmpty;
+
+  Recommendation copyWith({
+    RecommendationStatus? status,
+    List<ForecastEvidence>? evidence,
+  }) => Recommendation(
     id: id,
     title: title,
     detail: detail,
     timeLabel: timeLabel,
     category: category,
     status: status ?? this.status,
+    priority: priority,
+    windowType: windowType,
+    scheduledAt: scheduledAt,
+    day: day,
+    generatedAt: generatedAt,
+    signalEvidenceIds: signalEvidenceIds,
+    checkInEvidenceIds: checkInEvidenceIds,
+    evidence: evidence ?? this.evidence,
   );
 }
 
 enum AlertSeverity { info, caution, high }
 
+enum RiskAlertCategory { sleepDebt, trainingLoad, fatigueStress }
+
 class RiskAlert {
-  const RiskAlert(this.title, this.detail, this.severity);
+  const RiskAlert(
+    this.title,
+    this.detail,
+    this.severity, {
+    this.id = '',
+    this.category = RiskAlertCategory.fatigueStress,
+    this.dismissed = false,
+    this.day,
+    this.detectedAt,
+    this.signalEvidenceIds = const [],
+    this.checkInEvidenceIds = const [],
+    this.evidence = const [],
+  });
+
+  final String id;
   final String title;
   final String detail;
   final AlertSeverity severity;
+  final RiskAlertCategory category;
+  final bool dismissed;
+  final DateTime? day;
+  final DateTime? detectedAt;
+  final List<String> signalEvidenceIds;
+  final List<String> checkInEvidenceIds;
+  final List<ForecastEvidence> evidence;
+
+  RiskAlert copyWith({bool? dismissed, List<ForecastEvidence>? evidence}) =>
+      RiskAlert(
+        title,
+        detail,
+        severity,
+        id: id,
+        category: category,
+        dismissed: dismissed ?? this.dismissed,
+        day: day,
+        detectedAt: detectedAt,
+        signalEvidenceIds: signalEvidenceIds,
+        checkInEvidenceIds: checkInEvidenceIds,
+        evidence: evidence ?? this.evidence,
+      );
 }

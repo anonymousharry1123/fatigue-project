@@ -67,8 +67,8 @@ users/{uid}
 ├── checkIns/{checkInId}
 ├── scoreSnapshots/{snapshotId}       (daily scores)
 ├── forecastPoints/{pointId}          (hourly forecasts + updatedAt + evidence IDs)
-├── recommendations/{recId}           (reserved)
-└── riskAlerts/{alertId}               (reserved)
+├── recommendations/{recId}           (daily grounded guidance + evidence IDs)
+└── riskAlerts/{alertId}               (dismissible wellness flags + evidence IDs)
 ```
 
 The user document stores profile fields, account email, preferences, consent
@@ -97,6 +97,8 @@ by Firebase Authentication.
 - Latest check-in
 - Reaction-time baseline windows
 - Hourly forecast range reads and day-scoped replacement
+- Daily recommendation and risk-alert reads/replacement
+- Risk-alert dismissal and guidance cleanup
 - Full user export and recursive user-tree deletion
 
 The `signals(type, timestamp)` compound index is declared in

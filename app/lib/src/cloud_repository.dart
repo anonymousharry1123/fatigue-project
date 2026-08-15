@@ -143,6 +143,30 @@ abstract interface class CloudRepository {
     required List<ForecastPoint> points,
   });
 
+  Future<List<Recommendation>> recommendationsForDay(String uid, DateTime day);
+
+  Future<void> replaceRecommendationsForDay(
+    String uid, {
+    required DateTime day,
+    required List<Recommendation> recommendations,
+  });
+
+  Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day);
+
+  Future<void> replaceRiskAlertsForDay(
+    String uid, {
+    required DateTime day,
+    required List<RiskAlert> alerts,
+  });
+
+  Future<void> setRiskAlertDismissed(
+    String uid,
+    String alertId, {
+    required bool dismissed,
+  });
+
+  Future<void> clearGuidance(String uid);
+
   Future<Map<String, Object?>> exportUser(String uid);
   Future<void> deleteUserTree(String uid);
 }
@@ -155,6 +179,8 @@ class MemoryCloudRepository implements CloudRepository {
   final Map<String, CloudUserState> _users = {};
   final Map<String, Map<String, ScoreSnapshot>> _scores = {};
   final Map<String, Map<String, ForecastPoint>> _forecasts = {};
+  final Map<String, Map<String, Recommendation>> _recommendations = {};
+  final Map<String, Map<String, RiskAlert>> _riskAlerts = {};
 
   void seed(String uid, CloudUserState state) {
     _users[uid] = state;
@@ -303,6 +329,102 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<Recommendation>> recommendationsForDay(
+    String uid,
+    DateTime day,
+  ) async {
+    _authorize(uid);
+    final values = (_recommendations[uid]?.values ?? const <Recommendation>[])
+        .where((item) => item.day != null && _sameDay(item.day!, day))
+        .toList();
+    return values..sort((left, right) {
+      final leftTime = left.scheduledAt ?? left.day!;
+      final rightTime = right.scheduledAt ?? right.day!;
+      return leftTime.compareTo(rightTime);
+    });
+  }
+
+  @override
+  Future<void> replaceRecommendationsForDay(
+    String uid, {
+    required DateTime day,
+    required List<Recommendation> recommendations,
+  }) async {
+    _authorize(uid);
+    if (recommendations.any(
+      (item) => item.day == null || !_sameDay(item.day!, day),
+    )) {
+      throw ArgumentError(
+        'Every recommendation must belong to the target day.',
+      );
+    }
+    final stored = _recommendations.putIfAbsent(uid, () => {});
+    stored.removeWhere(
+      (_, recommendation) =>
+          recommendation.day != null && _sameDay(recommendation.day!, day),
+    );
+    for (final recommendation in recommendations) {
+      stored[recommendation.id] = recommendationFromCloud(
+        recommendation.id,
+        recommendationToCloud(recommendation).cast<String, dynamic>(),
+      );
+    }
+  }
+
+  @override
+  Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) async {
+    _authorize(uid);
+    final values = (_riskAlerts[uid]?.values ?? const <RiskAlert>[])
+        .where((item) => item.day != null && _sameDay(item.day!, day))
+        .toList();
+    return values..sort(
+      (left, right) => right.severity.index.compareTo(left.severity.index),
+    );
+  }
+
+  @override
+  Future<void> replaceRiskAlertsForDay(
+    String uid, {
+    required DateTime day,
+    required List<RiskAlert> alerts,
+  }) async {
+    _authorize(uid);
+    if (alerts.any((item) => item.day == null || !_sameDay(item.day!, day))) {
+      throw ArgumentError('Every risk alert must belong to the target day.');
+    }
+    final stored = _riskAlerts.putIfAbsent(uid, () => {});
+    stored.removeWhere(
+      (_, alert) => alert.day != null && _sameDay(alert.day!, day),
+    );
+    for (final alert in alerts) {
+      stored[alert.id] = riskAlertFromCloud(
+        alert.id,
+        riskAlertToCloud(alert).cast<String, dynamic>(),
+      );
+    }
+  }
+
+  @override
+  Future<void> setRiskAlertDismissed(
+    String uid,
+    String alertId, {
+    required bool dismissed,
+  }) async {
+    _authorize(uid);
+    final alert = _riskAlerts[uid]?[alertId];
+    if (alert != null) {
+      _riskAlerts[uid]![alertId] = alert.copyWith(dismissed: dismissed);
+    }
+  }
+
+  @override
+  Future<void> clearGuidance(String uid) async {
+    _authorize(uid);
+    _recommendations.remove(uid);
+    _riskAlerts.remove(uid);
+  }
+
+  @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     _authorize(uid);
     return {
@@ -322,6 +444,14 @@ class MemoryCloudRepository implements CloudRepository {
           for (final entry in (_forecasts[uid] ?? const {}).entries)
             entry.key: _exportSafe(forecastPointToCloud(entry.value)),
         },
+        'recommendations': {
+          for (final entry in (_recommendations[uid] ?? const {}).entries)
+            entry.key: _exportSafe(recommendationToCloud(entry.value)),
+        },
+        'riskAlerts': {
+          for (final entry in (_riskAlerts[uid] ?? const {}).entries)
+            entry.key: _exportSafe(riskAlertToCloud(entry.value)),
+        },
       },
     };
   }
@@ -332,8 +462,15 @@ class MemoryCloudRepository implements CloudRepository {
     _users.remove(uid);
     _scores.remove(uid);
     _forecasts.remove(uid);
+    _recommendations.remove(uid);
+    _riskAlerts.remove(uid);
   }
 }
+
+bool _sameDay(DateTime left, DateTime right) =>
+    left.year == right.year &&
+    left.month == right.month &&
+    left.day == right.day;
 
 String scoreSnapshotId(DateTime day) =>
     '${day.year.toString().padLeft(4, '0')}-'

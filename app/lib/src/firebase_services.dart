@@ -375,6 +375,122 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<Recommendation>> recommendationsForDay(
+    String uid,
+    DateTime day,
+  ) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final snapshot = await _user(
+      uid,
+    ).collection('recommendations').where('day', isEqualTo: start).get();
+    final values = snapshot.docs
+        .map(
+          (document) => recommendationFromCloud(
+            document.id,
+            _normalizeDates(document.data()),
+          ),
+        )
+        .toList();
+    return values..sort((left, right) {
+      final leftTime = left.scheduledAt ?? start;
+      final rightTime = right.scheduledAt ?? start;
+      return leftTime.compareTo(rightTime);
+    });
+  }
+
+  @override
+  Future<void> replaceRecommendationsForDay(
+    String uid, {
+    required DateTime day,
+    required List<Recommendation> recommendations,
+  }) async {
+    final start = DateTime(day.year, day.month, day.day);
+    if (recommendations.any(
+      (item) => item.day == null || !_sameDay(item.day!, start),
+    )) {
+      throw ArgumentError(
+        'Every recommendation must belong to the target day.',
+      );
+    }
+    final collection = _user(uid).collection('recommendations');
+    final existing = await collection.where('day', isEqualTo: start).get();
+    final desired = {for (final item in recommendations) item.id: item};
+    final batch = _firestore.batch();
+    for (final document in existing.docs) {
+      if (!desired.containsKey(document.id)) batch.delete(document.reference);
+    }
+    for (final entry in desired.entries) {
+      batch.set(collection.doc(entry.key), recommendationToCloud(entry.value));
+    }
+    await batch.commit();
+  }
+
+  @override
+  Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final snapshot = await _user(
+      uid,
+    ).collection('riskAlerts').where('day', isEqualTo: start).get();
+    final values = snapshot.docs
+        .map(
+          (document) =>
+              riskAlertFromCloud(document.id, _normalizeDates(document.data())),
+        )
+        .toList();
+    return values..sort(
+      (left, right) => right.severity.index.compareTo(left.severity.index),
+    );
+  }
+
+  @override
+  Future<void> replaceRiskAlertsForDay(
+    String uid, {
+    required DateTime day,
+    required List<RiskAlert> alerts,
+  }) async {
+    final start = DateTime(day.year, day.month, day.day);
+    if (alerts.any((item) => item.day == null || !_sameDay(item.day!, start))) {
+      throw ArgumentError('Every risk alert must belong to the target day.');
+    }
+    final collection = _user(uid).collection('riskAlerts');
+    final existing = await collection.where('day', isEqualTo: start).get();
+    final desired = {for (final item in alerts) item.id: item};
+    final batch = _firestore.batch();
+    for (final document in existing.docs) {
+      if (!desired.containsKey(document.id)) batch.delete(document.reference);
+    }
+    for (final entry in desired.entries) {
+      batch.set(collection.doc(entry.key), riskAlertToCloud(entry.value));
+    }
+    await batch.commit();
+  }
+
+  @override
+  Future<void> setRiskAlertDismissed(
+    String uid,
+    String alertId, {
+    required bool dismissed,
+  }) => _user(uid).collection('riskAlerts').doc(alertId).set({
+    'dismissed': dismissed,
+  }, SetOptions(merge: true));
+
+  @override
+  Future<void> clearGuidance(String uid) async {
+    for (final collectionName in const ['recommendations', 'riskAlerts']) {
+      final collection = _user(uid).collection(collectionName);
+      while (true) {
+        final page = await collection.limit(100).get();
+        if (page.docs.isEmpty) break;
+        final batch = _firestore.batch();
+        for (final document in page.docs) {
+          batch.delete(document.reference);
+        }
+        await batch.commit();
+      }
+    }
+  }
+
+  @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     final state = await readUser(uid);
     final export = <String, Object?>{
@@ -422,6 +538,11 @@ class FirestoreCloudRepository implements CloudRepository {
     String string => DateTime.tryParse(string),
     _ => null,
   };
+
+  static bool _sameDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 
   static Object? _jsonSafe(Object? value) => switch (value) {
     Timestamp timestamp => timestamp.toDate().toIso8601String(),

@@ -311,6 +311,89 @@ void main() {
     expect(find.textContaining('Linked check-in'), findsWidgets);
   });
 
+  testWidgets(
+    'Versions 0.18–0.19 show grounded guidance and dismiss wellness flags',
+    (tester) async {
+      final now = DateTime.now();
+      final controller = AppController()
+        ..isReady = true
+        ..onboardingComplete = true
+        ..signals = [
+          for (var index = 0; index < 4; index++)
+            SignalReading(
+              id: 'short-sleep-$index',
+              type: SignalType.sleep,
+              value: 5.5,
+              timestamp: now.subtract(Duration(days: index)),
+            ),
+          SignalReading(
+            id: 'bedtime-live',
+            type: SignalType.bedtime,
+            value: 1,
+            timestamp: now,
+          ),
+          SignalReading(
+            id: 'study-live',
+            type: SignalType.study,
+            value: 6,
+            timestamp: now,
+          ),
+          SignalReading(
+            id: 'hydration-live',
+            type: SignalType.hydration,
+            value: .6,
+            timestamp: now,
+          ),
+        ]
+        ..checkIns = [
+          for (var index = 0; index < 3; index++)
+            DailyCheckIn(
+              id: 'strained-$index',
+              timestamp: now.subtract(Duration(days: index)),
+              energy: 3,
+              mood: 4,
+              stress: 9,
+            ),
+        ];
+      await controller.refreshGuidance();
+      final alertId = controller.alerts.first.id;
+
+      await tester.pumpWidget(TonyoApp(controller: controller));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Coach'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Grounded daily guidance'), findsOneWidget);
+      expect(find.text('Wellness flags'), findsOneWidget);
+      expect(find.text('Short-sleep pattern'), findsOneWidget);
+      expect(find.textContaining('fixture'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.byKey(Key('dismiss-risk-$alertId')),
+        180,
+      );
+      await tester.tap(find.byKey(Key('dismiss-risk-$alertId')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key('risk-alert-$alertId')), findsNothing);
+
+      await tester.scrollUntilVisible(
+        find.text('Protect a 60-minute focus block'),
+        220,
+      );
+      expect(find.text('Protect a 60-minute focus block'), findsOneWidget);
+      expect(find.textContaining('WINDOW'), findsWidgets);
+      expect(find.byIcon(Icons.link_rounded), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.textContaining('general wellness only'),
+        220,
+      );
+      expect(find.textContaining('does not diagnose'), findsOneWidget);
+    },
+  );
+
   testWidgets('Version 0.16 Week view uses calculated daily summaries', (
     tester,
   ) async {
