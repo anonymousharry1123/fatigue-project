@@ -52,7 +52,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-15 — **82 tests passed** with Version 0.17 Key Windows; static analysis clean
+- Last verified: 2026-08-15 — **86 tests passed** after reconciling Version 0.17 with the latest `origin/main`; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -68,7 +68,7 @@
 11. Daily history (date grouping, completion, edit/delete) - Complete (v0.10)
 12. Firebase foundation (Auth, Firestore schema, rules, migration) - Complete (v0.10-a)
 13. Basic Energy Score (seven explainable factors + daily cloud snapshot) - Complete (v0.11)
-14. Cognitive Score (five explainable factors + previous-day comparison) - Complete (v0.12)
+14. Cognitive Score (six explainable factors + previous-day comparison) - Complete (v0.12)
 15. Today Dashboard (saved scores + fatigue state + daily signals) - Complete (v0.13)
 16. Score Drivers (ranked contributions + evidence-aware confidence) - Complete (v0.14)
 17. Forecast Engine (hourly estimates + uncertainty + cloud persistence) - Complete (v0.15)
@@ -471,6 +471,27 @@ private signals and check-ins actually used by the forecast.
   “crash.” The detector now scores prior decline plus subsequent rebound and
   excludes the terminal point so the window describes a meaningful dip.
 
+### 2026-08-15 — Main reconciliation and regression repairs
+
+**Branch:** `main`
+
+**Goal:** Reconcile the local Version 0.17 commits with the newer remote
+sleep-normalization, cohort, and bug-fix work; repair integration regressions;
+verify and synchronize `main`.
+
+**Results:**
+- Merged `origin/main` into local `main` without discarding either history.
+- Fixed an unbounded-width `Row`/`Expanded` failure in the updated Insights
+  confidence card by using a responsive stacked/two-column layout.
+- Made the expanded Cognitive model consistently use six inputs in model
+  completeness, Today/Insights copy, roadmap text, README text, and tests.
+- Removed a trailing blank-line defect from `ENGINE_TUNING_LOG.md`.
+- `flutter test` passed all **86 tests**; `flutter analyze` reported no issues.
+
+**Major issues:** The Git merge had no text conflicts, but the complete widget
+suite exposed a runtime layout assertion and a stale five-input denominator
+that static analysis could not detect.
+
 ---
 
 ## Prompts Used
@@ -511,6 +532,18 @@ regression coverage.
 **Modifications:** Stored document IDs rather than duplicated signal values;
 resolved only linked records; treated legacy forecasts without link arrays as
 valid but explicitly unsupported by recent linked evidence.
+
+### Maintenance: Reconcile and sync main
+**Prompt:**
+"fix branch issues and sync changes to main"
+
+**Result:** Merged the latest remote fixes with Version 0.17, repaired the
+resulting Insights layout and six-input Cognitive consistency issues, and
+verified the combined branch with 86 passing tests and clean static analysis.
+
+**Modifications:** Preserved both histories with a merge commit instead of
+rebasing or discarding either side; added a focused follow-up repair commit
+before pushing `main`.
 
 ### Feature: Versions 0.8 & 0.9 check-in and reaction test
 **Prompt:**

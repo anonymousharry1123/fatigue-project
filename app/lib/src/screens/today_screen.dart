@@ -141,7 +141,7 @@ class TodayScreen extends StatelessWidget {
                               label: 'Cognitive',
                               eyebrow: 'ESTIMATED COGNITIVE SCORE',
                               completeness: _confidenceLine(
-                                '${score.cognitiveInputCount}/5 cognitive inputs',
+                                '${score.cognitiveInputCount}/6 cognitive inputs',
                                 score.cognitiveConfidence,
                                 score.cognitiveFreshness,
                               ),

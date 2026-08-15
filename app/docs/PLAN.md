@@ -172,7 +172,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 ### Version 0.12 — Cognitive Score ✅
 
 - Calculate an explainable 0–100 Cognitive Score
-- Query reaction-time `signals`, sleep, study load, and latest mood/stress `checkIns` from Firestore
+- Query reaction-time `signals`, sleep, study load, screen time, and latest mood/stress `checkIns` from Firestore
 - Compare the result with the previous day’s `scoreSnapshots` document
 - Write cognitive fields onto the same daily snapshot schema from Version 0.10-a
 - Personalize the reaction-time contribution against prior valid reaction tests when a baseline exists

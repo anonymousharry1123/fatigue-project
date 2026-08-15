@@ -101,10 +101,9 @@ class InsightsScreen extends StatelessWidget {
           TonyoCard(
             color: const Color(0xFF111722),
             padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final summary = Row(
                   children: [
                     const MetricIcon(
                       icon: Icons.psychology_rounded,
@@ -118,19 +117,30 @@ class InsightsScreen extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Confidence combines input coverage with the age, source, and quality of supporting records. Contributions are associations used by this wellness model—not medical findings or proof of cause.',
-                    style: TextStyle(
-                      color: TonyoColors.muted,
-                      fontSize: 10,
-                      height: 1.4,
-                    ),
+                );
+                const detail = Text(
+                  'Confidence combines input coverage with the age, source, and quality of supporting records. Contributions are associations used by this wellness model—not medical findings or proof of cause.',
+                  style: TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 10,
+                    height: 1.4,
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 560) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [summary, const SizedBox(height: 12), detail],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: summary),
+                    const SizedBox(width: 16),
+                    const Expanded(flex: 3, child: detail),
+                  ],
+                );
+              },
             ),
           ),
         ],

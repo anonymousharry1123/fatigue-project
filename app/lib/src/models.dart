@@ -399,7 +399,7 @@ class ScoreSnapshot {
   int? get cognitiveChange =>
       previousCognitive == null ? null : cognitive - previousCognitive!;
   double get completeness => (inputCount / 7).clamp(0, 1);
-  double get cognitiveCompleteness => (cognitiveInputCount / 5).clamp(0, 1);
+  double get cognitiveCompleteness => (cognitiveInputCount / 6).clamp(0, 1);
   List<ScoreDriver> get energyPositiveDrivers =>
       drivers.where((driver) => driver.isPositive).toList(growable: false);
   List<ScoreDriver> get energyNegativeDrivers =>

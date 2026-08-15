@@ -22,6 +22,7 @@ void main() {
     expect(score.cognitiveFreshness, inInclusiveRange(0, 1));
     expect(score.inputCount, 7);
     expect(score.cognitiveInputCount, 6);
+    expect(score.cognitiveCompleteness, 1);
     expect(score.isEstimate, isTrue);
     expect(score.drivers.map((driver) => driver.label).toSet(), {
       'Sleep',

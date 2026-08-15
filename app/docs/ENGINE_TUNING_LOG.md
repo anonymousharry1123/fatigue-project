@@ -58,4 +58,3 @@ Timeline left → right: **observe** → **predict** → **edit** → **measure*
 - **Data changes (after):**
 - **Pass guardrails?** (0–100 / mean jump / drivers named / tests)
 - **Keep or revert:**
-

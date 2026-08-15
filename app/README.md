@@ -14,8 +14,9 @@ Version 0.11 adds a Firebase-backed, explainable daily Energy Score. The
 mood, and stress, and stores one private daily snapshot per authenticated user.
 
 Version 0.12 extends that same snapshot with an explainable Cognitive Score
-using reaction time, recent sleep, study load, mood, and stress. Signed-in
-scores compare with the previous daily Cognitive snapshot when one exists.
+using reaction time, recent sleep, study load, screen time, mood, and stress.
+Signed-in scores compare with the previous daily Cognitive snapshot when one
+exists.
 
 Version 0.13 promotes Today into a snapshot-backed dashboard. It loads the
 saved daily Energy and Cognitive scores when available, calculates them live
