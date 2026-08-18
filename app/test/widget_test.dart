@@ -210,7 +210,7 @@ void main() {
     expect(find.textContaining('choices are saved'), findsOneWidget);
   });
 
-  testWidgets('Version 0.25 syncs heart, sleep, workout, and water data', (
+  testWidgets('syncs heart, sleep, workout, steps, and water data', (
     tester,
   ) async {
     final health = _WidgetHealthService(
@@ -248,6 +248,13 @@ void main() {
           timestamp: DateTime.now(),
           source: SignalSource.healthKit,
         ),
+        SignalReading(
+          id: 'healthkit-steps-2026-08-18',
+          type: SignalType.steps,
+          value: 6400,
+          timestamp: DateTime.now(),
+          source: SignalSource.healthKit,
+        ),
       ],
     );
     final controller = readyController(healthService: health)
@@ -278,10 +285,11 @@ void main() {
     expect(controller.healthKitSleepNightCount, 1);
     expect(controller.healthKitWorkoutSignalCount, 1);
     expect(controller.healthKitHydrationSignalCount, 1);
+    expect(controller.healthKitStepSignalCount, 1);
     expect(find.textContaining('Imported 1 new heart signal'), findsOneWidget);
     expect(find.textContaining('Reconciled 1 night'), findsOneWidget);
     expect(
-      find.textContaining('Imported 2 new activity signals'),
+      find.textContaining('Imported 3 new or updated activity signals'),
       findsOneWidget,
     );
     expect(find.textContaining('30-day window'), findsOneWidget);

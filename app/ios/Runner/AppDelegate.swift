@@ -34,6 +34,7 @@ import UserNotifications
       .heartRateVariabilitySDNN,
       .restingHeartRate,
       .dietaryWater,
+      .stepCount,
     ]
     for identifier in quantityIdentifiers {
       if let type = HKObjectType.quantityType(forIdentifier: identifier) {
@@ -406,6 +407,57 @@ import UserNotifications
         }
       }
       healthStore.execute(waterQuery)
+    }
+
+    if let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) {
+      group.enter()
+      var interval = DateComponents()
+      interval.day = 1
+      let calendar = Calendar.current
+      let anchor = calendar.startOfDay(for: start)
+      let stepsQuery = HKStatisticsCollectionQuery(
+        quantityType: stepType,
+        quantitySamplePredicate: predicate,
+        options: .cumulativeSum,
+        anchorDate: anchor,
+        intervalComponents: interval
+      )
+      stepsQuery.initialResultsHandler = { _, collection, error in
+        defer { group.leave() }
+        if let error {
+          lock.lock()
+          queryError = queryError ?? error
+          lock.unlock()
+          return
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let idFormatter = DateFormatter()
+        idFormatter.calendar = calendar
+        idFormatter.locale = Locale(identifier: "en_US_POSIX")
+        idFormatter.dateFormat = "yyyy-MM-dd"
+        var stepPayload: [[String: Any]] = []
+        collection?.enumerateStatistics(from: start, to: now) { statistics, _ in
+          guard let sum = statistics.sumQuantity() else { return }
+          let steps = sum.doubleValue(for: HKUnit.count())
+          guard steps.isFinite, steps > 0, steps <= 200_000 else { return }
+          let timestamp = min(now, statistics.endDate.addingTimeInterval(-1))
+          stepPayload.append([
+            "id": "healthkit-steps-\(idFormatter.string(from: statistics.startDate))",
+            "type": "steps",
+            "value": steps,
+            "timestamp": formatter.string(from: timestamp),
+            "source": "healthKit",
+            "quality": 1.0,
+            "note": "Apple Health daily step total",
+          ])
+        }
+        lock.lock()
+        payload.append(contentsOf: stepPayload)
+        lock.unlock()
+      }
+      healthStore.execute(stepsQuery)
     }
 
     group.notify(queue: .main) {

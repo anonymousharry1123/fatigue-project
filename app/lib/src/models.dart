@@ -4,6 +4,7 @@ enum SignalType {
   hydration,
   study,
   exercise,
+  steps,
   screenTime,
   caffeine,
   reactionTime,
@@ -25,6 +26,7 @@ extension SignalTypeInfo on SignalType {
     SignalType.hydration => 'Hydration',
     SignalType.study => 'Study',
     SignalType.exercise => 'Exercise',
+    SignalType.steps => 'Steps',
     SignalType.screenTime => 'Screen time',
     SignalType.caffeine => 'Caffeine',
     SignalType.reactionTime => 'Reaction time',
@@ -53,6 +55,7 @@ extension SignalTypeInfo on SignalType {
     SignalType.reactionTime => 'ms',
     SignalType.hrv => 'ms',
     SignalType.restingHeartRate => 'bpm',
+    SignalType.steps => 'steps',
   };
 }
 

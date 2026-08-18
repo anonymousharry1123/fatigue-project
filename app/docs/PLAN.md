@@ -253,10 +253,11 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Reconcile overlapping samples and multiple sources in Firestore
 - Prefer imported sleep only when it is more complete than manual data
 
-### Version 0.25 — Workout and Hydration Sync ✅ Current
+### Version 0.25 — Activity and Hydration Sync ✅ Current
 
-- Import workouts and available hydration samples into `signals`
+- Import workouts, daily step totals, and available hydration samples into `signals`
 - Derive daily training load from queried exercise signals
+- Use steps as the Energy model’s movement input only when no workout exists
 - Retain manual correction and fallback controls on the same documents
 
 ## Upcoming Versions

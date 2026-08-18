@@ -174,6 +174,42 @@ void main() {
     );
   });
 
+  test('Apple Health steps fill movement only when no workout exists', () {
+    final steps = SignalReading(
+      id: 'healthkit-steps-2026-07-21',
+      type: SignalType.steps,
+      value: 7000,
+      timestamp: now,
+      source: SignalSource.healthKit,
+    );
+    final stepsOnly = FatigueEngine.score(
+      signals: [steps],
+      checkIns: const [],
+      now: now,
+    );
+    final withWorkout = FatigueEngine.score(
+      signals: [
+        steps,
+        SignalReading(
+          id: 'workout',
+          type: SignalType.exercise,
+          value: 1,
+          timestamp: now,
+          source: SignalSource.healthKit,
+        ),
+      ],
+      checkIns: const [],
+      now: now,
+    );
+
+    expect(stepsOnly.inputCount, 1);
+    expect(stepsOnly.confidence, greaterThan(.2));
+    expect(stepsOnly.drivers.single.label, 'Movement');
+    expect(stepsOnly.drivers.single.detail, contains('7000 steps'));
+    expect(withWorkout.inputCount, 1);
+    expect(withWorkout.drivers.single.label, 'Exercise');
+  });
+
   test('self-reported energy does not circularly change the Energy Score', () {
     ScoreSnapshot calculate(double energy) => FatigueEngine.score(
       signals: const [],

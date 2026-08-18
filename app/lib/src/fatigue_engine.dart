@@ -56,12 +56,19 @@ abstract final class FatigueEngine {
       type: SignalType.exercise,
       day: start,
     );
+    final stepsAggregate = ActivitySyncLogic.aggregateForDay(
+      targetDay,
+      type: SignalType.steps,
+      day: start,
+    );
     final hydrationReadings = hydrationAggregate?.evidence ?? const [];
     final exerciseReadings = exerciseAggregate?.evidence ?? const [];
+    final stepReadings = stepsAggregate?.evidence ?? const [];
     final studyReadings = readingsFor(SignalType.study);
     final screenReadings = readingsFor(SignalType.screenTime);
     final hydration = hydrationAggregate?.total;
     final exercise = exerciseAggregate?.total;
+    final steps = stepsAggregate?.total;
     final study = totalOf(studyReadings);
     final screen = totalOf(screenReadings);
     final applicableCheckIns =
@@ -124,6 +131,26 @@ abstract final class FatigueEngine {
           impact,
           '${exercise.toStringAsFixed(1)} hr logged today',
           readings: exerciseReadings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 24),
+        ),
+      );
+    } else if (steps != null) {
+      // Steps fill the daily movement input only when there is no workout, so
+      // the same activity is not rewarded twice.
+      final impact = switch (steps) {
+        < 2000 => -3.0,
+        < 5000 => 0.0,
+        <= 12000 => 4.0,
+        _ => 2.0,
+      };
+      energy += impact;
+      drivers.add(
+        _signalDriver(
+          'Movement',
+          impact,
+          '${steps.round()} steps from Apple Health today',
+          readings: stepReadings,
           cutoff: cutoff,
           maximumAge: const Duration(hours: 24),
         ),
@@ -499,6 +526,12 @@ abstract final class FatigueEngine {
             : negative
             ? 'Today’s training load was outside the model’s recovery range.'
             : 'Today’s movement had a neutral estimated effect.',
+      'Movement' =>
+        positive
+            ? 'Today’s step total supported the daily movement estimate.'
+            : negative
+            ? 'Today’s step total was below the model’s movement range.'
+            : 'Today’s step total was close to the model’s neutral range.',
       'Workload' || 'Study load' =>
         positive
             ? 'Study load stayed within a manageable range for today.'

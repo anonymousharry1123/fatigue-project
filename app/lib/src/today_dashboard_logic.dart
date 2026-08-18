@@ -42,6 +42,7 @@ abstract final class TodayDashboardLogic {
     SignalType.sleep,
     SignalType.hydration,
     SignalType.exercise,
+    SignalType.steps,
     SignalType.study,
     SignalType.screenTime,
     SignalType.reactionTime,
@@ -123,6 +124,7 @@ abstract final class TodayDashboardLogic {
   static String _displayValue(SignalType type, double value) => switch (type) {
     SignalType.reactionTime => '${value.round()} ms',
     SignalType.hydration => '${value.toStringAsFixed(1)} L',
+    SignalType.steps => '${value.round()} steps',
     SignalType.sleep ||
     SignalType.exercise ||
     SignalType.study ||

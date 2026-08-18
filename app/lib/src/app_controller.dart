@@ -165,6 +165,13 @@ class AppController extends ChangeNotifier {
             item.type == SignalType.hydration,
       )
       .length;
+  int get healthKitStepSignalCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            item.type == SignalType.steps,
+      )
+      .length;
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -1254,7 +1261,7 @@ class AppController extends ChangeNotifier {
       activitySyncError = error.message;
     } on Object {
       activitySyncError =
-          'Apple Health workout and hydration data could not be imported.';
+          'Apple Health workout, step, and hydration data could not be imported.';
     } finally {
       if (heartResult != null ||
           (sleepResult?.importedNightCount ?? 0) > 0 ||
@@ -1311,23 +1318,26 @@ class AppController extends ChangeNotifier {
   }
 
   String get activitySyncSummary {
-    if (isSyncing) return 'Reading the last 30 days of workouts and water…';
+    if (isSyncing) {
+      return 'Reading the last 30 days of workouts, steps, and water…';
+    }
     if (activitySyncError != null) return activitySyncError!;
     if (lastSync == null) {
-      return 'Workouts and hydration have not been synced yet.';
+      return 'Workouts, steps, and hydration have not been synced yet.';
     }
     final workouts = healthKitWorkoutSignalCount;
     final hydration = healthKitHydrationSignalCount;
-    final total = workouts + hydration;
+    final steps = healthKitStepSignalCount;
+    final total = workouts + hydration + steps;
     if (lastActivityImportCount == 0) {
       if (lastActivityDuplicateCount > 0) {
         return 'Up to date · $lastActivityDuplicateCount matching ${lastActivityDuplicateCount == 1 ? 'sample was' : 'samples were'} already saved.';
       }
       return total == 0
-          ? 'No readable workouts or water samples found. Manual activity logging remains available.'
-          : 'Up to date · $workouts ${workouts == 1 ? 'workout' : 'workouts'} and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
+          ? 'No readable workouts, steps, or water samples found. Manual activity logging remains available.'
+          : 'Up to date · $workouts ${workouts == 1 ? 'workout' : 'workouts'}, $steps daily step ${steps == 1 ? 'total' : 'totals'}, and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
     }
-    return 'Imported $lastActivityImportCount new ${lastActivityImportCount == 1 ? 'activity signal' : 'activity signals'} · $workouts ${workouts == 1 ? 'workout' : 'workouts'} and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
+    return 'Imported $lastActivityImportCount new or updated ${lastActivityImportCount == 1 ? 'activity signal' : 'activity signals'} · $workouts ${workouts == 1 ? 'workout' : 'workouts'}, $steps daily step ${steps == 1 ? 'total' : 'totals'}, and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
   }
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());

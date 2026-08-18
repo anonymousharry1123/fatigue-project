@@ -242,7 +242,7 @@ class ProfileScreen extends StatelessWidget {
       HealthAuthorizationState.authorized when controller.healthAuthorized =>
         controller.lastSync == null
             ? 'Read-only access · health sync ready'
-            : '${controller.healthKitHeartSignalCount} heart · ${controller.healthKitSleepNightCount} sleep nights · ${controller.healthKitWorkoutSignalCount + controller.healthKitHydrationSignalCount} activity signals',
+            : '${controller.healthKitHeartSignalCount} heart · ${controller.healthKitSleepNightCount} sleep nights · ${controller.healthKitWorkoutSignalCount + controller.healthKitHydrationSignalCount + controller.healthKitStepSignalCount} activity signals',
       HealthAuthorizationState.authorized =>
         'Permission choices saved · connect to sync',
       HealthAuthorizationState.revoked =>
@@ -802,7 +802,7 @@ class _HealthPermissionSheet extends StatelessWidget {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Manual sleep and activity logging stays available in every permission state. A manual exercise or hydration value corrects that day’s imported total; deleting it falls back to Apple Health. Existing manual entries are never removed.',
+                      'Manual sleep and activity logging stays available. Score use: recent sleep, today’s water, and either workout duration or steps affect Energy confidence. HRV and resting heart rate are saved for recovery trends but do not affect the score until personal baselines are implemented.',
                       style: TextStyle(fontSize: 11),
                     ),
                   ),
@@ -971,7 +971,7 @@ class _HealthPermissionStatus extends StatelessWidget {
             ),
             HealthAuthorizationState.authorized => (
               controller.healthAuthorized
-                  ? 'Your permission choices are saved in Apple Health. Tonyo can now import readable heart, sleep, workout, and hydration data.'
+                  ? 'Your permission choices are saved in Apple Health. Tonyo can now import readable heart, sleep, workout, step, and hydration data.'
                   : 'Your permission choices are saved in Apple Health. Reconnect Tonyo to import readable health data.',
               TonyoColors.mint,
             ),

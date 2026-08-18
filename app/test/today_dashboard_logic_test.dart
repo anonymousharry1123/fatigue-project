@@ -62,7 +62,7 @@ void main() {
       (item) => item.type == SignalType.sleep,
     );
 
-    expect(summaries, hasLength(6));
+    expect(summaries, hasLength(7));
     expect(hydration.displayValue, '1.9 L');
     expect(hydration.readingCount, 2);
     expect(reaction.displayValue, '274 ms');
@@ -117,5 +117,28 @@ void main() {
           .displayValue,
       '1.8 L',
     );
+  });
+
+  test('shows Apple Health daily steps as a separate signal', () {
+    final day = DateTime(2026, 8, 18);
+    final summaries = TodayDashboardLogic.summariesForDay(
+      [
+        SignalReading(
+          id: 'healthkit-steps-2026-08-18',
+          type: SignalType.steps,
+          value: 6432,
+          timestamp: day.add(const Duration(hours: 12)),
+          source: SignalSource.healthKit,
+        ),
+      ],
+      day: day,
+      now: day.add(const Duration(hours: 13)),
+    );
+
+    final steps = summaries.singleWhere(
+      (item) => item.type == SignalType.steps,
+    );
+    expect(steps.displayValue, '6432 steps');
+    expect(steps.readingCount, 1);
   });
 }

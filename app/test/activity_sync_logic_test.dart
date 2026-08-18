@@ -205,4 +205,30 @@ void main() {
     expect(corrected!.total, 0);
     expect(corrected.usesManualCorrection, isTrue);
   });
+
+  test('daily step totals update in place instead of accumulating', () {
+    final day = DateTime(2026, 8, 18);
+    SignalReading steps(double value, int hour) => SignalReading(
+      id: 'healthkit-steps-2026-08-18',
+      type: SignalType.steps,
+      value: value,
+      timestamp: day.add(Duration(hours: hour)),
+      source: SignalSource.healthKit,
+    );
+
+    final result = ActivitySyncLogic.merge(
+      existing: [steps(1200, 10)],
+      imported: [steps(6400, 15)],
+    );
+    final aggregate = ActivitySyncLogic.aggregateForDay(
+      result.readings,
+      type: SignalType.steps,
+      day: day,
+    );
+
+    expect(result.importedCount, 1);
+    expect(result.duplicateCount, 0);
+    expect(result.readings, hasLength(1));
+    expect(aggregate!.total, 6400);
+  });
 }

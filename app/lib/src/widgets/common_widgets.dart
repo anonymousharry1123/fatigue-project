@@ -293,6 +293,7 @@ IconData iconForSignal(SignalType type) => switch (type) {
   SignalType.hydration => Icons.water_drop_rounded,
   SignalType.study => Icons.menu_book_rounded,
   SignalType.exercise => Icons.fitness_center_rounded,
+  SignalType.steps => Icons.directions_walk_rounded,
   SignalType.screenTime => Icons.smartphone_rounded,
   SignalType.caffeine => Icons.coffee_rounded,
   SignalType.reactionTime => Icons.bolt_rounded,
@@ -309,7 +310,9 @@ Color colorForSignal(SignalType type) => switch (type) {
   SignalType.sleep || SignalType.bedtime => TonyoColors.blue,
   SignalType.hydration || SignalType.hrv => TonyoColors.mint,
   SignalType.study => TonyoColors.amber,
-  SignalType.exercise || SignalType.restingHeartRate => TonyoColors.coral,
+  SignalType.exercise ||
+  SignalType.steps ||
+  SignalType.restingHeartRate => TonyoColors.coral,
   SignalType.screenTime || SignalType.reactionTime => TonyoColors.violet,
   SignalType.caffeine => TonyoColors.amber,
   SignalType.sleepAwake => TonyoColors.amber,

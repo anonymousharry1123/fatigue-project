@@ -86,7 +86,7 @@ days exist. Missing entries remain missing, and all association copy explicitly
 avoids causal or medical claims.
 
 Version 0.22 adds the read-only Apple Health permission flow on iOS. Before the
-system prompt, Tonyo explains its sleep, heart, workout, and hydration requests;
+system prompt, Tonyo explains its sleep, heart, workout/step, and hydration requests;
 permission choices can be reviewed in Settings or disconnected inside Tonyo.
 Apple does not disclose individual read-category decisions to apps, so the UI
 labels the completed request honestly and keeps manual sleep and activity entry

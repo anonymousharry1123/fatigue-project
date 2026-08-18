@@ -30,13 +30,17 @@ class ActivityDailyAggregate {
   final bool usesManualCorrection;
 }
 
-/// Normalizes Version 0.25 workout and hydration imports and derives the
+/// Normalizes Apple Health workout, step, and hydration imports and derives the
 /// manual-safe daily values used by scores, forecasts, and summaries.
 abstract final class ActivitySyncLogic {
   static const manualCorrectionNote = 'Manual daily correction';
   static const blankManualValueNote = 'Blank field · imported fallback allowed';
 
-  static const supportedTypes = {SignalType.exercise, SignalType.hydration};
+  static const supportedTypes = {
+    SignalType.exercise,
+    SignalType.hydration,
+    SignalType.steps,
+  };
 
   static const duplicateWindow = Duration(minutes: 5);
   static const exerciseValueTolerance = .1;
@@ -57,20 +61,39 @@ abstract final class ActivitySyncLogic {
         rejectedCount += 1;
         continue;
       }
-      final tolerance = candidate.type == SignalType.exercise
-          ? exerciseValueTolerance
-          : hydrationValueTolerance;
+      final sameIdIndex = readings.indexWhere(
+        (item) => item.id == candidate.id,
+      );
+      if (sameIdIndex >= 0) {
+        final saved = readings[sameIdIndex];
+        // Daily step totals grow during the day. HealthKit gives them a stable
+        // per-day ID so a refresh replaces the partial total instead of
+        // double-counting it.
+        if (candidate.type == SignalType.steps &&
+            (saved.value - candidate.value).abs() > 1) {
+          readings[sameIdIndex] = candidate;
+          importedCount += 1;
+        } else {
+          duplicateCount += 1;
+        }
+        continue;
+      }
+      final tolerance = switch (candidate.type) {
+        SignalType.exercise => exerciseValueTolerance,
+        SignalType.hydration => hydrationValueTolerance,
+        SignalType.steps => 1.0,
+        _ => 0.0,
+      };
       final duplicate = readings.any(
         (item) =>
-            item.id == candidate.id ||
-            (item.source == SignalSource.healthKit &&
-                item.type == candidate.type &&
-                item.timestamp
-                        .difference(candidate.timestamp)
-                        .inMilliseconds
-                        .abs() <=
-                    duplicateWindow.inMilliseconds &&
-                (item.value - candidate.value).abs() <= tolerance),
+            item.source == SignalSource.healthKit &&
+            item.type == candidate.type &&
+            item.timestamp
+                    .difference(candidate.timestamp)
+                    .inMilliseconds
+                    .abs() <=
+                duplicateWindow.inMilliseconds &&
+            (item.value - candidate.value).abs() <= tolerance,
       );
       if (duplicate) {
         duplicateCount += 1;
@@ -123,7 +146,7 @@ abstract final class ActivitySyncLogic {
       );
     }
 
-    if (type == SignalType.hydration) {
+    if (type == SignalType.hydration || type == SignalType.steps) {
       final selected =
           all
               .where(
@@ -238,6 +261,7 @@ abstract final class ActivitySyncLogic {
   static bool _validRange(SignalType type, double value) => switch (type) {
     SignalType.exercise => value > 0 && value <= 24,
     SignalType.hydration => value > 0 && value <= 10,
+    SignalType.steps => value > 0 && value <= 200000,
     _ => false,
   };
 

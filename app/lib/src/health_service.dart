@@ -37,7 +37,7 @@ class HealthSyncException implements Exception {
   String toString() => message;
 }
 
-/// The complete read-only permission set requested by Version 0.22.
+/// The read-only permission groups shown before opening Apple's category sheet.
 const healthPermissions = <HealthPermissionInfo>[
   HealthPermissionInfo(
     title: 'Sleep',
@@ -52,7 +52,8 @@ const healthPermissions = <HealthPermissionInfo>[
   ),
   HealthPermissionInfo(
     title: 'Workouts',
-    detail: 'Workout duration for daily training-load estimates.',
+    detail:
+        'Workout duration and daily steps for movement and training-load estimates.',
     iconName: 'workout',
   ),
   HealthPermissionInfo(
@@ -154,7 +155,7 @@ class HealthService {
     } on PlatformException catch (error) {
       throw HealthSyncException(
         error.message ??
-            'Apple Health workout and hydration data could not be read.',
+            'Apple Health workout, step, and hydration data could not be read.',
       );
     }
   }
