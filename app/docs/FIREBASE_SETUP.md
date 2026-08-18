@@ -45,7 +45,9 @@ cp config/firebase_options.example.json config/firebase_options.json
 ```
 
 Fill the values from **Project Settings → Your apps → SDK setup and
-configuration**. The real file is gitignored.
+configuration**. `FIREBASE_APP_ID` is the web registration and
+`FIREBASE_IOS_APP_ID` is the separate iOS registration (its value contains
+`:ios:`). The real file is gitignored.
 
 Run the app with:
 
@@ -55,7 +57,9 @@ flutter run --dart-define-from-file=config/firebase_options.json
 
 When the file is omitted, Tonyo deliberately starts in offline demo mode. It
 continues to use the existing SharedPreferences cache and does not attempt a
-Firebase connection.
+Firebase connection. iOS also starts offline when `FIREBASE_IOS_APP_ID` is
+missing or is not an iOS app ID; this prevents the native Firebase SDK from
+terminating Runner when given the web app ID.
 
 ## Data layout
 

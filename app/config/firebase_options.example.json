@@ -5,5 +5,6 @@
   "FIREBASE_PROJECT_ID": "replace-me",
   "FIREBASE_AUTH_DOMAIN": "replace-me.firebaseapp.com",
   "FIREBASE_STORAGE_BUCKET": "replace-me.firebasestorage.app",
+  "FIREBASE_IOS_APP_ID": "1:replace-me:ios:replace-me",
   "FIREBASE_IOS_BUNDLE_ID": "com.example.app"
 }
