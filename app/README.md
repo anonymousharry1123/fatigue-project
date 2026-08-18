@@ -36,7 +36,7 @@ flutter run -d edge --web-port=7357
 With Firebase:
 
 ```sh
-flutter run -d edge --web-port=7357 --dart-define-from-file=config/firebase_options.json
+flutter run -d edge --dart-define-from-file=config/firebase_options.json
 ```
 
 VS Code launch configs under `../.vscode/launch.json` already set `--web-port=7357`.
