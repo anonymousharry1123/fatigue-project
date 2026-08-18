@@ -45,6 +45,7 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
       child: MaterialApp(
         title: 'Tonyo',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const TonyoScrollBehavior(),
         theme: buildTonyoTheme(),
         home: AnimatedBuilder(
           animation: controller,
