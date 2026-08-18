@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'sleep_sync_logic.dart';
 
 enum DailyHistoryItemKind { activity, sleep, checkIn, signal }
 
@@ -124,6 +125,14 @@ abstract final class DailyHistoryLogic {
     }
     for (final signal in signals) {
       final groupId = signal.groupId;
+      final isImportedSleep =
+          groupId?.startsWith(SleepSyncLogic.importedGroupPrefix) ?? false;
+      if (isImportedSleep) {
+        if (signal.type == SignalType.sleep) {
+          add(DailyHistoryItem.signal(signal));
+        }
+        continue;
+      }
       final isGroupedRecord =
           groupId != null &&
           (groupId.startsWith('activity-') || groupId.startsWith('sleep-'));

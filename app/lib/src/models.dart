@@ -9,9 +9,11 @@ enum SignalType {
   reactionTime,
   hrv,
   restingHeartRate,
+  sleepAwake,
   sleepCore,
   sleepDeep,
   sleepRem,
+  sleepUnspecified,
 }
 
 enum SignalSource { manual, healthKit, model }
@@ -28,9 +30,11 @@ extension SignalTypeInfo on SignalType {
     SignalType.reactionTime => 'Reaction time',
     SignalType.hrv => 'HRV',
     SignalType.restingHeartRate => 'Resting HR',
+    SignalType.sleepAwake => 'Awake',
     SignalType.sleepCore => 'Core sleep',
     SignalType.sleepDeep => 'Deep sleep',
     SignalType.sleepRem => 'REM sleep',
+    SignalType.sleepUnspecified => 'Unspecified sleep',
   };
 
   String get unit => switch (this) {
@@ -38,9 +42,11 @@ extension SignalTypeInfo on SignalType {
     SignalType.study ||
     SignalType.exercise ||
     SignalType.screenTime ||
+    SignalType.sleepAwake ||
     SignalType.sleepCore ||
     SignalType.sleepDeep ||
-    SignalType.sleepRem => 'hr',
+    SignalType.sleepRem ||
+    SignalType.sleepUnspecified => 'hr',
     SignalType.bedtime => 'hour',
     SignalType.hydration => 'L',
     SignalType.caffeine => 'drinks',

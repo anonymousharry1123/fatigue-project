@@ -130,6 +130,50 @@ void main() {
     expect(score.drivers.single.contribution, 0);
   });
 
+  test('Version 0.25 scores manual activity corrections over imports', () {
+    final score = FatigueEngine.score(
+      signals: [
+        SignalReading(
+          id: 'health-workout',
+          type: SignalType.exercise,
+          value: 2,
+          timestamp: DateTime(2026, 7, 21, 8),
+          source: SignalSource.healthKit,
+        ),
+        SignalReading(
+          id: 'manual-exercise',
+          type: SignalType.exercise,
+          value: .5,
+          timestamp: DateTime(2026, 7, 21, 8, 30),
+        ),
+        SignalReading(
+          id: 'health-water',
+          type: SignalType.hydration,
+          value: .5,
+          timestamp: DateTime(2026, 7, 21, 8),
+          source: SignalSource.healthKit,
+        ),
+        SignalReading(
+          id: 'manual-water',
+          type: SignalType.hydration,
+          value: 2,
+          timestamp: DateTime(2026, 7, 21, 8, 30),
+        ),
+      ],
+      checkIns: const [],
+      now: now,
+    );
+
+    expect(
+      score.drivers.singleWhere((item) => item.label == 'Exercise').detail,
+      contains('0.5 hr'),
+    );
+    expect(
+      score.drivers.singleWhere((item) => item.label == 'Hydration').detail,
+      contains('2.0 L'),
+    );
+  });
+
   test('self-reported energy does not circularly change the Energy Score', () {
     ScoreSnapshot calculate(double energy) => FatigueEngine.score(
       signals: const [],
@@ -147,6 +191,45 @@ void main() {
 
     expect(calculate(1).energy, calculate(10).energy);
     expect(calculate(1).inputCount, 2);
+  });
+
+  test('Version 0.24 scores the preferred nightly sleep source once', () {
+    const importedGroup = 'healthkit-sleep-2026-07-21';
+    final manual = SignalReading(
+      id: 'sleep-manual-duration',
+      groupId: 'sleep-manual',
+      type: SignalType.sleep,
+      value: 8,
+      timestamp: DateTime(2026, 7, 21, 8),
+    );
+    final imported = SignalReading(
+      id: '$importedGroup-duration',
+      groupId: importedGroup,
+      type: SignalType.sleep,
+      value: 6.5,
+      timestamp: DateTime(2026, 7, 21, 8, 30),
+      source: SignalSource.healthKit,
+    );
+
+    ScoreDriver sleepDriver(SignalType architectureType) => FatigueEngine.score(
+      signals: [
+        manual,
+        imported,
+        SignalReading(
+          id: '$importedGroup-stage',
+          groupId: importedGroup,
+          type: architectureType,
+          value: 6.5,
+          timestamp: imported.timestamp,
+          source: SignalSource.healthKit,
+        ),
+      ],
+      checkIns: const [],
+      now: now,
+    ).drivers.singleWhere((item) => item.label == 'Sleep');
+
+    expect(sleepDriver(SignalType.sleepUnspecified).detail, contains('8.0 hr'));
+    expect(sleepDriver(SignalType.sleepCore).detail, contains('6.5 hr'));
   });
 
   test('Version 0.15 forecast is hourly, bounded, and signal-aware', () {

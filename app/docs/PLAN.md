@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: August 15, 2026
-Current release: **Version 0.21 — Insights Dashboard**
+Last updated: August 17, 2026
+Current release: **Version 0.25 — Workout and Hydration Sync**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -229,37 +229,37 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Store notification prefs on `users/{uid}`; never send content that implies diagnosis
 - Suppress duplicate and low-confidence alerts using Firestore fields (`dismissed`, freshness)
 
-### Version 0.21 — Insights Dashboard ✅ Current
+### Version 0.21 — Insights Dashboard ✅
 
 - Promote the Insights preview into calculated daily and weekly trends
 - Aggregate sleep, training, and study from date-range `signals` queries
 - Explain model associations without presenting them as proven causes; do not expose other users’ data
 
-## Upcoming Versions
-
-### Version 0.22 — HealthKit Permissions
+### Version 0.22 — HealthKit Permissions ✅
 
 - Explain each requested permission
 - Support approval, denial, and revocation
 - Preserve manual Firestore entry when access is unavailable
 
-### Version 0.23 — Heart Data Sync
+### Version 0.23 — Heart Data Sync ✅
 
 - Import HRV and resting heart rate into `signals` with `source: healthKit`
 - Normalize units, timestamps, sources, and duplicates against the Version 0.10-a schema
 - Deduplicate with existing manual rows using timestamp/value rules
 
-### Version 0.24 — Sleep Architecture Sync
+### Version 0.24 — Sleep Architecture Sync ✅
 
 - Import awake, core, deep, REM, and unspecified sleep stages as typed `signals`
 - Reconcile overlapping samples and multiple sources in Firestore
 - Prefer imported sleep only when it is more complete than manual data
 
-### Version 0.25 — Workout and Hydration Sync
+### Version 0.25 — Workout and Hydration Sync ✅ Current
 
 - Import workouts and available hydration samples into `signals`
 - Derive daily training load from queried exercise signals
 - Retain manual correction and fallback controls on the same documents
+
+## Upcoming Versions
 
 ### Version 0.26 — Continuous Refresh
 

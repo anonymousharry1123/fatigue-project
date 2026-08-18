@@ -1,4 +1,6 @@
+import 'activity_sync_logic.dart';
 import 'models.dart';
+import 'sleep_sync_logic.dart';
 
 enum TodayFatigueStatus { fresh, moderate, fatigued }
 
@@ -71,8 +73,31 @@ abstract final class TodayDashboardLogic {
 
     return summaryTypes
         .map((type) {
-          final matches = readings.where((item) => item.type == type).toList()
-            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          if (ActivitySyncLogic.supportedTypes.contains(type)) {
+            final aggregate = ActivitySyncLogic.aggregateForDay(
+              readings,
+              type: type,
+              day: start,
+            );
+            if (aggregate == null) {
+              return TodaySignalSummary(
+                type: type,
+                displayValue: '—',
+                recordedAt: null,
+                readingCount: 0,
+              );
+            }
+            return TodaySignalSummary(
+              type: type,
+              displayValue: _displayValue(type, aggregate.total),
+              recordedAt: aggregate.evidence.first.timestamp,
+              readingCount: aggregate.evidence.length,
+            );
+          }
+          final matches = type == SignalType.sleep
+              ? SleepSyncLogic.preferredSleepReadings(readings)
+              : (readings.where((item) => item.type == type).toList()
+                  ..sort((a, b) => b.timestamp.compareTo(a.timestamp)));
           if (matches.isEmpty) {
             return TodaySignalSummary(
               type: type,

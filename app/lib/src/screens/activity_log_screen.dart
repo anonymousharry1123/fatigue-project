@@ -63,7 +63,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Fill any categories you tracked. Blank fields save as 0.',
+              'Fill any categories you tracked. Blank fields save as 0. Manual exercise and hydration replace Apple Health totals for that day; deleting the manual log restores the imported fallback.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 18),
@@ -188,10 +188,14 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final hydration = _parsed(_hydration);
-    final study = _parsed(_study);
-    final exercise = _parsed(_exercise);
-    final screenTime = _parsed(_screenTime);
+    final hydrationValue = _nullableParsed(_hydration);
+    final studyValue = _nullableParsed(_study);
+    final exerciseValue = _nullableParsed(_exercise);
+    final screenTimeValue = _nullableParsed(_screenTime);
+    final hydration = ActivityLogLogic.valueOrZero(hydrationValue);
+    final study = ActivityLogLogic.valueOrZero(studyValue);
+    final exercise = ActivityLogLogic.valueOrZero(exerciseValue);
+    final screenTime = ActivityLogLogic.valueOrZero(screenTimeValue);
     if (!ActivityLogLogic.hasAnyLoggedValue(
       hydrationLiters: hydration,
       studyHours: study,
@@ -207,10 +211,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     try {
       await AppScope.of(context).saveActivityLog(
         id: _editingId,
-        hydrationLiters: hydration,
-        studyHours: study,
-        exerciseHours: exercise,
-        screenTimeHours: screenTime,
+        hydrationLiters: hydrationValue,
+        studyHours: studyValue,
+        exerciseHours: exerciseValue,
+        screenTimeHours: screenTimeValue,
         timestamp: _editingTimestamp,
       );
       if (!mounted) return;
@@ -264,10 +268,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     });
   }
 
-  double _parsed(TextEditingController controller) {
+  double? _nullableParsed(TextEditingController controller) {
     final raw = controller.text.trim();
-    if (raw.isEmpty) return 0;
-    return double.parse(raw);
+    return raw.isEmpty ? null : double.parse(raw);
   }
 
   static String _number(double value) =>

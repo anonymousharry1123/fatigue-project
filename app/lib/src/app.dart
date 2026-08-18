@@ -14,17 +14,26 @@ class TonyoApp extends StatefulWidget {
   State<TonyoApp> createState() => _TonyoAppState();
 }
 
-class _TonyoAppState extends State<TonyoApp> {
+class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
   late final AppController controller = widget.controller ?? AppController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (!controller.isReady) controller.load();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && controller.isReady) {
+      controller.refreshHealthAuthorization();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (widget.controller == null) controller.dispose();
     super.dispose();
   }

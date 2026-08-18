@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
+import 'activity_sync_logic.dart';
 import 'models.dart';
+import 'sleep_sync_logic.dart';
 
 abstract final class FatigueEngine {
   static ScoreSnapshot score({
@@ -37,20 +39,29 @@ abstract final class FatigueEngine {
         ? null
         : readings.fold<double>(0, (sum, item) => sum + item.value);
 
-    final sleepReadings = recent
-        .where((item) => item.type == SignalType.sleep)
-        .take(3)
-        .toList();
+    final sleepReadings = SleepSyncLogic.preferredSleepReadings(
+      recent,
+    ).take(3).toList();
     final sleep = sleepReadings.isEmpty
         ? null
         : sleepReadings.fold<double>(0, (sum, item) => sum + item.value) /
               sleepReadings.length;
-    final hydrationReadings = readingsFor(SignalType.hydration);
-    final exerciseReadings = readingsFor(SignalType.exercise);
+    final hydrationAggregate = ActivitySyncLogic.aggregateForDay(
+      targetDay,
+      type: SignalType.hydration,
+      day: start,
+    );
+    final exerciseAggregate = ActivitySyncLogic.aggregateForDay(
+      targetDay,
+      type: SignalType.exercise,
+      day: start,
+    );
+    final hydrationReadings = hydrationAggregate?.evidence ?? const [];
+    final exerciseReadings = exerciseAggregate?.evidence ?? const [];
     final studyReadings = readingsFor(SignalType.study);
     final screenReadings = readingsFor(SignalType.screenTime);
-    final hydration = totalOf(hydrationReadings);
-    final exercise = totalOf(exerciseReadings);
+    final hydration = hydrationAggregate?.total;
+    final exercise = exerciseAggregate?.total;
     final study = totalOf(studyReadings);
     final screen = totalOf(screenReadings);
     final applicableCheckIns =
@@ -596,8 +607,12 @@ abstract final class FatigueEngine {
       return average(normalized) ?? usualBedHour;
     }
 
-    final sleepReadings = readings(SignalType.sleep).take(3).toList();
-    final bedtimeReadings = readings(SignalType.bedtime).take(5).toList();
+    final sleepReadings = SleepSyncLogic.preferredSleepReadings(
+      recentSignals,
+    ).take(3).toList();
+    final bedtimeReadings = SleepSyncLogic.preferredBedtimeReadings(
+      recentSignals,
+    ).take(5).toList();
     final sleepHours = average(sleepReadings.map((item) => item.value));
     final observedBedtime = bedtimeReadings.isEmpty
         ? null
@@ -640,6 +655,28 @@ abstract final class FatigueEngine {
     ({double total, List<SignalReading> evidence}) modeledDailyTotal(
       SignalType type,
     ) {
+      if (ActivitySyncLogic.supportedTypes.contains(type)) {
+        final today = ActivitySyncLogic.aggregateForDay(
+          recentSignals,
+          type: type,
+          day: targetDay,
+        );
+        if (today != null) {
+          return (total: today.total, evidence: today.evidence);
+        }
+        final selectedDays = ActivitySyncLogic.aggregatesByDay(
+          recentSignals,
+          type: type,
+          start: recentStart,
+          end: targetDay.add(const Duration(days: 1)),
+        ).take(3).toList(growable: false);
+        return (
+          total: average(selectedDays.map((item) => item.total)) ?? 0,
+          evidence: selectedDays
+              .expand((item) => item.evidence)
+              .toList(growable: false),
+        );
+      }
       final sameDay = sameDaySignals
           .where((item) => item.type == type)
           .toList();
@@ -1213,13 +1250,9 @@ abstract final class FatigueEngine {
             .toList()
           ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
     final alerts = <RiskAlert>[];
-    final sleepByDay = <String, SignalReading>{};
-    for (final item in recentSignals.where(
-      (item) => item.type == SignalType.sleep,
-    )) {
-      sleepByDay.putIfAbsent(_dayIdentifier(item.timestamp), () => item);
-    }
-    final recentSleep = sleepByDay.values.take(5).toList();
+    final recentSleep = SleepSyncLogic.preferredSleepReadings(
+      recentSignals,
+    ).take(5).toList();
     final shortSleep = recentSleep.where((item) => item.value < 6.5).toList();
     if (recentSleep.length >= 3 && shortSleep.length >= 3) {
       alerts.add(
@@ -1241,21 +1274,27 @@ abstract final class FatigueEngine {
         ),
       );
     }
-    final exercise = recentSignals
-        .where((item) => item.type == SignalType.exercise)
-        .toList();
-    final exerciseDays = exercise
-        .map((item) => _dayIdentifier(item.timestamp))
-        .toSet();
-    final exerciseTotal = exercise.fold<double>(
-      0,
-      (sum, item) => sum + item.value,
+    final exerciseAggregates = ActivitySyncLogic.aggregatesByDay(
+      recentSignals,
+      type: SignalType.exercise,
+      start: rangeStart,
+      end: rangeEnd,
     );
-    if (exerciseDays.length >= 3 && exerciseTotal >= 6 && score.energy < 62) {
+    final exercise = <String, SignalReading>{
+      for (final item in exerciseAggregates.expand((item) => item.evidence))
+        item.id: item,
+    }.values.toList();
+    final exerciseTotal = exerciseAggregates.fold<double>(
+      0,
+      (sum, item) => sum + item.total,
+    );
+    if (exerciseAggregates.length >= 3 &&
+        exerciseTotal >= 6 &&
+        score.energy < 62) {
       alerts.add(
         RiskAlert(
           'Possible training overreaching',
-          '${exerciseTotal.toStringAsFixed(1)} hours of exercise across ${exerciseDays.length} recent days overlaps with a lower Energy estimate. This can be a cue to consider a lighter session and more recovery.',
+          '${exerciseTotal.toStringAsFixed(1)} hours of exercise across ${exerciseAggregates.length} recent days overlaps with a lower Energy estimate. This can be a cue to consider a lighter session and more recovery.',
           AlertSeverity.high,
           id: '${_dayIdentifier(targetDay)}-training-load',
           category: RiskAlertCategory.trainingLoad,

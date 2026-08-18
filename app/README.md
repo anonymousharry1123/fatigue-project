@@ -85,5 +85,34 @@ patterns, and summarizes model associations only when enough varied matched
 days exist. Missing entries remain missing, and all association copy explicitly
 avoids causal or medical claims.
 
+Version 0.22 adds the read-only Apple Health permission flow on iOS. Before the
+system prompt, Tonyo explains its sleep, heart, workout, and hydration requests;
+permission choices can be reviewed in Settings or disconnected inside Tonyo.
+Apple does not disclose individual read-category decisions to apps, so the UI
+labels the completed request honestly and keeps manual sleep and activity entry
+available for approval, denial, revocation, errors, and unsupported platforms.
+
+Version 0.23 imports the latest 30 days of readable HealthKit HRV and resting
+heart-rate samples. Native values are normalized to milliseconds and bpm,
+timestamps are converted for local-day grouping, and stable HealthKit UUIDs are
+stored as private `signals` with `source: healthKit`. Repeated syncs skip the
+same UUID or a same-type sample within two minutes and 0.1 unit; an existing
+manual row always wins that match. Profile shows import, empty, duplicate, and
+error states without deleting saved data.
+
+Version 0.24 imports awake, core, deep, REM, and unspecified HealthKit sleep
+samples as typed private signals. It resolves overlapping intervals across
+Health sources before saving one nightly architecture, preventing a phone and
+watch from double-counting the same time. Manual sleep remains the model input
+unless the imported night is at least 80% as long and at least half of it has
+detailed core/deep/REM staging; imported stage evidence remains read-only.
+
+Version 0.25 imports the latest 30 days of HealthKit workouts and available
+dietary-water samples into the same private `signals` collection. Daily training
+load unions overlapping workout intervals before calculating exercise hours;
+hydration totals sum distinct water samples. A manual exercise or hydration row
+becomes that day’s correction for scores, forecasts, Insights, and Today, while
+deleting it restores the untouched HealthKit fallback.
+
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.

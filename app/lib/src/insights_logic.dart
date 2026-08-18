@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'activity_sync_logic.dart';
 import 'fatigue_engine.dart';
 import 'models.dart';
+import 'sleep_sync_logic.dart';
 
 enum InsightTrendMetric { energy, sleep, training, study }
 
@@ -212,14 +214,20 @@ abstract final class InsightsLogic {
         daySignals.where((item) => item.type == type).toList(growable: false);
 
     double? total(SignalType type) {
+      if (ActivitySyncLogic.supportedTypes.contains(type)) {
+        return ActivitySyncLogic.aggregateForDay(
+          daySignals,
+          type: type,
+          day: day,
+        )?.total;
+      }
       final values = readings(type);
       return values.isEmpty
           ? null
           : values.fold<double>(0, (sum, item) => sum + item.value);
     }
 
-    final sleepReadings = readings(SignalType.sleep)
-      ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    final sleepReadings = SleepSyncLogic.preferredSleepReadings(daySignals);
     final trackedSignals = daySignals
         .where((item) => _scoreSignalTypes.contains(item.type))
         .length;

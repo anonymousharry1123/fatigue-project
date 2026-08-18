@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_log_logic.dart';
+import 'activity_sync_logic.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
@@ -11,11 +12,13 @@ import 'daily_history_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
+import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
 import 'models.dart';
 import 'notification_logic.dart';
 import 'notification_service.dart';
 import 'reaction_test_logic.dart';
+import 'sleep_sync_logic.dart';
 import 'today_dashboard_logic.dart';
 
 class AppController extends ChangeNotifier {
@@ -44,6 +47,7 @@ class AppController extends ChangeNotifier {
   bool outcomeConsent = false;
   bool healthAvailable = false;
   bool healthAuthorized = false;
+  bool isHealthAuthorizing = false;
   bool isSyncing = false;
   bool isCloudSyncing = false;
   bool isEnergyScoreLoading = false;
@@ -52,6 +56,17 @@ class AppController extends ChangeNotifier {
   bool isNotificationSyncing = false;
   bool isInsightsLoading = false;
   DateTime? lastSync;
+  int lastHealthImportCount = 0;
+  int lastHealthDuplicateCount = 0;
+  int lastHealthRejectedCount = 0;
+  int lastSleepImportCount = 0;
+  int lastSleepDuplicateCount = 0;
+  int lastSleepRejectedCount = 0;
+  int lastSleepNightCount = 0;
+  int lastSleepManualPreferenceCount = 0;
+  int lastActivityImportCount = 0;
+  int lastActivityDuplicateCount = 0;
+  int lastActivityRejectedCount = 0;
   String? accountEmail;
   String? cloudSyncError;
   String? energyScoreError;
@@ -59,6 +74,12 @@ class AppController extends ChangeNotifier {
   String? guidanceError;
   String? notificationError;
   String? insightsError;
+  String? healthError;
+  String? healthSyncError;
+  String? sleepSyncError;
+  String? activitySyncError;
+  HealthAuthorizationState healthAuthorization =
+      HealthAuthorizationState.unavailable;
   NotificationPermissionState notificationPermission =
       NotificationPermissionState.unknown;
   UserProfile profile = const UserProfile();
@@ -106,6 +127,44 @@ class AppController extends ChangeNotifier {
       scheduledNotificationCount == 0
       ? null
       : _notificationPlan.notifications.first;
+  int get healthKitHeartSignalCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            HeartSyncLogic.supportedTypes.contains(item.type),
+      )
+      .length;
+  int get healthKitSleepSignalCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            SleepSyncLogic.stageTypes.contains(item.type),
+      )
+      .length;
+  int get healthKitSleepNightCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            (item.groupId?.startsWith(SleepSyncLogic.importedGroupPrefix) ??
+                false),
+      )
+      .map((item) => item.groupId)
+      .toSet()
+      .length;
+  int get healthKitWorkoutSignalCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            item.type == SignalType.exercise,
+      )
+      .length;
+  int get healthKitHydrationSignalCount => signals
+      .where(
+        (item) =>
+            item.source == SignalSource.healthKit &&
+            item.type == SignalType.hydration,
+      )
+      .length;
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -687,7 +746,7 @@ class AppController extends ChangeNotifier {
         'On Flutter web, use a fixed --web-port so localhost storage persists.',
       );
     }
-    healthAvailable = await _healthService.isAvailable();
+    await refreshHealthAuthorization(notify: false);
     if (isCloudAuthenticated) {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
@@ -840,6 +899,15 @@ class AppController extends ChangeNotifier {
           type: entry.key,
           value: entry.value,
           timestamp: recordedAt,
+          note: switch (entry.key) {
+            SignalType.hydration when hydrationLiters != null =>
+              ActivitySyncLogic.manualCorrectionNote,
+            SignalType.exercise when exerciseHours != null =>
+              ActivitySyncLogic.manualCorrectionNote,
+            SignalType.hydration ||
+            SignalType.exercise => ActivitySyncLogic.blankManualValueNote,
+            _ => null,
+          },
         ),
       ),
     );
@@ -1057,30 +1125,209 @@ class AppController extends ChangeNotifier {
 
   Future<bool> connectHealth() async {
     if (!healthAvailable) return false;
-    healthAuthorized = await _healthService.requestAuthorization();
-    if (healthAuthorized) await syncHealth();
+    isHealthAuthorizing = true;
+    healthError = null;
+    healthSyncError = null;
+    sleepSyncError = null;
+    activitySyncError = null;
+    notifyListeners();
+    try {
+      healthAuthorization = await _healthService.requestAuthorization();
+      healthAvailable =
+          healthAuthorization != HealthAuthorizationState.unavailable;
+      healthAuthorized =
+          healthAuthorization == HealthAuthorizationState.authorized;
+      if (!healthAuthorized) {
+        healthError = switch (healthAuthorization) {
+          HealthAuthorizationState.denied =>
+            'The Apple Health permission sheet was not completed.',
+          HealthAuthorizationState.unavailable =>
+            'Apple Health is unavailable on this device.',
+          _ => 'Apple Health permissions could not be requested.',
+        };
+      }
+    } on Object {
+      healthAuthorization = HealthAuthorizationState.error;
+      healthAuthorized = false;
+      healthError = 'Apple Health permissions could not be requested.';
+    } finally {
+      isHealthAuthorizing = false;
+    }
     await _commit();
+    if (healthAuthorized) await syncHealth();
     return healthAuthorized;
   }
 
-  Future<void> syncHealth() async {
-    if (!healthAuthorized || isSyncing) return;
-    isSyncing = true;
-    notifyListeners();
-    final imported = await _healthService.sync();
-    for (final reading in imported) {
-      final duplicate = signals.any(
-        (item) =>
-            item.type == reading.type &&
-            item.timestamp.difference(reading.timestamp).inMinutes.abs() < 2 &&
-            (item.value - reading.value).abs() < .01,
-      );
-      if (!duplicate) signals.add(reading);
+  Future<HealthAuthorizationState> refreshHealthAuthorization({
+    bool notify = true,
+  }) async {
+    final previous = healthAuthorization;
+    final status = await _healthService.authorizationStatus();
+    healthAvailable = status != HealthAuthorizationState.unavailable;
+    if (status != HealthAuthorizationState.error) healthError = null;
+    // A Tonyo-level disconnect remains in force until the person explicitly
+    // reconnects, even if iOS still has some read categories enabled.
+    if (previous == HealthAuthorizationState.revoked &&
+        !healthAuthorized &&
+        status == HealthAuthorizationState.authorized) {
+      healthAuthorization = HealthAuthorizationState.revoked;
+    } else {
+      healthAuthorization = status;
+      if (status != HealthAuthorizationState.authorized) {
+        healthAuthorized = false;
+      }
     }
-    signals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    lastSync = DateTime.now();
-    isSyncing = false;
-    await _commit(energyInputsChanged: true);
+    if (notify) notifyListeners();
+    return healthAuthorization;
+  }
+
+  Future<void> disconnectHealth() async {
+    healthAuthorized = false;
+    healthAuthorization = healthAvailable
+        ? HealthAuthorizationState.revoked
+        : HealthAuthorizationState.unavailable;
+    healthError = null;
+    healthSyncError = null;
+    sleepSyncError = null;
+    activitySyncError = null;
+    await _commit();
+  }
+
+  Future<bool> openHealthSettings() async {
+    final opened = await _healthService.openSettings();
+    healthError = opened
+        ? null
+        : 'Open Settings to manage Apple Health access.';
+    notifyListeners();
+    return opened;
+  }
+
+  Future<HeartSyncMergeResult?> syncHealth() async {
+    if (!healthAuthorized || isSyncing) return null;
+    isSyncing = true;
+    healthSyncError = null;
+    sleepSyncError = null;
+    activitySyncError = null;
+    notifyListeners();
+    HeartSyncMergeResult? heartResult;
+    SleepSyncMergeResult? sleepResult;
+    ActivitySyncMergeResult? activityResult;
+    try {
+      final imported = await _healthService.sync();
+      heartResult = HeartSyncLogic.merge(existing: signals, imported: imported);
+      signals = heartResult.readings;
+      lastHealthImportCount = heartResult.importedCount;
+      lastHealthDuplicateCount = heartResult.duplicateCount;
+      lastHealthRejectedCount = heartResult.rejectedCount;
+    } on HealthSyncException catch (error) {
+      healthSyncError = error.message;
+    } on Object {
+      healthSyncError = 'Apple Health heart data could not be imported.';
+    }
+
+    try {
+      final imported = await _healthService.syncSleep();
+      sleepResult = SleepSyncLogic.merge(existing: signals, imported: imported);
+      signals = sleepResult.readings;
+      lastSleepImportCount = sleepResult.importedSignalCount;
+      lastSleepDuplicateCount = sleepResult.duplicateCount;
+      lastSleepRejectedCount = sleepResult.rejectedSampleCount;
+      lastSleepNightCount = sleepResult.importedNightCount;
+      lastSleepManualPreferenceCount = sleepResult.skippedManualNightCount;
+    } on HealthSyncException catch (error) {
+      sleepSyncError = error.message;
+    } on Object {
+      sleepSyncError = 'Apple Health sleep data could not be imported.';
+    }
+
+    try {
+      final imported = await _healthService.syncActivity();
+      activityResult = ActivitySyncLogic.merge(
+        existing: signals,
+        imported: imported,
+      );
+      signals = activityResult.readings;
+      lastActivityImportCount = activityResult.importedCount;
+      lastActivityDuplicateCount = activityResult.duplicateCount;
+      lastActivityRejectedCount = activityResult.rejectedCount;
+    } on HealthSyncException catch (error) {
+      activitySyncError = error.message;
+    } on Object {
+      activitySyncError =
+          'Apple Health workout and hydration data could not be imported.';
+    } finally {
+      if (heartResult != null ||
+          (sleepResult?.importedNightCount ?? 0) > 0 ||
+          activityResult != null) {
+        lastSync = DateTime.now();
+      }
+      isSyncing = false;
+      notifyListeners();
+    }
+
+    if (heartResult == null && sleepResult == null && activityResult == null) {
+      return null;
+    }
+    await _commit(
+      energyInputsChanged:
+          (heartResult?.importedCount ?? 0) > 0 ||
+          (sleepResult?.importedSignalCount ?? 0) > 0 ||
+          (activityResult?.importedCount ?? 0) > 0,
+    );
+    return heartResult;
+  }
+
+  String get healthSyncSummary {
+    if (isSyncing) return 'Reading the last 30 days of heart data…';
+    if (healthSyncError != null) return healthSyncError!;
+    if (lastSync == null) return 'Heart data has not been synced yet.';
+    final total = healthKitHeartSignalCount;
+    if (lastHealthImportCount == 0) {
+      if (lastHealthDuplicateCount > 0) {
+        return 'No new signals · $lastHealthDuplicateCount matching ${lastHealthDuplicateCount == 1 ? 'entry was' : 'entries were'} already saved.';
+      }
+      return total == 0
+          ? 'No readable heart samples found. You can retry after checking Apple Health access.'
+          : 'Up to date · $total saved heart ${total == 1 ? 'signal' : 'signals'}.';
+    }
+    return 'Imported $lastHealthImportCount new heart ${lastHealthImportCount == 1 ? 'signal' : 'signals'} · $total saved.';
+  }
+
+  String get sleepSyncSummary {
+    if (isSyncing) return 'Reading the last 30 days of sleep stages…';
+    if (sleepSyncError != null) return sleepSyncError!;
+    if (lastSync == null) return 'Sleep stages have not been synced yet.';
+    final nights = healthKitSleepNightCount;
+    final stages = healthKitSleepSignalCount;
+    if (lastSleepNightCount == 0) {
+      return nights == 0
+          ? 'No readable sleep samples found. Check Sleep access in Apple Health.'
+          : 'Up to date · $nights imported ${nights == 1 ? 'night' : 'nights'} saved.';
+    }
+    final manualNote = lastSleepManualPreferenceCount == 0
+        ? ''
+        : ' · Kept manual sleep for $lastSleepManualPreferenceCount ${lastSleepManualPreferenceCount == 1 ? 'night' : 'nights'}';
+    return 'Reconciled $lastSleepNightCount ${lastSleepNightCount == 1 ? 'night' : 'nights'} · $stages stage ${stages == 1 ? 'signal' : 'signals'} saved$manualNote.';
+  }
+
+  String get activitySyncSummary {
+    if (isSyncing) return 'Reading the last 30 days of workouts and water…';
+    if (activitySyncError != null) return activitySyncError!;
+    if (lastSync == null) {
+      return 'Workouts and hydration have not been synced yet.';
+    }
+    final workouts = healthKitWorkoutSignalCount;
+    final hydration = healthKitHydrationSignalCount;
+    final total = workouts + hydration;
+    if (lastActivityImportCount == 0) {
+      if (lastActivityDuplicateCount > 0) {
+        return 'Up to date · $lastActivityDuplicateCount matching ${lastActivityDuplicateCount == 1 ? 'sample was' : 'samples were'} already saved.';
+      }
+      return total == 0
+          ? 'No readable workouts or water samples found. Manual activity logging remains available.'
+          : 'Up to date · $workouts ${workouts == 1 ? 'workout' : 'workouts'} and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
+    }
+    return 'Imported $lastActivityImportCount new ${lastActivityImportCount == 1 ? 'activity signal' : 'activity signals'} · $workouts ${workouts == 1 ? 'workout' : 'workouts'} and $hydration water ${hydration == 1 ? 'sample' : 'samples'} saved.';
   }
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());
@@ -1098,6 +1345,21 @@ class AppController extends ChangeNotifier {
   Future<void> clearTrackingData() async {
     signals = [];
     checkIns = [];
+    lastSync = null;
+    lastHealthImportCount = 0;
+    lastHealthDuplicateCount = 0;
+    lastHealthRejectedCount = 0;
+    lastSleepImportCount = 0;
+    lastSleepDuplicateCount = 0;
+    lastSleepRejectedCount = 0;
+    lastSleepNightCount = 0;
+    lastSleepManualPreferenceCount = 0;
+    lastActivityImportCount = 0;
+    lastActivityDuplicateCount = 0;
+    lastActivityRejectedCount = 0;
+    healthSyncError = null;
+    sleepSyncError = null;
+    activitySyncError = null;
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;
@@ -1146,7 +1408,26 @@ class AppController extends ChangeNotifier {
     );
     outcomeConsent = false;
     healthAuthorized = false;
+    isHealthAuthorizing = false;
+    healthAuthorization = healthAvailable
+        ? HealthAuthorizationState.revoked
+        : HealthAuthorizationState.unavailable;
+    healthError = null;
+    healthSyncError = null;
+    sleepSyncError = null;
+    activitySyncError = null;
     lastSync = null;
+    lastHealthImportCount = 0;
+    lastHealthDuplicateCount = 0;
+    lastHealthRejectedCount = 0;
+    lastSleepImportCount = 0;
+    lastSleepDuplicateCount = 0;
+    lastSleepRejectedCount = 0;
+    lastSleepNightCount = 0;
+    lastSleepManualPreferenceCount = 0;
+    lastActivityImportCount = 0;
+    lastActivityDuplicateCount = 0;
+    lastActivityRejectedCount = 0;
     accountEmail = null;
     profile = const UserProfile();
     signals = [];
@@ -1181,6 +1462,18 @@ class AppController extends ChangeNotifier {
     'notificationPreferencesVersion': notificationPreferencesVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
+    'healthAuthorizationState': healthAuthorization.name,
+    'lastHealthImportCount': lastHealthImportCount,
+    'lastHealthDuplicateCount': lastHealthDuplicateCount,
+    'lastHealthRejectedCount': lastHealthRejectedCount,
+    'lastSleepImportCount': lastSleepImportCount,
+    'lastSleepDuplicateCount': lastSleepDuplicateCount,
+    'lastSleepRejectedCount': lastSleepRejectedCount,
+    'lastSleepNightCount': lastSleepNightCount,
+    'lastSleepManualPreferenceCount': lastSleepManualPreferenceCount,
+    'lastActivityImportCount': lastActivityImportCount,
+    'lastActivityDuplicateCount': lastActivityDuplicateCount,
+    'lastActivityRejectedCount': lastActivityRejectedCount,
     'accountEmail': accountEmail,
     'lastSync': lastSync?.toIso8601String(),
     'profile': profile.toJson(),
@@ -1306,6 +1599,20 @@ class AppController extends ChangeNotifier {
     if (!sameAccount) {
       _recommendationStatuses.clear();
       _dismissedRiskAlertIds.clear();
+      lastHealthImportCount = 0;
+      lastHealthDuplicateCount = 0;
+      lastHealthRejectedCount = 0;
+      lastSleepImportCount = 0;
+      lastSleepDuplicateCount = 0;
+      lastSleepRejectedCount = 0;
+      lastSleepNightCount = 0;
+      lastSleepManualPreferenceCount = 0;
+      lastActivityImportCount = 0;
+      lastActivityDuplicateCount = 0;
+      lastActivityRejectedCount = 0;
+      healthSyncError = null;
+      sleepSyncError = null;
+      activitySyncError = null;
     }
     profile = state.profile;
     accountEmail = state.accountEmail;
@@ -1321,7 +1628,8 @@ class AppController extends ChangeNotifier {
       state: NotificationPlanState.disabled,
     );
     outcomeConsent = state.outcomeConsent;
-    healthAuthorized = state.healthAuthorized;
+    // Health authorization is device-specific. Cloud state must not turn on
+    // access on a different device; the local platform check remains primary.
     lastSync = state.lastSync;
     signals = [...state.signals]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1360,10 +1668,40 @@ class AppController extends ChangeNotifier {
     );
     outcomeConsent = json['outcomeConsent'] as bool? ?? false;
     healthAuthorized = json['healthAuthorized'] as bool? ?? false;
+    healthAuthorization =
+        HealthAuthorizationState.values
+            .where(
+              (value) =>
+                  value.name == json['healthAuthorizationState'] as String?,
+            )
+            .firstOrNull ??
+        (healthAuthorized
+            ? HealthAuthorizationState.authorized
+            : HealthAuthorizationState.notDetermined);
     accountEmail = json['accountEmail'] as String?;
     lastSync = json['lastSync'] == null
         ? null
         : DateTime.tryParse(json['lastSync'] as String);
+    lastHealthImportCount =
+        (json['lastHealthImportCount'] as num?)?.round() ?? 0;
+    lastHealthDuplicateCount =
+        (json['lastHealthDuplicateCount'] as num?)?.round() ?? 0;
+    lastHealthRejectedCount =
+        (json['lastHealthRejectedCount'] as num?)?.round() ?? 0;
+    lastSleepImportCount = (json['lastSleepImportCount'] as num?)?.round() ?? 0;
+    lastSleepDuplicateCount =
+        (json['lastSleepDuplicateCount'] as num?)?.round() ?? 0;
+    lastSleepRejectedCount =
+        (json['lastSleepRejectedCount'] as num?)?.round() ?? 0;
+    lastSleepNightCount = (json['lastSleepNightCount'] as num?)?.round() ?? 0;
+    lastSleepManualPreferenceCount =
+        (json['lastSleepManualPreferenceCount'] as num?)?.round() ?? 0;
+    lastActivityImportCount =
+        (json['lastActivityImportCount'] as num?)?.round() ?? 0;
+    lastActivityDuplicateCount =
+        (json['lastActivityDuplicateCount'] as num?)?.round() ?? 0;
+    lastActivityRejectedCount =
+        (json['lastActivityRejectedCount'] as num?)?.round() ?? 0;
     profile = UserProfile.fromJson(
       (json['profile'] as Map).cast<String, dynamic>(),
     );

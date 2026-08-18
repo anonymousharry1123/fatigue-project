@@ -298,9 +298,11 @@ IconData iconForSignal(SignalType type) => switch (type) {
   SignalType.reactionTime => Icons.bolt_rounded,
   SignalType.hrv => Icons.monitor_heart_rounded,
   SignalType.restingHeartRate => Icons.favorite_rounded,
+  SignalType.sleepAwake => Icons.visibility_rounded,
   SignalType.sleepCore ||
   SignalType.sleepDeep ||
-  SignalType.sleepRem => Icons.nights_stay_rounded,
+  SignalType.sleepRem ||
+  SignalType.sleepUnspecified => Icons.nights_stay_rounded,
 };
 
 Color colorForSignal(SignalType type) => switch (type) {
@@ -310,9 +312,11 @@ Color colorForSignal(SignalType type) => switch (type) {
   SignalType.exercise || SignalType.restingHeartRate => TonyoColors.coral,
   SignalType.screenTime || SignalType.reactionTime => TonyoColors.violet,
   SignalType.caffeine => TonyoColors.amber,
+  SignalType.sleepAwake => TonyoColors.amber,
   SignalType.sleepCore ||
   SignalType.sleepDeep ||
-  SignalType.sleepRem => TonyoColors.primary,
+  SignalType.sleepRem ||
+  SignalType.sleepUnspecified => TonyoColors.primary,
 };
 
 String formatHour(DateTime value) {

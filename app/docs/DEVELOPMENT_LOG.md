@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.21 — Insights Dashboard (as of 2026-08-15)
+- **Current release:** Version 0.25 — Workout and Hydration Sync (as of 2026-08-17)
 
 ## Implementation Report
 
@@ -33,7 +33,11 @@
 | 0.19 | Multi-day, dismissible wellness-pattern warnings | Complete |
 | 0.20 | Opt-in, confidence-gated forecast notifications | Complete |
 | 0.21 | Private calculated daily/weekly Insights dashboard | Complete |
-| 0.22+ | HealthKit, heart/sleep sync, AI coach | Not started |
+| 0.22 | Read-only Apple Health permission workflow | Complete |
+| 0.23 | HealthKit HRV and resting-heart-rate sync | Complete |
+| 0.24 | Reconciled HealthKit sleep architecture sync | Complete |
+| 0.25 | HealthKit workout and hydration sync | Complete |
+| 0.26+ | Continuous refresh, personal baselines, AI coach | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -56,7 +60,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-15 — **107 tests passed** for Version 0.21; static analysis clean
+- Last verified: 2026-08-17 — **127 tests passed** for Version 0.25; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -82,6 +86,10 @@
 21. Fatigue Warnings (seven-day wellness-pattern detection + dismissal) - Complete (v0.19)
 22. Notifications (explicit consent + confidence/freshness-gated local scheduling) - Complete (v0.20)
 23. Insights Dashboard (private daily charts + weekly comparison + non-causal associations) - Complete (v0.21)
+24. Apple Health permissions (read-only explanations, denial/revocation fallback, iOS entitlement) - Complete (v0.22)
+25. Heart data sync (normalized HealthKit HRV/resting HR, stable IDs, manual-safe deduplication) - Complete (v0.23)
+26. Sleep architecture sync (five typed stages, multi-source interval reconciliation, manual preference) - Complete (v0.24)
+27. Workout and hydration sync (normalized imports, unioned daily load, manual correction/fallback) - Complete (v0.25)
 
 ## Day-to-Day Entries
 
@@ -622,9 +630,235 @@ and weekly trends sourced from the existing owner-scoped Firestore data.
   are. Associations require three varied matched days, report sample size, and
   use non-causal wording in both logic and UI.
 
+### 2026-08-17 — Version 0.22 HealthKit Permissions
+
+**Branch:** `main`
+
+**Goal:** Add an explicit, understandable Apple Health permission workflow
+without making Health access a prerequisite for Tonyo's existing manual data.
+
+**Results:**
+- Added a native iOS HealthKit bridge that requests read-only sleep analysis,
+  heart-rate variability, resting heart rate, workouts, and dietary water.
+- Enabled the HealthKit app capability and added a focused Health read usage
+  description. Tonyo does not request permission to write Health data.
+- Replaced the profile preview with an interactive Apple Health sheet that
+  explains all four user-facing permission groups before the system prompt.
+- Added unavailable, not-requested, completed, denied, disconnected, and error
+  states; state is refreshed when the app resumes, with a Settings shortcut and
+  a Tonyo-level disconnect that does not delete saved data.
+- Kept permission state device-local when hydrating Firestore so access on one
+  device cannot silently enable another device.
+- Preserved all manual activity and sleep entry paths and existing rows for
+  approval, cancellation, disconnect, errors, and unsupported platforms.
+- Bumped the app to `0.22.0+23`; Firestore remains at schema Version 7 because
+  this release adds permission infrastructure but does not import Health data.
+- Added controller and widget coverage for explanations, approval, denial,
+  disconnect, and manual-data retention.
+- `flutter test` passed all **109 tests**; `flutter analyze` and direct Swift
+  type-checking reported no issues.
+
+**Major issues:**
+- HealthKit deliberately does not tell apps whether individual read categories
+  were allowed, denied, or later revoked. The app therefore labels a successful
+  callback as a completed permission choice, not proof that every category was
+  granted, and directs category management to Settings.
+- Permission success must not imply data-sync success. Version 0.22 leaves the
+  native sync result empty; typed imports and deduplication remain Version 0.23.
+- The installed Xcode lacks the iOS 26.5 simulator/platform component, so a
+  complete app build could not select a destination. The HealthKit bridge was
+  still type-checked directly against the installed iPhoneOS SDK, and both
+  plist files passed validation.
+
+### 2026-08-17 — Version 0.23 Heart Data Sync
+
+**Branch:** `main`
+
+**Goal:** Import HealthKit HRV and resting-heart-rate samples into the existing
+private signal schema without duplicating or replacing manual evidence.
+
+**Results:**
+- Added parallel native HealthKit quantity queries for the latest 30 days of
+  heart-rate variability and resting heart rate.
+- Converted HealthKit HRV seconds to milliseconds and resting heart rate to
+  count/minute (`bpm`), emitted ISO-8601 sample end times, and attached stable
+  IDs derived from each HealthKit sample UUID.
+- Added a pure heart-sync merge layer that accepts only supported finite values,
+  normalizes timestamps to local time for Tonyo's calendar grouping, forces
+  `source: healthKit`, clamps quality, and rejects implausible ranges.
+- Made repeated imports idempotent by matching stable IDs or same-type samples
+  within two minutes and 0.1 unit. Existing rows, including manual rows, win a
+  match and are never overwritten.
+- Sync now runs after the first completed Health permission workflow and through
+  an explicit Profile action. Successful rows use the existing user-scoped
+  `signals` persistence and update `lastHealthSync`.
+- Added progress, imported/up-to-date/empty/duplicate/invalid/error states, a
+  saved heart-signal count, and 30-day-window context to the Apple Health sheet.
+- Preserved all existing signals and cleared the busy state when native queries
+  fail; an empty readable result is distinguished from a query error.
+- Bumped the app to `0.23.0+24`; Firestore remains at schema Version 7 because
+  `hrv`, `restingHeartRate`, unit, timestamp, source, and stable document IDs
+  were already supported by the Version 0.10-a signal schema.
+- Added merge, controller, Firestore persistence, error, and widget coverage.
+- `flutter test` passed all **114 tests**; `flutter analyze`, direct Swift
+  type-checking, project validation, and plist validation all passed.
+
+**Major issues:**
+- HealthKit returns no samples when a read category is denied and deliberately
+  does not disclose that decision. The empty state therefore explains that the
+  device may have no heart samples or Health access may be off.
+- Comparing UTC HealthKit timestamps directly with local manual timestamps can
+  miss real duplicates near day boundaries. Imported samples normalize to local
+  time before the timestamp/value rule is evaluated.
+- The installed Xcode still lacks its iOS 26.5 simulator/platform component, so
+  native validation uses direct Swift type-checking against the iPhoneOS SDK.
+
+### 2026-08-17 — Version 0.24 Sleep Architecture Sync
+
+**Branch:** `main`
+
+**Goal:** Import HealthKit sleep architecture without double-counting
+overlapping phone/watch samples or allowing a partial import to displace a
+more complete manual sleep log.
+
+**Results:**
+- Added a separate 30-day native sleep-analysis query with stable HealthKit
+  UUIDs, source bundle identifiers, localizable ISO timestamps, and typed
+  awake, core, deep, REM, and unspecified samples. HealthKit in-bed records are
+  intentionally excluded because they are not a sleep stage.
+- Added a pure sleep reconciliation layer that clusters sessions, divides all
+  overlapping intervals at their boundaries, favors the source with the most
+  detailed architecture, fills gaps from other readable sources, and persists
+  one aggregate stage set per local wake date.
+- Stored derived stage, total-duration, and bedtime rows through the existing
+  private user-scoped `signals` collection. Stable nightly group/document IDs
+  make repeated syncs idempotent and replace only that imported night's derived
+  rows; manual rows remain untouched.
+- Kept manual total sleep as the scoring/forecast/Insights/Today source unless
+  an import covers at least 80% of the manual duration and at least 50% of the
+  imported sleep is detailed core/deep/REM data. Partial imported stages remain
+  saved as read-only evidence without creating a competing total-sleep row.
+- Added a separate sleep status card, saved-night/stage counts, manual-fallback
+  messaging, invalid-sample handling, and combined Health sync action.
+- Bumped the app to `0.24.0+25`; Firestore remains at schema Version 7 because
+  the generic signal document already stores typed enum names, values, units,
+  timestamps, sources, quality, notes, and group IDs.
+- Added reconciliation, idempotency, manual-preference, model-selection,
+  controller, Firestore persistence, and widget coverage.
+- `flutter test` passed all **120 tests**; `flutter analyze`, direct Swift
+  type-checking, Xcode project inspection, and plist validation passed.
+
+**Major issues:**
+- HealthKit providers can describe the same minutes differently. Reconciliation
+  chooses a single winner for every boundary segment using source-level staged
+  coverage, then stage specificity, so overlapping sources never add time.
+- A short staged fragment is not automatically better than a full manual log.
+  The explicit 50%-staged and 80%-duration thresholds keep manual data active
+  until the imported night is meaningfully more complete.
+- The installed Xcode still lacks its iOS 26.5 simulator/platform component, so
+  the native bridge was verified with direct iPhoneOS Swift type-checking.
+
+### 2026-08-17 — Version 0.25 Workout and Hydration Sync
+
+**Branch:** `main`
+
+**Goal:** Import HealthKit workouts and available dietary-water samples, derive
+daily training load without double-counting overlapping workouts, and keep the
+existing manual activity workflow as a correction and fallback.
+
+**Results:**
+- Added parallel 30-day native HealthKit queries for `HKWorkout` and dietary
+  water. Workouts are normalized to hours, water to liters, timestamps to ISO
+  sample end times, and document IDs to stable HealthKit UUIDs.
+- Added a pure activity-sync merge layer for finite/range validation,
+  local-time normalization, source enforcement, stable-ID and near-duplicate
+  detection, and manual-row preservation.
+- Derived daily training load from queried exercise signals by unioning workout
+  intervals within each local day, preventing overlapping exports/providers
+  from adding the same workout minutes twice. Distinct water samples are summed.
+- Applied the same daily aggregation to Energy scoring, forecasts, Insights,
+  Today summaries, and training-load warnings.
+- Kept imported documents untouched when a manual exercise or hydration value
+  exists. The explicit manual value becomes that day’s correction; deleting the
+  manual activity group restores the HealthKit fallback automatically.
+- Tagged legacy blank-as-zero placeholders separately so a study-only manual
+  log does not suppress an imported workout or water total. An explicitly
+  entered zero remains a valid correction.
+- Added workout/water counts, partial error handling, invalid/duplicate/empty
+  states, and a third Health sync status card. Updated permission and Activity
+  Log copy to explain correction/fallback behavior.
+- Bumped the app to `0.25.0+26`; Firestore remains at schema Version 7 because
+  workout duration and water reuse the existing `exercise`/`hydration` signal
+  types and generic private signal documents.
+- Added merge, overlap-union, blank-placeholder, correction/fallback, scoring,
+  dashboard, controller, Firestore persistence, failure, and widget coverage.
+- `flutter test` passed all **127 tests**; `flutter analyze`, direct Swift
+  type-checking, Xcode project inspection, and plist validation passed.
+
+**Major issues:**
+- Separate Health providers can export overlapping versions of one workout.
+  Stable-ID deduplication alone cannot catch every provider pair, so daily load
+  uses the union of workout intervals rather than summing raw durations.
+- Version 0.6 intentionally persisted blank activity fields as zero. Without a
+  marker, a study-only log would look like an intentional zero-exercise and
+  zero-hydration correction. New rows retain all four documents but mark blank
+  placeholders as eligible for imported fallback.
+- HealthKit does not reveal which read category was denied; empty workout/water
+  results therefore stay distinct from query failures and manual logging always
+  remains available.
+
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.25 Workout and Hydration Sync
+**Prompt:**
+"complete .25"
+
+**Result:** Completed native workout/water import, normalized private signal
+persistence, overlap-safe daily training load, and manual correction/fallback
+selection across scoring and dashboard consumers.
+
+**Modifications:** Reused existing `exercise` and `hydration` Firestore signal
+types; unioned HealthKit workout intervals; tagged blank manual zeros so only
+explicitly entered manual values override imported daily totals.
+
+### Feature: Version 0.24 Sleep Architecture Sync
+**Prompt:**
+"complete .24"
+
+**Result:** Completed typed HealthKit sleep-stage import, deterministic
+multi-source interval reconciliation, private Firestore persistence, and
+manual-safe model selection with automated coverage.
+
+**Modifications:** Excluded HealthKit in-bed records from architecture totals;
+kept partial stage imports as read-only evidence; required at least 50% detailed
+staging and 80% manual-duration coverage before imported total sleep is
+preferred.
+
+### Feature: Version 0.23 Heart Data Sync
+**Prompt:**
+"complete .23"
+
+**Result:** Completed native HRV/resting-heart-rate import, normalization,
+manual-safe idempotent merging, private Firestore persistence, sync states, and
+automated coverage.
+
+**Modifications:** Limited this release to the planned heart categories and a
+30-day user-triggered window. Sleep architecture, workouts, hydration, and
+continuous background refresh remain scoped to Versions 0.24–0.26.
+
+### Feature: Version 0.22 HealthKit Permissions
+**Prompt:**
+"complete .22"
+
+**Result:** Completed the read-only native Apple Health permission workflow,
+plain-language category explanations, settings/disconnect handling, and manual
+Firestore-entry fallback with automated coverage.
+
+**Modifications:** HealthKit hides per-category read decisions, so Tonyo reports
+that choices were completed rather than claiming every category is authorized.
+Typed heart, sleep, workout, and hydration imports remain in later versions.
 
 ### Feature: Version 0.21 Insights Dashboard
 **Prompt:**
@@ -894,5 +1128,9 @@ state.
 - [x] Implement Version 0.19 multi-day, dismissible Fatigue Warnings
 - [x] Implement Version 0.20 opt-in, confidence-gated Notifications
 - [x] Implement Version 0.21 private calculated Insights Dashboard
+- [x] Implement Version 0.22 read-only Apple Health permissions
+- [x] Implement Version 0.23 HRV and resting-heart-rate sync
+- [x] Implement Version 0.24 reconciled sleep architecture sync
+- [x] Implement Version 0.25 workout and hydration sync with manual fallback
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

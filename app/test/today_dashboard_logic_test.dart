@@ -69,4 +69,53 @@ void main() {
     expect(study.isAvailable, isFalse);
     expect(sleep.isAvailable, isFalse);
   });
+
+  test('Version 0.25 uses manual daily activity corrections once', () {
+    final day = DateTime(2026, 8, 17);
+    final summaries = TodayDashboardLogic.summariesForDay(
+      [
+        SignalReading(
+          id: 'health-workout',
+          type: SignalType.exercise,
+          value: 2,
+          timestamp: day.add(const Duration(hours: 10)),
+          source: SignalSource.healthKit,
+        ),
+        SignalReading(
+          id: 'manual-exercise',
+          type: SignalType.exercise,
+          value: .75,
+          timestamp: day.add(const Duration(hours: 12)),
+        ),
+        SignalReading(
+          id: 'health-water',
+          type: SignalType.hydration,
+          value: .5,
+          timestamp: day.add(const Duration(hours: 9)),
+          source: SignalSource.healthKit,
+        ),
+        SignalReading(
+          id: 'manual-water',
+          type: SignalType.hydration,
+          value: 1.8,
+          timestamp: day.add(const Duration(hours: 12)),
+        ),
+      ],
+      day: day,
+      now: day.add(const Duration(hours: 13)),
+    );
+
+    expect(
+      summaries
+          .singleWhere((item) => item.type == SignalType.exercise)
+          .displayValue,
+      '0.8 hr',
+    );
+    expect(
+      summaries
+          .singleWhere((item) => item.type == SignalType.hydration)
+          .displayValue,
+      '1.8 L',
+    );
+  });
 }

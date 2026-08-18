@@ -2,6 +2,7 @@ import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/demo_data.dart';
+import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
 import 'package:app/src/today_dashboard_logic.dart';
@@ -12,12 +13,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  AppController readyController({NotificationService? notificationService}) {
-    final controller = AppController(notificationService: notificationService)
-      ..isReady = true
-      ..onboardingComplete = true
-      ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
-      ..checkIns = buildDemoCheckIns(DateTime(2026, 7, 21, 9));
+  AppController readyController({
+    NotificationService? notificationService,
+    HealthService? healthService,
+  }) {
+    final controller =
+        AppController(
+            notificationService: notificationService,
+            healthService: healthService,
+          )
+          ..isReady = true
+          ..onboardingComplete = true
+          ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
+          ..checkIns = buildDemoCheckIns(DateTime(2026, 7, 21, 9));
     return controller;
   }
 
@@ -161,6 +169,122 @@ void main() {
       find.textContaining('do not establish that one behavior caused'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Version 0.22 explains and manages Apple Health permissions', (
+    tester,
+  ) async {
+    final health = _WidgetHealthService();
+    final controller = readyController(healthService: health)
+      ..healthAvailable = true
+      ..healthAuthorization = HealthAuthorizationState.notDetermined;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('health-source-card')),
+      200,
+    );
+    await tester.tap(find.byKey(const Key('health-source-card')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apple Health permissions'), findsOneWidget);
+    expect(find.text('Sleep'), findsOneWidget);
+    expect(find.text('Heart'), findsOneWidget);
+    expect(find.text('Workouts'), findsOneWidget);
+    expect(find.text('Hydration'), findsOneWidget);
+    expect(find.textContaining('read access only'), findsOneWidget);
+    expect(find.textContaining('Manual sleep and activity'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('health-connect-button')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const Key('health-connect-button')));
+    await tester.pumpAndSettle();
+
+    expect(health.permissionRequests, 1);
+    expect(controller.healthAuthorized, isTrue);
+    expect(find.textContaining('choices are saved'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.25 syncs heart, sleep, workout, and water data', (
+    tester,
+  ) async {
+    final health = _WidgetHealthService(
+      readings: [
+        SignalReading(
+          id: 'healthkit-widget-hrv',
+          type: SignalType.hrv,
+          value: 58,
+          timestamp: DateTime.now(),
+          source: SignalSource.healthKit,
+        ),
+      ],
+      sleepReadings: [
+        SignalReading(
+          id: 'healthkit-widget-core',
+          type: SignalType.sleepCore,
+          value: 6,
+          timestamp: DateTime.now(),
+          source: SignalSource.healthKit,
+          groupId: 'com.apple.health.watch',
+        ),
+      ],
+      activityReadings: [
+        SignalReading(
+          id: 'healthkit-widget-workout',
+          type: SignalType.exercise,
+          value: 1.25,
+          timestamp: DateTime.now(),
+          source: SignalSource.healthKit,
+        ),
+        SignalReading(
+          id: 'healthkit-widget-water',
+          type: SignalType.hydration,
+          value: .4,
+          timestamp: DateTime.now(),
+          source: SignalSource.healthKit,
+        ),
+      ],
+    );
+    final controller = readyController(healthService: health)
+      ..healthAvailable = true
+      ..healthAuthorized = true
+      ..healthAuthorization = HealthAuthorizationState.authorized
+      ..signals = [];
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('health-source-card')),
+      200,
+    );
+    await tester.tap(find.byKey(const Key('health-source-card')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('health-sync-button')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const Key('health-sync-button')));
+    await tester.pumpAndSettle();
+
+    expect(health.syncCalls, 1);
+    expect(controller.healthKitHeartSignalCount, 1);
+    expect(controller.healthKitSleepNightCount, 1);
+    expect(controller.healthKitWorkoutSignalCount, 1);
+    expect(controller.healthKitHydrationSignalCount, 1);
+    expect(find.textContaining('Imported 1 new heart signal'), findsOneWidget);
+    expect(find.textContaining('Reconciled 1 night'), findsOneWidget);
+    expect(
+      find.textContaining('Imported 2 new activity signals'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('30-day window'), findsOneWidget);
   });
 
   testWidgets('additional designs open from Add and Today', (tester) async {
@@ -777,4 +901,43 @@ class _WidgetNotificationService implements NotificationService {
     permissionRequests += 1;
     return NotificationPermissionState.granted;
   }
+}
+
+class _WidgetHealthService extends HealthService {
+  _WidgetHealthService({
+    this.readings = const [],
+    this.sleepReadings = const [],
+    this.activityReadings = const [],
+  });
+
+  int permissionRequests = 0;
+  int syncCalls = 0;
+  final List<SignalReading> readings;
+  final List<SignalReading> sleepReadings;
+  final List<SignalReading> activityReadings;
+
+  @override
+  Future<HealthAuthorizationState> authorizationStatus() async =>
+      HealthAuthorizationState.notDetermined;
+
+  @override
+  Future<HealthAuthorizationState> requestAuthorization() async {
+    permissionRequests += 1;
+    return HealthAuthorizationState.authorized;
+  }
+
+  @override
+  Future<bool> openSettings() async => true;
+
+  @override
+  Future<List<SignalReading>> sync() async {
+    syncCalls += 1;
+    return readings;
+  }
+
+  @override
+  Future<List<SignalReading>> syncSleep() async => sleepReadings;
+
+  @override
+  Future<List<SignalReading>> syncActivity() async => activityReadings;
 }

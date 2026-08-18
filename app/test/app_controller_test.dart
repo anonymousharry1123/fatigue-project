@@ -1,6 +1,8 @@
 import 'package:app/src/app_controller.dart';
+import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
+import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -957,6 +959,18 @@ void main() {
       ),
       hasLength(4),
     );
+    expect(
+      controller.signals
+          .singleWhere((signal) => signal.type == SignalType.hydration)
+          .note,
+      ActivitySyncLogic.manualCorrectionNote,
+    );
+    expect(
+      controller.signals
+          .singleWhere((signal) => signal.type == SignalType.exercise)
+          .note,
+      ActivitySyncLogic.blankManualValueNote,
+    );
 
     final restored = AppController();
     await restored.load();
@@ -1017,6 +1031,340 @@ void main() {
     },
   );
 
+  test(
+    'Version 0.22 handles approval, denial, and revocation without changing manual data',
+    () async {
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.denied,
+      );
+      final controller = AppController(healthService: health);
+      await controller.load();
+      final manual = SignalReading(
+        id: 'manual-hydration',
+        type: SignalType.hydration,
+        value: 2.2,
+        timestamp: DateTime(2026, 8, 17, 12),
+      );
+      controller.signals = [manual];
+
+      expect(controller.healthAvailable, isTrue);
+      expect(await controller.connectHealth(), isFalse);
+      expect(controller.healthAuthorization, HealthAuthorizationState.denied);
+      expect(controller.signals, [manual]);
+
+      health.requestResult = HealthAuthorizationState.authorized;
+      expect(await controller.connectHealth(), isTrue);
+      expect(controller.healthAuthorized, isTrue);
+      expect(controller.signals, [manual]);
+
+      await controller.disconnectHealth();
+      expect(controller.healthAuthorized, isFalse);
+      expect(controller.healthAuthorization, HealthAuthorizationState.revoked);
+      expect(controller.signals, [manual]);
+
+      health.status = HealthAuthorizationState.authorized;
+      await controller.refreshHealthAuthorization();
+      expect(controller.healthAuthorization, HealthAuthorizationState.revoked);
+      expect(controller.signals, [manual]);
+    },
+  );
+
+  test(
+    'Version 0.23 imports normalized heart signals and persists them to Firestore',
+    () async {
+      final hrvTimestamp = DateTime.utc(2026, 8, 17, 10);
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.authorized,
+        syncReadings: [
+          SignalReading(
+            id: 'healthkit-hrv',
+            type: SignalType.hrv,
+            value: 55.2,
+            timestamp: hrvTimestamp,
+            source: SignalSource.healthKit,
+          ),
+          SignalReading(
+            id: 'healthkit-rhr',
+            type: SignalType.restingHeartRate,
+            value: 61,
+            timestamp: DateTime.utc(2026, 8, 17, 9),
+            source: SignalSource.healthKit,
+          ),
+          SignalReading(
+            id: 'healthkit-manual-duplicate',
+            type: SignalType.hrv,
+            value: 55.25,
+            timestamp: hrvTimestamp.add(const Duration(minutes: 1)),
+            source: SignalSource.healthKit,
+          ),
+        ],
+      );
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'health-user',
+          email: 'health@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'health-user');
+      final controller = AppController(
+        healthService: health,
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await controller.load();
+      controller.signals = [
+        SignalReading(
+          id: 'manual-hrv',
+          type: SignalType.hrv,
+          value: 55.2,
+          timestamp: hrvTimestamp.toLocal(),
+        ),
+      ];
+
+      expect(await controller.connectHealth(), isTrue);
+
+      expect(health.syncCalls, 1);
+      expect(controller.lastHealthImportCount, 1);
+      expect(controller.lastHealthDuplicateCount, 2);
+      expect(controller.lastHealthRejectedCount, 0);
+      expect(controller.healthKitHeartSignalCount, 1);
+      expect(controller.lastSync, isNotNull);
+      expect(
+        controller.signals
+            .singleWhere((item) => item.id == 'manual-hrv')
+            .source,
+        SignalSource.manual,
+      );
+      final imported = controller.signals.singleWhere(
+        (item) => item.id == 'healthkit-rhr',
+      );
+      expect(imported.source, SignalSource.healthKit);
+      expect(imported.timestamp.isUtc, isFalse);
+
+      final cloud = await repository.readUser('health-user');
+      expect(cloud, isNotNull);
+      expect(
+        cloud!.signals.singleWhere((item) => item.id == 'healthkit-rhr').source,
+        SignalSource.healthKit,
+      );
+    },
+  );
+
+  test(
+    'Version 0.23 surfaces sync failures without losing existing data',
+    () async {
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.authorized,
+        syncError: const HealthSyncException('Health query failed.'),
+        sleepSyncError: const HealthSyncException('Sleep query failed.'),
+        activitySyncError: const HealthSyncException('Activity query failed.'),
+      );
+      final controller = AppController(healthService: health);
+      await controller.load();
+      final manual = SignalReading(
+        id: 'manual-heart',
+        type: SignalType.hrv,
+        value: 52,
+        timestamp: DateTime(2026, 8, 17, 10),
+      );
+      controller.signals = [manual];
+
+      expect(await controller.connectHealth(), isTrue);
+
+      expect(controller.healthAuthorized, isTrue);
+      expect(controller.isSyncing, isFalse);
+      expect(controller.healthSyncError, 'Health query failed.');
+      expect(controller.sleepSyncError, 'Sleep query failed.');
+      expect(controller.activitySyncError, 'Activity query failed.');
+      expect(controller.lastSync, isNull);
+      expect(controller.signals, [manual]);
+    },
+  );
+
+  test(
+    'Version 0.24 reconciles typed sleep stages and persists the night to Firestore',
+    () async {
+      final wake = DateTime(2026, 8, 17, 7);
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.authorized,
+        sleepReadings: [
+          SignalReading(
+            id: 'healthkit-sleep-core',
+            type: SignalType.sleepCore,
+            value: 5,
+            timestamp: wake.subtract(const Duration(hours: 3)),
+            source: SignalSource.healthKit,
+            groupId: 'com.apple.health.watch',
+          ),
+          SignalReading(
+            id: 'healthkit-sleep-deep',
+            type: SignalType.sleepDeep,
+            value: 1.5,
+            timestamp: wake.subtract(const Duration(hours: 1, minutes: 30)),
+            source: SignalSource.healthKit,
+            groupId: 'com.apple.health.watch',
+          ),
+          SignalReading(
+            id: 'healthkit-sleep-rem',
+            type: SignalType.sleepRem,
+            value: 1.5,
+            timestamp: wake,
+            source: SignalSource.healthKit,
+            groupId: 'com.apple.health.watch',
+          ),
+        ],
+      );
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'sleep-user',
+          email: 'sleep@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'sleep-user');
+      final controller = AppController(
+        healthService: health,
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await controller.load();
+
+      expect(await controller.connectHealth(), isTrue);
+
+      expect(health.sleepSyncCalls, 1);
+      expect(controller.lastSleepNightCount, 1);
+      expect(controller.healthKitSleepNightCount, 1);
+      expect(controller.healthKitSleepSignalCount, 3);
+      expect(
+        controller.signals
+            .singleWhere((item) => item.type == SignalType.sleep)
+            .value,
+        8,
+      );
+      expect(
+        controller.signals.map((item) => item.type),
+        containsAll([
+          SignalType.sleepCore,
+          SignalType.sleepDeep,
+          SignalType.sleepRem,
+        ]),
+      );
+
+      final cloud = await repository.readUser('sleep-user');
+      expect(cloud, isNotNull);
+      expect(
+        cloud!.signals.where((item) => item.type == SignalType.sleepDeep),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'Version 0.25 persists activity imports and retains manual fallback controls',
+    () async {
+      final day = DateTime(2026, 8, 17);
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.authorized,
+        activityReadings: [
+          SignalReading(
+            id: 'healthkit-workout',
+            type: SignalType.exercise,
+            value: 1.5,
+            timestamp: day.add(const Duration(hours: 10)),
+            source: SignalSource.healthKit,
+          ),
+          SignalReading(
+            id: 'healthkit-water',
+            type: SignalType.hydration,
+            value: .4,
+            timestamp: day.add(const Duration(hours: 11)),
+            source: SignalSource.healthKit,
+          ),
+        ],
+      );
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'activity-user',
+          email: 'activity@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'activity-user');
+      final controller = AppController(
+        healthService: health,
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      await controller.load();
+
+      expect(await controller.connectHealth(), isTrue);
+
+      expect(health.activitySyncCalls, 1);
+      expect(controller.lastActivityImportCount, 2);
+      expect(controller.healthKitWorkoutSignalCount, 1);
+      expect(controller.healthKitHydrationSignalCount, 1);
+      var cloud = await repository.readUser('activity-user');
+      expect(cloud, isNotNull);
+      expect(
+        cloud!.signals.map((item) => item.id),
+        containsAll(['healthkit-workout', 'healthkit-water']),
+      );
+
+      await controller.saveActivityLog(
+        id: 'activity-correction',
+        exerciseHours: .75,
+        hydrationLiters: 1.8,
+        timestamp: day.add(const Duration(hours: 12)),
+      );
+      expect(
+        ActivitySyncLogic.aggregateForDay(
+          controller.signals,
+          type: SignalType.exercise,
+          day: day,
+        )!.total,
+        .75,
+      );
+      expect(
+        ActivitySyncLogic.aggregateForDay(
+          controller.signals,
+          type: SignalType.hydration,
+          day: day,
+        )!.total,
+        1.8,
+      );
+
+      await controller.deleteActivityLog('activity-correction');
+      expect(
+        ActivitySyncLogic.aggregateForDay(
+          controller.signals,
+          type: SignalType.exercise,
+          day: day,
+        )!.total,
+        1.5,
+      );
+      expect(
+        ActivitySyncLogic.aggregateForDay(
+          controller.signals,
+          type: SignalType.hydration,
+          day: day,
+        )!.total,
+        .4,
+      );
+      cloud = await repository.readUser('activity-user');
+      expect(
+        cloud!.signals.map((item) => item.id),
+        contains('healthkit-workout'),
+      );
+      expect(
+        cloud.signals.where((item) => item.groupId == 'activity-correction'),
+        isEmpty,
+      );
+    },
+  );
+
   test('manual log validation covers every Version 0.6 and 0.7 input', () {
     expect(
       ActivityLogEntry.validationMessage(SignalType.hydration, -0.1),
@@ -1052,4 +1400,60 @@ void main() {
       isNotNull,
     );
   });
+}
+
+class _FakeHealthService extends HealthService {
+  _FakeHealthService({
+    required this.status,
+    required this.requestResult,
+    this.syncReadings = const [],
+    this.sleepReadings = const [],
+    this.activityReadings = const [],
+    this.syncError,
+    this.sleepSyncError,
+    this.activitySyncError,
+  });
+
+  HealthAuthorizationState status;
+  HealthAuthorizationState requestResult;
+  List<SignalReading> syncReadings;
+  List<SignalReading> sleepReadings;
+  List<SignalReading> activityReadings;
+  Object? syncError;
+  Object? sleepSyncError;
+  Object? activitySyncError;
+  int syncCalls = 0;
+  int sleepSyncCalls = 0;
+  int activitySyncCalls = 0;
+
+  @override
+  Future<HealthAuthorizationState> authorizationStatus() async => status;
+
+  @override
+  Future<HealthAuthorizationState> requestAuthorization() async =>
+      requestResult;
+
+  @override
+  Future<List<SignalReading>> sync() async {
+    syncCalls += 1;
+    final error = syncError;
+    if (error != null) throw error;
+    return syncReadings;
+  }
+
+  @override
+  Future<List<SignalReading>> syncSleep() async {
+    sleepSyncCalls += 1;
+    final error = sleepSyncError;
+    if (error != null) throw error;
+    return sleepReadings;
+  }
+
+  @override
+  Future<List<SignalReading>> syncActivity() async {
+    activitySyncCalls += 1;
+    final error = activitySyncError;
+    if (error != null) throw error;
+    return activityReadings;
+  }
 }
