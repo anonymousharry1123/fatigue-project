@@ -1,5 +1,18 @@
 import 'package:flutter/material.dart';
 
+/// Material 3 on Android stretches scroll content at the edge; disable that.
+class TonyoScrollBehavior extends MaterialScrollBehavior {
+  const TonyoScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) =>
+      child;
+}
+
 abstract final class TonyoColors {
   static const background = Color(0xFF080910);
   static const surface = Color(0xFF13141E);
