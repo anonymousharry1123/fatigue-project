@@ -1,5 +1,7 @@
 import Flutter
+import FamilyControls
 import HealthKit
+import SwiftUI
 import UIKit
 import UserNotifications
 
@@ -7,6 +9,8 @@ import UserNotifications
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let healthStore = HKHealthStore()
   private var healthChannel: FlutterMethodChannel?
+  private var screenTimeChannel: FlutterMethodChannel?
+  private var healthObserverQueries: [HKObserverQuery] = []
 
   override func application(
     _ application: UIApplication,
@@ -26,6 +30,103 @@ import UserNotifications
       self?.handleHealthCall(call, result: result)
     }
     healthChannel = channel
+
+    let screenTimeChannel = FlutterMethodChannel(
+      name: "tonyo/screen_time",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    screenTimeChannel.setMethodCallHandler { [weak self] call, result in
+      self?.handleScreenTimeCall(call, result: result)
+    }
+    self.screenTimeChannel = screenTimeChannel
+  }
+
+  private func handleScreenTimeCall(
+    _ call: FlutterMethodCall,
+    result: @escaping FlutterResult
+  ) {
+    switch call.method {
+    case "authorizationStatus":
+      result(screenTimeAuthorizationStatus())
+    case "requestAuthorization":
+      requestScreenTimeAuthorization(result: result)
+    case "showReport":
+      showScreenTimeReport(result: result)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  /// Family Controls is a restricted entitlement. The optional report stays
+  /// disabled until Apple approves it and the release configuration is
+  /// deliberately activated alongside the matching code-signing entitlement.
+  private var hasFamilyControlsEntitlement: Bool {
+    Bundle.main.object(
+      forInfoDictionaryKey: "TonyoFamilyControlsEntitlementApproved"
+    ) as? Bool == true
+  }
+
+  private func screenTimeAuthorizationStatus() -> String {
+    guard hasFamilyControlsEntitlement else {
+      return "entitlementRequired"
+    }
+    let status = AuthorizationCenter.shared.authorizationStatus
+    if #available(iOS 26.4, *), status == .approvedWithDataAccess {
+      return "authorized"
+    }
+    return switch status {
+    case .notDetermined: "notDetermined"
+    case .denied: "denied"
+    case .approved: "authorized"
+    default: "error"
+    }
+  }
+
+  private func requestScreenTimeAuthorization(result: @escaping FlutterResult) {
+    guard hasFamilyControlsEntitlement else {
+      result("entitlementRequired")
+      return
+    }
+    Task { @MainActor in
+      do {
+        try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        result(screenTimeAuthorizationStatus())
+      } catch {
+        result(
+          FlutterError(
+            code: "screen_time_authorization_failed",
+            message: "The private Screen Time report could not be authorized.",
+            details: nil
+          )
+        )
+      }
+    }
+  }
+
+  private func showScreenTimeReport(result: @escaping FlutterResult) {
+    guard hasFamilyControlsEntitlement else {
+      result(false)
+      return
+    }
+    guard screenTimeAuthorizationStatus() == "authorized" else {
+      result(false)
+      return
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let rootViewController = self?.window?.rootViewController else {
+        result(false)
+        return
+      }
+      var presenter = rootViewController
+      while let presented = presenter.presentedViewController {
+        presenter = presented
+      }
+      let report = UIHostingController(rootView: TonyoScreenTimeReportView())
+      report.modalPresentationStyle = .pageSheet
+      presenter.present(report, animated: true) {
+        result(true)
+      }
+    }
   }
 
   private var requestedHealthTypes: Set<HKObjectType> {
@@ -63,9 +164,68 @@ import UserNotifications
       syncSleepData(result: result)
     case "syncActivity":
       syncActivityData(result: result)
+    case "enableBackgroundUpdates":
+      enableBackgroundHealthUpdates(result: result)
+    case "disableBackgroundUpdates":
+      disableBackgroundHealthUpdates(result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func enableBackgroundHealthUpdates(result: @escaping FlutterResult) {
+    guard HKHealthStore.isHealthDataAvailable() else {
+      result(false)
+      return
+    }
+    disableHealthObservers()
+    let group = DispatchGroup()
+    let lock = NSLock()
+    var enabled = true
+
+    for objectType in requestedHealthTypes {
+      guard let sampleType = objectType as? HKSampleType else { continue }
+      let observer = HKObserverQuery(sampleType: sampleType, predicate: nil) {
+        [weak self] _, completion, error in
+        guard error == nil, let channel = self?.healthChannel else {
+          completion()
+          return
+        }
+        DispatchQueue.main.async {
+          channel.invokeMethod("healthDataChanged", arguments: nil) { _ in
+            completion()
+          }
+        }
+      }
+      healthObserverQueries.append(observer)
+      healthStore.execute(observer)
+      group.enter()
+      healthStore.enableBackgroundDelivery(for: sampleType, frequency: .hourly) {
+        success, _ in
+        if !success {
+          lock.lock()
+          enabled = false
+          lock.unlock()
+        }
+        group.leave()
+      }
+    }
+
+    group.notify(queue: .main) { result(enabled) }
+  }
+
+  private func disableBackgroundHealthUpdates(result: @escaping FlutterResult) {
+    disableHealthObservers()
+    healthStore.disableAllBackgroundDelivery { success, _ in
+      DispatchQueue.main.async { result(success) }
+    }
+  }
+
+  private func disableHealthObservers() {
+    for query in healthObserverQueries {
+      healthStore.stop(query)
+    }
+    healthObserverQueries.removeAll()
   }
 
   private func healthAuthorizationStatus(result: @escaping FlutterResult) {

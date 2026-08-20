@@ -69,6 +69,7 @@ class SignalReading {
     this.quality = 1,
     this.note,
     this.groupId,
+    this.syncedAt,
   });
 
   final String id;
@@ -79,6 +80,11 @@ class SignalReading {
   final double quality;
   final String? note;
   final String? groupId;
+  final DateTime? syncedAt;
+
+  /// Age of the underlying observation. A recent import never makes an old
+  /// physiological sample look current.
+  Duration ageAt(DateTime now) => now.difference(timestamp);
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -89,6 +95,7 @@ class SignalReading {
     'quality': quality,
     'note': note,
     'groupId': groupId,
+    'syncedAt': syncedAt?.toIso8601String(),
   };
 
   factory SignalReading.fromJson(Map<String, dynamic> json) => SignalReading(
@@ -100,8 +107,23 @@ class SignalReading {
     quality: (json['quality'] as num?)?.toDouble() ?? 1,
     note: json['note'] as String?,
     groupId: json['groupId'] as String?,
+    syncedAt: json['syncedAt'] == null
+        ? null
+        : DateTime.parse(json['syncedAt'] as String),
   );
 }
+
+enum HealthSyncStatus {
+  idle,
+  syncing,
+  upToDate,
+  updated,
+  partialFailure,
+  failed,
+  disabled,
+}
+
+enum HealthRefreshReason { manual, initial, foreground, background }
 
 enum CheckInPeriod { morning, evening }
 
@@ -294,12 +316,102 @@ class DailyCheckIn {
   }
 }
 
+enum OutcomeType { observedEnergy, cognitiveReaction }
+
+extension OutcomeTypeInfo on OutcomeType {
+  String get label => switch (this) {
+    OutcomeType.observedEnergy => 'Observed energy',
+    OutcomeType.cognitiveReaction => 'Reaction-time outcome',
+  };
+
+  String get unit => switch (this) {
+    OutcomeType.observedEnergy => 'rating_1_10',
+    OutcomeType.cognitiveReaction => 'ms',
+  };
+}
+
+enum OutcomeSource { checkIn, reactionSignal, coach }
+
+/// A consent-gated Version 0.31 record for future personal-model evaluation.
+class OutcomeRecord {
+  const OutcomeRecord({
+    required this.id,
+    required this.type,
+    required this.value,
+    required this.observedAt,
+    required this.recordedAt,
+    required this.source,
+    required this.sourceId,
+    this.recommendationId,
+    this.consentVersion = 1,
+  });
+
+  final String id;
+  final OutcomeType type;
+  final double value;
+  final DateTime observedAt;
+  final DateTime recordedAt;
+  final OutcomeSource source;
+  final String sourceId;
+  final String? recommendationId;
+  final int consentVersion;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'type': type.name,
+    'value': value,
+    'observedAt': observedAt.toIso8601String(),
+    'recordedAt': recordedAt.toIso8601String(),
+    'source': source.name,
+    'sourceId': sourceId,
+    'recommendationId': recommendationId,
+    'consentVersion': consentVersion,
+  };
+
+  factory OutcomeRecord.fromJson(Map<String, dynamic> json) => OutcomeRecord(
+    id: json['id'] as String,
+    type: OutcomeType.values.byName(json['type'] as String),
+    value: (json['value'] as num).toDouble(),
+    observedAt: DateTime.parse(json['observedAt'] as String),
+    recordedAt: DateTime.parse(json['recordedAt'] as String),
+    source: OutcomeSource.values.byName(json['source'] as String),
+    sourceId: json['sourceId'] as String,
+    recommendationId: json['recommendationId'] as String?,
+    consentVersion: (json['consentVersion'] as num?)?.toInt() ?? 1,
+  );
+}
+
+enum CoachPriority { balanced, focus, training, recovery }
+
+extension CoachPriorityInfo on CoachPriority {
+  String get label => switch (this) {
+    CoachPriority.balanced => 'Balanced day',
+    CoachPriority.focus => 'Focus first',
+    CoachPriority.training => 'Training first',
+    CoachPriority.recovery => 'Recovery first',
+  };
+
+  String get detail => switch (this) {
+    CoachPriority.balanced => 'Balance deep work, movement, and recovery.',
+    CoachPriority.focus => 'Protect demanding study before other goals.',
+    CoachPriority.training => 'Protect the best safe training window.',
+    CoachPriority.recovery => 'Favor sleep, naps, and lower-intensity blocks.',
+  };
+}
+
+CoachPriority coachPriorityFromGoal(String goal) => switch (goal) {
+  'Improve focus' => CoachPriority.focus,
+  'Improve recovery' => CoachPriority.recovery,
+  _ => CoachPriority.balanced,
+};
+
 class UserProfile {
   const UserProfile({
     this.name = 'Maya',
     this.ageRange = '16–18',
     this.role = 'Student athlete',
     this.goal = 'Balance focus and training',
+    this.coachPriority = CoachPriority.balanced,
     this.wakeHour = 7,
     this.bedHour = 23,
   });
@@ -308,6 +420,7 @@ class UserProfile {
   final String ageRange;
   final String role;
   final String goal;
+  final CoachPriority coachPriority;
   final double wakeHour;
   final double bedHour;
 
@@ -316,6 +429,7 @@ class UserProfile {
     String? ageRange,
     String? role,
     String? goal,
+    CoachPriority? coachPriority,
     double? wakeHour,
     double? bedHour,
   }) => UserProfile(
@@ -323,6 +437,7 @@ class UserProfile {
     ageRange: ageRange ?? this.ageRange,
     role: role ?? this.role,
     goal: goal ?? this.goal,
+    coachPriority: coachPriority ?? this.coachPriority,
     wakeHour: wakeHour ?? this.wakeHour,
     bedHour: bedHour ?? this.bedHour,
   );
@@ -332,18 +447,25 @@ class UserProfile {
     'ageRange': ageRange,
     'role': role,
     'goal': goal,
+    'coachPriority': coachPriority.name,
     'wakeHour': wakeHour,
     'bedHour': bedHour,
   };
 
-  factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
-    name: (json['name'] as String?) ?? 'Maya',
-    ageRange: (json['ageRange'] as String?) ?? '16–18',
-    role: (json['role'] as String?) ?? 'Student athlete',
-    goal: (json['goal'] as String?) ?? 'Balance focus and training',
-    wakeHour: (json['wakeHour'] as num?)?.toDouble() ?? 7,
-    bedHour: (json['bedHour'] as num?)?.toDouble() ?? 23,
-  );
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    final goal = (json['goal'] as String?) ?? 'Balance focus and training';
+    return UserProfile(
+      name: (json['name'] as String?) ?? 'Maya',
+      ageRange: (json['ageRange'] as String?) ?? '16–18',
+      role: (json['role'] as String?) ?? 'Student athlete',
+      goal: goal,
+      coachPriority: json['coachPriority'] == null
+          ? coachPriorityFromGoal(goal)
+          : CoachPriority.values.byName(json['coachPriority'] as String),
+      wakeHour: (json['wakeHour'] as num?)?.toDouble() ?? 7,
+      bedHour: (json['bedHour'] as num?)?.toDouble() ?? 23,
+    );
+  }
 }
 
 class ScoreDriver {
@@ -370,6 +492,83 @@ class ScoreDriver {
   bool get isNeutral => !isPositive && !isNegative;
 }
 
+enum PersonalBaselineType { hrv, restingHeartRate, sleep, reactionTime }
+
+extension PersonalBaselineTypeInfo on PersonalBaselineType {
+  String get label => switch (this) {
+    PersonalBaselineType.hrv => 'HRV',
+    PersonalBaselineType.restingHeartRate => 'Resting heart rate',
+    PersonalBaselineType.sleep => 'Sleep',
+    PersonalBaselineType.reactionTime => 'Reaction time',
+  };
+
+  String get unit => switch (this) {
+    PersonalBaselineType.hrv || PersonalBaselineType.reactionTime => 'ms',
+    PersonalBaselineType.restingHeartRate => 'bpm',
+    PersonalBaselineType.sleep => 'hr',
+  };
+
+  int get minimumSamples => switch (this) {
+    PersonalBaselineType.reactionTime => 5,
+    _ => 7,
+  };
+}
+
+class PersonalBaselineMetric {
+  const PersonalBaselineMetric({
+    required this.type,
+    required this.value,
+    required this.sampleCount,
+    required this.minimumSamples,
+    required this.variability,
+    this.latestSampleAt,
+  });
+
+  final PersonalBaselineType type;
+  final double? value;
+  final int sampleCount;
+  final int minimumSamples;
+  final double variability;
+  final DateTime? latestSampleAt;
+
+  bool get isReady => value != null && sampleCount >= minimumSamples;
+  double get readiness => (sampleCount / minimumSamples).clamp(0, 1);
+  int get samplesNeeded =>
+      (minimumSamples - sampleCount).clamp(0, minimumSamples);
+}
+
+class PersonalBaselines {
+  const PersonalBaselines({
+    required this.generatedAt,
+    required this.windowDays,
+    required this.metrics,
+  });
+
+  final DateTime generatedAt;
+  final int windowDays;
+  final List<PersonalBaselineMetric> metrics;
+
+  PersonalBaselineMetric? metric(PersonalBaselineType type) =>
+      metrics.where((item) => item.type == type).firstOrNull;
+
+  int get readyCount => metrics.where((item) => item.isReady).length;
+
+  double get overallReadiness => metrics.isEmpty
+      ? 0
+      : metrics.fold<double>(0, (sum, item) => sum + item.readiness) /
+            metrics.length;
+
+  double readinessFor(Iterable<PersonalBaselineType> types) {
+    final selected = types
+        .map(metric)
+        .whereType<PersonalBaselineMetric>()
+        .toList();
+    if (selected.isEmpty) return 1;
+    return selected.fold<double>(0, (sum, item) => sum + item.readiness) /
+        selected.length;
+  }
+}
+
 class ScoreSnapshot {
   const ScoreSnapshot({
     required this.energy,
@@ -387,6 +586,8 @@ class ScoreSnapshot {
     this.isEstimate = true,
     this.freshness,
     this.cognitiveFreshness,
+    this.personalBaselines,
+    this.baselineConfidence = 0,
   });
 
   final int energy;
@@ -404,6 +605,8 @@ class ScoreSnapshot {
   final bool isEstimate;
   final double? freshness;
   final double? cognitiveFreshness;
+  final PersonalBaselines? personalBaselines;
+  final double baselineConfidence;
 
   int? get cognitiveChange =>
       previousCognitive == null ? null : cognitive - previousCognitive!;
@@ -555,6 +758,17 @@ enum RecommendationStatus { suggested, accepted, completed, dismissed }
 
 enum RecommendationPriority { routine, important }
 
+enum CoachPlanPhase {
+  morning,
+  deepWork,
+  midday,
+  nap,
+  training,
+  recovery,
+  taper,
+  evening,
+}
+
 class Recommendation {
   const Recommendation({
     required this.id,
@@ -571,6 +785,14 @@ class Recommendation {
     this.signalEvidenceIds = const [],
     this.checkInEvidenceIds = const [],
     this.evidence = const [],
+    this.planPhase,
+    this.durationMinutes,
+    this.planConfidence,
+    this.decisionReason,
+    this.helpful,
+    this.feedbackScore = .5,
+    this.feedbackSampleCount = 0,
+    this.feedbackRank = 0,
   });
   final String id;
   final String title;
@@ -586,6 +808,14 @@ class Recommendation {
   final List<String> signalEvidenceIds;
   final List<String> checkInEvidenceIds;
   final List<ForecastEvidence> evidence;
+  final CoachPlanPhase? planPhase;
+  final int? durationMinutes;
+  final double? planConfidence;
+  final String? decisionReason;
+  final bool? helpful;
+  final double feedbackScore;
+  final int feedbackSampleCount;
+  final int feedbackRank;
 
   bool get isGrounded =>
       signalEvidenceIds.isNotEmpty || checkInEvidenceIds.isNotEmpty;
@@ -593,6 +823,11 @@ class Recommendation {
   Recommendation copyWith({
     RecommendationStatus? status,
     List<ForecastEvidence>? evidence,
+    bool? helpful,
+    RecommendationPriority? priority,
+    double? feedbackScore,
+    int? feedbackSampleCount,
+    int? feedbackRank,
   }) => Recommendation(
     id: id,
     title: title,
@@ -600,7 +835,7 @@ class Recommendation {
     timeLabel: timeLabel,
     category: category,
     status: status ?? this.status,
-    priority: priority,
+    priority: priority ?? this.priority,
     windowType: windowType,
     scheduledAt: scheduledAt,
     day: day,
@@ -608,6 +843,14 @@ class Recommendation {
     signalEvidenceIds: signalEvidenceIds,
     checkInEvidenceIds: checkInEvidenceIds,
     evidence: evidence ?? this.evidence,
+    planPhase: planPhase,
+    durationMinutes: durationMinutes,
+    planConfidence: planConfidence,
+    decisionReason: decisionReason,
+    helpful: helpful ?? this.helpful,
+    feedbackScore: feedbackScore ?? this.feedbackScore,
+    feedbackSampleCount: feedbackSampleCount ?? this.feedbackSampleCount,
+    feedbackRank: feedbackRank ?? this.feedbackRank,
   );
 }
 

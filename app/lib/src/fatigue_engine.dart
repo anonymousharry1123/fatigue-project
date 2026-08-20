@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'activity_sync_logic.dart';
 import 'models.dart';
+import 'personal_baseline_logic.dart';
+import 'screen_time_logic.dart';
 import 'sleep_sync_logic.dart';
 
 abstract final class FatigueEngine {
@@ -11,6 +13,7 @@ abstract final class FatigueEngine {
     DateTime? now,
     DateTime? day,
     ScoreSnapshot? previousDay,
+    PersonalBaselines? personalBaselines,
   }) {
     final clock = now ?? DateTime.now();
     final target = day ?? clock;
@@ -65,7 +68,9 @@ abstract final class FatigueEngine {
     final exerciseReadings = exerciseAggregate?.evidence ?? const [];
     final stepReadings = stepsAggregate?.evidence ?? const [];
     final studyReadings = readingsFor(SignalType.study);
-    final screenReadings = readingsFor(SignalType.screenTime);
+    final screenReadings = ScreenTimeLogic.modelReadings(
+      readingsFor(SignalType.screenTime),
+    );
     final hydration = hydrationAggregate?.total;
     final exercise = exerciseAggregate?.total;
     final steps = stepsAggregate?.total;
@@ -84,22 +89,87 @@ abstract final class FatigueEngine {
             .toList()
           ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final latestCheckIn = applicableCheckIns.firstOrNull;
+    final sleepBaseline = personalBaselines?.metric(PersonalBaselineType.sleep);
+    final currentHrv = PersonalBaselineLogic.currentValue(
+      PersonalBaselineType.hrv,
+      signals: targetDay,
+      day: start,
+    );
+    final currentRestingHeartRate = PersonalBaselineLogic.currentValue(
+      PersonalBaselineType.restingHeartRate,
+      signals: targetDay,
+      day: start,
+    );
 
     // A neutral estimate starts at 60. Every available input contributes an
     // independently bounded adjustment so the result remains explainable.
     var energy = 60.0;
     final drivers = <ScoreDriver>[];
     if (sleep != null) {
-      final impact = ((sleep - 7.5) * 12).clamp(-30, 20).toDouble();
+      final personalDifference = PersonalBaselineLogic.differencePercent(
+        current: sleep,
+        baseline: sleepBaseline,
+      );
+      final personalAdjustment = personalDifference == null
+          ? 0.0
+          : (personalDifference * .16).clamp(-4.0, 4.0);
+      final impact =
+          ((sleep - 7.5) * 12).clamp(-30, 20).toDouble() + personalAdjustment;
       energy += impact;
       drivers.add(
         _signalDriver(
           'Sleep',
           impact,
-          '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}',
+          '${sleep.toStringAsFixed(1)} hr ${sleepReadings.length == 1 ? 'last night' : '${sleepReadings.length}-night average'}${_baselineDetail(sleepBaseline, current: sleep)}',
           readings: sleepReadings,
           cutoff: cutoff,
           maximumAge: const Duration(days: 7),
+        ),
+      );
+    }
+    if (personalBaselines != null && currentHrv != null) {
+      final readings = readingsFor(SignalType.hrv);
+      final baseline = personalBaselines.metric(PersonalBaselineType.hrv);
+      final difference = PersonalBaselineLogic.differencePercent(
+        current: currentHrv,
+        baseline: baseline,
+      );
+      final impact = difference == null
+          ? 0.0
+          : (difference * .22).clamp(-8.0, 8.0);
+      energy += impact;
+      drivers.add(
+        _signalDriver(
+          'HRV vs baseline',
+          impact,
+          '${currentHrv.round()} ms${_baselineDetail(baseline, current: currentHrv)}',
+          readings: readings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 36),
+        ),
+      );
+    }
+    if (personalBaselines != null && currentRestingHeartRate != null) {
+      final readings = readingsFor(SignalType.restingHeartRate);
+      final baseline = personalBaselines.metric(
+        PersonalBaselineType.restingHeartRate,
+      );
+      final difference = PersonalBaselineLogic.differencePercent(
+        current: currentRestingHeartRate,
+        baseline: baseline,
+      );
+      final impact = difference == null
+          ? 0.0
+          : (-difference * .3).clamp(-8.0, 8.0);
+      energy += impact;
+      drivers.add(
+        _signalDriver(
+          'Resting HR vs baseline',
+          impact,
+          '${currentRestingHeartRate.round()} bpm${_baselineDetail(baseline, current: currentRestingHeartRate)}',
+          readings: readings,
+          cutoff: cutoff,
+          maximumAge: const Duration(hours: 36),
         ),
       );
     }
@@ -252,10 +322,20 @@ abstract final class FatigueEngine {
           ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     if (currentReaction != null) {
       final baselineReadings = priorReactions.take(14).toList();
-      final baseline = baselineReadings.isEmpty
-          ? null
-          : baselineReadings.fold<double>(0, (sum, item) => sum + item.value) /
-                baselineReadings.length;
+      final reactionMetric = personalBaselines?.metric(
+        PersonalBaselineType.reactionTime,
+      );
+      final baseline = personalBaselines == null
+          ? baselineReadings.isEmpty
+                ? null
+                : baselineReadings.fold<double>(
+                        0,
+                        (sum, item) => sum + item.value,
+                      ) /
+                      baselineReadings.length
+          : reactionMetric?.isReady == true
+          ? reactionMetric!.value
+          : null;
       final impact = baseline == null
           ? ((330 - currentReaction.value) / 5).clamp(-18, 16).toDouble()
           : (((baseline - currentReaction.value) / baseline) * 120)
@@ -267,7 +347,7 @@ abstract final class FatigueEngine {
           'Reaction time',
           impact,
           baseline == null
-              ? '${currentReaction.value.round()} ms · personal baseline building'
+              ? '${currentReaction.value.round()} ms · personal baseline building${reactionMetric == null ? '' : ' (${reactionMetric.sampleCount}/${reactionMetric.minimumSamples})'}'
               : '${currentReaction.value.round()} ms vs ${baseline.round()} ms baseline',
           readings: [currentReaction],
           cutoff: cutoff,
@@ -351,18 +431,37 @@ abstract final class FatigueEngine {
     _rankDrivers(drivers);
     final inputCount = drivers.length.clamp(0, 7);
     final freshness = _averageFreshness(drivers);
-    final confidence = _confidence(
-      inputCount: inputCount,
-      expectedInputs: 7,
-      freshness: freshness,
+    final energyBaselineTypes = <PersonalBaselineType>[
+      if (sleep != null) PersonalBaselineType.sleep,
+      if (currentHrv != null) PersonalBaselineType.hrv,
+      if (currentRestingHeartRate != null)
+        PersonalBaselineType.restingHeartRate,
+    ];
+    final energyBaselineReadiness = personalBaselines?.readinessFor(
+      energyBaselineTypes,
+    );
+    final confidence = _applyBaselineReadiness(
+      _confidence(
+        inputCount: inputCount,
+        expectedInputs: 7,
+        freshness: freshness,
+      ),
+      energyBaselineReadiness,
     );
     _rankDrivers(cognitiveDrivers);
     final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 6);
     final cognitiveFreshness = _averageFreshness(cognitiveDrivers);
-    final cognitiveConfidence = _confidence(
-      inputCount: cognitiveInputCount,
-      expectedInputs: 6,
-      freshness: cognitiveFreshness,
+    final cognitiveBaselineTypes = <PersonalBaselineType>[
+      if (sleep != null) PersonalBaselineType.sleep,
+      if (currentReaction != null) PersonalBaselineType.reactionTime,
+    ];
+    final cognitiveConfidence = _applyBaselineReadiness(
+      _confidence(
+        inputCount: cognitiveInputCount,
+        expectedInputs: 6,
+        freshness: cognitiveFreshness,
+      ),
+      personalBaselines?.readinessFor(cognitiveBaselineTypes),
     );
     final previousCognitive = previousDay?.hasCognitiveScore == true
         ? previousDay!.cognitive
@@ -383,7 +482,29 @@ abstract final class FatigueEngine {
       isEstimate: true,
       freshness: freshness,
       cognitiveFreshness: cognitiveFreshness,
+      personalBaselines: personalBaselines,
+      baselineConfidence: personalBaselines?.overallReadiness ?? 0,
     );
+  }
+
+  static String _baselineDetail(
+    PersonalBaselineMetric? baseline, {
+    required double current,
+  }) {
+    if (baseline == null || baseline.value == null) {
+      return ' · personal baseline building';
+    }
+    if (!baseline.isReady) {
+      return ' · baseline building (${baseline.sampleCount}/${baseline.minimumSamples})';
+    }
+    final difference = current - baseline.value!;
+    final sign = difference >= 0 ? '+' : '−';
+    return ' · $sign${difference.abs().toStringAsFixed(1)} ${baseline.type.unit} vs your baseline';
+  }
+
+  static double _applyBaselineReadiness(double confidence, double? readiness) {
+    if (readiness == null) return confidence;
+    return (confidence * (.72 + readiness.clamp(0, 1) * .28)).clamp(.2, .95);
   }
 
   static ScoreDriver _signalDriver(

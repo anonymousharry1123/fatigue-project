@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.25 — Workout and Hydration Sync (as of 2026-08-17)
+- **Current release:** Version 0.31 — Outcome Collection (as of 2026-08-20)
 
 ## Implementation Report
 
@@ -37,7 +37,13 @@
 | 0.23 | HealthKit HRV and resting-heart-rate sync | Complete |
 | 0.24 | Reconciled HealthKit sleep architecture sync | Complete |
 | 0.25 | HealthKit workout and hydration sync | Complete |
-| 0.26+ | Continuous refresh, personal baselines, AI coach | Not started |
+| 0.26 | Continuous HealthKit refresh + change gating | Complete |
+| 0.27 | Rolling private personal baselines | Complete |
+| 0.28 | Privacy-preserving Screen Time report + manual model input | Complete |
+| 0.29 | Priority-aware morning-to-evening AI Coach plan | Complete |
+| 0.30 | Persisted recommendation actions, helpfulness, and history ranking | Complete |
+| 0.31 | Consent-gated observed-energy and cognitive outcome records | Complete |
+| 0.32+ | Personalized model, transparency, and production polish | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -60,7 +66,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-17 — **127 tests passed** for Version 0.25; static analysis clean
+- Last verified: 2026-08-20 — **155 tests passed** through Version 0.31; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -90,6 +96,12 @@
 25. Heart data sync (normalized HealthKit HRV/resting HR, stable IDs, manual-safe deduplication) - Complete (v0.23)
 26. Sleep architecture sync (five typed stages, multi-source interval reconciliation, manual preference) - Complete (v0.24)
 27. Workout and hydration sync (normalized imports, unioned daily load, manual correction/fallback) - Complete (v0.25)
+28. Continuous refresh (HealthKit background/resume delivery, durable sync metadata, meaningful-change gating) - Complete (v0.26)
+29. Personal baselines (rolling private HRV, resting HR, sleep, and reaction references with confidence gating) - Complete (v0.27)
+30. Screen-Time enhancement (manual-first model input + sandboxed daily-total Device Activity report) - Complete (v0.28)
+31. AI Coach daily plan (priority/confidence conflict resolution + persisted morning-to-evening timeline) - Complete (v0.29)
+32. Recommendation feedback (direct status/helpfulness writes + 30-day private-history ranking) - Complete (v0.30)
+33. Outcome collection (explicit dual consent + linked energy/reaction records) - Complete (v0.31)
 
 ## Day-to-Day Entries
 
@@ -807,9 +819,291 @@ existing manual activity workflow as a correction and fallback.
   results therefore stay distinct from query failures and manual logging always
   remains available.
 
+### 2026-08-20 — Version 0.26 Continuous Refresh
+
+**Branch:** `main`
+
+**Goal:** Refresh Apple Health as iOS permits, persist trustworthy sync state,
+and avoid recalculating derived data when an import changes no model input.
+
+**Results:**
+- Registered HealthKit observer queries and hourly background delivery for all
+  requested read types, with launch/resume refresh as the platform-safe
+  fallback and a 15-minute foreground throttle.
+- Added durable user sync metadata for attempt/success/change timestamps,
+  reason, status, and background-delivery state. Imported signal documents now
+  retain a separate `syncedAt` timestamp without confusing it with observation
+  freshness.
+- Added an effective-input fingerprint covering preferred sleep, manual-safe
+  daily activity aggregates, reaction, heart, study, screen, and caffeine.
+  Unchanged imports still update sync status but do not rewrite score snapshots,
+  forecasts, guidance, or Insights.
+- Added Profile status for automatic refresh and retained explicit manual sync,
+  disconnect, unsupported-platform, partial-failure, and offline behavior.
+- Bumped Firestore documents to schema Version 8 and kept older signals/user
+  documents readable when new sync fields are absent.
+- Focused and full Flutter regression suites passed before Version 0.27 work
+  began (**137 tests**); static analysis was clean.
+
+**Major issues:**
+- A recent sync is not proof that an old physiological observation is fresh.
+  Tonyo stores `syncedAt` separately and continues calculating model freshness
+  from the signal's measurement `timestamp`.
+- HealthKit delivery is opportunistic. Observer callbacks are supported where
+  iOS grants them, while launch and resume checks preserve predictable refresh
+  behavior without promising exact background timing.
+
+### 2026-08-20 — Version 0.27 Personal Baselines
+
+**Branch:** `main`
+
+**Goal:** Compare HRV, resting heart rate, sleep, and reaction time only with
+the signed-in person's own history and lower confidence while history builds.
+
+**Results:**
+- Added one user-scoped 42-day signal query for baseline calculation; today's
+  values are excluded from their own historical reference.
+- Collapsed repeated same-day heart/reaction readings into daily values and used
+  rolling medians plus median absolute variability so outliers do not dominate.
+- Required seven historical days for HRV, resting heart rate, and sleep, and
+  five for reaction time. Partial readiness explicitly reduces Energy and
+  Cognitive confidence instead of implying mature personalization.
+- Added bounded HRV/resting-HR contributions, personalized sleep context, and a
+  mature reaction reference while retaining deterministic absolute fallbacks.
+- Persisted baseline values, sample counts, thresholds, variability, readiness,
+  and generation time on the private daily `scoreSnapshots` document.
+- Added Personal Baseline cards to Today and Insights with explicit owner-only,
+  no-cohort language and building/ready states.
+- Bumped the app to `0.27.0+28`; full verification completed with **141 passing
+  tests**, clean static analysis, and native iOS validation.
+
+**Major issues:**
+- Including today's value in its baseline would dampen the very deviation being
+  measured. Baseline construction uses dates strictly before the target day.
+- Multiple heart samples in one day would otherwise over-weight high-frequency
+  devices. Samples first collapse to one daily value, so each day contributes
+  equally to the rolling median.
+
+### 2026-08-20 — Version 0.28 Screen-Time Enhancement
+
+**Branch:** `main`
+
+**Goal:** Keep manual screen time dependable for scoring while preparing an
+optional Apple Device Activity report that cannot expose protected usage data
+to Flutter or Firebase.
+
+**Results:**
+- Added manual-first screen-time selection to Energy and Cognitive scoring;
+  synthetic Cohort Lab data remains a fallback only when no manual reading is
+  present.
+- Added a separate Flutter platform service for authorization and presentation.
+  Its channel deliberately carries only status strings and a presentation
+  result—never activity duration or protected detail payloads.
+- Added and embedded a native Device Activity report extension. It traverses
+  only activity segments, reduces them to today’s total duration, and never
+  reads applications, categories, web domains, pickups, or notifications.
+- Replaced the Profile preview with a complete setup/status sheet covering
+  manual fallback, the report-extension sandbox, Firestore boundaries, denied
+  permission, unsupported platforms, and entitlement-pending behavior.
+- Kept Apple’s restricted Family Controls capability default-off via
+  `TonyoFamilyControlsEntitlementApproved=false`; documented the exact target,
+  entitlement, provisioning, and physical-device activation steps for after
+  Apple approval.
+- Bumped the app to `0.28.0+29`; full verification completed with **145 passing
+  tests**, clean static analysis, valid plist/project files, and an unsigned iOS
+  build containing `ScreenTimeReportExtension.appex`.
+
+**Major issues:**
+- Family Controls entitlement approval is external state and cannot be assumed.
+  The app explicitly reports `entitlementRequired` and does not request access
+  until the approved signing capability and build flag are both activated.
+- The containing app must not receive protected report results merely to power
+  scoring. The report is view-only, while a user-entered `screenTime` signal
+  remains the auditable model input and Firebase value.
+
+### 2026-08-20 — Version 0.29 AI Coach Daily Plan
+
+**Branch:** `main`
+
+**Goal:** Turn grounded Coach actions into a complete morning-to-evening plan
+that uses private Firebase scores/windows and resolves competing goals from
+confidence plus a saved user priority.
+
+**Results:**
+- Added Balanced, Focus, Training, and Recovery coach priorities to the user
+  profile. New and returning users can set the priority during onboarding or in
+  Profile; legacy goals migrate to a matching priority where possible.
+- Added a deterministic eight-block timeline spanning morning setup, deep work,
+  pre-dip hydration, a short nap, rebound recovery/training, pre-bed tapering,
+  and evening wind-down, all anchored to the saved wake/bed schedule.
+- Reused Firebase-backed score snapshots and linked forecast windows. Every
+  plan item remains grounded in owner-scoped signal/check-in evidence and uses
+  a stable daily recommendation ID.
+- Made training and recovery intentionally compete for the rebound window.
+  Training goes first only for a Training-first user when confidence and energy
+  support normal intensity; otherwise recovery goes first and training becomes
+  shorter/lighter. Low confidence also shortens the deep-work block.
+- Persisted `planPhase`, `durationMinutes`, `planConfidence`, and
+  `decisionReason` on private recommendation documents and bumped the Firestore
+  schema to Version 9 with backward-compatible reads.
+- Upgraded Coach into a timeline view with day range, saved priority, plan
+  confidence, duration/phase tags, and visible conflict reasoning.
+- Bumped the app to `0.29.0+30`; full verification completed with **148 passing
+  tests**, clean static analysis, and an unsigned iOS release-version build.
+
+**Major issues:**
+- A priority must not override weak evidence. Training-first affects ordering
+  only when both score confidence and estimated energy clear conservative
+  thresholds; otherwise recovery wins the conflict.
+- Existing recommendation status must survive plan regeneration. Stable daily
+  IDs and the controller’s saved-status merge remain in place so Version 0.30
+  feedback can extend these documents without a second plan store.
+
+### 2026-08-20 — Version 0.30 Recommendation Feedback
+
+**Branch:** `main`
+
+**Goal:** Make AI Coach blocks actionable, persist helpfulness on each private
+recommendation document, and let prior responses influence future ranking.
+
+**Results:**
+- Added Accept, Dismiss, and Complete controls to every Coach plan block, with
+  visible durable status and a helpful/not-helpful prompt after completion or
+  dismissal.
+- Replaced the old user-document-only status path with direct owner-scoped
+  updates to `users/{uid}/recommendations/{id}`. Offline actions and feedback
+  remain in SharedPreferences and report a pending cloud state on write failure.
+- Activated the existing `feedback` field as a nullable boolean and persisted
+  feedback score, sample count, and learned rank metadata with backward-safe
+  defaults. Firestore schema version is now 10.
+- Added an owner-scoped 30-day recommendation-history query. Explicit feedback
+  provides the strongest outcome; completed, accepted, and dismissed states are
+  weaker implicit signals when no rating exists.
+- Applied a two-sample neutral prior so one response cannot over-personalize a
+  plan. Repeated positive or negative history can adjust importance and rank,
+  while the daily plan remains chronologically ordered.
+- Bumped the app to `0.30.0+31`; full verification completed with **150 passing
+  tests**, clean static analysis, and an unsigned iOS build.
+
+**Major issues:**
+- Existing status actions did not update recommendation documents; `_commit()`
+  only replaced the user profile/cache collections. Dedicated document updates
+  now persist status and feedback without regenerating the plan.
+- Feedback must not let a single tap dominate future advice. Bayesian shrinkage
+  toward neutral and a minimum of two responses gate importance changes.
+
+### 2026-08-20 — Version 0.31 Outcome Collection
+
+**Branch:** `main`
+
+**Goal:** Collect optional observed-energy and reaction outcomes for future
+personalization, with explicit consent before any training-eligible record is
+created.
+
+**Results:**
+- Added typed `OutcomeRecord` documents under the dedicated owner-scoped
+  `users/{uid}/outcomes/{id}` collection and advanced the Firestore schema to
+  Version 11.
+- Added two explicit user consent flags: `outcomeCollection` and
+  `trainingRecordUse`. Repository checks and Firestore Security Rules require
+  both flags for every outcome create or update.
+- Linked future consented check-in energy to observed-energy outcomes and future
+  reaction-test signals to cognitive outcomes. Pre-consent records are not
+  backfilled.
+- Added an optional observed-energy prompt after a completed Coach block, with a
+  stable recommendation link and one replaceable outcome per block.
+- Added Profile consent explanations and confirmation, check-in/reaction status
+  copy, active outcome counts, offline cache handling, export, individual source
+  deletion, tracking reset, and account-tree deletion coverage.
+- Turning consent off immediately excludes cached outcomes but preserves the
+  owner’s ability to export or delete previously stored records. Re-enabling
+  restores the owner’s active 90-day history.
+- Bumped the app to `0.31.0+32`; full verification completed with **155 passing
+  tests**, clean static analysis, and an unsigned iOS build.
+
+**Major issues:**
+- A single legacy boolean was too ambiguous for training-record eligibility.
+  The cloud document now writes both explicit flags, and Security Rules fail
+  closed when either flag is absent or false.
+- Outcome collection must not silently change current estimates. Version 0.31
+  stores linked records only; Energy/Cognitive scoring and forecasts do not
+  consume the new collection, and personalized training remains Version 0.32.
+
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.31 Outcome Collection
+**Prompt:**
+"complete .31"
+
+**Result:** Completed explicit consent, owner-scoped energy/reaction outcome
+records, Coach outcome capture, lifecycle handling, Security Rules, and
+automated coverage.
+
+**Modifications:** Used a dedicated outcomes subcollection so source check-ins
+and reaction signals retain their existing schemas. Writes require both consent
+flags; only future records are linked, and no model is trained in this release.
+
+### Feature: Version 0.30 Recommendation Feedback
+**Prompt:**
+"complete .30"
+
+**Result:** Completed direct recommendation actions, helpfulness capture,
+owner-scoped history queries, conservative feedback ranking, Coach interaction
+states, offline fallback, and automated coverage.
+
+**Modifications:** Kept the v0.29 timeline chronological and stored a separate
+feedback rank. Explicit votes outweigh status-only outcomes, and a neutral prior
+prevents one response from immediately changing recommendation importance.
+
+### Feature: Version 0.29 AI Coach Daily Plan
+**Prompt:**
+"complete .29"
+
+**Result:** Completed a Firebase-backed morning-to-evening plan, persisted
+coach priority and plan metadata, confidence-aware conflict resolution, Coach
+timeline presentation, legacy migration, and automated coverage.
+
+**Modifications:** Reused grounded recommendation documents and stable IDs.
+When recovery and training share the rebound, priority can choose training first
+only if confidence and energy support it; conservative recovery otherwise wins.
+
+### Feature: Version 0.28 Screen-Time Enhancement
+**Prompt:**
+"complete .28"
+
+**Result:** Completed manual-first screen-time scoring, entitlement-aware
+authorization and Profile UI, a sandboxed daily-total Device Activity report
+extension, activation documentation, and automated coverage.
+
+**Modifications:** Kept the restricted capability default-off until Apple
+approval. No protected Device Activity payload crosses the native/Flutter
+boundary or enters Firebase; manual screen-time signals remain authoritative.
+
+### Feature: Version 0.27 Personal Baselines
+**Prompt:**
+"complete .26 then complete .27"
+
+**Result:** Completed rolling owner-only HRV, resting-heart-rate, sleep, and
+reaction baselines; baseline-aware scoring/confidence; private snapshot
+persistence; Today/Insights presentation; and automated coverage.
+
+**Modifications:** Used a 42-day window, daily median inputs, and explicit
+minimum sample thresholds. Excluded the target day from its own baseline and
+kept deterministic absolute scoring while personalization is still building.
+
+### Feature: Version 0.26 Continuous Refresh
+**Prompt:**
+"complete .26 then complete .27"
+
+**Result:** Completed HealthKit observer/resume refresh, sync metadata and
+signal sync timestamps, effective-input change detection, Firestore upserts,
+Profile status, and automated coverage before beginning Version 0.27.
+
+**Modifications:** Treated background timing as opportunistic, retained a
+15-minute resume throttle and manual action, and regenerated derived documents
+only when the effective model-input fingerprint changed.
 
 ### Feature: Version 0.25 Workout and Hydration Sync
 **Prompt:**
@@ -1132,5 +1426,11 @@ state.
 - [x] Implement Version 0.23 HRV and resting-heart-rate sync
 - [x] Implement Version 0.24 reconciled sleep architecture sync
 - [x] Implement Version 0.25 workout and hydration sync with manual fallback
+- [x] Implement Version 0.26 continuous HealthKit refresh with meaningful-change gating
+- [x] Implement Version 0.27 private rolling personal baselines and confidence gating
+- [x] Implement Version 0.28 manual-first, privacy-preserving Screen Time enhancement
+- [x] Implement Version 0.29 priority-aware morning-to-evening AI Coach plan
+- [x] Implement Version 0.30 persisted recommendation feedback and ranking
+- [x] Implement Version 0.31 explicit-consent outcome collection and lifecycle handling
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

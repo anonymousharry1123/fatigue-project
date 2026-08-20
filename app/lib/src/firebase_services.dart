@@ -99,6 +99,7 @@ class FirestoreCloudRepository implements CloudRepository {
     'scoreSnapshots',
     'forecastPoints',
     'recommendations',
+    'outcomes',
     'riskAlerts',
   ];
 
@@ -113,6 +114,17 @@ class FirestoreCloudRepository implements CloudRepository {
   void _authorize(String uid) {
     if (_auth.currentSession?.uid != uid) {
       throw StateError('Cross-user repository access denied.');
+    }
+  }
+
+  Future<void> _requireOutcomeConsent(String uid) async {
+    final snapshot = await _user(uid).get();
+    final consent =
+        (snapshot.data()?['consentFlags'] as Map?)?.cast<String, dynamic>() ??
+        const {};
+    if (consent['outcomeCollection'] != true ||
+        consent['trainingRecordUse'] != true) {
+      throw StateError('Outcome collection requires explicit consent.');
     }
   }
 
@@ -132,6 +144,8 @@ class FirestoreCloudRepository implements CloudRepository {
         (prefs['notificationPreferencesVersion'] as num?)?.round() ?? 0;
     final consent =
         (data['consentFlags'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final healthSync =
+        (data['healthSync'] as Map?)?.cast<String, dynamic>() ?? const {};
     final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
     final checkInSnapshot = values[2] as QuerySnapshot<Map<String, dynamic>>;
     return CloudUserState(
@@ -151,6 +165,18 @@ class FirestoreCloudRepository implements CloudRepository {
       outcomeConsent: consent['outcomeCollection'] as bool? ?? false,
       healthAuthorized: prefs['healthAuthorized'] as bool? ?? false,
       lastSync: _dateTimeOrNull(data['lastHealthSync']),
+      healthSyncStatus:
+          HealthSyncStatus.values
+              .where((value) => value.name == healthSync['status'])
+              .firstOrNull ??
+          HealthSyncStatus.idle,
+      lastHealthRefreshReason: HealthRefreshReason.values
+          .where((value) => value.name == healthSync['reason'])
+          .firstOrNull,
+      lastHealthSyncAttempt: _dateTimeOrNull(healthSync['lastAttemptAt']),
+      lastHealthChangeAt: _dateTimeOrNull(healthSync['lastMeaningfulChangeAt']),
+      healthBackgroundRefreshEnabled:
+          healthSync['backgroundRefreshEnabled'] as bool? ?? false,
       migrationVersion: data['localMigrationVersion'] as int? ?? 0,
       signals: signalSnapshot.docs
           .map(
@@ -182,6 +208,11 @@ class FirestoreCloudRepository implements CloudRepository {
         outcomeConsent: state.outcomeConsent,
         healthAuthorized: state.healthAuthorized,
         lastSync: state.lastSync,
+        healthSyncStatus: state.healthSyncStatus,
+        lastHealthRefreshReason: state.lastHealthRefreshReason,
+        lastHealthSyncAttempt: state.lastHealthSyncAttempt,
+        lastHealthChangeAt: state.lastHealthChangeAt,
+        healthBackgroundRefreshEnabled: state.healthBackgroundRefreshEnabled,
         migrationVersion: state.migrationVersion,
       ),
       SetOptions(merge: true),
@@ -411,6 +442,35 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<Recommendation>> recommendationsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!end.isAfter(start)) {
+      throw ArgumentError('Recommendation range end must follow start.');
+    }
+    final snapshot = await _user(uid)
+        .collection('recommendations')
+        .where('day', isGreaterThanOrEqualTo: start)
+        .where('day', isLessThan: end)
+        .get();
+    final values = snapshot.docs
+        .map(
+          (document) => recommendationFromCloud(
+            document.id,
+            _normalizeDates(document.data()),
+          ),
+        )
+        .toList();
+    return values..sort((left, right) {
+      final leftTime = left.scheduledAt ?? left.day!;
+      final rightTime = right.scheduledAt ?? right.day!;
+      return leftTime.compareTo(rightTime);
+    });
+  }
+
+  @override
   Future<void> replaceRecommendationsForDay(
     String uid, {
     required DateTime day,
@@ -436,6 +496,75 @@ class FirestoreCloudRepository implements CloudRepository {
     }
     await batch.commit();
   }
+
+  @override
+  Future<void> setRecommendationStatus(
+    String uid,
+    String recommendationId, {
+    required RecommendationStatus status,
+  }) => _user(uid).collection('recommendations').doc(recommendationId).update({
+    'status': status.name,
+  });
+
+  @override
+  Future<void> setRecommendationFeedback(
+    String uid,
+    String recommendationId, {
+    required bool helpful,
+  }) => _user(uid).collection('recommendations').doc(recommendationId).update({
+    'feedback': helpful,
+  });
+
+  @override
+  Future<void> upsertOutcome(String uid, OutcomeRecord outcome) async {
+    await _requireOutcomeConsent(uid);
+    await _user(
+      uid,
+    ).collection('outcomes').doc(outcome.id).set(outcomeToCloud(outcome));
+  }
+
+  @override
+  Future<List<OutcomeRecord>> outcomesByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!end.isAfter(start)) {
+      throw ArgumentError('Outcome range end must follow start.');
+    }
+    await _requireOutcomeConsent(uid);
+    final snapshot = await _user(uid)
+        .collection('outcomes')
+        .where('observedAt', isGreaterThanOrEqualTo: start)
+        .where('observedAt', isLessThan: end)
+        .get();
+    final values = snapshot.docs
+        .map(
+          (document) =>
+              outcomeFromCloud(document.id, _normalizeDates(document.data())),
+        )
+        .toList();
+    return values
+      ..sort((left, right) => right.observedAt.compareTo(left.observedAt));
+  }
+
+  @override
+  Future<void> clearOutcomes(String uid) async {
+    final collection = _user(uid).collection('outcomes');
+    while (true) {
+      final page = await collection.limit(100).get();
+      if (page.docs.isEmpty) break;
+      final batch = _firestore.batch();
+      for (final document in page.docs) {
+        batch.delete(document.reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
+  Future<void> deleteOutcome(String uid, String outcomeId) =>
+      _user(uid).collection('outcomes').doc(outcomeId).delete();
 
   @override
   Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) async {

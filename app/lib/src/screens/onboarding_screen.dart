@@ -28,6 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _age = '16–18';
   String _role = 'Student athlete';
   String _goal = 'Balance focus and training';
+  CoachPriority _coachPriority = CoachPriority.balanced;
   double _wake = 7;
   double _bed = 23;
 
@@ -432,7 +433,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ['Improve focus', 'Improve recovery', 'Balance focus and training']
                 .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                 .toList(),
-        onChanged: (value) => setState(() => _goal = value!),
+        onChanged: (value) => setState(() {
+          _goal = value!;
+          _coachPriority = coachPriorityFromGoal(value);
+        }),
+      ),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<CoachPriority>(
+        key: const Key('onboarding-coach-priority'),
+        initialValue: _coachPriority,
+        decoration: const InputDecoration(labelText: 'AI Coach priority'),
+        items: CoachPriority.values
+            .map(
+              (value) =>
+                  DropdownMenuItem(value: value, child: Text(value.label)),
+            )
+            .toList(),
+        onChanged: (value) => setState(() => _coachPriority = value!),
       ),
       const SizedBox(height: 20),
       const TonyoCard(
@@ -559,6 +576,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ageRange: _age,
           role: _role,
           goal: _goal,
+          coachPriority: _coachPriority,
           wakeHour: _wake,
           bedHour: _bed,
         ),

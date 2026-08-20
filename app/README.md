@@ -114,5 +114,49 @@ hydration totals sum distinct water samples. A manual exercise or hydration row
 becomes that day’s correction for scores, forecasts, Insights, and Today, while
 deleting it restores the untouched HealthKit fallback.
 
+Version 0.26 enables HealthKit background delivery where iOS permits it and
+also checks for due updates when Tonyo launches or resumes. User documents keep
+the last attempt, success, refresh reason, status, and meaningful-change time;
+imported signal documents keep their observation and sync timestamps. Duplicate
+imports update sync status without regenerating scores or forecasts.
+
+Version 0.27 builds rolling, owner-only HRV, resting-heart-rate, sleep, and
+reaction-time baselines from the prior 42 days of private Firestore signals.
+Daily values and rolling medians compare a person only with their own history,
+current-day values are excluded from their own reference, and score confidence
+remains reduced until each baseline reaches its minimum history threshold.
+
+Version 0.28 keeps manually entered screen time authoritative for Energy and
+Cognitive scoring and adds an entitlement-gated Apple Device Activity report
+extension. The extension renders only today’s total duration; protected app,
+category, website, pickup, and notification details never cross into Flutter or
+Firebase. The report remains default-off until Apple approves Family Controls,
+while manual logging works on every supported platform. See
+[docs/SCREEN_TIME_SETUP.md](docs/SCREEN_TIME_SETUP.md) for activation steps.
+
+Version 0.29 promotes AI Coach into a generated eight-block
+morning-to-evening plan. Firebase-backed scores and peak, dip, and recovery
+windows schedule morning setup, deep work, hydration, a brief nap, training,
+recovery, bedtime tapering, and wind-down. A saved Balanced, Focus, Training,
+or Recovery priority resolves competing rebound goals; lower confidence keeps
+focus shorter, training lighter, and recovery first. Each private
+`recommendations` document now retains plan phase, duration, confidence,
+decision reasoning, timing, and linked evidence.
+
+Version 0.30 makes every plan block actionable. Accept, dismiss, and complete
+states update the owner-scoped recommendation document directly, and completed
+or dismissed advice can be rated helpful or not helpful. Tonyo queries the
+prior 30 days of private recommendation history and applies a neutral-prior,
+feedback-weighted rank to future blocks; repeated preferences can adjust
+importance while the morning-to-evening timeline remains chronological.
+
+Version 0.31 adds consent-gated outcome collection without training a model.
+After an explicit confirmation in Profile, future check-in energy ratings and
+reaction-test results are linked into private `users/{uid}/outcomes` records;
+users can also optionally log observed energy after a completed Coach block.
+Firestore requires both outcome-collection and training-record-use flags before
+any outcome write. Turning consent off excludes saved outcomes, while data
+export, tracking reset, and account deletion continue to cover the collection.
+
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.

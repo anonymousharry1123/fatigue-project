@@ -4,6 +4,7 @@ import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/screen_time_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -163,6 +164,102 @@ void main() {
     expect(controller.onboardingComplete, isTrue);
     expect(controller.profile.name, 'Returning Maya');
   });
+
+  test(
+    'Version 0.31 links only future consented energy and reaction outcomes',
+    () async {
+      final now = DateTime(2026, 8, 20, 12);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'outcome-uid',
+          email: 'outcomes@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'outcome-uid')
+        ..seed(
+          'outcome-uid',
+          const CloudUserState(
+            profile: UserProfile(name: 'Outcome Maya'),
+            accountEmail: 'outcomes@example.com',
+            onboardingComplete: false,
+            notificationsEnabled: false,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [],
+            checkIns: [],
+          ),
+        );
+      final controller = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+        clock: () => now,
+      );
+
+      await controller.load();
+      await controller.addCheckIn(
+        id: 'before-consent',
+        energy: 4,
+        mood: 5,
+        stress: 6,
+        timestamp: now.subtract(const Duration(hours: 2)),
+      );
+      await controller.addReactionResult(270);
+      expect(controller.outcomes, isEmpty);
+
+      await controller.setOutcomeConsent(true);
+      expect(
+        (await repository.readUser('outcome-uid'))!.outcomeConsent,
+        isTrue,
+      );
+      await controller.addCheckIn(
+        id: 'after-consent',
+        energy: 8,
+        mood: 7,
+        stress: 3,
+        timestamp: now,
+      );
+      await controller.addReactionResult(245);
+
+      expect(controller.observedEnergyOutcomeCount, 1);
+      expect(controller.cognitiveOutcomeCount, 1);
+      final stored = await repository.outcomesByRange(
+        'outcome-uid',
+        start: now.subtract(const Duration(days: 1)),
+        end: now.add(const Duration(days: 1)),
+      );
+      expect(stored, hasLength(2));
+      expect(stored.map((item) => item.type).toSet(), {
+        OutcomeType.observedEnergy,
+        OutcomeType.cognitiveReaction,
+      });
+
+      await controller.setOutcomeConsent(false);
+      expect(controller.outcomes, isEmpty);
+      expect(
+        (await repository.readUser('outcome-uid'))!.outcomeConsent,
+        isFalse,
+      );
+      expect(
+        repository.outcomesByRange(
+          'outcome-uid',
+          start: now.subtract(const Duration(days: 1)),
+          end: now.add(const Duration(days: 1)),
+        ),
+        throwsStateError,
+      );
+
+      await controller.setOutcomeConsent(true);
+      expect(controller.outcomes, hasLength(2));
+      await controller.deleteCheckIn('after-consent');
+      expect(controller.observedEnergyOutcomeCount, 0);
+      final reactionSignal = controller.signals.firstWhere(
+        (item) => item.type == SignalType.reactionTime && item.value == 245,
+      );
+      await controller.deleteSignal(reactionSignal.id);
+      expect(controller.outcomes, isEmpty);
+    },
+  );
 
   test('Version 0.10-a syncs writes and deletes cloud account data', () async {
     final auth = MemoryAccountAuth();
@@ -392,6 +489,11 @@ void main() {
           cognitiveInputCount: 4,
           freshness: .86,
           cognitiveFreshness: .81,
+          personalBaselines: PersonalBaselines(
+            generatedAt: day,
+            windowDays: 42,
+            metrics: const [],
+          ),
           day: day,
           calculatedAt: day.add(const Duration(hours: 6)),
         ),
@@ -613,7 +715,7 @@ void main() {
   );
 
   test(
-    'Versions 0.18–0.19 persist grounded guidance and alert dismissal',
+    'Versions 0.18–0.31 persist plans, feedback, outcomes, and alert dismissal',
     () async {
       final now = DateTime.now();
       final day = DateTime(now.year, now.month, now.day);
@@ -627,7 +729,10 @@ void main() {
         ..seed(
           'guidance-uid',
           CloudUserState(
-            profile: const UserProfile(name: 'Guidance Maya'),
+            profile: const UserProfile(
+              name: 'Guidance Maya',
+              coachPriority: CoachPriority.training,
+            ),
             accountEmail: 'guidance@example.com',
             onboardingComplete: true,
             notificationsEnabled: true,
@@ -680,9 +785,45 @@ void main() {
             ],
           ),
         );
+      for (var index = 1; index <= 2; index++) {
+        final historyDay = day.subtract(Duration(days: index));
+        await repository.replaceRecommendationsForDay(
+          'guidance-uid',
+          day: historyDay,
+          recommendations: [
+            Recommendation(
+              id: 'history-focus-$index',
+              title: 'Past focus',
+              detail: 'Past grounded focus block',
+              timeLabel: '9:00 AM',
+              category: 'Deep work',
+              status: RecommendationStatus.completed,
+              scheduledAt: historyDay.add(const Duration(hours: 9)),
+              day: historyDay,
+              generatedAt: historyDay,
+              planPhase: CoachPlanPhase.deepWork,
+              helpful: true,
+            ),
+            Recommendation(
+              id: 'history-training-$index',
+              title: 'Past training',
+              detail: 'Past grounded training block',
+              timeLabel: '5:00 PM',
+              category: 'Training',
+              status: RecommendationStatus.dismissed,
+              scheduledAt: historyDay.add(const Duration(hours: 17)),
+              day: historyDay,
+              generatedAt: historyDay,
+              planPhase: CoachPlanPhase.training,
+              helpful: false,
+            ),
+          ],
+        );
+      }
       final first = AppController(
         accountAuth: auth,
         cloudRepository: repository,
+        clock: () => now,
       );
 
       await first.load();
@@ -695,9 +836,35 @@ void main() {
         'guidance-uid',
         day,
       );
-      expect(first.recommendations, hasLength(5));
+      expect(first.recommendations, hasLength(8));
       expect(first.recommendations.every((item) => item.isGrounded), isTrue);
-      expect(persistedRecommendations, hasLength(5));
+      expect(
+        first.recommendations.every(
+          (item) =>
+              item.planPhase != null &&
+              item.durationMinutes != null &&
+              item.decisionReason != null,
+        ),
+        isTrue,
+      );
+      expect(persistedRecommendations, hasLength(8));
+      final focus = first.recommendations.singleWhere(
+        (item) => item.planPhase == CoachPlanPhase.deepWork,
+      );
+      final training = first.recommendations.singleWhere(
+        (item) => item.planPhase == CoachPlanPhase.training,
+      );
+      expect(focus.feedbackSampleCount, 2);
+      expect(focus.feedbackScore, .75);
+      expect(focus.feedbackRank, 1);
+      expect(focus.priority, RecommendationPriority.important);
+      expect(training.feedbackSampleCount, 2);
+      expect(training.feedbackScore, .25);
+      expect(training.priority, RecommendationPriority.routine);
+      expect(
+        (await repository.readUser('guidance-uid'))!.profile.coachPriority,
+        CoachPriority.training,
+      );
       expect(persistedAlerts.map((item) => item.category).toSet(), {
         RiskAlertCategory.sleepDebt,
         RiskAlertCategory.trainingLoad,
@@ -706,6 +873,34 @@ void main() {
       expect(first.guidanceSavedToCloud, isTrue);
       expect(first.guidanceError, isNull);
 
+      await first.setOutcomeConsent(true);
+
+      final completedId = first.recommendations.first.id;
+      await first.setRecommendationStatus(
+        completedId,
+        RecommendationStatus.accepted,
+      );
+      expect(
+        (await repository.recommendationsForDay(
+          'guidance-uid',
+          day,
+        )).singleWhere((item) => item.id == completedId).status,
+        RecommendationStatus.accepted,
+      );
+      await first.setRecommendationStatus(
+        completedId,
+        RecommendationStatus.completed,
+      );
+      await first.setRecommendationFeedback(completedId, true);
+      await first.recordObservedEnergy(7, recommendationId: completedId);
+      expect(first.outcomeForRecommendation(completedId)?.value, 7);
+      final dismissedRecommendationId = first.recommendations.last.id;
+      await first.setRecommendationStatus(
+        dismissedRecommendationId,
+        RecommendationStatus.dismissed,
+      );
+      await first.setRecommendationFeedback(dismissedRecommendationId, false);
+
       final dismissedId = persistedAlerts.first.id;
       await first.dismissRiskAlert(dismissedId);
       expect(first.alerts.map((item) => item.id), isNot(contains(dismissedId)));
@@ -713,8 +908,21 @@ void main() {
       final restored = AppController(
         accountAuth: auth,
         cloudRepository: repository,
+        clock: () => now,
       );
       await restored.load();
+
+      final restoredCompleted = restored.recommendations.singleWhere(
+        (item) => item.id == completedId,
+      );
+      final restoredDismissed = restored.recommendations.singleWhere(
+        (item) => item.id == dismissedRecommendationId,
+      );
+      expect(restoredCompleted.status, RecommendationStatus.completed);
+      expect(restoredCompleted.helpful, isTrue);
+      expect(restored.outcomeForRecommendation(completedId)?.value, 7);
+      expect(restoredDismissed.status, RecommendationStatus.dismissed);
+      expect(restoredDismissed.helpful, isFalse);
 
       expect(
         restored.allAlerts
@@ -1365,6 +1573,181 @@ void main() {
     },
   );
 
+  test(
+    'Version 0.26 background refresh persists status and skips unchanged model work',
+    () async {
+      var now = DateTime(2026, 8, 20, 12);
+      final health = _FakeHealthService(
+        status: HealthAuthorizationState.notDetermined,
+        requestResult: HealthAuthorizationState.authorized,
+        syncReadings: [
+          SignalReading(
+            id: 'healthkit-hrv-v26',
+            type: SignalType.hrv,
+            value: 56,
+            timestamp: now.subtract(const Duration(hours: 1)),
+            source: SignalSource.healthKit,
+          ),
+        ],
+      );
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'refresh-user',
+          email: 'refresh@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'refresh-user');
+      final controller = AppController(
+        healthService: health,
+        accountAuth: auth,
+        cloudRepository: repository,
+        clock: () => now,
+      );
+      await controller.load();
+      controller.onboardingComplete = true;
+
+      expect(await controller.connectHealth(), isTrue);
+
+      expect(health.backgroundEnableCalls, 1);
+      expect(controller.healthBackgroundRefreshEnabled, isTrue);
+      expect(controller.healthSyncStatus, HealthSyncStatus.updated);
+      expect(controller.lastHealthRefreshReason, HealthRefreshReason.initial);
+      expect(controller.lastHealthChangeAt, now);
+      expect(controller.signals.single.syncedAt, now.toUtc());
+      final scoreWrites = repository.scoreUpsertCallCount;
+      final forecastWrites = repository.forecastReplaceCallCount;
+
+      now = now.add(const Duration(minutes: 16));
+      await health.triggerBackgroundUpdate();
+
+      expect(controller.healthSyncStatus, HealthSyncStatus.upToDate);
+      expect(
+        controller.lastHealthRefreshReason,
+        HealthRefreshReason.background,
+      );
+      expect(repository.scoreUpsertCallCount, scoreWrites);
+      expect(repository.forecastReplaceCallCount, forecastWrites);
+      final cloud = await repository.readUser('refresh-user');
+      expect(cloud?.healthSyncStatus, HealthSyncStatus.upToDate);
+      expect(cloud?.lastHealthRefreshReason, HealthRefreshReason.background);
+    },
+  );
+
+  test(
+    'Version 0.27 queries private history and persists mature personal baselines',
+    () async {
+      final today = DateTime(2026, 8, 20);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'baseline-user',
+          email: 'baseline@example.com',
+        ),
+      );
+      final repository = MemoryCloudRepository(signedInUid: 'baseline-user')
+        ..seed(
+          'baseline-user',
+          CloudUserState(
+            profile: const UserProfile(name: 'Baseline Maya'),
+            accountEmail: 'baseline@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: false,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            signals: [
+              for (var daysAgo = 1; daysAgo <= 7; daysAgo++) ...[
+                for (final entry in const {
+                  SignalType.hrv: 52.0,
+                  SignalType.restingHeartRate: 61.0,
+                  SignalType.sleep: 8.0,
+                  SignalType.reactionTime: 275.0,
+                }.entries)
+                  SignalReading(
+                    id: '${entry.key.name}-$daysAgo',
+                    type: entry.key,
+                    value: entry.value,
+                    timestamp: today
+                        .subtract(Duration(days: daysAgo))
+                        .add(const Duration(hours: 7)),
+                  ),
+              ],
+              for (final entry in const {
+                SignalType.hrv: 58.0,
+                SignalType.restingHeartRate: 64.0,
+                SignalType.sleep: 7.5,
+                SignalType.reactionTime: 260.0,
+              }.entries)
+                SignalReading(
+                  id: '${entry.key.name}-today',
+                  type: entry.key,
+                  value: entry.value,
+                  timestamp: today.add(const Duration(hours: 8)),
+                ),
+            ],
+            checkIns: const [],
+          ),
+        );
+      final controller = AppController(
+        accountAuth: auth,
+        cloudRepository: repository,
+        clock: () => today.add(const Duration(hours: 12)),
+      );
+
+      await controller.load();
+
+      expect(controller.personalBaselines.readyCount, 4);
+      expect(controller.score.baselineConfidence, 1);
+      expect(
+        controller.personalBaselines
+            .metric(PersonalBaselineType.hrv)
+            ?.sampleCount,
+        7,
+      );
+      final saved = await repository.scoreSnapshotForDay(
+        'baseline-user',
+        today,
+      );
+      expect(saved?.personalBaselines?.readyCount, 4);
+      expect(saved?.baselineConfidence, 1);
+    },
+  );
+
+  test(
+    'Version 0.28 gates the private report without replacing manual signals',
+    () async {
+      final screenTime = _FakeScreenTimeService(
+        status: ScreenTimeAuthorizationState.entitlementRequired,
+        requestResult: ScreenTimeAuthorizationState.authorized,
+      );
+      final controller = AppController(screenTimeService: screenTime);
+
+      await controller.load();
+      expect(
+        controller.screenTimeAuthorization,
+        ScreenTimeAuthorizationState.entitlementRequired,
+      );
+      expect(controller.screenTimeReportAvailable, isFalse);
+
+      screenTime.status = ScreenTimeAuthorizationState.notDetermined;
+      await controller.refreshScreenTimeAuthorization();
+      await controller.saveActivityLog(screenTimeHours: 3.25);
+      expect(controller.manualScreenTimeSignalCount, 1);
+
+      final authorization = await controller.authorizeScreenTimeReport();
+      final shown = await controller.showScreenTimeReport();
+
+      expect(authorization, ScreenTimeAuthorizationState.authorized);
+      expect(shown, isTrue);
+      expect(screenTime.authorizationRequests, 1);
+      expect(screenTime.reportRequests, 1);
+      expect(
+        controller.signals
+            .singleWhere((item) => item.type == SignalType.screenTime)
+            .value,
+        3.25,
+      );
+    },
+  );
+
   test('manual log validation covers every Version 0.6 and 0.7 input', () {
     expect(
       ActivityLogEntry.validationMessage(SignalType.hydration, -0.1),
@@ -1425,6 +1808,28 @@ class _FakeHealthService extends HealthService {
   int syncCalls = 0;
   int sleepSyncCalls = 0;
   int activitySyncCalls = 0;
+  int backgroundEnableCalls = 0;
+  int backgroundDisableCalls = 0;
+  Future<void> Function()? backgroundCallback;
+
+  @override
+  Future<bool> enableBackgroundUpdates(
+    Future<void> Function() onHealthDataChanged,
+  ) async {
+    backgroundEnableCalls += 1;
+    backgroundCallback = onHealthDataChanged;
+    return true;
+  }
+
+  @override
+  Future<void> disableBackgroundUpdates() async {
+    backgroundDisableCalls += 1;
+    backgroundCallback = null;
+  }
+
+  Future<void> triggerBackgroundUpdate() async {
+    await backgroundCallback?.call();
+  }
 
   @override
   Future<HealthAuthorizationState> authorizationStatus() async => status;
@@ -1455,5 +1860,30 @@ class _FakeHealthService extends HealthService {
     final error = activitySyncError;
     if (error != null) throw error;
     return activityReadings;
+  }
+}
+
+class _FakeScreenTimeService extends ScreenTimeService {
+  _FakeScreenTimeService({required this.status, required this.requestResult});
+
+  ScreenTimeAuthorizationState status;
+  ScreenTimeAuthorizationState requestResult;
+  int authorizationRequests = 0;
+  int reportRequests = 0;
+
+  @override
+  Future<ScreenTimeAuthorizationState> authorizationStatus() async => status;
+
+  @override
+  Future<ScreenTimeAuthorizationState> requestAuthorization() async {
+    authorizationRequests += 1;
+    status = requestResult;
+    return requestResult;
+  }
+
+  @override
+  Future<bool> showReport() async {
+    reportRequests += 1;
+    return true;
   }
 }

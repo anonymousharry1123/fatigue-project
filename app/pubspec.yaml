@@ -1,7 +1,7 @@
 name: app
 description: "Tonyo — a private, explainable fatigue and energy coach."
 publish_to: 'none'
-version: 0.25.0+26
+version: 0.31.0+32
 
 environment:
   sdk: ^3.12.2

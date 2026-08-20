@@ -77,6 +77,41 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   ),
                   const SizedBox(height: 18),
                   _PeriodBanner(period: period),
+                  const SizedBox(height: 10),
+                  TonyoCard(
+                    key: const Key('checkin-outcome-status'),
+                    color:
+                        (controller.outcomeConsent
+                                ? TonyoColors.mint
+                                : TonyoColors.violet)
+                            .withValues(alpha: .07),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          controller.outcomeConsent
+                              ? Icons.fact_check_rounded
+                              : Icons.lock_outline_rounded,
+                          color: controller.outcomeConsent
+                              ? TonyoColors.mint
+                              : TonyoColors.violet,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Text(
+                            controller.outcomeConsent
+                                ? 'Outcome learning is on. This energy rating will also be linked as a private observed-energy outcome.'
+                                : 'Outcome learning is off. This check-in still supports today’s wellness estimates, but no training record is created.',
+                            style: const TextStyle(
+                              color: TonyoColors.muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 18),
                   _RatingCard(
                     icon: Icons.bolt_rounded,

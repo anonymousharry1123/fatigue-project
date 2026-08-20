@@ -145,11 +145,41 @@ abstract interface class CloudRepository {
 
   Future<List<Recommendation>> recommendationsForDay(String uid, DateTime day);
 
+  Future<List<Recommendation>> recommendationsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  });
+
   Future<void> replaceRecommendationsForDay(
     String uid, {
     required DateTime day,
     required List<Recommendation> recommendations,
   });
+
+  Future<void> setRecommendationStatus(
+    String uid,
+    String recommendationId, {
+    required RecommendationStatus status,
+  });
+
+  Future<void> setRecommendationFeedback(
+    String uid,
+    String recommendationId, {
+    required bool helpful,
+  });
+
+  Future<void> upsertOutcome(String uid, OutcomeRecord outcome);
+
+  Future<List<OutcomeRecord>> outcomesByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  });
+
+  Future<void> clearOutcomes(String uid);
+
+  Future<void> deleteOutcome(String uid, String outcomeId);
 
   Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day);
 
@@ -180,7 +210,11 @@ class MemoryCloudRepository implements CloudRepository {
   final Map<String, Map<String, ScoreSnapshot>> _scores = {};
   final Map<String, Map<String, ForecastPoint>> _forecasts = {};
   final Map<String, Map<String, Recommendation>> _recommendations = {};
+  final Map<String, Map<String, OutcomeRecord>> _outcomes = {};
   final Map<String, Map<String, RiskAlert>> _riskAlerts = {};
+  int replaceUserCallCount = 0;
+  int scoreUpsertCallCount = 0;
+  int forecastReplaceCallCount = 0;
 
   void seed(String uid, CloudUserState state) {
     _users[uid] = state;
@@ -189,6 +223,13 @@ class MemoryCloudRepository implements CloudRepository {
   void _authorize(String uid) {
     if (signedInUid == null || signedInUid != uid) {
       throw StateError('Cross-user repository access denied.');
+    }
+  }
+
+  void _requireOutcomeConsent(String uid) {
+    _authorize(uid);
+    if (_users[uid]?.outcomeConsent != true) {
+      throw StateError('Outcome collection requires explicit consent.');
     }
   }
 
@@ -201,6 +242,7 @@ class MemoryCloudRepository implements CloudRepository {
   @override
   Future<void> replaceUser(String uid, CloudUserState state) async {
     _authorize(uid);
+    replaceUserCallCount += 1;
     _users[uid] = state;
   }
 
@@ -265,6 +307,7 @@ class MemoryCloudRepository implements CloudRepository {
   @override
   Future<void> upsertScoreSnapshot(String uid, ScoreSnapshot snapshot) async {
     _authorize(uid);
+    scoreUpsertCallCount += 1;
     final day = snapshot.day;
     if (day == null) throw ArgumentError('A score snapshot requires a day.');
     _scores.putIfAbsent(uid, () => {})[scoreSnapshotId(
@@ -308,6 +351,7 @@ class MemoryCloudRepository implements CloudRepository {
     required List<ForecastPoint> points,
   }) async {
     _authorize(uid);
+    forecastReplaceCallCount += 1;
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
     if (points.any(
@@ -345,6 +389,31 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<List<Recommendation>> recommendationsByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    _authorize(uid);
+    if (!end.isAfter(start)) {
+      throw ArgumentError('Recommendation range end must follow start.');
+    }
+    final values = (_recommendations[uid]?.values ?? const <Recommendation>[])
+        .where(
+          (item) =>
+              item.day != null &&
+              !item.day!.isBefore(start) &&
+              item.day!.isBefore(end),
+        )
+        .toList();
+    return values..sort((left, right) {
+      final leftTime = left.scheduledAt ?? left.day!;
+      final rightTime = right.scheduledAt ?? right.day!;
+      return leftTime.compareTo(rightTime);
+    });
+  }
+
+  @override
   Future<void> replaceRecommendationsForDay(
     String uid, {
     required DateTime day,
@@ -369,6 +438,78 @@ class MemoryCloudRepository implements CloudRepository {
         recommendationToCloud(recommendation).cast<String, dynamic>(),
       );
     }
+  }
+
+  @override
+  Future<void> setRecommendationStatus(
+    String uid,
+    String recommendationId, {
+    required RecommendationStatus status,
+  }) async {
+    _authorize(uid);
+    final current = _recommendations[uid]?[recommendationId];
+    if (current == null) {
+      throw StateError('Recommendation $recommendationId does not exist.');
+    }
+    _recommendations[uid]![recommendationId] = current.copyWith(status: status);
+  }
+
+  @override
+  Future<void> setRecommendationFeedback(
+    String uid,
+    String recommendationId, {
+    required bool helpful,
+  }) async {
+    _authorize(uid);
+    final current = _recommendations[uid]?[recommendationId];
+    if (current == null) {
+      throw StateError('Recommendation $recommendationId does not exist.');
+    }
+    _recommendations[uid]![recommendationId] = current.copyWith(
+      helpful: helpful,
+    );
+  }
+
+  @override
+  Future<void> upsertOutcome(String uid, OutcomeRecord outcome) async {
+    _requireOutcomeConsent(uid);
+    _outcomes.putIfAbsent(uid, () => {})[outcome.id] = outcomeFromCloud(
+      outcome.id,
+      outcomeToCloud(outcome).cast<String, dynamic>(),
+    );
+  }
+
+  @override
+  Future<List<OutcomeRecord>> outcomesByRange(
+    String uid, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    _requireOutcomeConsent(uid);
+    if (!end.isAfter(start)) {
+      throw ArgumentError('Outcome range end must follow start.');
+    }
+    final values = (_outcomes[uid]?.values ?? const <OutcomeRecord>[])
+        .where(
+          (outcome) =>
+              !outcome.observedAt.isBefore(start) &&
+              outcome.observedAt.isBefore(end),
+        )
+        .toList();
+    return values
+      ..sort((left, right) => right.observedAt.compareTo(left.observedAt));
+  }
+
+  @override
+  Future<void> clearOutcomes(String uid) async {
+    _authorize(uid);
+    _outcomes.remove(uid);
+  }
+
+  @override
+  Future<void> deleteOutcome(String uid, String outcomeId) async {
+    _authorize(uid);
+    _outcomes[uid]?.remove(outcomeId);
   }
 
   @override
@@ -448,6 +589,10 @@ class MemoryCloudRepository implements CloudRepository {
           for (final entry in (_recommendations[uid] ?? const {}).entries)
             entry.key: _exportSafe(recommendationToCloud(entry.value)),
         },
+        'outcomes': {
+          for (final entry in (_outcomes[uid] ?? const {}).entries)
+            entry.key: _exportSafe(outcomeToCloud(entry.value)),
+        },
         'riskAlerts': {
           for (final entry in (_riskAlerts[uid] ?? const {}).entries)
             entry.key: _exportSafe(riskAlertToCloud(entry.value)),
@@ -463,6 +608,7 @@ class MemoryCloudRepository implements CloudRepository {
     _scores.remove(uid);
     _forecasts.remove(uid);
     _recommendations.remove(uid);
+    _outcomes.remove(uid);
     _riskAlerts.remove(uid);
   }
 }

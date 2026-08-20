@@ -260,7 +260,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen> {
                 const SizedBox(height: 14),
                 Text(
                   phase == _ReactionPhase.complete
-                      ? 'Result saved. Early taps and out-of-range attempts do not count toward your baseline.'
+                      ? controller.outcomeConsent
+                            ? 'Result saved as a signal and private cognitive outcome. Early or invalid taps do not count.'
+                            : 'Result saved as a signal. Outcome learning is off, so no training record was created.'
                       : 'Three valid rounds make one daily benchmark. Early taps reset the current round.',
                   style: const TextStyle(
                     color: TonyoColors.muted,

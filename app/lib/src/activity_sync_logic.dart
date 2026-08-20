@@ -49,6 +49,7 @@ abstract final class ActivitySyncLogic {
   static ActivitySyncMergeResult merge({
     required Iterable<SignalReading> existing,
     required Iterable<SignalReading> imported,
+    DateTime? syncedAt,
   }) {
     final readings = existing.toList();
     var importedCount = 0;
@@ -56,7 +57,7 @@ abstract final class ActivitySyncLogic {
     var rejectedCount = 0;
 
     for (final raw in imported) {
-      final candidate = _normalize(raw);
+      final candidate = _normalize(raw, syncedAt: syncedAt);
       if (candidate == null) {
         rejectedCount += 1;
         continue;
@@ -222,7 +223,10 @@ abstract final class ActivitySyncLogic {
     return output;
   }
 
-  static SignalReading? _normalize(SignalReading reading) {
+  static SignalReading? _normalize(
+    SignalReading reading, {
+    DateTime? syncedAt,
+  }) {
     if (!supportedTypes.contains(reading.type) ||
         reading.id.trim().isEmpty ||
         !reading.value.isFinite ||
@@ -239,6 +243,7 @@ abstract final class ActivitySyncLogic {
           ? reading.quality.clamp(0, 1).toDouble()
           : 1,
       note: reading.note,
+      syncedAt: syncedAt ?? reading.syncedAt ?? DateTime.now().toUtc(),
     );
   }
 

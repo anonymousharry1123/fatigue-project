@@ -27,7 +27,7 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && controller.isReady) {
-      controller.refreshHealthAuthorization();
+      controller.handleAppResumed();
     }
   }
 

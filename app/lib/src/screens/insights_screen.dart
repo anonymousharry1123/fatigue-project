@@ -6,6 +6,7 @@ import '../insights_logic.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/personal_baseline_card.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -135,6 +136,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
               ],
             ),
           ),
+          const SectionHeader('Personal baselines'),
+          PersonalBaselineCard(baselines: controller.personalBaselines),
           const SectionHeader('Today’s Energy drivers'),
           _RankedDriversCard(
             key: const Key('insights-energy-drivers'),

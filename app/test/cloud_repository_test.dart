@@ -7,12 +7,12 @@ void main() {
   final day = DateTime.utc(2026, 7, 28);
   late MemoryCloudRepository repository;
 
-  CloudUserState state() => CloudUserState(
+  CloudUserState state({bool outcomeConsent = false}) => CloudUserState(
     profile: const UserProfile(name: 'Maya'),
     accountEmail: 'maya@example.com',
     onboardingComplete: true,
     notificationsEnabled: true,
-    outcomeConsent: false,
+    outcomeConsent: outcomeConsent,
     healthAuthorized: false,
     migrationVersion: localMigrationVersion,
     signals: [
@@ -103,6 +103,58 @@ void main() {
       throwsStateError,
     );
     await expectLater(
+      repository.recommendationsByRange(
+        'other-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.setRecommendationStatus(
+        'other-uid',
+        'recommendation-1',
+        status: RecommendationStatus.accepted,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.setRecommendationFeedback(
+        'other-uid',
+        'recommendation-1',
+        helpful: true,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.upsertOutcome(
+        'other-uid',
+        OutcomeRecord(
+          id: 'outcome-1',
+          type: OutcomeType.observedEnergy,
+          value: 7,
+          observedAt: day,
+          recordedAt: day,
+          source: OutcomeSource.checkIn,
+          sourceId: 'checkin-1',
+        ),
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.outcomesByRange(
+        'other-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      ),
+      throwsStateError,
+    );
+    await expectLater(repository.clearOutcomes('other-uid'), throwsStateError);
+    await expectLater(
+      repository.deleteOutcome('other-uid', 'outcome-1'),
+      throwsStateError,
+    );
+    await expectLater(
       repository.riskAlertsForDay('other-uid', day),
       throwsStateError,
     );
@@ -145,6 +197,70 @@ void main() {
 
     expect(checkIns.map((value) => value.id), ['morning']);
   });
+
+  test(
+    'Version 0.31 gates private outcome writes and history by consent',
+    () async {
+      final energy = OutcomeRecord(
+        id: 'energy-checkin-morning',
+        type: OutcomeType.observedEnergy,
+        value: 7,
+        observedAt: day.add(const Duration(hours: 8)),
+        recordedAt: day.add(const Duration(hours: 8, minutes: 1)),
+        source: OutcomeSource.checkIn,
+        sourceId: 'morning',
+      );
+      final reaction = OutcomeRecord(
+        id: 'reaction-new',
+        type: OutcomeType.cognitiveReaction,
+        value: 260,
+        observedAt: day.add(const Duration(hours: 9)),
+        recordedAt: day.add(const Duration(hours: 9, minutes: 1)),
+        source: OutcomeSource.reactionSignal,
+        sourceId: 'reaction-new',
+      );
+
+      await expectLater(
+        repository.upsertOutcome('maya-uid', energy),
+        throwsStateError,
+      );
+      await repository.replaceUser('maya-uid', state(outcomeConsent: true));
+      await repository.upsertOutcome('maya-uid', energy);
+      await repository.upsertOutcome('maya-uid', reaction);
+
+      final outcomes = await repository.outcomesByRange(
+        'maya-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      );
+      expect(outcomes.map((item) => item.id), ['reaction-new', energy.id]);
+      expect(outcomes.last.type, OutcomeType.observedEnergy);
+      final exported = await repository.exportUser('maya-uid');
+      expect(
+        (exported['reservedCollections'] as Map)['outcomes'],
+        hasLength(2),
+      );
+
+      await repository.deleteOutcome('maya-uid', reaction.id);
+      expect(
+        await repository.outcomesByRange(
+          'maya-uid',
+          start: day,
+          end: day.add(const Duration(days: 1)),
+        ),
+        hasLength(1),
+      );
+      await repository.clearOutcomes('maya-uid');
+      expect(
+        await repository.outcomesByRange(
+          'maya-uid',
+          start: day,
+          end: day.add(const Duration(days: 1)),
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   test('upserts one shared daily Energy and Cognitive snapshot', () async {
     final calculatedAt = day.add(const Duration(hours: 12));
@@ -270,6 +386,16 @@ void main() {
         day: day,
         recommendations: [recommendation('replacement-rec', day)],
       );
+      await repository.setRecommendationStatus(
+        'maya-uid',
+        'replacement-rec',
+        status: RecommendationStatus.completed,
+      );
+      await repository.setRecommendationFeedback(
+        'maya-uid',
+        'replacement-rec',
+        helpful: true,
+      );
       await repository.replaceRiskAlertsForDay(
         'maya-uid',
         day: day,
@@ -289,12 +415,20 @@ void main() {
         'maya-uid',
         tomorrow,
       );
+      final rangeRecommendations = await repository.recommendationsByRange(
+        'maya-uid',
+        start: day,
+        end: tomorrow.add(const Duration(days: 1)),
+      );
       final alerts = await repository.riskAlertsForDay('maya-uid', day);
       final exported = await repository.exportUser('maya-uid');
 
       expect(recommendations.map((item) => item.id), ['replacement-rec']);
       expect(recommendations.single.signalEvidenceIds, ['hydration']);
+      expect(recommendations.single.status, RecommendationStatus.completed);
+      expect(recommendations.single.helpful, isTrue);
       expect(tomorrowRecommendations.single.id, 'tomorrow-rec');
+      expect(rangeRecommendations, hasLength(2));
       expect(alerts.single.dismissed, isTrue);
       expect(alerts.single.category, RiskAlertCategory.sleepDebt);
       expect(

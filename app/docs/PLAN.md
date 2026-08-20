@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: August 17, 2026
-Current release: **Version 0.25 — Workout and Hydration Sync**
+Last updated: August 20, 2026
+Current release: **Version 0.31 — Outcome Collection**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -139,7 +139,7 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
   - `users/{uid}/checkIns/{checkInId}` — `DailyCheckIn` fields (`period`, `energy`, `mood`, `stress`, `note`, `timestamp`)
   - `users/{uid}/scoreSnapshots/{snapshotId}` — Version 0.11+ daily scores (`energy`, `cognitive`, per-model confidence/input counts/drivers, previous Cognitive comparison, `day`, `calculatedAt`)
   - `users/{uid}/forecastPoints/{pointId}` — hourly forecasts (`time`, `energy`, `uncertainty`, `updatedAt`)
-  - `users/{uid}/recommendations/{recId}` — Version 0.18+ grounded guidance (`title`, `detail`, `timeLabel`, `category`, `status`, priority/window timing, evidence IDs, `feedback`)
+  - `users/{uid}/recommendations/{recId}` — Version 0.18+ grounded guidance (`title`, `detail`, `timeLabel`, `category`, `status`, priority/window timing, plan phase/duration/confidence/decision, evidence IDs, `feedback`)
   - `users/{uid}/riskAlerts/{alertId}` — Version 0.19+ wellness flags (`title`, `detail`, `severity`, category/day/evidence IDs, `dismissed`)
 - Enforce privacy with Security Rules: users may only `read`/`write` documents under their own `uid`; deny list/collection-group access across users
 - Use Firebase Auth for accounts (no passwords stored in Firestore); keep wellness-only copy and no medical claims in stored metadata
@@ -253,50 +253,50 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Reconcile overlapping samples and multiple sources in Firestore
 - Prefer imported sleep only when it is more complete than manual data
 
-### Version 0.25 — Activity and Hydration Sync ✅ Current
+### Version 0.25 — Activity and Hydration Sync ✅
 
 - Import workouts, daily step totals, and available hydration samples into `signals`
 - Derive daily training load from queried exercise signals
 - Use steps as the Energy model’s movement input only when no workout exists
 - Retain manual correction and fallback controls on the same documents
 
-## Upcoming Versions
-
-### Version 0.26 — Continuous Refresh
+### Version 0.26 — Continuous Refresh ✅
 
 - Refresh HealthKit data as iOS permits and upsert into Firestore
 - Track source, freshness, and sync status on `users/{uid}` and signal docs
 - Recalculate scores/forecasts only when meaningful Firebase inputs change
 
-### Version 0.27 — Personal Baselines
+### Version 0.27 — Personal Baselines ✅
 
 - Build rolling HRV, resting-heart-rate, sleep, and reaction-time baselines from historical `signals` queries
 - Compare users with their own history only (Security Rules keep data user-scoped)
 - Reduce confidence until enough baseline data exists in Firestore
 
-### Version 0.28 — Screen-Time Enhancement
+### Version 0.28 — Screen-Time Enhancement ✅
 
 - Keep manual screen time as the dependable model input in `signals`
 - Add a privacy-preserving Device Activity report if entitlement access is approved
 - Keep protected activity data inside Apple’s report-extension sandbox; only derived aggregates may enter Firebase
 
-### Version 0.29 — AI Coach Daily Plan
+### Version 0.29 — AI Coach Daily Plan ✅
 
 - Promote the AI Coach preview into a generated morning-to-evening plan
 - Schedule deep work, naps, training, tapering, and recovery using Firebase-backed scores and windows
 - Resolve conflicting goals using confidence and user priorities stored on `users/{uid}`
 
-### Version 0.30 — Recommendation Feedback
+### Version 0.30 — Recommendation Feedback ✅
 
 - Accept, dismiss, and complete recommendations by updating `recommendations` documents
 - Record whether advice was helpful (`feedback` field from Version 0.10-a schema)
 - Adjust future recommendation ranking from that queried history
 
-### Version 0.31 — Outcome Collection
+### Version 0.31 — Outcome Collection ✅ Current
 
-- Collect optional observed-energy ratings into `checkIns` or a dedicated outcomes subcollection under the same user tree
-- Use reaction-test `signals` as cognitive outcomes
-- Require explicit consent flags on `users/{uid}` before any training-record use; respect Security Rules
+- Collect optional observed-energy ratings in `users/{uid}/outcomes`, linked to future check-ins or completed Coach blocks
+- Keep reaction tests in `signals` and link future consented results as cognitive outcomes
+- Require both explicit outcome-collection and training-record-use flags on `users/{uid}` before writes; enforce the gate in Security Rules
+
+## Upcoming Versions
 
 ### Version 0.32 — Personalized ML Model
 
@@ -325,9 +325,11 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 
 ## Stable Data Interfaces
 
-- `SignalReading`: measurement type, value, unit, timestamp, source, and quality → Firestore `users/{uid}/signals/{id}`
+- `SignalReading`: measurement type, value, unit, observation timestamp, source, quality, and optional sync timestamp → Firestore `users/{uid}/signals/{id}`
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
+- `OutcomeRecord`: consented observed energy or cognitive reaction value, timestamps, source link, consent version, and optional recommendation link → `users/{uid}/outcomes/{id}`
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
+- `PersonalBaselines`: rolling HRV, resting-heart-rate, sleep, and reaction-time references with sample maturity → embedded in the private daily `scoreSnapshots` document
 - `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
 - `ForecastWindow`: peak, crash, or recovery period (derived; may be stored or computed from `forecastPoints`)
 - `Recommendation`: action, timing, priority, evidence, and feedback → `users/{uid}/recommendations/{id}`

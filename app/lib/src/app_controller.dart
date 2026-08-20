@@ -8,7 +8,9 @@ import 'activity_sync_logic.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
+import 'continuous_refresh_logic.dart';
 import 'daily_history_logic.dart';
+import 'daily_plan_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'health_service.dart';
@@ -17,26 +19,36 @@ import 'insights_logic.dart';
 import 'models.dart';
 import 'notification_logic.dart';
 import 'notification_service.dart';
+import 'personal_baseline_logic.dart';
 import 'reaction_test_logic.dart';
+import 'recommendation_feedback_logic.dart';
+import 'screen_time_service.dart';
 import 'sleep_sync_logic.dart';
 import 'today_dashboard_logic.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
     HealthService? healthService,
+    ScreenTimeService? screenTimeService,
     AccountAuth? accountAuth,
     NotificationService? notificationService,
+    DateTime Function()? clock,
     this.cloudRepository,
   }) : _healthService = healthService ?? const HealthService(),
+       _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
-       _notificationService = notificationService ?? LocalNotificationService();
+       _notificationService = notificationService ?? LocalNotificationService(),
+       _now = clock ?? DateTime.now;
 
   static const _storageKey = 'tonyo_state_v1';
   static const forecastDayCount = 7;
   static const forecastFreshnessWindow = Duration(hours: 12);
+  static const outcomeHistoryWindow = Duration(days: 90);
   final HealthService _healthService;
+  final ScreenTimeService _screenTimeService;
   final AccountAuth _accountAuth;
   final NotificationService _notificationService;
+  final DateTime Function() _now;
   final CloudRepository? cloudRepository;
 
   bool isReady = false;
@@ -48,6 +60,7 @@ class AppController extends ChangeNotifier {
   bool healthAvailable = false;
   bool healthAuthorized = false;
   bool isHealthAuthorizing = false;
+  bool isScreenTimeAuthorizing = false;
   bool isSyncing = false;
   bool isCloudSyncing = false;
   bool isEnergyScoreLoading = false;
@@ -55,7 +68,13 @@ class AppController extends ChangeNotifier {
   bool isGuidanceLoading = false;
   bool isNotificationSyncing = false;
   bool isInsightsLoading = false;
+  bool isOutcomeLoading = false;
   DateTime? lastSync;
+  DateTime? lastHealthSyncAttempt;
+  DateTime? lastHealthChangeAt;
+  HealthSyncStatus healthSyncStatus = HealthSyncStatus.idle;
+  HealthRefreshReason? lastHealthRefreshReason;
+  bool healthBackgroundRefreshEnabled = false;
   int lastHealthImportCount = 0;
   int lastHealthDuplicateCount = 0;
   int lastHealthRejectedCount = 0;
@@ -74,17 +93,22 @@ class AppController extends ChangeNotifier {
   String? guidanceError;
   String? notificationError;
   String? insightsError;
+  String? outcomeError;
   String? healthError;
+  String? screenTimeError;
   String? healthSyncError;
   String? sleepSyncError;
   String? activitySyncError;
   HealthAuthorizationState healthAuthorization =
       HealthAuthorizationState.unavailable;
+  ScreenTimeAuthorizationState screenTimeAuthorization =
+      ScreenTimeAuthorizationState.unavailable;
   NotificationPermissionState notificationPermission =
       NotificationPermissionState.unknown;
   UserProfile profile = const UserProfile();
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
+  List<OutcomeRecord> _outcomes = [];
   ScoreSnapshot? _scoreSnapshot;
   List<SignalReading> _todaySignals = [];
   bool _scoreLoadedFromSnapshot = false;
@@ -93,6 +117,7 @@ class AppController extends ChangeNotifier {
   bool insightsLoadedFromCloud = false;
   final Map<String, List<ForecastPoint>> _forecastsByDay = {};
   final Map<String, RecommendationStatus> _recommendationStatuses = {};
+  final Map<String, bool> _recommendationFeedback = {};
   final Set<String> _dismissedRiskAlertIds = {};
   List<Recommendation> _recommendations = [];
   List<RiskAlert> _riskAlerts = [];
@@ -118,6 +143,17 @@ class AppController extends ChangeNotifier {
       );
   bool get notificationSchedulingSupported =>
       _notificationService.supportsScheduling;
+  bool get screenTimeReportAvailable =>
+      screenTimeAuthorization != ScreenTimeAuthorizationState.unavailable &&
+      screenTimeAuthorization !=
+          ScreenTimeAuthorizationState.entitlementRequired;
+  int get manualScreenTimeSignalCount => signals
+      .where(
+        (item) =>
+            item.type == SignalType.screenTime &&
+            item.source == SignalSource.manual,
+      )
+      .length;
   NotificationPlan get notificationPlan => _notificationPlan;
   int get scheduledNotificationCount =>
       notificationPermission == NotificationPermissionState.granted
@@ -127,6 +163,16 @@ class AppController extends ChangeNotifier {
       scheduledNotificationCount == 0
       ? null
       : _notificationPlan.notifications.first;
+  List<OutcomeRecord> get outcomes => List.unmodifiable(_outcomes);
+  int get observedEnergyOutcomeCount => _outcomes
+      .where((outcome) => outcome.type == OutcomeType.observedEnergy)
+      .length;
+  int get cognitiveOutcomeCount => _outcomes
+      .where((outcome) => outcome.type == OutcomeType.cognitiveReaction)
+      .length;
+  OutcomeRecord? outcomeForRecommendation(String recommendationId) => _outcomes
+      .where((outcome) => outcome.recommendationId == recommendationId)
+      .firstOrNull;
   int get healthKitHeartSignalCount => signals
       .where(
         (item) =>
@@ -172,6 +218,9 @@ class AppController extends ChangeNotifier {
             item.type == SignalType.steps,
       )
       .length;
+  bool get isHealthSyncFresh =>
+      lastSync != null &&
+      _now().difference(lastSync!) < const Duration(hours: 2);
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
@@ -256,6 +305,9 @@ class AppController extends ChangeNotifier {
   ScoreSnapshot get score =>
       _scoreSnapshot ??
       FatigueEngine.score(signals: signals, checkIns: checkIns);
+  PersonalBaselines get personalBaselines =>
+      score.personalBaselines ??
+      PersonalBaselineLogic.build(signals: signals, asOf: _now());
   List<ForecastPoint> forecastFor(DateTime day) =>
       _forecastsByDay[_dayKey(day)] ??
       FatigueEngine.forecast(
@@ -300,6 +352,10 @@ class AppController extends ChangeNotifier {
   List<RiskAlert> get allAlerts => List.unmodifiable(_riskAlerts);
   List<Recommendation> get recommendations =>
       List.unmodifiable(_recommendations);
+  int get recommendationFeedbackHistoryCount => _recommendations.fold(
+    0,
+    (total, item) => total + item.feedbackSampleCount,
+  );
 
   /// Personal reaction baseline from prior valid tests (Version 0.9).
   double? get reactionBaseline => ReactionTestLogic.baselineMs(signals);
@@ -315,7 +371,7 @@ class AppController extends ChangeNotifier {
     bool notify = true,
     bool forceRecalculate = false,
   }) async {
-    final currentTime = DateTime.now();
+    final currentTime = _now();
     final target = day ?? currentTime;
     final start = DateTime(target.year, target.month, target.day);
     final end = start.add(const Duration(days: 1));
@@ -345,7 +401,8 @@ class AppController extends ChangeNotifier {
             savedSnapshot != null &&
             savedSnapshot.hasCognitiveScore &&
             savedSnapshot.freshness != null &&
-            savedSnapshot.cognitiveFreshness != null) {
+            savedSnapshot.cognitiveFreshness != null &&
+            savedSnapshot.personalBaselines != null) {
           _scoreSnapshot = savedSnapshot;
           _scoreLoadedFromSnapshot = true;
           return;
@@ -354,10 +411,11 @@ class AppController extends ChangeNotifier {
         final scoringResults = await Future.wait<Object?>([
           repository.signalsByRange(
             session.uid,
-            start: start.subtract(const Duration(days: 6)),
+            start: start.subtract(
+              const Duration(days: PersonalBaselineLogic.windowDays),
+            ),
             end: end,
           ),
-          repository.reactionBaselineWindow(session.uid, limit: 14),
           repository.checkInsByRange(
             session.uid,
             start: start.subtract(const Duration(hours: 36)),
@@ -369,13 +427,8 @@ class AppController extends ChangeNotifier {
           ),
         ]);
         scoringSignals = scoringResults[0]! as List<SignalReading>;
-        final reactionHistory = scoringResults[1]! as List<SignalReading>;
-        scoringSignals = {
-          for (final signal in scoringSignals) signal.id: signal,
-          for (final signal in reactionHistory) signal.id: signal,
-        }.values.toList();
-        scoringCheckIns = scoringResults[2]! as List<DailyCheckIn>;
-        previousDay = scoringResults[3] as ScoreSnapshot?;
+        scoringCheckIns = scoringResults[1]! as List<DailyCheckIn>;
+        previousDay = scoringResults[2] as ScoreSnapshot?;
       } else if (session != null && repository != null) {
         energyScoreError = 'Cloud scoring unavailable · using cached inputs';
       }
@@ -394,6 +447,10 @@ class AppController extends ChangeNotifier {
         now: calculationTime,
         day: start,
         previousDay: previousDay,
+        personalBaselines: PersonalBaselineLogic.build(
+          signals: scoringSignals,
+          asOf: start,
+        ),
       );
       if (canUseCloud) {
         await repository.upsertScoreSnapshot(session.uid, snapshot);
@@ -407,6 +464,10 @@ class AppController extends ChangeNotifier {
         checkIns: checkIns,
         now: calculationTime,
         day: start,
+        personalBaselines: PersonalBaselineLogic.build(
+          signals: signals,
+          asOf: start,
+        ),
       );
       _todaySignals = signals
           .where(
@@ -521,10 +582,10 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  /// Builds Versions 0.18–0.19 guidance from a seven-day, user-scoped input
-  /// range, then replaces today's private recommendation and alert documents.
+  /// Builds Version 0.30's feedback-ranked daily plan plus Version 0.19 alerts
+  /// from owner-scoped inputs, then replaces today's private documents.
   Future<void> refreshGuidance({DateTime? day, bool notify = true}) async {
-    final clock = DateTime.now();
+    final clock = _now();
     final target = day ?? clock;
     final targetDay = DateTime(target.year, target.month, target.day);
     final rangeStart = targetDay.subtract(const Duration(days: 6));
@@ -540,6 +601,7 @@ class AppController extends ChangeNotifier {
       required List<SignalReading> sourceSignals,
       required List<DailyCheckIn> sourceCheckIns,
       List<Recommendation> savedRecommendations = const [],
+      List<Recommendation> feedbackHistory = const [],
       List<RiskAlert> savedAlerts = const [],
     }) {
       final windowValues = FatigueEngine.windows(
@@ -548,20 +610,26 @@ class AppController extends ChangeNotifier {
         signals: sourceSignals,
         checkIns: sourceCheckIns,
       );
-      final savedStatuses = {
-        for (final item in savedRecommendations) item.id: item.status,
+      final savedById = {
+        for (final item in savedRecommendations) item.id: item,
       };
       _recommendations =
-          FatigueEngine.recommendations(
-            windowValues,
-            score,
-            day: targetDay,
-            generatedAt: clock,
+          RecommendationFeedbackLogic.rank(
+            plan: DailyPlanLogic.build(
+              windows: windowValues,
+              score: score,
+              profile: profile,
+              day: targetDay,
+              generatedAt: clock,
+            ),
+            history: feedbackHistory,
           ).map((item) {
-            final status =
-                savedStatuses[item.id] ?? _recommendationStatuses[item.id];
+            final saved = savedById[item.id];
+            final status = saved?.status ?? _recommendationStatuses[item.id];
+            final helpful = saved?.helpful ?? _recommendationFeedback[item.id];
             if (status != null) _recommendationStatuses[item.id] = status;
-            return item.copyWith(status: status);
+            if (helpful != null) _recommendationFeedback[item.id] = helpful;
+            return item.copyWith(status: status, helpful: helpful);
           }).toList();
 
       final savedDismissals = {
@@ -597,13 +665,21 @@ class AppController extends ChangeNotifier {
             end: rangeEnd,
           ),
           repository.recommendationsForDay(session.uid, targetDay),
+          repository.recommendationsByRange(
+            session.uid,
+            start: targetDay.subtract(
+              RecommendationFeedbackLogic.historyWindow,
+            ),
+            end: targetDay,
+          ),
           repository.riskAlertsForDay(session.uid, targetDay),
         ]);
         derive(
           sourceSignals: values[0] as List<SignalReading>,
           sourceCheckIns: values[1] as List<DailyCheckIn>,
           savedRecommendations: values[2] as List<Recommendation>,
-          savedAlerts: values[3] as List<RiskAlert>,
+          feedbackHistory: values[3] as List<Recommendation>,
+          savedAlerts: values[4] as List<RiskAlert>,
         );
         await Future.wait([
           repository.replaceRecommendationsForDay(
@@ -733,6 +809,54 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// Loads only consented, owner-scoped Version 0.31 outcome records.
+  Future<void> refreshOutcomes({bool notify = true}) async {
+    if (!outcomeConsent) {
+      _outcomes = [];
+      outcomeError = null;
+      isOutcomeLoading = false;
+      if (notify) notifyListeners();
+      return;
+    }
+    final now = _now();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    isOutcomeLoading = true;
+    outcomeError = null;
+    if (notify) notifyListeners();
+    try {
+      if (session != null && repository != null) {
+        _outcomes = await repository.outcomesByRange(
+          session.uid,
+          start: now.subtract(outcomeHistoryWindow),
+          end: now.add(const Duration(days: 1)),
+        );
+        await _writeLocal();
+      } else {
+        _outcomes =
+            _outcomes
+                .where(
+                  (outcome) =>
+                      !outcome.observedAt.isBefore(
+                        now.subtract(outcomeHistoryWindow),
+                      ) &&
+                      outcome.observedAt.isBefore(
+                        now.add(const Duration(days: 1)),
+                      ),
+                )
+                .toList()
+              ..sort(
+                (left, right) => right.observedAt.compareTo(left.observedAt),
+              );
+      }
+    } on Object {
+      outcomeError = 'Private outcomes unavailable · cached records retained';
+    } finally {
+      isOutcomeLoading = false;
+      if (notify) notifyListeners();
+    }
+  }
+
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
     final raw = preferences.getString(_storageKey);
@@ -754,9 +878,19 @@ class AppController extends ChangeNotifier {
       );
     }
     await refreshHealthAuthorization(notify: false);
+    await refreshScreenTimeAuthorization(notify: false);
     if (isCloudAuthenticated) {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
+    }
+    if (outcomeConsent) await refreshOutcomes(notify: false);
+    if (healthAuthorized &&
+        healthAuthorization == HealthAuthorizationState.authorized) {
+      await _ensureContinuousHealthUpdates();
+      await refreshHealthIfDue(
+        reason: HealthRefreshReason.initial,
+        notify: false,
+      );
     }
     if (onboardingComplete) {
       await refreshScores(notify: false);
@@ -766,6 +900,17 @@ class AppController extends ChangeNotifier {
     }
     isReady = true;
     notifyListeners();
+  }
+
+  Future<void> handleAppResumed() async {
+    final status = await refreshHealthAuthorization(notify: false);
+    await refreshScreenTimeAuthorization(notify: false);
+    if (status == HealthAuthorizationState.authorized && healthAuthorized) {
+      await _ensureContinuousHealthUpdates();
+      await refreshHealthIfDue(reason: HealthRefreshReason.foreground);
+    } else {
+      notifyListeners();
+    }
   }
 
   Future<void> completeOnboarding(
@@ -787,6 +932,7 @@ class AppController extends ChangeNotifier {
         await _hydrateOrMigrateCloud();
         if (onboardingComplete) {
           await _writeLocal();
+          if (outcomeConsent) await refreshOutcomes(notify: false);
           await refreshScores(notify: false);
           await refreshForecasts(notify: false);
           await refreshGuidance(notify: false);
@@ -814,6 +960,7 @@ class AppController extends ChangeNotifier {
     await _accountAuth.signIn(email: email, password: password);
     await _hydrateOrMigrateCloud();
     await _writeLocal();
+    if (outcomeConsent) await refreshOutcomes(notify: false);
     if (onboardingComplete) {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
@@ -824,6 +971,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await _healthService.disableBackgroundUpdates();
+    healthBackgroundRefreshEnabled = false;
     try {
       await _notificationService.cancelGuidance();
     } on Object {
@@ -989,23 +1138,34 @@ class AppController extends ChangeNotifier {
         '${CheckInLogic.minRating} and ${CheckInLogic.maxRating}',
       );
     }
-    final when = timestamp ?? DateTime.now();
+    final when = timestamp ?? _now();
     final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
-    checkIns.removeWhere((item) => item.id == checkInId);
-    checkIns.insert(
-      0,
-      DailyCheckIn(
-        id: checkInId,
-        timestamp: when,
-        energy: CheckInLogic.clampRating(energy),
-        mood: CheckInLogic.clampRating(mood),
-        stress: CheckInLogic.clampRating(stress),
-        // Period always follows the check-in timestamp (morning < 14:00).
-        period: CheckInLogic.periodFor(when),
-        note: note,
-      ),
+    final checkIn = DailyCheckIn(
+      id: checkInId,
+      timestamp: when,
+      energy: CheckInLogic.clampRating(energy),
+      mood: CheckInLogic.clampRating(mood),
+      stress: CheckInLogic.clampRating(stress),
+      // Period always follows the check-in timestamp (morning < 14:00).
+      period: CheckInLogic.periodFor(when),
+      note: note,
     );
+    checkIns.removeWhere((item) => item.id == checkInId);
+    checkIns.insert(0, checkIn);
     await _commit(energyInputsChanged: true);
+    if (outcomeConsent) {
+      await _saveOutcome(
+        OutcomeRecord(
+          id: 'energy-checkin-$checkInId',
+          type: OutcomeType.observedEnergy,
+          value: checkIn.energy,
+          observedAt: checkIn.timestamp,
+          recordedAt: _now(),
+          source: OutcomeSource.checkIn,
+          sourceId: checkInId,
+        ),
+      );
+    }
   }
 
   Future<void> addReactionResult(double averageMs, {String? note}) async {
@@ -1015,21 +1175,116 @@ class AppController extends ChangeNotifier {
         '${ReactionTestLogic.minValidMs} and ${ReactionTestLogic.maxValidMs} ms',
       );
     }
-    await addSignal(
-      SignalType.reactionTime,
-      averageMs,
-      note: note ?? 'Three-round reaction test',
+    final observedAt = _now();
+    final signalId =
+        'manual-${observedAt.microsecondsSinceEpoch}-${signals.length}';
+    signals.insert(
+      0,
+      SignalReading(
+        id: signalId,
+        type: SignalType.reactionTime,
+        value: averageMs,
+        timestamp: observedAt,
+        note: note ?? 'Three-round reaction test',
+      ),
     );
+    await _commit(energyInputsChanged: true);
+    if (outcomeConsent) {
+      await _saveOutcome(
+        OutcomeRecord(
+          id: 'reaction-$signalId',
+          type: OutcomeType.cognitiveReaction,
+          value: averageMs,
+          observedAt: observedAt,
+          recordedAt: _now(),
+          source: OutcomeSource.reactionSignal,
+          sourceId: signalId,
+        ),
+      );
+    }
+  }
+
+  Future<void> recordObservedEnergy(
+    double energy, {
+    String? recommendationId,
+    DateTime? observedAt,
+  }) async {
+    if (!outcomeConsent) {
+      throw StateError('Outcome learning requires explicit consent.');
+    }
+    if (!CheckInLogic.isValidRating(energy)) {
+      throw ArgumentError('Observed energy must be between 1 and 10.');
+    }
+    if (recommendationId != null) {
+      final recommendation = _recommendations
+          .where((item) => item.id == recommendationId)
+          .firstOrNull;
+      if (recommendation?.status != RecommendationStatus.completed) {
+        throw StateError('Complete the recommendation before rating energy.');
+      }
+    }
+    final when = observedAt ?? _now();
+    final sourceId = recommendationId ?? '${when.microsecondsSinceEpoch}';
+    await _saveOutcome(
+      OutcomeRecord(
+        id: 'energy-coach-$sourceId',
+        type: OutcomeType.observedEnergy,
+        value: CheckInLogic.clampRating(energy),
+        observedAt: when,
+        recordedAt: _now(),
+        source: OutcomeSource.coach,
+        sourceId: sourceId,
+        recommendationId: recommendationId,
+      ),
+    );
+  }
+
+  Future<void> _saveOutcome(OutcomeRecord outcome) async {
+    if (!outcomeConsent) {
+      throw StateError('Outcome learning requires explicit consent.');
+    }
+    _outcomes.removeWhere((item) => item.id == outcome.id);
+    _outcomes.insert(0, outcome);
+    outcomeError = null;
+    notifyListeners();
+    await _writeLocal();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      try {
+        await repository.upsertOutcome(session.uid, outcome);
+      } on Object {
+        outcomeError = 'Outcome saved on this device · cloud update pending';
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> deleteSignal(String id) async {
     signals.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
+    await _deleteOutcome('reaction-$id');
   }
 
   Future<void> deleteCheckIn(String id) async {
     checkIns.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
+    await _deleteOutcome('energy-checkin-$id');
+  }
+
+  Future<void> _deleteOutcome(String outcomeId) async {
+    _outcomes.removeWhere((item) => item.id == outcomeId);
+    await _writeLocal();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      try {
+        await repository.deleteOutcome(session.uid, outcomeId);
+      } on Object {
+        outcomeError = 'Outcome deletion pending · retry when connected';
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> setRecommendationStatus(
@@ -1040,7 +1295,48 @@ class AppController extends ChangeNotifier {
     _recommendations = _recommendations
         .map((item) => item.id == id ? item.copyWith(status: status) : item)
         .toList();
-    await _commit();
+    guidanceError = null;
+    notifyListeners();
+    await _writeLocal();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      try {
+        await repository.setRecommendationStatus(
+          session.uid,
+          id,
+          status: status,
+        );
+      } on Object {
+        guidanceError =
+            'Recommendation updated on this device · cloud update pending';
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> setRecommendationFeedback(String id, bool helpful) async {
+    _recommendationFeedback[id] = helpful;
+    _recommendations = _recommendations
+        .map((item) => item.id == id ? item.copyWith(helpful: helpful) : item)
+        .toList();
+    guidanceError = null;
+    notifyListeners();
+    await _writeLocal();
+    final session = _accountAuth.currentSession;
+    final repository = cloudRepository;
+    if (session != null && repository != null) {
+      try {
+        await repository.setRecommendationFeedback(
+          session.uid,
+          id,
+          helpful: helpful,
+        );
+      } on Object {
+        guidanceError = 'Feedback saved on this device · cloud update pending';
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> dismissRiskAlert(String id) async {
@@ -1127,7 +1423,10 @@ class AppController extends ChangeNotifier {
 
   Future<void> setOutcomeConsent(bool value) async {
     outcomeConsent = value;
+    outcomeError = null;
+    if (!value) _outcomes = [];
     await _commit();
+    if (value) await refreshOutcomes();
   }
 
   Future<bool> connectHealth() async {
@@ -1161,7 +1460,10 @@ class AppController extends ChangeNotifier {
       isHealthAuthorizing = false;
     }
     await _commit();
-    if (healthAuthorized) await syncHealth();
+    if (healthAuthorized) {
+      await _ensureContinuousHealthUpdates();
+      await syncHealth(reason: HealthRefreshReason.initial);
+    }
     return healthAuthorized;
   }
 
@@ -1182,6 +1484,11 @@ class AppController extends ChangeNotifier {
       healthAuthorization = status;
       if (status != HealthAuthorizationState.authorized) {
         healthAuthorized = false;
+        if (healthBackgroundRefreshEnabled) {
+          await _healthService.disableBackgroundUpdates();
+          healthBackgroundRefreshEnabled = false;
+          healthSyncStatus = HealthSyncStatus.disabled;
+        }
       }
     }
     if (notify) notifyListeners();
@@ -1189,7 +1496,10 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> disconnectHealth() async {
+    await _healthService.disableBackgroundUpdates();
     healthAuthorized = false;
+    healthBackgroundRefreshEnabled = false;
+    healthSyncStatus = HealthSyncStatus.disabled;
     healthAuthorization = healthAvailable
         ? HealthAuthorizationState.revoked
         : HealthAuthorizationState.unavailable;
@@ -1209,19 +1519,98 @@ class AppController extends ChangeNotifier {
     return opened;
   }
 
-  Future<HeartSyncMergeResult?> syncHealth() async {
+  Future<ScreenTimeAuthorizationState> refreshScreenTimeAuthorization({
+    bool notify = true,
+  }) async {
+    screenTimeAuthorization = await _screenTimeService.authorizationStatus();
+    screenTimeError = switch (screenTimeAuthorization) {
+      ScreenTimeAuthorizationState.error =>
+        'Screen Time report status could not be checked.',
+      _ => null,
+    };
+    if (notify) notifyListeners();
+    return screenTimeAuthorization;
+  }
+
+  Future<ScreenTimeAuthorizationState> authorizeScreenTimeReport() async {
+    isScreenTimeAuthorizing = true;
+    screenTimeError = null;
+    notifyListeners();
+    try {
+      screenTimeAuthorization = await _screenTimeService.requestAuthorization();
+      screenTimeError = switch (screenTimeAuthorization) {
+        ScreenTimeAuthorizationState.denied =>
+          'Screen Time report permission was not granted.',
+        ScreenTimeAuthorizationState.entitlementRequired =>
+          'Apple Family Controls entitlement access is still required.',
+        ScreenTimeAuthorizationState.error =>
+          'Screen Time report permission could not be requested.',
+        _ => null,
+      };
+    } on Object {
+      screenTimeAuthorization = ScreenTimeAuthorizationState.error;
+      screenTimeError = 'Screen Time report permission could not be requested.';
+    } finally {
+      isScreenTimeAuthorizing = false;
+      notifyListeners();
+    }
+    return screenTimeAuthorization;
+  }
+
+  Future<bool> showScreenTimeReport() async {
+    if (screenTimeAuthorization != ScreenTimeAuthorizationState.authorized) {
+      screenTimeError = 'Allow the private Screen Time report first.';
+      notifyListeners();
+      return false;
+    }
+    final shown = await _screenTimeService.showReport();
+    screenTimeError = shown
+        ? null
+        : 'The private Screen Time report could not be opened.';
+    notifyListeners();
+    return shown;
+  }
+
+  Future<void> refreshHealthIfDue({
+    HealthRefreshReason reason = HealthRefreshReason.foreground,
+    bool notify = true,
+  }) async {
+    final now = _now();
+    if (!ContinuousRefreshLogic.shouldRefresh(
+      now: now,
+      lastAttempt: lastHealthSyncAttempt,
+    )) {
+      if (notify) notifyListeners();
+      return;
+    }
+    await syncHealth(reason: reason, notify: notify);
+  }
+
+  Future<HeartSyncMergeResult?> syncHealth({
+    HealthRefreshReason reason = HealthRefreshReason.manual,
+    bool notify = true,
+  }) async {
     if (!healthAuthorized || isSyncing) return null;
+    final attemptTime = _now();
+    final before = List<SignalReading>.of(signals);
     isSyncing = true;
+    healthSyncStatus = HealthSyncStatus.syncing;
+    lastHealthSyncAttempt = attemptTime;
+    lastHealthRefreshReason = reason;
     healthSyncError = null;
     sleepSyncError = null;
     activitySyncError = null;
-    notifyListeners();
+    if (notify) notifyListeners();
     HeartSyncMergeResult? heartResult;
     SleepSyncMergeResult? sleepResult;
     ActivitySyncMergeResult? activityResult;
     try {
       final imported = await _healthService.sync();
-      heartResult = HeartSyncLogic.merge(existing: signals, imported: imported);
+      heartResult = HeartSyncLogic.merge(
+        existing: signals,
+        imported: imported,
+        syncedAt: attemptTime.toUtc(),
+      );
       signals = heartResult.readings;
       lastHealthImportCount = heartResult.importedCount;
       lastHealthDuplicateCount = heartResult.duplicateCount;
@@ -1234,7 +1623,11 @@ class AppController extends ChangeNotifier {
 
     try {
       final imported = await _healthService.syncSleep();
-      sleepResult = SleepSyncLogic.merge(existing: signals, imported: imported);
+      sleepResult = SleepSyncLogic.merge(
+        existing: signals,
+        imported: imported,
+        syncedAt: attemptTime.toUtc(),
+      );
       signals = sleepResult.readings;
       lastSleepImportCount = sleepResult.importedSignalCount;
       lastSleepDuplicateCount = sleepResult.duplicateCount;
@@ -1252,6 +1645,7 @@ class AppController extends ChangeNotifier {
       activityResult = ActivitySyncLogic.merge(
         existing: signals,
         imported: imported,
+        syncedAt: attemptTime.toUtc(),
       );
       signals = activityResult.readings;
       lastActivityImportCount = activityResult.importedCount;
@@ -1263,25 +1657,44 @@ class AppController extends ChangeNotifier {
       activitySyncError =
           'Apple Health workout, step, and hydration data could not be imported.';
     } finally {
-      if (heartResult != null ||
-          (sleepResult?.importedNightCount ?? 0) > 0 ||
-          activityResult != null) {
-        lastSync = DateTime.now();
+      final successfulSourceCount = [
+        heartResult,
+        sleepResult,
+        activityResult,
+      ].where((result) => result != null).length;
+      final importedCount =
+          (heartResult?.importedCount ?? 0) +
+          (sleepResult?.importedSignalCount ?? 0) +
+          (activityResult?.importedCount ?? 0);
+      if (successfulSourceCount > 0) {
+        lastSync = attemptTime;
       }
+      healthSyncStatus = successfulSourceCount == 0
+          ? HealthSyncStatus.failed
+          : successfulSourceCount < 3
+          ? HealthSyncStatus.partialFailure
+          : importedCount > 0
+          ? HealthSyncStatus.updated
+          : HealthSyncStatus.upToDate;
       isSyncing = false;
-      notifyListeners();
+      if (notify) notifyListeners();
     }
 
-    if (heartResult == null && sleepResult == null && activityResult == null) {
-      return null;
-    }
-    await _commit(
-      energyInputsChanged:
-          (heartResult?.importedCount ?? 0) > 0 ||
-          (sleepResult?.importedSignalCount ?? 0) > 0 ||
-          (activityResult?.importedCount ?? 0) > 0,
+    final meaningfulChange = ContinuousRefreshLogic.hasMeaningfulModelChange(
+      before,
+      signals,
     );
+    if (meaningfulChange) lastHealthChangeAt = attemptTime;
+    await _commit(energyInputsChanged: meaningfulChange);
     return heartResult;
+  }
+
+  Future<void> _ensureContinuousHealthUpdates() async {
+    if (!healthAuthorized || healthBackgroundRefreshEnabled) return;
+    healthBackgroundRefreshEnabled = await _healthService
+        .enableBackgroundUpdates(
+          () => refreshHealthIfDue(reason: HealthRefreshReason.background),
+        );
   }
 
   String get healthSyncSummary {
@@ -1355,7 +1768,15 @@ class AppController extends ChangeNotifier {
   Future<void> clearTrackingData() async {
     signals = [];
     checkIns = [];
+    _outcomes = [];
+    outcomeError = null;
     lastSync = null;
+    lastHealthSyncAttempt = null;
+    lastHealthChangeAt = null;
+    healthSyncStatus = healthAuthorized
+        ? HealthSyncStatus.idle
+        : HealthSyncStatus.disabled;
+    lastHealthRefreshReason = null;
     lastHealthImportCount = 0;
     lastHealthDuplicateCount = 0;
     lastHealthRejectedCount = 0;
@@ -1375,6 +1796,7 @@ class AppController extends ChangeNotifier {
     _scoreLoadedFromSnapshot = false;
     energyScoreError = null;
     _recommendationStatuses.clear();
+    _recommendationFeedback.clear();
     _dismissedRiskAlertIds.clear();
     _recommendations = [];
     _riskAlerts = [];
@@ -1384,6 +1806,7 @@ class AppController extends ChangeNotifier {
     if (session != null && repository != null) {
       await repository.clearScoreSnapshots(session.uid);
       await repository.clearGuidance(session.uid);
+      await repository.clearOutcomes(session.uid);
     }
     await _commit(energyInputsChanged: true);
   }
@@ -1401,6 +1824,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    await _healthService.disableBackgroundUpdates();
     try {
       await _notificationService.cancelGuidance();
     } on Object {
@@ -1417,6 +1841,9 @@ class AppController extends ChangeNotifier {
       state: NotificationPlanState.disabled,
     );
     outcomeConsent = false;
+    _outcomes = [];
+    isOutcomeLoading = false;
+    outcomeError = null;
     healthAuthorized = false;
     isHealthAuthorizing = false;
     healthAuthorization = healthAvailable
@@ -1427,6 +1854,11 @@ class AppController extends ChangeNotifier {
     sleepSyncError = null;
     activitySyncError = null;
     lastSync = null;
+    lastHealthSyncAttempt = null;
+    lastHealthChangeAt = null;
+    healthSyncStatus = HealthSyncStatus.idle;
+    lastHealthRefreshReason = null;
+    healthBackgroundRefreshEnabled = false;
     lastHealthImportCount = 0;
     lastHealthDuplicateCount = 0;
     lastHealthRejectedCount = 0;
@@ -1451,6 +1883,7 @@ class AppController extends ChangeNotifier {
     forecastError = null;
     guidanceError = null;
     _recommendationStatuses.clear();
+    _recommendationFeedback.clear();
     _dismissedRiskAlertIds.clear();
     _recommendations = [];
     _riskAlerts = [];
@@ -1486,12 +1919,19 @@ class AppController extends ChangeNotifier {
     'lastActivityRejectedCount': lastActivityRejectedCount,
     'accountEmail': accountEmail,
     'lastSync': lastSync?.toIso8601String(),
+    'lastHealthSyncAttempt': lastHealthSyncAttempt?.toIso8601String(),
+    'lastHealthChangeAt': lastHealthChangeAt?.toIso8601String(),
+    'healthSyncStatus': healthSyncStatus.name,
+    'lastHealthRefreshReason': lastHealthRefreshReason?.name,
+    'healthBackgroundRefreshEnabled': healthBackgroundRefreshEnabled,
     'profile': profile.toJson(),
     'signals': signals.map((item) => item.toJson()).toList(),
     'checkIns': checkIns.map((item) => item.toJson()).toList(),
+    'outcomes': _outcomes.map((item) => item.toJson()).toList(),
     'recommendationStatuses': _recommendationStatuses.map(
       (key, value) => MapEntry(key, value.name),
     ),
+    'recommendationFeedback': _recommendationFeedback,
     'dismissedRiskAlertIds': _dismissedRiskAlertIds.toList(),
   };
 
@@ -1586,6 +2026,11 @@ class AppController extends ChangeNotifier {
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
     lastSync: lastSync,
+    healthSyncStatus: healthSyncStatus,
+    lastHealthRefreshReason: lastHealthRefreshReason,
+    lastHealthSyncAttempt: lastHealthSyncAttempt,
+    lastHealthChangeAt: lastHealthChangeAt,
+    healthBackgroundRefreshEnabled: healthBackgroundRefreshEnabled,
     migrationVersion: migrationVersion,
     signals: List.unmodifiable(signals),
     checkIns: List.unmodifiable(checkIns),
@@ -1608,7 +2053,9 @@ class AppController extends ChangeNotifier {
     insightsError = null;
     if (!sameAccount) {
       _recommendationStatuses.clear();
+      _recommendationFeedback.clear();
       _dismissedRiskAlertIds.clear();
+      _outcomes = [];
       lastHealthImportCount = 0;
       lastHealthDuplicateCount = 0;
       lastHealthRejectedCount = 0;
@@ -1638,9 +2085,18 @@ class AppController extends ChangeNotifier {
       state: NotificationPlanState.disabled,
     );
     outcomeConsent = state.outcomeConsent;
+    if (!outcomeConsent) _outcomes = [];
+    outcomeError = null;
     // Health authorization is device-specific. Cloud state must not turn on
     // access on a different device; the local platform check remains primary.
     lastSync = state.lastSync;
+    lastHealthSyncAttempt = state.lastHealthSyncAttempt;
+    lastHealthChangeAt = state.lastHealthChangeAt;
+    healthSyncStatus = state.healthSyncStatus;
+    lastHealthRefreshReason = state.lastHealthRefreshReason;
+    // Observer registration is device-process state and must be re-established
+    // after every launch even when another device wrote `true` to Firestore.
+    healthBackgroundRefreshEnabled = false;
     signals = [...state.signals]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     checkIns = [...state.checkIns]
@@ -1659,7 +2115,10 @@ class AppController extends ChangeNotifier {
     _insightsSnapshot = null;
     insightsLoadedFromCloud = false;
     insightsError = null;
+    _outcomes = [];
+    outcomeError = null;
     _recommendationStatuses.clear();
+    _recommendationFeedback.clear();
     _dismissedRiskAlertIds.clear();
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
     final notificationPrefsVersion =
@@ -1692,6 +2151,21 @@ class AppController extends ChangeNotifier {
     lastSync = json['lastSync'] == null
         ? null
         : DateTime.tryParse(json['lastSync'] as String);
+    lastHealthSyncAttempt = json['lastHealthSyncAttempt'] == null
+        ? null
+        : DateTime.tryParse(json['lastHealthSyncAttempt'] as String);
+    lastHealthChangeAt = json['lastHealthChangeAt'] == null
+        ? null
+        : DateTime.tryParse(json['lastHealthChangeAt'] as String);
+    healthSyncStatus =
+        HealthSyncStatus.values
+            .where((value) => value.name == json['healthSyncStatus'])
+            .firstOrNull ??
+        HealthSyncStatus.idle;
+    lastHealthRefreshReason = HealthRefreshReason.values
+        .where((value) => value.name == json['lastHealthRefreshReason'])
+        .firstOrNull;
+    healthBackgroundRefreshEnabled = false;
     lastHealthImportCount =
         (json['lastHealthImportCount'] as num?)?.round() ?? 0;
     lastHealthDuplicateCount =
@@ -1727,6 +2201,19 @@ class AppController extends ChangeNotifier {
               DailyCheckIn.fromJson((item as Map).cast<String, dynamic>()),
         )
         .toList();
+    if (outcomeConsent) {
+      _outcomes =
+          ((json['outcomes'] as List?) ?? const [])
+              .map(
+                (item) => OutcomeRecord.fromJson(
+                  (item as Map).cast<String, dynamic>(),
+                ),
+              )
+              .toList()
+            ..sort(
+              (left, right) => right.observedAt.compareTo(left.observedAt),
+            );
+    }
     final statuses =
         (json['recommendationStatuses'] as Map?)?.cast<String, dynamic>() ??
         const {};
@@ -1734,6 +2221,14 @@ class AppController extends ChangeNotifier {
       _recommendationStatuses[entry.key] = RecommendationStatus.values.byName(
         entry.value as String,
       );
+    }
+    final feedback =
+        (json['recommendationFeedback'] as Map?)?.cast<String, dynamic>() ??
+        const {};
+    for (final entry in feedback.entries) {
+      if (entry.value is bool) {
+        _recommendationFeedback[entry.key] = entry.value as bool;
+      }
     }
     _dismissedRiskAlertIds.addAll(
       ((json['dismissedRiskAlertIds'] as List?) ?? const []).cast<String>(),

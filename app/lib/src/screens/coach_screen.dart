@@ -27,6 +27,8 @@ class CoachScreen extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         _GuidanceSummary(controller: controller),
+        const SizedBox(height: 10),
+        _DailyPlanOverview(controller: controller),
         if (controller.guidanceError case final error?) ...[
           const SizedBox(height: 10),
           _GuidanceNotice(message: error),
@@ -48,7 +50,7 @@ class CoachScreen extends StatelessWidget {
           ...controller.recommendations.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _RecommendationCard(item: item),
+              child: _RecommendationCard(controller: controller, item: item),
             ),
           ),
         const SizedBox(height: 14),
@@ -103,7 +105,7 @@ class _CoachHeader extends StatelessWidget {
             Text('AI Coach', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 5),
             const Text(
-              'Grounded daily guidance from your recent patterns',
+              'A prioritized morning-to-evening plan from your recent patterns',
               style: TextStyle(color: TonyoColors.muted, fontSize: 12),
             ),
           ],
@@ -147,12 +149,12 @@ class _GuidanceSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Grounded daily guidance',
+                  'Generated daily plan',
                   style: TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$recommendationCount timed actions \u00b7 $alertCount active '
+                  '$recommendationCount plan blocks \u00b7 $alertCount active '
                   '${alertCount == 1 ? 'flag' : 'flags'}',
                   style: const TextStyle(
                     color: TonyoColors.muted,
@@ -184,6 +186,74 @@ class _GuidanceSummary extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyPlanOverview extends StatelessWidget {
+  const _DailyPlanOverview({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = controller.recommendations;
+    final feedbackCount = controller.recommendationFeedbackHistoryCount;
+    final confidence = plan.firstOrNull?.planConfidence;
+    final range = plan.isEmpty
+        ? 'Waiting for grounded forecast windows'
+        : '${plan.first.timeLabel}–${plan.last.timeLabel}';
+    return TonyoCard(
+      key: const Key('coach-daily-plan-summary'),
+      color: TonyoColors.violet.withValues(alpha: .07),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.view_timeline_rounded,
+                color: TonyoColors.violet,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'Morning-to-evening plan · $range',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _SmallTag(
+                label: controller.profile.coachPriority.label.toUpperCase(),
+              ),
+              if (confidence != null)
+                _SmallTag(
+                  label: '${(confidence * 100).round()}% PLAN CONFIDENCE',
+                ),
+              if (feedbackCount > 0)
+                _SmallTag(label: '$feedbackCount PAST RESPONSES'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            controller.profile.coachPriority.detail,
+            style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            feedbackCount == 0
+                ? 'Complete or dismiss blocks and share what helped. Future plans will learn from those responses.'
+                : 'Past responses now adjust each block’s feedback rank and importance; the timeline stays chronological.',
+            style: const TextStyle(color: TonyoColors.mint, fontSize: 10),
           ),
         ],
       ),
@@ -353,8 +423,9 @@ class _NoRecommendationsCard extends StatelessWidget {
 }
 
 class _RecommendationCard extends StatelessWidget {
-  const _RecommendationCard({required this.item});
+  const _RecommendationCard({required this.controller, required this.item});
 
+  final AppController controller;
   final Recommendation item;
 
   @override
@@ -412,15 +483,289 @@ class _RecommendationCard extends StatelessWidget {
           runSpacing: 6,
           children: [
             _SmallTag(label: item.category.toUpperCase()),
+            if (item.planPhase case final phase?)
+              _SmallTag(label: _phaseLabel(phase).toUpperCase()),
+            if (item.durationMinutes case final duration?)
+              _SmallTag(label: '$duration MIN'),
             if (item.windowType case final window?)
               _SmallTag(label: '${_windowLabel(window).toUpperCase()} WINDOW'),
           ],
         ),
         const SizedBox(height: 10),
+        if (item.decisionReason case final reason?) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: TonyoColors.violet.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.balance_rounded,
+                  size: 14,
+                  color: TonyoColors.violet,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    reason,
+                    style: const TextStyle(
+                      color: TonyoColors.muted,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         _EvidenceSummary(evidence: item.evidence),
+        const SizedBox(height: 12),
+        _RecommendationActions(controller: controller, item: item),
       ],
     ),
   );
+}
+
+class _RecommendationActions extends StatelessWidget {
+  const _RecommendationActions({required this.controller, required this.item});
+
+  final AppController controller;
+  final Recommendation item;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusLabel = switch (item.status) {
+      RecommendationStatus.suggested => 'SUGGESTED',
+      RecommendationStatus.accepted => 'ACCEPTED',
+      RecommendationStatus.completed => 'COMPLETED',
+      RecommendationStatus.dismissed => 'DISMISSED',
+    };
+    final canRate =
+        item.status == RecommendationStatus.completed ||
+        item.status == RecommendationStatus.dismissed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _SmallTag(label: statusLabel),
+            if (item.feedbackSampleCount > 0)
+              _SmallTag(
+                label: item.feedbackRank == 1
+                    ? 'TOP FEEDBACK MATCH'
+                    : '#${item.feedbackRank} FEEDBACK MATCH',
+              ),
+            if (item.feedbackSampleCount > 0)
+              _SmallTag(
+                label:
+                    '${(item.feedbackScore * 100).round()}% · ${item.feedbackSampleCount} ${item.feedbackSampleCount == 1 ? 'RESPONSE' : 'RESPONSES'}',
+              ),
+          ],
+        ),
+        if (item.status == RecommendationStatus.suggested) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton.icon(
+                key: ValueKey('accept-recommendation-${item.id}'),
+                onPressed: () async {
+                  await controller.setRecommendationStatus(
+                    item.id,
+                    RecommendationStatus.accepted,
+                  );
+                },
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Accept'),
+              ),
+              TextButton.icon(
+                key: ValueKey('dismiss-recommendation-${item.id}'),
+                onPressed: () async {
+                  await controller.setRecommendationStatus(
+                    item.id,
+                    RecommendationStatus.dismissed,
+                  );
+                },
+                icon: const Icon(Icons.close_rounded, size: 16),
+                label: const Text('Dismiss'),
+              ),
+            ],
+          ),
+        ] else if (item.status == RecommendationStatus.accepted) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton.icon(
+                key: ValueKey('complete-recommendation-${item.id}'),
+                onPressed: () async {
+                  await controller.setRecommendationStatus(
+                    item.id,
+                    RecommendationStatus.completed,
+                  );
+                },
+                icon: const Icon(Icons.done_all_rounded, size: 16),
+                label: const Text('Complete'),
+              ),
+              TextButton.icon(
+                key: ValueKey('dismiss-recommendation-${item.id}'),
+                onPressed: () async {
+                  await controller.setRecommendationStatus(
+                    item.id,
+                    RecommendationStatus.dismissed,
+                  );
+                },
+                icon: const Icon(Icons.close_rounded, size: 16),
+                label: const Text('Dismiss'),
+              ),
+            ],
+          ),
+        ],
+        if (canRate) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Was this advice helpful?',
+                  style: TextStyle(
+                    color: TonyoColors.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton.filledTonal(
+                key: ValueKey('helpful-recommendation-${item.id}'),
+                tooltip: 'Helpful',
+                isSelected: item.helpful == true,
+                onPressed: () =>
+                    controller.setRecommendationFeedback(item.id, true),
+                icon: const Icon(Icons.thumb_up_alt_outlined, size: 17),
+                selectedIcon: const Icon(Icons.thumb_up_alt_rounded, size: 17),
+              ),
+              const SizedBox(width: 5),
+              IconButton.filledTonal(
+                key: ValueKey('not-helpful-recommendation-${item.id}'),
+                tooltip: 'Not helpful',
+                isSelected: item.helpful == false,
+                onPressed: () =>
+                    controller.setRecommendationFeedback(item.id, false),
+                icon: const Icon(Icons.thumb_down_alt_outlined, size: 17),
+                selectedIcon: const Icon(
+                  Icons.thumb_down_alt_rounded,
+                  size: 17,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (item.status == RecommendationStatus.completed) ...[
+          const SizedBox(height: 9),
+          if (!controller.outcomeConsent)
+            const Text(
+              'Outcome learning is off. No training record will be created.',
+              key: Key('coach-outcome-consent-off'),
+              style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+            )
+          else if (controller.outcomeForRecommendation(item.id)
+              case final outcome?)
+            Container(
+              key: ValueKey('recommendation-outcome-${item.id}'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: TonyoColors.mint.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Text(
+                'Observed energy ${outcome.value.round()}/10 saved privately',
+                style: const TextStyle(
+                  color: TonyoColors.mint,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          else
+            OutlinedButton.icon(
+              key: ValueKey('record-outcome-${item.id}'),
+              onPressed: () => _recordObservedEnergy(context, controller, item),
+              icon: const Icon(Icons.bolt_rounded, size: 16),
+              label: const Text('Log observed energy'),
+            ),
+        ],
+      ],
+    );
+  }
+
+  static Future<void> _recordObservedEnergy(
+    BuildContext context,
+    AppController controller,
+    Recommendation item,
+  ) async {
+    var energy = 6.0;
+    final result = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Observed energy'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Optional: how energized did you feel after this completed block?',
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${energy.round()}/10',
+                key: const Key('observed-energy-value'),
+                style: const TextStyle(
+                  color: TonyoColors.mint,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Slider(
+                key: const Key('observed-energy-slider'),
+                value: energy,
+                min: 1,
+                max: 10,
+                divisions: 9,
+                label: energy.round().toString(),
+                onChanged: (value) => setState(() => energy = value),
+              ),
+              const Text(
+                'Saved only because outcome learning is on. This release does not train a personalized model.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Skip'),
+            ),
+            FilledButton(
+              key: const Key('save-observed-energy'),
+              onPressed: () => Navigator.pop(dialogContext, energy),
+              child: const Text('Save outcome'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    await controller.recordObservedEnergy(result, recommendationId: item.id);
+  }
 }
 
 class _EvidenceSummary extends StatelessWidget {
@@ -496,18 +841,23 @@ class _SmallTag extends StatelessWidget {
 }
 
 IconData _recommendationIcon(String category) => switch (category) {
-  'Study' => Icons.menu_book_rounded,
+  'Deep work' => Icons.menu_book_rounded,
+  'Morning' => Icons.wb_sunny_outlined,
   'Hydration' => Icons.water_drop_rounded,
   'Nap' => Icons.bedtime_rounded,
+  'Taper' => Icons.bedtime_outlined,
+  'Evening' => Icons.nightlight_round,
   'Training' => Icons.fitness_center_rounded,
   _ => Icons.spa_rounded,
 };
 
 Color _recommendationColor(String category) => switch (category) {
-  'Study' => TonyoColors.amber,
+  'Deep work' => TonyoColors.amber,
+  'Morning' => TonyoColors.amber,
   'Hydration' => TonyoColors.blue,
   'Training' => TonyoColors.coral,
   'Nap' => TonyoColors.violet,
+  'Taper' || 'Evening' => TonyoColors.violet,
   _ => TonyoColors.mint,
 };
 
@@ -533,4 +883,15 @@ String _windowLabel(ForecastWindowType type) => switch (type) {
   ForecastWindowType.peak => 'Peak',
   ForecastWindowType.crash => 'Crash',
   ForecastWindowType.recovery => 'Recovery',
+};
+
+String _phaseLabel(CoachPlanPhase phase) => switch (phase) {
+  CoachPlanPhase.morning => 'Morning',
+  CoachPlanPhase.deepWork => 'Deep work',
+  CoachPlanPhase.midday => 'Midday',
+  CoachPlanPhase.nap => 'Nap',
+  CoachPlanPhase.training => 'Training',
+  CoachPlanPhase.recovery => 'Recovery',
+  CoachPlanPhase.taper => 'Taper',
+  CoachPlanPhase.evening => 'Evening',
 };

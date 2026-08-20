@@ -42,6 +42,7 @@ class SleepSyncLogic {
   static SleepSyncMergeResult merge({
     required Iterable<SignalReading> existing,
     required Iterable<SignalReading> imported,
+    DateTime? syncedAt,
   }) {
     final existingReadings = existing.toList();
     final intervals = <_SleepInterval>[];
@@ -105,6 +106,7 @@ class SleepSyncLogic {
         night,
         groupId: groupId,
         includeSummary: preferImported,
+        syncedAt: syncedAt,
       );
       final previous = {
         for (final reading in output.where((item) => item.groupId == groupId))
@@ -343,6 +345,7 @@ class SleepSyncLogic {
     _ReconciledNight night, {
     required String groupId,
     required bool includeSummary,
+    DateTime? syncedAt,
   }) {
     final note =
         'Reconciled ${night.sourceCount} Apple Health '
@@ -361,6 +364,7 @@ class SleepSyncLogic {
           quality: quality,
           note: note,
           groupId: groupId,
+          syncedAt: syncedAt ?? DateTime.now().toUtc(),
         ),
         SignalReading(
           id: '$groupId-bedtime',
@@ -371,6 +375,7 @@ class SleepSyncLogic {
           quality: quality,
           note: note,
           groupId: groupId,
+          syncedAt: syncedAt ?? DateTime.now().toUtc(),
         ),
       ]);
     }
@@ -388,6 +393,7 @@ class SleepSyncLogic {
           quality: quality,
           note: note,
           groupId: groupId,
+          syncedAt: syncedAt ?? DateTime.now().toUtc(),
         ),
       );
     }

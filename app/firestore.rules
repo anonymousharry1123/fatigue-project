@@ -10,11 +10,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function outcomeConsentGranted(uid) {
+      let flags = get(/databases/$(database)/documents/users/$(uid)).data.consentFlags;
+      return flags.outcomeCollection == true && flags.trainingRecordUse == true;
+    }
+
     match /users/{uid} {
       allow read, create, update, delete: if isOwner(uid);
 
-      match /{document=**} {
-        allow read, create, update, delete: if isOwner(uid);
+      match /outcomes/{outcomeId} {
+        // Owners can always inspect or delete their records. Creating or
+        // changing a training-eligible record requires both explicit flags.
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && outcomeConsentGranted(uid);
+      }
+
+      match /{collection}/{document} {
+        allow read, create, update, delete:
+          if isOwner(uid) && collection != 'outcomes';
       }
     }
 

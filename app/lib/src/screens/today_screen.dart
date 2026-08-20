@@ -5,6 +5,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../today_dashboard_logic.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/personal_baseline_card.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
@@ -184,6 +185,11 @@ class TodayScreen extends StatelessWidget {
                           .toList(),
                     );
                   },
+                ),
+                const SectionHeader('Personal context'),
+                PersonalBaselineCard(
+                  baselines: controller.personalBaselines,
+                  compact: true,
                 ),
                 SectionHeader(
                   'What shaped today',

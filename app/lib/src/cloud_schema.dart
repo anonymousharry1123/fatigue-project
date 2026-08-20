@@ -1,7 +1,7 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 7 activates explicit notification opt-in.
-const int cloudSchemaVersion = 7;
+/// Firestore schema version. Version 11 adds consent-gated outcome records.
+const int cloudSchemaVersion = 11;
 
 const int notificationPreferencesVersion = 1;
 
@@ -23,6 +23,7 @@ Map<String, Object?> signalToCloud(SignalReading signal) => {
   'quality': signal.quality,
   'note': signal.note,
   'groupId': signal.groupId,
+  'syncedAt': signal.syncedAt,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -45,6 +46,9 @@ SignalReading signalFromCloud(String id, Map<String, dynamic> data) {
     quality: (data['quality'] as num?)?.toDouble() ?? 1,
     note: data['note'] as String?,
     groupId: data['groupId'] as String?,
+    syncedAt: data['syncedAt'] == null
+        ? null
+        : cloudDateTime(data['syncedAt'], field: 'syncedAt'),
   );
 }
 
@@ -80,6 +84,11 @@ Map<String, Object?> profileToCloud({
   required bool outcomeConsent,
   required bool healthAuthorized,
   DateTime? lastSync,
+  HealthSyncStatus healthSyncStatus = HealthSyncStatus.idle,
+  HealthRefreshReason? lastHealthRefreshReason,
+  DateTime? lastHealthSyncAttempt,
+  DateTime? lastHealthChangeAt,
+  bool healthBackgroundRefreshEnabled = false,
   DateTime? updatedAt,
   int migrationVersion = localMigrationVersion,
 }) => {
@@ -95,13 +104,57 @@ Map<String, Object?> profileToCloud({
   'consentFlags': {
     'wellnessOnlyAcknowledged': true,
     'outcomeCollection': outcomeConsent,
+    'trainingRecordUse': outcomeConsent,
   },
   'onboardingComplete': onboardingComplete,
   'lastHealthSync': lastSync,
+  'healthSync': {
+    'status': healthSyncStatus.name,
+    'reason': lastHealthRefreshReason?.name,
+    'lastAttemptAt': lastHealthSyncAttempt,
+    'lastSuccessAt': lastSync,
+    'lastMeaningfulChangeAt': lastHealthChangeAt,
+    'backgroundRefreshEnabled': healthBackgroundRefreshEnabled,
+  },
   'localMigrationVersion': migrationVersion,
   'schemaVersion': cloudSchemaVersion,
   'updatedAt': updatedAt ?? DateTime.now().toUtc(),
 };
+
+/// Version 0.31 consent-gated observed-energy or cognitive outcome document.
+Map<String, Object?> outcomeToCloud(OutcomeRecord outcome) => {
+  'type': outcome.type.name,
+  'value': outcome.value,
+  'unit': outcome.type.unit,
+  'observedAt': outcome.observedAt,
+  'recordedAt': outcome.recordedAt,
+  'source': outcome.source.name,
+  'sourceId': outcome.sourceId,
+  'recommendationId': outcome.recommendationId,
+  'consentVersion': outcome.consentVersion,
+  'schemaVersion': cloudSchemaVersion,
+};
+
+OutcomeRecord outcomeFromCloud(String id, Map<String, dynamic> data) {
+  final type = OutcomeType.values.byName(data['type'] as String);
+  final unit = data['unit'] as String?;
+  if (unit != null && unit != type.unit) {
+    throw FormatException(
+      'Outcome $id uses unit "$unit"; expected "${type.unit}".',
+    );
+  }
+  return OutcomeRecord(
+    id: id,
+    type: type,
+    value: (data['value'] as num).toDouble(),
+    observedAt: cloudDateTime(data['observedAt'], field: 'observedAt'),
+    recordedAt: cloudDateTime(data['recordedAt'], field: 'recordedAt'),
+    source: OutcomeSource.values.byName(data['source'] as String),
+    sourceId: data['sourceId'] as String,
+    recommendationId: data['recommendationId'] as String?,
+    consentVersion: (data['consentVersion'] as num?)?.toInt() ?? 1,
+  );
+}
 
 class CloudUserState {
   const CloudUserState({
@@ -114,6 +167,11 @@ class CloudUserState {
     required this.signals,
     required this.checkIns,
     this.lastSync,
+    this.healthSyncStatus = HealthSyncStatus.idle,
+    this.lastHealthRefreshReason,
+    this.lastHealthSyncAttempt,
+    this.lastHealthChangeAt,
+    this.healthBackgroundRefreshEnabled = false,
     this.migrationVersion = 0,
     this.crashNotificationsEnabled = true,
     this.recoveryNotificationsEnabled = true,
@@ -130,6 +188,11 @@ class CloudUserState {
   final bool outcomeConsent;
   final bool healthAuthorized;
   final DateTime? lastSync;
+  final HealthSyncStatus healthSyncStatus;
+  final HealthRefreshReason? lastHealthRefreshReason;
+  final DateTime? lastHealthSyncAttempt;
+  final DateTime? lastHealthChangeAt;
+  final bool healthBackgroundRefreshEnabled;
   final int migrationVersion;
   final List<SignalReading> signals;
   final List<DailyCheckIn> checkIns;
@@ -145,6 +208,11 @@ class CloudUserState {
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
     lastSync: lastSync,
+    healthSyncStatus: healthSyncStatus,
+    lastHealthRefreshReason: lastHealthRefreshReason,
+    lastHealthSyncAttempt: lastHealthSyncAttempt,
+    lastHealthChangeAt: lastHealthChangeAt,
+    healthBackgroundRefreshEnabled: healthBackgroundRefreshEnabled,
     migrationVersion: migrationVersion ?? this.migrationVersion,
     signals: signals,
     checkIns: checkIns,
@@ -162,6 +230,11 @@ class CloudUserState {
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
     'lastSync': lastSync?.toIso8601String(),
+    'healthSyncStatus': healthSyncStatus.name,
+    'lastHealthRefreshReason': lastHealthRefreshReason?.name,
+    'lastHealthSyncAttempt': lastHealthSyncAttempt?.toIso8601String(),
+    'lastHealthChangeAt': lastHealthChangeAt?.toIso8601String(),
+    'healthBackgroundRefreshEnabled': healthBackgroundRefreshEnabled,
     'profile': profile.toJson(),
     'signals': signals.map((value) => value.toJson()).toList(),
     'checkIns': checkIns.map((value) => value.toJson()).toList(),
@@ -179,6 +252,10 @@ Map<String, Object?> scoreSnapshotToCloud({
   'cognitiveConfidence': snapshot.cognitiveConfidence,
   'freshness': snapshot.freshness,
   'cognitiveFreshness': snapshot.cognitiveFreshness,
+  'baselineConfidence': snapshot.baselineConfidence,
+  'personalBaselines': snapshot.personalBaselines == null
+      ? null
+      : personalBaselinesToCloud(snapshot.personalBaselines!),
   'inputCount': snapshot.inputCount,
   'cognitiveInputCount': snapshot.cognitiveInputCount,
   'isEstimate': snapshot.isEstimate,
@@ -224,6 +301,12 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
           (data['cognitiveConfidence'] as num?)?.toDouble() ?? .2,
       freshness: (data['freshness'] as num?)?.toDouble(),
       cognitiveFreshness: (data['cognitiveFreshness'] as num?)?.toDouble(),
+      baselineConfidence: (data['baselineConfidence'] as num?)?.toDouble() ?? 0,
+      personalBaselines: data['personalBaselines'] == null
+          ? null
+          : personalBaselinesFromCloud(
+              (data['personalBaselines'] as Map).cast<String, dynamic>(),
+            ),
       inputCount: (data['inputCount'] as num?)?.round() ?? 0,
       cognitiveInputCount: (data['cognitiveInputCount'] as num?)?.round() ?? 0,
       hasCognitiveScore: data.containsKey('cognitive'),
@@ -268,6 +351,44 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
         );
       }).toList(),
     );
+
+Map<String, Object?> personalBaselinesToCloud(PersonalBaselines baselines) => {
+  'generatedAt': baselines.generatedAt,
+  'windowDays': baselines.windowDays,
+  'metrics': [
+    for (final metric in baselines.metrics)
+      {
+        'type': metric.type.name,
+        'value': metric.value,
+        'sampleCount': metric.sampleCount,
+        'minimumSamples': metric.minimumSamples,
+        'variability': metric.variability,
+        'latestSampleAt': metric.latestSampleAt,
+      },
+  ],
+};
+
+PersonalBaselines personalBaselinesFromCloud(
+  Map<String, dynamic> data,
+) => PersonalBaselines(
+  generatedAt: cloudDateTime(data['generatedAt'], field: 'generatedAt'),
+  windowDays: (data['windowDays'] as num?)?.round() ?? 42,
+  metrics: ((data['metrics'] as List?) ?? const []).map((raw) {
+    final metric = (raw as Map).cast<String, dynamic>();
+    final type = PersonalBaselineType.values.byName(metric['type'] as String);
+    return PersonalBaselineMetric(
+      type: type,
+      value: (metric['value'] as num?)?.toDouble(),
+      sampleCount: (metric['sampleCount'] as num?)?.round() ?? 0,
+      minimumSamples:
+          (metric['minimumSamples'] as num?)?.round() ?? type.minimumSamples,
+      variability: (metric['variability'] as num?)?.toDouble() ?? 0,
+      latestSampleAt: metric['latestSampleAt'] == null
+          ? null
+          : cloudDateTime(metric['latestSampleAt'], field: 'latestSampleAt'),
+    );
+  }).toList(),
+);
 
 /// Version 0.15+ hourly forecast document. Version 0.17 adds the exact signal
 /// and check-in document IDs used by the deterministic forecast.
@@ -318,11 +439,8 @@ List<String> _cloudStringList(Object? value, {required String field}) {
   return value.cast<String>().toSet().toList(growable: false);
 }
 
-/// Version 0.18 grounded recommendation document.
-Map<String, Object?> recommendationToCloud(
-  Recommendation recommendation, {
-  Object? feedback,
-}) => {
+/// Version 0.18+ grounded recommendation / Version 0.30 feedback document.
+Map<String, Object?> recommendationToCloud(Recommendation recommendation) => {
   'title': recommendation.title,
   'detail': recommendation.detail,
   'timeLabel': recommendation.timeLabel,
@@ -335,7 +453,14 @@ Map<String, Object?> recommendationToCloud(
   'generatedAt': recommendation.generatedAt,
   'signalEvidenceIds': recommendation.signalEvidenceIds,
   'checkInEvidenceIds': recommendation.checkInEvidenceIds,
-  'feedback': feedback,
+  'planPhase': recommendation.planPhase?.name,
+  'durationMinutes': recommendation.durationMinutes,
+  'planConfidence': recommendation.planConfidence,
+  'decisionReason': recommendation.decisionReason,
+  'feedback': recommendation.helpful,
+  'feedbackScore': recommendation.feedbackScore,
+  'feedbackSampleCount': recommendation.feedbackSampleCount,
+  'feedbackRank': recommendation.feedbackRank,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -372,6 +497,16 @@ Recommendation recommendationFromCloud(String id, Map<String, dynamic> data) =>
         data['checkInEvidenceIds'],
         field: 'checkInEvidenceIds',
       ),
+      planPhase: data['planPhase'] == null
+          ? null
+          : CoachPlanPhase.values.byName(data['planPhase'] as String),
+      durationMinutes: (data['durationMinutes'] as num?)?.toInt(),
+      planConfidence: (data['planConfidence'] as num?)?.toDouble(),
+      decisionReason: data['decisionReason'] as String?,
+      helpful: data['feedback'] as bool?,
+      feedbackScore: (data['feedbackScore'] as num?)?.toDouble() ?? .5,
+      feedbackSampleCount: (data['feedbackSampleCount'] as num?)?.toInt() ?? 0,
+      feedbackRank: (data['feedbackRank'] as num?)?.toInt() ?? 0,
     );
 
 /// Version 0.19 dismissible wellness-pattern alert document.

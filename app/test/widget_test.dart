@@ -5,6 +5,7 @@ import 'package:app/src/demo_data.dart';
 import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
+import 'package:app/src/screen_time_service.dart';
 import 'package:app/src/today_dashboard_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,11 +17,13 @@ void main() {
   AppController readyController({
     NotificationService? notificationService,
     HealthService? healthService,
+    ScreenTimeService? screenTimeService,
   }) {
     final controller =
         AppController(
             notificationService: notificationService,
             healthService: healthService,
+            screenTimeService: screenTimeService,
           )
           ..isReady = true
           ..onboardingComplete = true
@@ -100,6 +103,46 @@ void main() {
     await tester.tap(find.byKey(const Key('notification-crash-switch')));
     await tester.pumpAndSettle();
     expect(controller.crashNotificationsEnabled, isFalse);
+  });
+
+  testWidgets('Version 0.31 requires confirmation for outcome learning', (
+    tester,
+  ) async {
+    final controller = readyController();
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('outcome-learning-setting')),
+      200,
+    );
+    await tester.tap(find.byKey(const Key('outcome-learning-setting')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Outcome learning'), findsWidgets);
+    expect(find.text('Observed energy'), findsOneWidget);
+    expect(find.text('Cognitive outcomes'), findsOneWidget);
+    expect(
+      find.textContaining('not train a personalized model'),
+      findsOneWidget,
+    );
+    expect(controller.outcomeConsent, isFalse);
+
+    await tester.tap(find.byKey(const Key('outcome-consent-switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('Allow outcome learning?'), findsOneWidget);
+    expect(controller.outcomeConsent, isFalse);
+
+    await tester.tap(find.byKey(const Key('confirm-outcome-consent')));
+    await tester.pumpAndSettle();
+    expect(controller.outcomeConsent, isTrue);
+    expect(find.byKey(const Key('outcome-consent-status')), findsOneWidget);
+    expect(find.textContaining('0 energy · 0 cognitive'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('outcome-consent-switch')));
+    await tester.pumpAndSettle();
+    expect(controller.outcomeConsent, isFalse);
   });
 
   testWidgets('Version 0.21 presents private calculated weekly insights', (
@@ -208,6 +251,44 @@ void main() {
     expect(health.permissionRequests, 1);
     expect(controller.healthAuthorized, isTrue);
     expect(find.textContaining('choices are saved'), findsOneWidget);
+  });
+
+  testWidgets('Version 0.28 presents the sandboxed Screen Time report flow', (
+    tester,
+  ) async {
+    final screenTime = _WidgetScreenTimeService();
+    final controller = readyController(screenTimeService: screenTime)
+      ..screenTimeAuthorization = ScreenTimeAuthorizationState.notDetermined;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('screen-time-source-card')),
+      200,
+    );
+    await tester.tap(find.byKey(const Key('screen-time-source-card')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Private Screen Time report'), findsOneWidget);
+    expect(find.text('Manual input stays in control'), findsOneWidget);
+    expect(find.text('Protected details stay with Apple'), findsOneWidget);
+    expect(find.text('No protected report data in Firebase'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('screen-time-report-button')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const Key('screen-time-report-button')));
+    await tester.pumpAndSettle();
+
+    expect(screenTime.authorizationRequests, 1);
+    expect(screenTime.reportRequests, 1);
+    expect(
+      controller.screenTimeAuthorization,
+      ScreenTimeAuthorizationState.authorized,
+    );
   });
 
   testWidgets('syncs heart, sleep, workout, steps, and water data', (
@@ -546,12 +627,14 @@ void main() {
   });
 
   testWidgets(
-    'Versions 0.18–0.19 show grounded guidance and dismiss wellness flags',
+    'Versions 0.18–0.31 show plan actions, outcomes, and wellness flags',
     (tester) async {
       final now = DateTime.now();
       final controller = AppController()
         ..isReady = true
         ..onboardingComplete = true
+        ..outcomeConsent = true
+        ..profile = const UserProfile(coachPriority: CoachPriority.recovery)
         ..signals = [
           for (var index = 0; index < 4; index++)
             SignalReading(
@@ -591,6 +674,12 @@ void main() {
         ];
       await controller.refreshGuidance();
       final alertId = controller.alerts.first.id;
+      final focusId = controller.recommendations
+          .singleWhere((item) => item.planPhase == CoachPlanPhase.deepWork)
+          .id;
+      final taperId = controller.recommendations
+          .singleWhere((item) => item.planPhase == CoachPlanPhase.taper)
+          .id;
 
       await tester.pumpWidget(TonyoApp(controller: controller));
       await tester.tap(
@@ -601,8 +690,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Grounded daily guidance'), findsOneWidget);
+      expect(find.text('Generated daily plan'), findsOneWidget);
+      expect(find.byKey(const Key('coach-daily-plan-summary')), findsOneWidget);
+      expect(find.textContaining('Morning-to-evening plan'), findsOneWidget);
+      expect(find.textContaining('Future plans will learn'), findsOneWidget);
+      expect(find.text('RECOVERY FIRST'), findsOneWidget);
       expect(find.text('Wellness flags'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Short-sleep pattern'), 180);
       expect(find.text('Short-sleep pattern'), findsOneWidget);
       expect(find.textContaining('fixture'), findsNothing);
       await tester.scrollUntilVisible(
@@ -613,13 +707,106 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(Key('risk-alert-$alertId')), findsNothing);
 
-      await tester.scrollUntilVisible(
-        find.text('Protect a 60-minute focus block'),
-        220,
-      );
-      expect(find.text('Protect a 60-minute focus block'), findsOneWidget);
+      await tester.scrollUntilVisible(find.textContaining('Protect a '), 220);
+      expect(find.textContaining('focus block'), findsOneWidget);
       expect(find.textContaining('WINDOW'), findsWidgets);
       expect(find.byIcon(Icons.link_rounded), findsWidgets);
+      expect(find.byIcon(Icons.balance_rounded), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.byKey(Key('accept-recommendation-$focusId')),
+        180,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('accept-recommendation-$focusId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('accept-recommendation-$focusId')));
+      await tester.pumpAndSettle();
+      expect(
+        controller.recommendations
+            .singleWhere((item) => item.id == focusId)
+            .status,
+        RecommendationStatus.accepted,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(Key('complete-recommendation-$focusId')),
+        120,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('complete-recommendation-$focusId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('complete-recommendation-$focusId')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(Key('helpful-recommendation-$focusId')),
+        100,
+      );
+      await tester.tap(find.byKey(Key('helpful-recommendation-$focusId')));
+      await tester.pumpAndSettle();
+      expect(
+        controller.recommendations
+            .singleWhere((item) => item.id == focusId)
+            .helpful,
+        isTrue,
+      );
+      expect(find.text('Was this advice helpful?'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(Key('record-outcome-$focusId')),
+        100,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('record-outcome-$focusId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('record-outcome-$focusId')));
+      await tester.pumpAndSettle();
+      expect(find.text('Observed energy'), findsOneWidget);
+      expect(find.byKey(const Key('observed-energy-value')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('save-observed-energy')));
+      await tester.pumpAndSettle();
+      expect(controller.outcomeForRecommendation(focusId)?.value, 6);
+      expect(
+        find.byKey(Key('recommendation-outcome-$focusId')),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Taper stimulation before bed'),
+        220,
+      );
+      expect(find.text('Taper stimulation before bed'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(Key('dismiss-recommendation-$taperId')),
+        160,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('dismiss-recommendation-$taperId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('dismiss-recommendation-$taperId')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(Key('not-helpful-recommendation-$taperId')),
+        100,
+      );
+      await tester.tap(find.byKey(Key('not-helpful-recommendation-$taperId')));
+      await tester.pumpAndSettle();
+      expect(
+        controller.recommendations
+            .singleWhere((item) => item.id == taperId)
+            .status,
+        RecommendationStatus.dismissed,
+      );
+      expect(
+        controller.recommendations
+            .singleWhere((item) => item.id == taperId)
+            .helpful,
+        isFalse,
+      );
       await tester.scrollUntilVisible(
         find.textContaining('general wellness only'),
         220,
@@ -948,4 +1135,25 @@ class _WidgetHealthService extends HealthService {
 
   @override
   Future<List<SignalReading>> syncActivity() async => activityReadings;
+}
+
+class _WidgetScreenTimeService extends ScreenTimeService {
+  int authorizationRequests = 0;
+  int reportRequests = 0;
+
+  @override
+  Future<ScreenTimeAuthorizationState> authorizationStatus() async =>
+      ScreenTimeAuthorizationState.notDetermined;
+
+  @override
+  Future<ScreenTimeAuthorizationState> requestAuthorization() async {
+    authorizationRequests += 1;
+    return ScreenTimeAuthorizationState.authorized;
+  }
+
+  @override
+  Future<bool> showReport() async {
+    reportRequests += 1;
+    return true;
+  }
 }

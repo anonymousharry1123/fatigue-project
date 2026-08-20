@@ -1,6 +1,7 @@
 import 'package:app/src/demo_data.dart';
 import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/personal_baseline_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -876,4 +877,106 @@ void main() {
     expect(fresh.freshness, greaterThan(stale.freshness!));
     expect(fresh.confidence, greaterThan(stale.confidence));
   });
+
+  test(
+    'Version 0.27 compares physiology with mature personal baselines and gates confidence',
+    () {
+      final today = DateTime(2026, 8, 20);
+
+      List<SignalReading> readings(int historyDays) => [
+        for (var daysAgo = 1; daysAgo <= historyDays; daysAgo++) ...[
+          SignalReading(
+            id: 'hrv-$daysAgo',
+            type: SignalType.hrv,
+            value: 50,
+            timestamp: today.subtract(Duration(days: daysAgo)),
+          ),
+          SignalReading(
+            id: 'rhr-$daysAgo',
+            type: SignalType.restingHeartRate,
+            value: 60,
+            timestamp: today.subtract(Duration(days: daysAgo)),
+          ),
+          SignalReading(
+            id: 'sleep-$daysAgo',
+            type: SignalType.sleep,
+            value: 8,
+            timestamp: today
+                .subtract(Duration(days: daysAgo))
+                .add(const Duration(hours: 7)),
+          ),
+          if (daysAgo <= 5)
+            SignalReading(
+              id: 'reaction-$daysAgo',
+              type: SignalType.reactionTime,
+              value: 280,
+              timestamp: today.subtract(Duration(days: daysAgo)),
+            ),
+        ],
+        SignalReading(
+          id: 'hrv-today',
+          type: SignalType.hrv,
+          value: 60,
+          timestamp: today.add(const Duration(hours: 7)),
+        ),
+        SignalReading(
+          id: 'rhr-today',
+          type: SignalType.restingHeartRate,
+          value: 70,
+          timestamp: today.add(const Duration(hours: 7)),
+        ),
+        SignalReading(
+          id: 'sleep-today',
+          type: SignalType.sleep,
+          value: 8,
+          timestamp: today.add(const Duration(hours: 7)),
+        ),
+        SignalReading(
+          id: 'reaction-today',
+          type: SignalType.reactionTime,
+          value: 250,
+          timestamp: today.add(const Duration(hours: 8)),
+        ),
+      ];
+
+      ScoreSnapshot calculate(int historyDays) {
+        final signals = readings(historyDays);
+        return FatigueEngine.score(
+          signals: signals,
+          checkIns: const [],
+          now: today.add(const Duration(hours: 12)),
+          day: today,
+          personalBaselines: PersonalBaselineLogic.build(
+            signals: signals,
+            asOf: today,
+          ),
+        );
+      }
+
+      final building = calculate(2);
+      final mature = calculate(8);
+
+      expect(mature.personalBaselines?.readyCount, 4);
+      expect(mature.baselineConfidence, 1);
+      expect(mature.confidence, greaterThan(building.confidence));
+      expect(
+        mature.drivers
+            .singleWhere((driver) => driver.label == 'HRV vs baseline')
+            .contribution,
+        greaterThan(0),
+      );
+      expect(
+        mature.drivers
+            .singleWhere((driver) => driver.label == 'Resting HR vs baseline')
+            .contribution,
+        lessThan(0),
+      );
+      expect(
+        mature.cognitiveDrivers
+            .singleWhere((driver) => driver.label == 'Reaction time')
+            .detail,
+        contains('baseline'),
+      );
+    },
+  );
 }

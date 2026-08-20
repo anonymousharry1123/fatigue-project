@@ -68,6 +68,35 @@ class HealthService {
 
   static const _channel = MethodChannel('tonyo/health');
 
+  Future<bool> enableBackgroundUpdates(
+    Future<void> Function() onHealthDataChanged,
+  ) async {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method != 'healthDataChanged') return null;
+      await onHealthDataChanged();
+      return true;
+    });
+    try {
+      return await _channel.invokeMethod<bool>('enableBackgroundUpdates') ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<void> disableBackgroundUpdates() async {
+    _channel.setMethodCallHandler(null);
+    try {
+      await _channel.invokeMethod<void>('disableBackgroundUpdates');
+    } on MissingPluginException {
+      // Unsupported platforms keep the foreground/manual fallback.
+    } on PlatformException {
+      // Disconnection still succeeds if iOS cannot update delivery settings.
+    }
+  }
+
   Future<bool> isAvailable() async =>
       (await authorizationStatus()) != HealthAuthorizationState.unavailable;
 

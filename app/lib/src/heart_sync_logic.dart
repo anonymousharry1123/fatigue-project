@@ -26,6 +26,7 @@ class HeartSyncLogic {
   static HeartSyncMergeResult merge({
     required Iterable<SignalReading> existing,
     required Iterable<SignalReading> imported,
+    DateTime? syncedAt,
   }) {
     final readings = [...existing];
     var importedCount = 0;
@@ -33,7 +34,7 @@ class HeartSyncLogic {
     var rejectedCount = 0;
 
     for (final raw in imported) {
-      final candidate = _normalize(raw);
+      final candidate = _normalize(raw, syncedAt: syncedAt);
       if (candidate == null) {
         rejectedCount += 1;
         continue;
@@ -67,7 +68,10 @@ class HeartSyncLogic {
     );
   }
 
-  static SignalReading? _normalize(SignalReading reading) {
+  static SignalReading? _normalize(
+    SignalReading reading, {
+    DateTime? syncedAt,
+  }) {
     if (!supportedTypes.contains(reading.type) ||
         !reading.value.isFinite ||
         !_validRange(reading.type, reading.value) ||
@@ -85,6 +89,7 @@ class HeartSyncLogic {
       source: SignalSource.healthKit,
       quality: quality,
       note: reading.note,
+      syncedAt: syncedAt ?? reading.syncedAt ?? DateTime.now().toUtc(),
     );
   }
 
