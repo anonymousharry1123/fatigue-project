@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 abstract final class TonyoFirebaseOptions {
   static const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const webAppId = String.fromEnvironment('FIREBASE_APP_ID');
+  static const androidAppId = String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
   static const iosAppId = String.fromEnvironment('FIREBASE_IOS_APP_ID');
   static const messagingSenderId = String.fromEnvironment(
     'FIREBASE_MESSAGING_SENDER_ID',
@@ -23,6 +24,7 @@ abstract final class TonyoFirebaseOptions {
     isWeb: kIsWeb,
     platform: defaultTargetPlatform,
     webAppId: webAppId,
+    androidAppId: androidAppId,
     iosAppId: iosAppId,
   );
 
@@ -37,17 +39,22 @@ abstract final class TonyoFirebaseOptions {
       messagingSenderId.isNotEmpty &&
       projectId.isNotEmpty;
 
-  /// Keeps the web and iOS Firebase registrations separate while retaining
-  /// FIREBASE_APP_ID as the existing web/default value for other platforms.
+  /// Picks the Firebase app registration for the current runtime.
+  /// `FIREBASE_APP_ID` stays the web/default value.
   static String selectAppId({
     required bool isWeb,
     required TargetPlatform platform,
     required String webAppId,
+    required String androidAppId,
     required String iosAppId,
-  }) => !isWeb && platform == TargetPlatform.iOS ? iosAppId : webAppId;
+  }) {
+    if (!isWeb && platform == TargetPlatform.iOS) return iosAppId;
+    if (!isWeb && platform == TargetPlatform.android) return androidAppId;
+    return webAppId;
+  }
 
-  /// Rejects a web app ID on iOS before the native Firebase SDK can abort the
-  /// process. Firebase app IDs use `1:<sender>:<platform>:<hash>`.
+  /// Rejects a web app ID on iOS/Android before the native Firebase SDK can
+  /// abort. Firebase app IDs use `1:<sender>:<platform>:<hash>`.
   static bool isAppIdValidForRuntime({
     required String appId,
     required bool isWeb,
@@ -58,6 +65,9 @@ abstract final class TonyoFirebaseOptions {
     final registeredPlatform = parts[2];
     if (isWeb) return registeredPlatform == 'web';
     if (platform == TargetPlatform.iOS) return registeredPlatform == 'ios';
+    if (platform == TargetPlatform.android) {
+      return registeredPlatform == 'android';
+    }
     return true;
   }
 

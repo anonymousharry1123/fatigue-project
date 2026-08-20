@@ -805,6 +805,21 @@ class AppController extends ChangeNotifier {
   Future<void> signIn({required String email, required String password}) async {
     if (!cloudEnabled) throw StateError('Firebase is not configured.');
     await _accountAuth.signIn(email: email, password: password);
+    await _finishCloudAuth();
+  }
+
+  /// Registers a new Firebase Auth user, then uploads this device’s local
+  /// Tonyo data if the cloud account is empty.
+  Future<void> createCloudAccount({
+    required String email,
+    required String password,
+  }) async {
+    if (!cloudEnabled) throw StateError('Firebase is not configured.');
+    await _accountAuth.register(email: email, password: password);
+    await _finishCloudAuth();
+  }
+
+  Future<void> _finishCloudAuth() async {
     await _hydrateOrMigrateCloud();
     await _writeLocal();
     if (onboardingComplete) {

@@ -156,7 +156,7 @@ class ProfileScreen extends StatelessWidget {
               title: 'Cloud account',
               subtitle: controller.isCloudAuthenticated
                   ? 'Signed in as ${controller.accountEmail}'
-                  : 'Sign in and migrate this device’s data',
+                  : 'Create or sign in to migrate this device’s data',
               onTap: () => controller.isCloudAuthenticated
                   ? _signOut(context, controller)
                   : _signIn(context, controller),
@@ -292,79 +292,10 @@ class ProfileScreen extends StatelessWidget {
     BuildContext context,
     AppController controller,
   ) async {
-    final name = TextEditingController(text: controller.profile.name);
-    var role = controller.profile.role;
-    var goal = controller.profile.goal;
     final updated = await showDialog<UserProfile>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Edit profile'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'First name'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Role'),
-                  items: ['Student', 'Athlete', 'Student athlete']
-                      .map(
-                        (value) =>
-                            DropdownMenuItem(value: value, child: Text(value)),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() => role = value!),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: goal,
-                  decoration: const InputDecoration(labelText: 'Goal'),
-                  items:
-                      [
-                            'Improve focus',
-                            'Improve recovery',
-                            'Balance focus and training',
-                          ]
-                          .map(
-                            (value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: (value) => setState(() => goal = value!),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(
-                context,
-                controller.profile.copyWith(
-                  name: name.text.trim().isEmpty
-                      ? controller.profile.name
-                      : name.text.trim(),
-                  role: role,
-                  goal: goal,
-                ),
-              ),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => _EditProfileDialog(profile: controller.profile),
     );
-    name.dispose();
     if (updated != null) await controller.updateProfile(updated);
   }
 
@@ -387,60 +318,63 @@ class ProfileScreen extends StatelessWidget {
     BuildContext context,
     AppController controller,
   ) async {
-    final email = TextEditingController(text: controller.accountEmail);
-    final password = TextEditingController();
-    final credentials = await showDialog<(String, String)>(
+    final result = await showDialog<_CloudAuthResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign in to Tonyo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(context, (email.text.trim(), password.text)),
-            child: const Text('Sign in'),
-          ),
-        ],
-      ),
+      builder: (context) =>
+          _CloudSignInDialog(initialEmail: controller.accountEmail),
     );
-    email.dispose();
-    password.dispose();
-    if (credentials == null) return;
+    if (result == null || !context.mounted) return;
     try {
-      await controller.signIn(email: credentials.$1, password: credentials.$2);
-    } on Object {
+      if (result.create) {
+        await controller.createCloudAccount(
+          email: result.email,
+          password: result.password,
+        );
+      } else {
+        await controller.signIn(email: result.email, password: result.password);
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sign-in failed. Check your email and password.'),
+          SnackBar(
+            content: Text(
+              result.create
+                  ? 'Cloud account created. Local data is syncing.'
+                  : 'Signed in. Private cloud sync is active.',
+            ),
           ),
         );
       }
+    } on Object catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_cloudAuthErrorMessage(error, result.create))),
+        );
+      }
     }
+  }
+
+  static String _cloudAuthErrorMessage(Object error, bool creating) {
+    final text = error.toString().toLowerCase();
+    if (text.contains('email-already-in-use')) {
+      return 'That email already has a Firebase account. Use Sign in.';
+    }
+    if (text.contains('weak-password')) {
+      return 'Password must be at least 6 characters.';
+    }
+    if (text.contains('invalid-email')) {
+      return 'Enter a valid email address.';
+    }
+    if (text.contains('user-not-found') ||
+        text.contains('wrong-password') ||
+        text.contains('invalid-credential') ||
+        text.contains('invalid-login-credentials')) {
+      return creating
+          ? 'Could not create the account. Try a different email.'
+          : 'No Firebase user for that email, or the password is wrong. Use Create account if this device never registered.';
+    }
+    return creating
+        ? 'Could not create the cloud account.'
+        : 'Sign-in failed. Check your email and password.';
   }
 
   static Future<void> _signOut(
@@ -1319,6 +1253,193 @@ class _SourceCard extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+class _CloudAuthResult {
+  const _CloudAuthResult({
+    required this.email,
+    required this.password,
+    required this.create,
+  });
+
+  final String email;
+  final String password;
+  final bool create;
+}
+
+class _CloudSignInDialog extends StatefulWidget {
+  const _CloudSignInDialog({this.initialEmail});
+
+  final String? initialEmail;
+
+  @override
+  State<_CloudSignInDialog> createState() => _CloudSignInDialogState();
+}
+
+class _CloudSignInDialogState extends State<_CloudSignInDialog> {
+  late final TextEditingController _email;
+  late final TextEditingController _password;
+
+  @override
+  void initState() {
+    super.initState();
+    _email = TextEditingController(text: widget.initialEmail);
+    _password = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit({required bool create}) {
+    Navigator.pop(
+      context,
+      _CloudAuthResult(
+        email: _email.text.trim(),
+        password: _password.text,
+        create: create,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Cloud account'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Create account registers a new Firebase user and uploads this device’s local data. Sign in only works if that email already exists in Authentication.',
+            style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+          ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _password,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Password',
+            helperText: 'At least 6 characters for a new account',
+          ),
+        ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      TextButton(
+        onPressed: () => _submit(create: false),
+        child: const Text('Sign in'),
+      ),
+      FilledButton(
+        onPressed: () => _submit(create: true),
+        child: const Text('Create account'),
+      ),
+    ],
+  );
+}
+
+class _EditProfileDialog extends StatefulWidget {
+  const _EditProfileDialog({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  State<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<_EditProfileDialog> {
+  late final TextEditingController _name;
+  late String _role;
+  late String _goal;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.profile.name);
+    _role = widget.profile.role;
+    _goal = widget.profile.goal;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Edit profile'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'First name'),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _role,
+            decoration: const InputDecoration(labelText: 'Role'),
+            items: ['Student', 'Athlete', 'Student athlete']
+                .map(
+                  (value) => DropdownMenuItem(value: value, child: Text(value)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _role = value!),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _goal,
+            decoration: const InputDecoration(labelText: 'Goal'),
+            items:
+                [
+                      'Improve focus',
+                      'Improve recovery',
+                      'Balance focus and training',
+                    ]
+                    .map(
+                      (value) => DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+            onChanged: (value) => setState(() => _goal = value!),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(
+          context,
+          widget.profile.copyWith(
+            name: _name.text.trim().isEmpty
+                ? widget.profile.name
+                : _name.text.trim(),
+            role: _role,
+            goal: _goal,
+          ),
+        ),
+        child: const Text('Save'),
+      ),
+    ],
   );
 }
 

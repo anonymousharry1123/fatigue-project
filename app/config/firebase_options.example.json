@@ -1,6 +1,7 @@
 {
   "FIREBASE_API_KEY": "replace-me",
   "FIREBASE_APP_ID": "replace-me",
+  "FIREBASE_ANDROID_APP_ID": "replace-me",
   "FIREBASE_MESSAGING_SENDER_ID": "replace-me",
   "FIREBASE_PROJECT_ID": "replace-me",
   "FIREBASE_AUTH_DOMAIN": "replace-me.firebaseapp.com",

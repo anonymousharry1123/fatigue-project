@@ -92,6 +92,33 @@ void main() {
     },
   );
 
+  test(
+    'Profile createCloudAccount registers and uploads local data',
+    () async {
+      final local = AppController();
+      await local.load();
+      await local.completeOnboarding(const UserProfile(name: 'Device Maya'));
+
+      final repository = MemoryCloudRepository(signedInUid: 'test-uid');
+      final controller = AppController(
+        accountAuth: MemoryAccountAuth(),
+        cloudRepository: repository,
+      );
+      await controller.load();
+
+      await controller.createCloudAccount(
+        email: 'maya@example.com',
+        password: 'secure-pass',
+      );
+
+      expect(controller.isCloudAuthenticated, isTrue);
+      expect(controller.accountEmail, 'maya@example.com');
+      final cloud = await repository.readUser('test-uid');
+      expect(cloud, isNotNull);
+      expect(cloud!.profile.name, 'Device Maya');
+    },
+  );
+
   test('Version 0.10-a uses existing cloud state over local cache', () async {
     final local = AppController();
     await local.load();
