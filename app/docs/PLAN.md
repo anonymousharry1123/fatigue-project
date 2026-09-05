@@ -1,6 +1,6 @@
 # Tonyo Product Roadmap
 
-Last updated: August 20, 2026
+Last updated: September 5, 2026
 Current release: **Version 0.31 — Outcome Collection**
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
@@ -296,12 +296,56 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Keep reaction tests in `signals` and link future consented results as cognitive outcomes
 - Require both explicit outcome-collection and training-record-use flags on `users/{uid}` before writes; enforce the gate in Security Rules
 
+### Prep for Version 0.32 — Training Schema & Data Research
+
+Do this work before implementing personalized training. It is not a shippable product version; it unblocks 0.32 without relaxing privacy rules.
+
+#### Minimal training schema (join, don’t invent a new cloud tree)
+
+Build an on-device / exported `TrainingExample` row per labeled day (or labeled window). Prefer joining existing Version 0.10-a / 0.31 collections over new Firestore collections for cross-user pooling.
+
+Each example should include:
+
+- **Identity & consent:** `uid` (local only), `outcomeConsent` / `trainingRecordUse` both true, `consentVersion`, example `createdAt`
+- **Time key:** local calendar `day` (and optional `period` morning/evening when the label came from a check-in)
+- **Label:** from `users/{uid}/outcomes/{id}` — `type` (`observedEnergy` | `cognitiveReaction`), `value`, `unit`, `source` (`checkIn` | `reactionSignal` | `coach`), `recordedAt`, optional `recommendationId` / `checkInId` / `signalId`
+- **Feature vector (nullable allowed):** day-scoped aggregates from `signals` + latest relevant `checkIns`, aligned to the label day (or prior night for sleep):
+  - Sleep: total hours, bedtime, optional stage hours (awake/core/deep/REM)
+  - Load: exercise hours, steps, study hours, screen time, caffeine drinks, hydration liters
+  - Physiology: HRV (ms), resting heart rate (bpm) when present
+  - Cognitive input: latest reaction-time ms when the label is cognitive
+  - Check-in context: mood, stress (1–10) when available the same day
+- **Provenance:** per-feature `source` (`manual` | `healthKit` | `model`), freshness, and a **missingness mask** (do not impute away “not logged”)
+- **Non-label baselines:** optional deterministic Energy / Cognitive scores from `scoreSnapshots` for comparison only — never treat `FatigueEngine` or Cohort Lab synthetic scores as training labels
+
+Acceptance for the schema prep:
+
+- One export path (JSON/CSV) that a single consented account can generate from Profile export or a debug builder
+- Documented join rules: outcome day ← sleep night / activity day; skip examples when consent is off
+- Unit tests covering missing caffeine/screen/study without dropping an otherwise labeled day
+- No Security Rules change that lets one account read another user’s `signals` or `outcomes`
+
+#### Research: fill holes without waiting for one perfect public dataset
+
+A single Kaggle table with sleep + exercise + caffeine + study + screen + mood + reaction + energy labels for adolescents is unlikely. Use public data as **priors / feature-engineering references**, and use **consented longitudinal Tonyo exports** as the personalization train set.
+
+Research checklist:
+
+1. **Inventory gaps** against `SignalType` + `OutcomeType` (what you already collect vs what public sets never co-occur).
+2. **Specialize by modality** — sleep+HRV (e.g. PhysioNet sleep studies), activity/load, caffeine/nutrition surveys (e.g. NHANES-style), student stress/burnout surveys, reaction-time / PVT open sets. Record license, age of subjects, and whether “fatigue” is self-report or clinical.
+3. **Prefer research hosts** (PhysioNet, Zenodo, OSF, paper supplements) over random Kaggle for anything that might become a prior; keep Kaggle for exploration only.
+4. **Do not force-join strangers** into fake complete days. Train optional heads or priors per modality, then personalize on-device with the user’s consented `TrainingExample` rows.
+5. **Keep `assets/data/synthetic_students.csv` / Cohort Lab** for engine and UI demos only — not as ML labels (`ENGINE_TUNING.md`).
+6. **Write findings** into `DEVELOPMENT_LOG.md` (dataset name, URL, license, overlapping fields, why it is or isn’t usable for 0.32).
+
+Ready for 0.32 when: schema export works on a consented account, missingness is explicit, and the research note lists which holes stay user-only vs which may use a public prior.
+
 ## Upcoming Versions
 
 ### Version 0.32 — Personalized ML Model
 
-- Train and evaluate a multimodal fatigue model on consented, user-exported or on-device datasets — not by reading other users’ Firestore data
-- Run approved inference on-device where possible
+- Consume the prep `TrainingExample` join (consented user export / on-device) — not other users’ Firestore data
+- Train and evaluate a multimodal fatigue model; run approved inference on-device where possible
 - Retain deterministic scoring as the fallback; store model metadata on `users/{uid}` without raw third-party PII
 
 ### Version 0.33 — Model Transparency
@@ -328,6 +372,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - `SignalReading`: measurement type, value, unit, observation timestamp, source, quality, and optional sync timestamp → Firestore `users/{uid}/signals/{id}`
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
 - `OutcomeRecord`: consented observed energy or cognitive reaction value, timestamps, source link, consent version, and optional recommendation link → `users/{uid}/outcomes/{id}`
+- `TrainingExample` (prep for 0.32): on-device / export-only join of a day-scoped feature vector + missingness mask to one consented `OutcomeRecord`; not a cross-user Firestore collection
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
 - `PersonalBaselines`: rolling HRV, resting-heart-rate, sleep, and reaction-time references with sample maturity → embedded in the private daily `scoreSnapshots` document
 - `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
