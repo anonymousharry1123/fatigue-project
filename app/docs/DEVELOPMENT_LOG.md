@@ -43,6 +43,7 @@
 | 0.29 | Priority-aware morning-to-evening AI Coach plan | Complete |
 | 0.30 | Persisted recommendation actions, helpfulness, and history ranking | Complete |
 | 0.31 | Consent-gated observed-energy and cognitive outcome records | Complete |
+| Prep for 0.32 | Bounded account snapshot, local eligibility pipeline and readiness UI | Complete; account not training-ready |
 | 0.32+ | Personalized model, transparency, and production polish | Not started |
 
 ### What ships in 0.8
@@ -66,7 +67,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-08-20 — **155 tests passed** through Version 0.31; static analysis clean
+- Last verified: 2026-09-06 — **244 tests passed**, including local/cloud sign-out, sign-in and prep for Version 0.32; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -104,6 +105,176 @@
 33. Outcome collection (explicit dual consent + linked energy/reaction records) - Complete (v0.31)
 
 ## Day-to-Day Entries
+
+### 2026-09-06 — Return local and cloud sign-out to Welcome
+
+**Branch:** `main`
+
+**Prompt:** “the sign out should also work for the local device like return
+into the sign in page (welcome screen)”
+
+**Changes:** Profile now exposes Sign out for saved local profiles as well as
+authenticated cloud accounts. A separate, device-only signed-out preference
+returns both modes to Welcome and survives restart without deleting saved
+profile, health, check-in, or outcome data or resetting onboarding completion.
+Changing this gate resets the navigator, so Back cannot reopen an old private
+route. Local mode explicitly offers Continue local profile and explains that it
+does not authenticate a password; cloud mode requires verified credentials and
+successful account restoration before reopening the saved profile. Incomplete
+authenticated profiles can still finish setup. A different account with no
+cloud profile cannot silently receive the previous signed-out account's cache.
+
+Health observers and alerts stop on sign-out; gated startup/resume skips data
+work. Explicit local resume restores derived views, and local/cloud reentry
+restarts the permitted device services. Session checks discard delayed Health
+imports after sign-out and prevent stale alert scheduling. Failed sign-out
+retains the active screen and permits retry. Credential errors take precedence
+over stale cloud-restore errors from an earlier attempt.
+
+**Verification:** Regression coverage includes local/cloud Welcome navigation,
+persistence across restart, saved-record retention, local resume, incorrect
+credentials, delayed/failed account restoration, incomplete-profile setup,
+failed sign-out/retry, Back navigation, native-service restart and delayed
+Health cancellation, stale-error retry and cross-account migration protection.
+The full suite passes **244 tests**, `flutter analyze` reports no issues, and
+`git diff --check` passes. The existing outcome-settings test now scrolls until
+its target is hit-testable above the bottom navigation. No real account was signed
+out, Firebase data changed, or phone installation performed during verification.
+
+### 2026-09-06 — Explicit Profile sign-out button
+
+**Branch:** `main`
+
+**Prompt:** “add a signout button”
+
+**Change:** Added a clearly labeled Sign out button directly below the Profile
+header, visible only while authenticated. It calls the existing sign-out flow,
+shows a disabled progress state, prevents duplicate requests, and reports a
+retryable failure without claiming success. The Cloud account setting now
+appears only when signed out and remains the sign-in entry point; tapping that
+generic label no longer unexpectedly signs out. Cloud data and the local offline
+cache are preserved; this is not account deletion or an app-access lock.
+
+**Verification:** Five new widget regressions pass, covering authenticated-only
+visibility, the signed-out sign-in entry point, local/cloud data preservation,
+duplicate submission, and failure/retry. A test initially tapped behind the
+success snackbar; waiting for its normal dismissal fixed the test. The full
+suite passes **232 tests** and `flutter analyze` reports no issues.
+`git diff --check` passes. No real account was signed out and the phone was not
+reinstalled during verification.
+
+### 2026-09-06 — Verify credentials before advancing sign-in
+
+**Branch:** `main`
+
+**Prompt:** “The sign in proccess is weird, it doesnt check the password until
+after you logged in, so verify that and change it.”
+
+**Cause:** Firebase already awaited `signInWithEmailAndPassword` before loading
+account data. The misleading behavior was in the UI: returning users completed
+profile/schedule pages before authentication, and Profile dismissed its sign-in
+dialog before calling Firebase.
+
+**Changes:** Returning users now submit credentials on the account page and
+restore an existing profile directly after successful authentication. Wrong
+credentials stay on that form with inline, retryable errors. Accounts without a
+saved profile can finish setup only after authentication, without a second
+sign-in/registration request. Both the new flow and the legacy controller entry
+point refuse to create setup defaults after a cloud-read failure. Profile uses
+a dialog-owned form that stays open until sign-in finishes, disables inputs and
+duplicate submission while pending, and safely handles dismissal/disposal.
+Shared typed error messages distinguish invalid credentials, network failures,
+rate limits and configuration errors without showing raw SDK details. Failed
+authentication no longer clears local model-preparation caches. Existing-password
+entry is not constrained by the new-account eight-character minimum.
+
+**Verification:** Added 18 unit/widget regressions with controlled authentication
+and repository responses. They cover delayed/rejected/successful authentication,
+retry, retained email, password preservation, duplicate taps, dismissal/disposal,
+saved-profile restoration, missing-profile setup and cloud-read failure without
+replacement writes. `flutter test` passed **227 tests**; `flutter analyze` found
+no issues; `git diff --check` passed. No real passwords, Firebase account/data
+mutations, or iPhone installation were used in verification. Version remains
+0.31; rebuilding the installed app is required to receive this fix.
+
+### 2026-09-06 — Resolve duplicate native Firebase SDK requirement
+
+**Branch:** `main`
+
+**Prompt:** Still receiving the Swift Package Manager conflict after following
+the bundle-ID/package instructions; asked whether the missing plist caused it.
+
+**Cause:** A manually added `firebase-ios-sdk` root reference remained in
+`ios/Runner.xcodeproj/project.pbxproj`, requiring `12.18.0..<13.0.0`.
+The installed FlutterFire core/auth/Firestore packages all require exactly
+`12.15.0`. Firebase runtime configuration/plist placement is independent of
+package resolution.
+
+**Change:** Removed only the redundant root package reference and its object.
+Retained `FlutterGeneratedPluginSwiftPackage`, all plugin version pins, signing,
+bundle IDs and unrelated local edits. No Firebase data or registration changed.
+
+**Verification:** `plutil -lint` and `git diff --check` passed.
+`xcodebuild -resolvePackageDependencies -workspace ios/Runner.xcworkspace
+-scheme Runner` succeeded and resolved Firebase and GoogleAppMeasurement to
+`12.15.0`. Physical-device build/install was not performed in this correction.
+
+### 2026-09-05 — Prep for Version 0.32
+
+**Branch:** `main`
+
+**Prompt:** “complete prep for .32”
+
+**Scope:** Complete the engineering preparation stage, not model fitting or a
+Version 0.32 release. Use the account's explicitly selected July 2–31 month for
+the feasibility check; do not widen it or turn seeded rows into outcomes.
+
+**Results:**
+
+- Added a dedicated owner-checked, read-only Firebase prep adapter: one shared
+  metadata/consent read and three parallel half-open, ordered collection queries
+  capped server-side at 1,500 signals, 100 check-ins and 100 outcomes. No writes,
+  listeners, score-label reads or `replaceUser` calls exist on this path.
+- Added an exact 30-calendar-day IANA-timezone window, immutable normalized
+  snapshot, content fingerprint, private bounded cache, explicit refresh and
+  invalidation on known input/consent/account changes. UID remains in memory;
+  local exports/cache omit owner identifiers. Navigation and background refresh
+  do not execute prep.
+- Added pure source joins and per-head readiness reporting: synthetic/uncertain
+  exclusions, consent/version gates, own-source and future-evidence exclusion,
+  prior-only baselines, eight nullable fixed-normalized features, fixed 1–10 to
+  0–100 Energy mapping, raw Cognitive milliseconds and whole-day holdout.
+- Added Profile → Model preparation with an explicit window/timezone, readable
+  coverage and request counts, cached reuse and a user-initiated local JSON export.
+- Added local reproduction tool `tool/export_ml_prep.dart`; private results stay
+  under the ignored `build/ml-prep` directory. No model or confidence adjustment
+  is introduced.
+
+**Issues found and resolved during verification:**
+
+- `TZDateTime` equality with native `DateTime` invalidated otherwise-correct
+  cached bounds; compare instants and store native UTC boundaries instead.
+- Cache fetch coalescing must include consent, refresh and schema inputs; stale
+  in-flight work must fail after edits/account switches rather than caching it.
+- Reference-only historical baseline inputs need an availability audit even
+  when the combined learned feature is missing. Tied timestamps also need stable
+  ID ordering so serialization cannot change deterministic results.
+- Existing deterministic helpers assume the device calendar. Prep reports a
+  timezone mismatch and refuses readiness when selected account/device historical
+  offsets differ. Unknown legacy ingestion/update time and unverified Coach
+  source provenance are conservative blockers, not inferred real evidence.
+
+**Verification:** `flutter test` passed **209 tests**; `flutter analyze` reported
+no issues; `git diff --check` passed. The Firebase-configured iPhone 17 simulator
+build installed and launched. On the signed-in account, July 2–31 prep returned
+222 signals, 60 check-ins and 0 outcomes using 3 collection queries plus 1 shared
+metadata read, with 0 prep writes. Reopening retained July and reused the cached
+snapshot with 0 reads/writes and the same fetched-at timestamp. Account metadata
+was schema 11 with both consent flags evaluated false. All 282 input documents
+were synthetic; neither head is training-ready. The local report was regenerated
+from the cached snapshot (fingerprint `4e07fa57d07bc0a3-77234`) without network access.
+The simulator subsequently shut down; it was left closed. No consent toggle,
+historical outcome backfill, missing-check-in recovery, or model training was performed.
 
 ### 2026-07-23 — Versions 0.8 & 0.9 (check-in + reaction test)
 
@@ -1033,6 +1204,28 @@ created.
 
 ## Prompts Used
 
+### UI: Explicit sign-out button
+**Prompt:** “add a signout button”
+
+**Result:** Discoverable Profile button with progress, duplicate-request guard,
+retryable errors, and the existing non-destructive account sign-out behavior.
+
+**Modifications:** Profile UI and regression tests only; no changes to Firebase
+credentials, authentication provider, security rules, or cloud data.
+
+### Fix: Verify sign-in before advancing
+**Prompt:**
+“The sign in proccess is weird, it doesnt check the password until after you
+logged in, so verify that and change it.”
+
+**Result:** Account-page authentication and an awaited Profile sign-in dialog,
+with 18 new regression tests and 227 passing tests overall.
+
+**Modifications:** Changed UI/authentication ordering and safe error handling;
+preserved Firebase's password verification, existing profiles, and all unrelated
+local changes. No authentication provider, credentials, security rules, or live
+database data changed.
+
 ### Feature: Version 0.31 Outcome Collection
 **Prompt:**
 "complete .31"
@@ -1373,6 +1566,13 @@ Energy inputs named by the roadmap.
 ---
 
 ## Challenges & Solutions
+
+### Challenge: Sign-in UI implied success before verification
+**Problem:** Navigation and dialog dismissal preceded credential verification,
+even though Firebase correctly awaited authentication before account reads.
+**Solution:** Keep credential entry visible while pending, show errors in place,
+restore returning profiles directly, and guard setup against failed cloud reads.
+**Prompt used:** Verify and change the delayed-password sign-in flow.
 
 ### Challenge 1: Lazy list broke widget expectations
 **Problem:** `find.text('Stress')` failed in widget tests even though the screen contained a Stress slider — off-screen `ListView` children were not built yet.

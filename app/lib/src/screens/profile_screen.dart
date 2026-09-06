@@ -10,10 +10,19 @@ import '../screen_time_service.dart';
 import '../sleep_sync_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'account_sign_in_dialog.dart';
 import 'admin/admin_cohort_screen.dart';
+import 'ml_prep_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isSigningOut = false;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +101,24 @@ class ProfileScreen extends StatelessWidget {
               ),
             ],
           ),
+          if (!controller.isSignedOut &&
+              (controller.onboardingComplete ||
+                  controller.isCloudAuthenticated)) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('profile-sign-out-button'),
+              onPressed: _isSigningOut
+                  ? null
+                  : () => _signOut(context, controller),
+              icon: _isSigningOut
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.logout_rounded),
+              label: Text(_isSigningOut ? 'Signing out…' : 'Sign out'),
+            ),
+          ],
           const SizedBox(height: 18),
           Row(
             children: [
@@ -153,16 +180,12 @@ class ProfileScreen extends StatelessWidget {
             status: controller.isCloudAuthenticated ? 'On' : 'Local',
           ),
           const SectionHeader('Settings'),
-          if (controller.cloudEnabled)
+          if (controller.cloudEnabled && !controller.isCloudAuthenticated)
             _SettingTile(
               icon: Icons.cloud_outlined,
               title: 'Cloud account',
-              subtitle: controller.isCloudAuthenticated
-                  ? 'Signed in as ${controller.accountEmail}'
-                  : 'Sign in and migrate this device’s data',
-              onTap: () => controller.isCloudAuthenticated
-                  ? _signOut(context, controller)
-                  : _signIn(context, controller),
+              subtitle: 'Sign in and migrate this device’s data',
+              onTap: () => _signIn(context, controller),
             ),
           _SettingTile(
             icon: Icons.track_changes_rounded,
@@ -184,6 +207,17 @@ class ProfileScreen extends StatelessWidget {
                 ? 'On · ${controller.outcomes.length} private outcome ${controller.outcomes.length == 1 ? 'record' : 'records'}'
                 : 'Off · no training records are created',
             onTap: () => _outcomeLearning(context),
+          ),
+          _SettingTile(
+            key: const Key('model-preparation-setting'),
+            icon: Icons.dataset_outlined,
+            title: 'Model preparation',
+            subtitle: 'Read-only 30-day snapshot · no model training',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => MlPrepScreen(controller: controller),
+              ),
+            ),
           ),
           _SettingTile(
             icon: Icons.privacy_tip_outlined,
@@ -446,79 +480,41 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
 
-  static Future<void> _signIn(
-    BuildContext context,
-    AppController controller,
-  ) async {
-    final email = TextEditingController(text: controller.accountEmail);
-    final password = TextEditingController();
-    final credentials = await showDialog<(String, String)>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign in to Tonyo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(context, (email.text.trim(), password.text)),
-            child: const Text('Sign in'),
-          ),
-        ],
-      ),
-    );
-    email.dispose();
-    password.dispose();
-    if (credentials == null) return;
+  static Future<void> _signIn(BuildContext context, AppController controller) =>
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AccountSignInDialog(controller: controller),
+      );
+
+  Future<void> _signOut(BuildContext context, AppController controller) async {
+    if (_isSigningOut ||
+        controller.isSignedOut ||
+        !(controller.onboardingComplete || controller.isCloudAuthenticated)) {
+      return;
+    }
+    setState(() => _isSigningOut = true);
     try {
-      await controller.signIn(email: credentials.$1, password: credentials.$2);
+      await controller.signOut();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Signed out. Your saved data is kept on this device.',
+            ),
+          ),
+        );
+      }
     } on Object {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Sign-in failed. Check your email and password.'),
+            content: Text('Could not sign out. Please try again.'),
           ),
         );
       }
-    }
-  }
-
-  static Future<void> _signOut(
-    BuildContext context,
-    AppController controller,
-  ) async {
-    await controller.signOut();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Signed out. The offline cache remains on this device.',
-          ),
-        ),
-      );
+    } finally {
+      if (mounted) setState(() => _isSigningOut = false);
     }
   }
 

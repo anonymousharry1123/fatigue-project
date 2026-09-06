@@ -42,19 +42,21 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return AppScope(
       controller: controller,
-      child: MaterialApp(
-        title: 'Tonyo',
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: const TonyoScrollBehavior(),
-        theme: buildTonyoTheme(),
-        home: AnimatedBuilder(
-          animation: controller,
-          builder: (context, _) {
-            if (!controller.isReady) return const _LoadingScreen();
-            return controller.onboardingComplete
-                ? const ShellScreen()
-                : const OnboardingScreen();
-          },
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) => MaterialApp(
+          // Reset the navigator as well as the home screen: a pushed private
+          // route must not remain visible or reachable with Back after sign-out.
+          key: ValueKey(controller.isSignedOut),
+          title: 'Tonyo',
+          debugShowCheckedModeBanner: false,
+          scrollBehavior: const TonyoScrollBehavior(),
+          theme: buildTonyoTheme(),
+          home: !controller.isReady
+              ? const _LoadingScreen()
+              : controller.onboardingComplete && !controller.isSignedOut
+              ? const ShellScreen()
+              : const OnboardingScreen(),
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -16,6 +17,8 @@ import 'fatigue_engine.dart';
 import 'health_service.dart';
 import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
+import 'ml_prep_models.dart';
+import 'ml_prep_service.dart';
 import 'models.dart';
 import 'notification_logic.dart';
 import 'notification_service.dart';
@@ -33,14 +36,24 @@ class AppController extends ChangeNotifier {
     AccountAuth? accountAuth,
     NotificationService? notificationService,
     DateTime Function()? clock,
+    PrepDataSource? prepDataSource,
     this.cloudRepository,
   }) : _healthService = healthService ?? const HealthService(),
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
        _notificationService = notificationService ?? LocalNotificationService(),
-       _now = clock ?? DateTime.now;
+       _now = clock ?? DateTime.now,
+       _mlPrepService = prepDataSource == null
+           ? null
+           : MlPrepService(
+               source: prepDataSource,
+               cache: SharedPreferencesPrepCache(),
+             );
 
   static const _storageKey = 'tonyo_state_v1';
+  // Device navigation state, deliberately separate from profile/cloud data.
+  static const _signedOutKey = 'tonyo_signed_out_v1';
+  static const _prepWindowKeyPrefix = 'tonyo_ml_prep_window_v1_';
   static const forecastDayCount = 7;
   static const forecastFreshnessWindow = Duration(hours: 12);
   static const outcomeHistoryWindow = Duration(days: 90);
@@ -50,9 +63,23 @@ class AppController extends ChangeNotifier {
   final NotificationService _notificationService;
   final DateTime Function() _now;
   final CloudRepository? cloudRepository;
+  final MlPrepService? _mlPrepService;
+  int _modelPreparationRevision = 0;
+  int get modelPreparationRevision => _modelPreparationRevision;
+  PrepWindow? _lastModelPreparationWindow;
+  String? _lastModelPreparationWindowUid;
+  PrepWindow? get lastModelPreparationWindow =>
+      cloudUid == _lastModelPreparationWindowUid
+      ? _lastModelPreparationWindow
+      : null;
 
   bool isReady = false;
   bool onboardingComplete = false;
+  bool isSignedOut = false;
+  bool _isSigningOut = false;
+  int _sessionRevision = 0;
+  bool get canResumeLocalProfile =>
+      isSignedOut && onboardingComplete && !cloudEnabled;
   bool notificationsEnabled = false;
   bool crashNotificationsEnabled = true;
   bool recoveryNotificationsEnabled = true;
@@ -129,6 +156,100 @@ class AppController extends ChangeNotifier {
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
   bool get isCloudAuthenticated => _accountAuth.currentSession != null;
   String? get cloudUid => _accountAuth.currentSession?.uid;
+  String? get modelPreparationBlocker {
+    if (!cloudEnabled || _mlPrepService == null) {
+      return 'Firebase is not configured in this build. Launch with '
+          '--dart-define-from-file=config/firebase_options.json to connect '
+          'your account.';
+    }
+    if (!isCloudAuthenticated) {
+      return 'Sign in through Profile → Cloud account before preparing your '
+          '30-day account snapshot.';
+    }
+    return null;
+  }
+
+  /// Explicit foreground action only. This path never commits or uploads data.
+  Future<PrepRun> prepareModelSnapshot({
+    required PrepWindow window,
+    bool refresh = false,
+  }) async {
+    final blocker = modelPreparationBlocker;
+    if (blocker != null) throw StateError(blocker);
+    final uid = cloudUid;
+    await _rememberModelPreparationWindow(window);
+    if (cloudUid != uid) {
+      throw StateError('Account changed during preparation.');
+    }
+    return _mlPrepService!.prepare(
+      window: window,
+      refresh: refresh,
+      coverageOnly: true,
+    );
+  }
+
+  String _prepWindowKey(String uid) =>
+      '$_prepWindowKeyPrefix${prepFingerprint({'uid': uid})}';
+
+  Future<void> _rememberModelPreparationWindow(PrepWindow window) async {
+    final uid = cloudUid;
+    if (uid == null) throw StateError('Sign in to select an account window.');
+    final preferences = await SharedPreferences.getInstance();
+    if (cloudUid != uid) {
+      throw StateError('Account changed during preparation.');
+    }
+    _lastModelPreparationWindow = window;
+    _lastModelPreparationWindowUid = uid;
+    if (!await preferences.setString(
+      _prepWindowKey(uid),
+      jsonEncode(window.toJson()),
+    )) {
+      throw StateError('Could not save the selected preparation window.');
+    }
+  }
+
+  void _restoreModelPreparationWindow(SharedPreferences preferences) {
+    final uid = cloudUid;
+    _lastModelPreparationWindow = null;
+    _lastModelPreparationWindowUid = null;
+    if (uid == null) return;
+    final raw = preferences.getString(_prepWindowKey(uid));
+    if (raw == null) return;
+    try {
+      _lastModelPreparationWindow = PrepWindow.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+      _lastModelPreparationWindowUid = uid;
+    } on Object {
+      // Invalid local preferences must not trigger a replacement account read.
+    }
+  }
+
+  Future<void> _clearModelPreparationWindow() async {
+    _lastModelPreparationWindow = null;
+    _lastModelPreparationWindowUid = null;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      for (final key in preferences.getKeys().where(
+        (key) => key.startsWith(_prepWindowKeyPrefix),
+      )) {
+        await preferences.remove(key);
+      }
+    } on Object catch (error) {
+      debugPrint('Tonyo could not clear the saved prep window: $error');
+    }
+  }
+
+  Future<void> _invalidateModelPreparation() async {
+    _modelPreparationRevision += 1;
+    try {
+      await _mlPrepService?.invalidate();
+    } on Object catch (error) {
+      // Prep cache maintenance must not prevent an account edit or sign-out.
+      debugPrint('Tonyo could not clear the model preparation cache: $error');
+    }
+  }
+
   bool get isScoreLoading => isEnergyScoreLoading;
   String? get scoreError => energyScoreError;
   bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
@@ -712,6 +833,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> refreshNotifications({bool notify = true}) async {
+    if (isSignedOut || _isSigningOut) return;
+    final sessionRevision = _sessionRevision;
     isNotificationSyncing = true;
     notificationError = null;
     if (notify) notifyListeners();
@@ -737,6 +860,9 @@ class AppController extends ChangeNotifier {
         return;
       }
       notificationPermission = await _notificationService.permissionStatus();
+      if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
+        return;
+      }
       if (notificationPermission != NotificationPermissionState.granted) {
         await _notificationService.cancelGuidance();
         notificationError =
@@ -746,6 +872,9 @@ class AppController extends ChangeNotifier {
         return;
       }
       await _notificationService.reconcile(_notificationPlan.notifications);
+      if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
+        await _notificationService.cancelGuidance();
+      }
     } on Object {
       notificationError = 'Notification schedule unavailable · try again';
     } finally {
@@ -826,11 +955,16 @@ class AppController extends ChangeNotifier {
     if (notify) notifyListeners();
     try {
       if (session != null && repository != null) {
-        _outcomes = await repository.outcomesByRange(
+        final refreshed = await repository.outcomesByRange(
           session.uid,
           start: now.subtract(outcomeHistoryWindow),
           end: now.add(const Duration(days: 1)),
         );
+        if (jsonEncode(_outcomes.map((item) => item.toJson()).toList()) !=
+            jsonEncode(refreshed.map((item) => item.toJson()).toList())) {
+          await _invalidateModelPreparation();
+        }
+        _outcomes = refreshed;
         await _writeLocal();
       } else {
         _outcomes =
@@ -859,6 +993,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> load() async {
     final preferences = await SharedPreferences.getInstance();
+    isSignedOut = preferences.getBool(_signedOutKey) ?? false;
+    _restoreModelPreparationWindow(preferences);
     final raw = preferences.getString(_storageKey);
     if (raw != null) {
       try {
@@ -876,6 +1012,13 @@ class AppController extends ChangeNotifier {
         'Tonyo local cache empty (key $_storageKey). '
         'On Flutter web, use a fixed --web-port so localhost storage persists.',
       );
+    }
+    // A saved local profile is not an active session. Do not hydrate cloud
+    // state or resume health/model work behind the welcome screen.
+    if (isSignedOut) {
+      isReady = true;
+      notifyListeners();
+      return;
     }
     await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
@@ -903,6 +1046,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> handleAppResumed() async {
+    if (isSignedOut) return;
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     if (status == HealthAuthorizationState.authorized && healthAuthorized) {
@@ -928,37 +1072,59 @@ class AppController extends ChangeNotifier {
         throw ArgumentError('Email and password are required for cloud setup.');
       }
       if (signInToExistingAccount) {
-        await _accountAuth.signIn(email: normalizedEmail, password: password);
-        await _hydrateOrMigrateCloud();
-        if (onboardingComplete) {
-          await _writeLocal();
-          if (outcomeConsent) await refreshOutcomes(notify: false);
-          await refreshScores(notify: false);
-          await refreshForecasts(notify: false);
-          await refreshGuidance(notify: false);
-          await refreshInsights(notify: false);
-          notifyListeners();
-          return;
-        }
+        await signIn(email: normalizedEmail, password: password);
+        await completeAuthenticatedOnboarding(newProfile);
+        return;
       } else {
         await _accountAuth.register(email: normalizedEmail, password: password);
+        await _clearModelPreparationWindow();
+        await _invalidateModelPreparation();
       }
     }
+    await _finishOnboarding(newProfile, email: normalizedEmail);
+  }
+
+  /// Finish setup only after the account form has authenticated with Firebase.
+  /// Returning accounts with a saved profile must never be replaced by defaults.
+  Future<void> completeAuthenticatedOnboarding(UserProfile newProfile) async {
+    if (!cloudEnabled || !isCloudAuthenticated) {
+      throw StateError('Sign in before finishing account setup.');
+    }
+    if (cloudSyncError != null) {
+      throw StateError('Restore cloud data before finishing account setup.');
+    }
+    if (onboardingComplete) return;
+    await _finishOnboarding(newProfile);
+  }
+
+  Future<void> _finishOnboarding(
+    UserProfile newProfile, {
+    String? email,
+  }) async {
     profile = newProfile;
-    accountEmail =
-        _accountAuth.currentSession?.email ?? normalizedEmail ?? accountEmail;
+    accountEmail = _accountAuth.currentSession?.email ?? email ?? accountEmail;
     onboardingComplete = true;
     if (signals.isEmpty) {
       signals = buildDemoSignals(DateTime.now());
       checkIns = buildDemoCheckIns(DateTime.now());
     }
+    await _setSignedOut(false);
     await _commit(energyInputsChanged: true);
   }
 
   Future<void> signIn({required String email, required String password}) async {
     if (!cloudEnabled) throw StateError('Firebase is not configured.');
+    final wasSignedOut = isSignedOut;
+    // A rejected password must not change local account state or prep caches.
     await _accountAuth.signIn(email: email, password: password);
+    await _clearModelPreparationWindow();
+    await _invalidateModelPreparation();
     await _hydrateOrMigrateCloud();
+    if (cloudSyncError != null) {
+      throw StateError(
+        'Your account data could not be restored. Please retry.',
+      );
+    }
     await _writeLocal();
     if (outcomeConsent) await refreshOutcomes(notify: false);
     if (onboardingComplete) {
@@ -966,26 +1132,76 @@ class AppController extends ChangeNotifier {
       await refreshForecasts(notify: false);
       await refreshGuidance(notify: false);
       await refreshInsights(notify: false);
+      await _setSignedOut(false);
+      if (wasSignedOut) {
+        await handleAppResumed();
+        if (notificationsEnabled) await refreshNotifications(notify: false);
+      }
     }
     notifyListeners();
   }
 
-  Future<void> signOut() async {
-    await _healthService.disableBackgroundUpdates();
-    healthBackgroundRefreshEnabled = false;
-    try {
-      await _notificationService.cancelGuidance();
-    } on Object {
-      // Signing out must still succeed if the platform scheduler is unavailable.
+  Future<void> _setSignedOut(bool value) async {
+    await _writeSignedOutPreference(value);
+    isSignedOut = value;
+  }
+
+  Future<void> _writeSignedOutPreference(bool value) async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setBool(_signedOutKey, value)) {
+      throw StateError('Could not save the device session state.');
     }
-    await _accountAuth.signOut();
-    cloudSyncError = null;
-    insightsLoadedFromCloud = false;
-    _notificationPlan = const NotificationPlan(
-      state: NotificationPlanState.disabled,
-    );
-    notificationPermission = NotificationPermissionState.unknown;
+  }
+
+  /// Local mode has no password authentication. Explicitly resume the same
+  /// saved profile, without registering or rerunning profile/demo setup.
+  Future<void> resumeLocalProfile() async {
+    if (!canResumeLocalProfile) {
+      throw StateError('No signed-out local profile is available.');
+    }
+    await _setSignedOut(false);
+    await refreshScores(notify: false);
+    await refreshForecasts(notify: false);
+    await refreshGuidance(notify: false);
+    await refreshInsights(notify: false);
+    await handleAppResumed();
     notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    if (isSignedOut || _isSigningOut) return;
+    _isSigningOut = true;
+    _sessionRevision += 1;
+    try {
+      await _clearModelPreparationWindow();
+      await _invalidateModelPreparation();
+      await _healthService.disableBackgroundUpdates();
+      healthBackgroundRefreshEnabled = false;
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        // Signing out must still succeed if the platform scheduler is unavailable.
+      }
+      // Persist the gate before ending auth so a restart cannot reopen the cache.
+      // A failed auth sign-out rolls it back and retains the existing screen.
+      await _writeSignedOutPreference(true);
+      try {
+        await _accountAuth.signOut();
+      } on Object {
+        await _writeSignedOutPreference(false);
+        rethrow;
+      }
+      isSignedOut = true;
+      cloudSyncError = null;
+      insightsLoadedFromCloud = false;
+      _notificationPlan = const NotificationPlan(
+        state: NotificationPlanState.disabled,
+      );
+      notificationPermission = NotificationPermissionState.unknown;
+      notifyListeners();
+    } finally {
+      _isSigningOut = false;
+    }
   }
 
   Future<void> updateProfile(UserProfile value) async {
@@ -1243,6 +1459,7 @@ class AppController extends ChangeNotifier {
     if (!outcomeConsent) {
       throw StateError('Outcome learning requires explicit consent.');
     }
+    await _invalidateModelPreparation();
     _outcomes.removeWhere((item) => item.id == outcome.id);
     _outcomes.insert(0, outcome);
     outcomeError = null;
@@ -1273,6 +1490,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _deleteOutcome(String outcomeId) async {
+    await _invalidateModelPreparation();
     _outcomes.removeWhere((item) => item.id == outcomeId);
     await _writeLocal();
     final session = _accountAuth.currentSession;
@@ -1575,6 +1793,7 @@ class AppController extends ChangeNotifier {
     HealthRefreshReason reason = HealthRefreshReason.foreground,
     bool notify = true,
   }) async {
+    if (isSignedOut) return;
     final now = _now();
     if (!ContinuousRefreshLogic.shouldRefresh(
       now: now,
@@ -1590,7 +1809,21 @@ class AppController extends ChangeNotifier {
     HealthRefreshReason reason = HealthRefreshReason.manual,
     bool notify = true,
   }) async {
-    if (!healthAuthorized || isSyncing) return null;
+    if (isSignedOut || _isSigningOut || !healthAuthorized || isSyncing) {
+      return null;
+    }
+    final sessionRevision = _sessionRevision;
+    bool sessionEnded() {
+      if (!isSignedOut &&
+          !_isSigningOut &&
+          sessionRevision == _sessionRevision) {
+        return false;
+      }
+      isSyncing = false;
+      if (notify) notifyListeners();
+      return true;
+    }
+
     final attemptTime = _now();
     final before = List<SignalReading>.of(signals);
     isSyncing = true;
@@ -1606,6 +1839,7 @@ class AppController extends ChangeNotifier {
     ActivitySyncMergeResult? activityResult;
     try {
       final imported = await _healthService.sync();
+      if (sessionEnded()) return null;
       heartResult = HeartSyncLogic.merge(
         existing: signals,
         imported: imported,
@@ -1621,8 +1855,10 @@ class AppController extends ChangeNotifier {
       healthSyncError = 'Apple Health heart data could not be imported.';
     }
 
+    if (sessionEnded()) return null;
     try {
       final imported = await _healthService.syncSleep();
+      if (sessionEnded()) return null;
       sleepResult = SleepSyncLogic.merge(
         existing: signals,
         imported: imported,
@@ -1640,8 +1876,10 @@ class AppController extends ChangeNotifier {
       sleepSyncError = 'Apple Health sleep data could not be imported.';
     }
 
+    if (sessionEnded()) return null;
     try {
       final imported = await _healthService.syncActivity();
+      if (sessionEnded()) return null;
       activityResult = ActivitySyncLogic.merge(
         existing: signals,
         imported: imported,
@@ -1656,29 +1894,29 @@ class AppController extends ChangeNotifier {
     } on Object {
       activitySyncError =
           'Apple Health workout, step, and hydration data could not be imported.';
-    } finally {
-      final successfulSourceCount = [
-        heartResult,
-        sleepResult,
-        activityResult,
-      ].where((result) => result != null).length;
-      final importedCount =
-          (heartResult?.importedCount ?? 0) +
-          (sleepResult?.importedSignalCount ?? 0) +
-          (activityResult?.importedCount ?? 0);
-      if (successfulSourceCount > 0) {
-        lastSync = attemptTime;
-      }
-      healthSyncStatus = successfulSourceCount == 0
-          ? HealthSyncStatus.failed
-          : successfulSourceCount < 3
-          ? HealthSyncStatus.partialFailure
-          : importedCount > 0
-          ? HealthSyncStatus.updated
-          : HealthSyncStatus.upToDate;
-      isSyncing = false;
-      if (notify) notifyListeners();
     }
+    if (sessionEnded()) return null;
+    final successfulSourceCount = [
+      heartResult,
+      sleepResult,
+      activityResult,
+    ].where((result) => result != null).length;
+    final importedCount =
+        (heartResult?.importedCount ?? 0) +
+        (sleepResult?.importedSignalCount ?? 0) +
+        (activityResult?.importedCount ?? 0);
+    if (successfulSourceCount > 0) {
+      lastSync = attemptTime;
+    }
+    healthSyncStatus = successfulSourceCount == 0
+        ? HealthSyncStatus.failed
+        : successfulSourceCount < 3
+        ? HealthSyncStatus.partialFailure
+        : importedCount > 0
+        ? HealthSyncStatus.updated
+        : HealthSyncStatus.upToDate;
+    isSyncing = false;
+    if (notify) notifyListeners();
 
     final meaningfulChange = ContinuousRefreshLogic.hasMeaningfulModelChange(
       before,
@@ -1690,11 +1928,21 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _ensureContinuousHealthUpdates() async {
-    if (!healthAuthorized || healthBackgroundRefreshEnabled) return;
+    if (isSignedOut ||
+        _isSigningOut ||
+        !healthAuthorized ||
+        healthBackgroundRefreshEnabled) {
+      return;
+    }
+    final sessionRevision = _sessionRevision;
     healthBackgroundRefreshEnabled = await _healthService
         .enableBackgroundUpdates(
           () => refreshHealthIfDue(reason: HealthRefreshReason.background),
         );
+    if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
+      await _healthService.disableBackgroundUpdates();
+      healthBackgroundRefreshEnabled = false;
+    }
   }
 
   String get healthSyncSummary {
@@ -1814,6 +2062,8 @@ class AppController extends ChangeNotifier {
   /// Permanently removes all documents under users/{uid}, deletes the Firebase
   /// Auth account, and then clears the local cache.
   Future<void> deleteAccountData() async {
+    await _clearModelPreparationWindow();
+    await _invalidateModelPreparation();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1824,6 +2074,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    await _clearModelPreparationWindow();
+    await _invalidateModelPreparation();
     await _healthService.disableBackgroundUpdates();
     try {
       await _notificationService.cancelGuidance();
@@ -1894,6 +2146,8 @@ class AppController extends ChangeNotifier {
     insightsError = null;
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_storageKey);
+    await preferences.remove(_signedOutKey);
+    isSignedOut = false;
     notifyListeners();
   }
 
@@ -1939,6 +2193,7 @@ class AppController extends ChangeNotifier {
     bool energyInputsChanged = false,
     bool forecastInputsChanged = false,
   }) async {
+    await _invalidateModelPreparation();
     notifyListeners();
     await _writeLocal();
     await _pushCloud();
@@ -1970,6 +2225,13 @@ class AppController extends ChangeNotifier {
       final remote = await repository.readUser(session.uid);
       if (remote == null) {
         if (onboardingComplete) {
+          if (isSignedOut &&
+              accountEmail?.trim().toLowerCase() !=
+                  session.email.trim().toLowerCase()) {
+            throw StateError(
+              'The saved device profile belongs to another account and cannot be migrated.',
+            );
+          }
           accountEmail = session.email;
           await repository.replaceUser(
             session.uid,
@@ -1994,6 +2256,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _pushCloud() async {
+    if (isSignedOut || _isSigningOut) return;
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
@@ -2037,6 +2300,13 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    final prepInputsChanged =
+        outcomeConsent != state.outcomeConsent ||
+        jsonEncode(signals.map((item) => item.toJson()).toList()) !=
+            jsonEncode(state.signals.map((item) => item.toJson()).toList()) ||
+        jsonEncode(checkIns.map((item) => item.toJson()).toList()) !=
+            jsonEncode(state.checkIns.map((item) => item.toJson()).toList());
+    if (prepInputsChanged) unawaited(_invalidateModelPreparation());
     final sameAccount =
         accountEmail?.trim().toLowerCase() ==
         state.accountEmail.trim().toLowerCase();

@@ -1,5 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../account_error.dart';
 import '../app.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -23,6 +25,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _acceptedPrivacy = false;
   bool _isSubmitting = false;
   bool _signInExisting = false;
+  bool _existingAccountVerified = false;
+  String? _accountError;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   String _age = '16–18';
@@ -64,6 +68,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: Column(
               children: [
+                if (_accountError != null) ...[
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _accountError!,
+                      key: const Key('onboarding-account-error'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
@@ -94,23 +111,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       backgroundColor: TonyoColors.primary,
                     ),
-                    child: Text(
-                      _page == 0
-                          ? 'Create my account'
-                          : _page == 1
-                          ? 'Continue to my profile'
-                          : _page == 2
-                          ? 'Set my schedule'
-                          : _signInExisting && AppScope.of(context).cloudEnabled
-                          ? 'Sign in and sync'
-                          : 'Start with demo data',
-                    ),
+                    child: _isSubmitting
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text('Please wait…'),
+                            ],
+                          )
+                        : Text(
+                            _page == 0
+                                ? AppScope.of(context).canResumeLocalProfile
+                                      ? 'Continue local profile'
+                                      : AppScope.of(context).isSignedOut &&
+                                            AppScope.of(context).cloudEnabled
+                                      ? 'Sign in'
+                                      : 'Create my account'
+                                : _page == 1
+                                ? _signInExisting &&
+                                          AppScope.of(context).cloudEnabled
+                                      ? 'Sign in'
+                                      : 'Continue to my profile'
+                                : _page == 2
+                                ? 'Set my schedule'
+                                : _existingAccountVerified
+                                ? 'Finish account setup'
+                                : 'Start with demo data',
+                          ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   AppScope.of(context).cloudEnabled
                       ? 'Private by design. Your data syncs only to your account.'
+                      : AppScope.of(context).canResumeLocalProfile
+                      ? 'Local mode. No password verification or Firebase sign-in.'
                       : 'Offline demo mode. Your data stays on this device.',
                   style: TextStyle(color: TonyoColors.muted, fontSize: 11),
                 ),
@@ -130,7 +171,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: IconButton.filledTonal(
-            onPressed: _previous,
+            onPressed: _isSubmitting ? null : _previous,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
         ),
@@ -153,8 +194,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () =>
-                  setState(() => _signInExisting = !_signInExisting),
+              onPressed: _isSubmitting
+                  ? null
+                  : () => setState(() {
+                      _signInExisting = !_signInExisting;
+                      _accountError = null;
+                    }),
               child: Text(
                 _signInExisting
                     ? 'Create a new account instead'
@@ -166,6 +211,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 28),
         TextFormField(
           controller: _emailController,
+          enabled: !_isSubmitting,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
@@ -186,10 +232,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextFormField(
           key: const Key('password-field'),
           controller: _passwordController,
+          enabled: !_isSubmitting,
           obscureText: _obscurePassword,
           enableSuggestions: false,
           autocorrect: false,
-          textInputAction: TextInputAction.next,
+          textInputAction: _signInExisting
+              ? TextInputAction.done
+              : TextInputAction.next,
+          onFieldSubmitted: (_) {
+            if (_signInExisting) _next();
+          },
           autofillHints: [
             _signInExisting
                 ? AutofillHints.password
@@ -200,8 +252,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             prefixIcon: const Icon(Icons.lock_outline_rounded),
             suffixIcon: IconButton(
               key: const Key('password-visibility'),
-              onPressed: () =>
-                  setState(() => _obscurePassword = !_obscurePassword),
+              onPressed: _isSubmitting
+                  ? null
+                  : () => setState(() => _obscurePassword = !_obscurePassword),
               icon: Icon(
                 _obscurePassword
                     ? Icons.visibility_outlined
@@ -210,6 +263,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           validator: (value) {
+            if (_signInExisting) {
+              return (value ?? '').isEmpty ? 'Enter your password' : null;
+            }
             if ((value ?? '').length < 8) {
               return 'Use at least 8 characters';
             }
@@ -221,6 +277,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           TextFormField(
             key: const Key('confirm-password-field'),
             controller: _confirmPasswordController,
+            enabled: !_isSubmitting,
             obscureText: _obscureConfirmPassword,
             enableSuggestions: false,
             autocorrect: false,
@@ -230,9 +287,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               prefixIcon: const Icon(Icons.lock_reset_rounded),
               suffixIcon: IconButton(
                 key: const Key('confirm-password-visibility'),
-                onPressed: () => setState(
-                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
-                ),
+                onPressed: _isSubmitting
+                    ? null
+                    : () => setState(
+                        () =>
+                            _obscureConfirmPassword = !_obscureConfirmPassword,
+                      ),
                 icon: Icon(
                   _obscureConfirmPassword
                       ? Icons.visibility_outlined
@@ -248,8 +308,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 14),
         CheckboxListTile(
           value: _acceptedPrivacy,
-          onChanged: (value) =>
-              setState(() => _acceptedPrivacy = value ?? false),
+          onChanged: _isSubmitting
+              ? null
+              : (value) => setState(() => _acceptedPrivacy = value ?? false),
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
           title: Text(
@@ -320,6 +381,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         textAlign: TextAlign.center,
         style: TextStyle(color: TonyoColors.muted, height: 1.45),
       ),
+      if (AppScope.of(context).canResumeLocalProfile) ...[
+        const SizedBox(height: 18),
+        const Text(
+          'You are signed out. Continue your saved local profile on this device. Local mode does not verify a password or sign you into Firebase.',
+          key: Key('onboarding-local-resume-notice'),
+          textAlign: TextAlign.center,
+          style: TextStyle(color: TonyoColors.muted, height: 1.45),
+        ),
+      ],
       const SizedBox(height: 28),
       TonyoCard(
         child: Column(
@@ -390,7 +460,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Align(
         alignment: Alignment.centerLeft,
         child: IconButton.filledTonal(
-          onPressed: _previous,
+          onPressed: _isSubmitting || _existingAccountVerified
+              ? null
+              : _previous,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
       ),
@@ -474,7 +546,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Align(
         alignment: Alignment.centerLeft,
         child: IconButton.filledTonal(
-          onPressed: _previous,
+          onPressed: _isSubmitting ? null : _previous,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
       ),
@@ -547,6 +619,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   );
 
   Future<void> _next() async {
+    if (_isSubmitting) return;
+    final controller = AppScope.of(context);
+    if (controller.canResumeLocalProfile) {
+      // Resume the saved device profile without passing through setup, which
+      // would replace its profile and seeded data. Local mode is not auth.
+      setState(() {
+        _isSubmitting = true;
+        _accountError = null;
+      });
+      try {
+        await controller.resumeLocalProfile();
+      } on Object {
+        if (mounted) {
+          setState(() {
+            _accountError =
+                'Could not open your local profile. Your saved data is kept. Please try again.';
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
+      }
+      return;
+    }
+    if (_page == 0 && controller.isSignedOut && controller.cloudEnabled) {
+      _signInExisting = true;
+    }
     if (_page == 1) {
       final valid = _accountFormKey.currentState?.validate() ?? false;
       if (!valid || !_acceptedPrivacy) {
@@ -559,36 +657,95 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
         return;
       }
+      if (_signInExisting && controller.cloudEnabled) {
+        // Stay on the account form until Firebase verifies these credentials.
+        // Existing users restore their profile rather than redoing onboarding.
+        FocusScope.of(context).unfocus();
+        setState(() {
+          _isSubmitting = true;
+          _accountError = null;
+        });
+        try {
+          await controller.signIn(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+          if (!mounted || controller.onboardingComplete) return;
+          if (controller.cloudSyncError != null) {
+            setState(() {
+              _accountError =
+                  'Your password was verified, but your saved data could not be loaded. Please try signing in again.';
+            });
+            return;
+          }
+          _existingAccountVerified = true;
+          _passwordController.clear();
+          _confirmPasswordController.clear();
+          await _pageController.nextPage(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+          );
+        } on Object catch (error) {
+          if (mounted) {
+            setState(() {
+              _accountError =
+                  error is! FirebaseAuthException &&
+                      controller.isCloudAuthenticated &&
+                      controller.cloudSyncError != null
+                  ? 'Your password was verified, but your saved data could not be loaded. Please try signing in again.'
+                  : accountErrorMessage(error);
+            });
+          }
+        } finally {
+          if (mounted) setState(() => _isSubmitting = false);
+        }
+        return;
+      }
     }
     if (_page < 3) {
-      await _pageController.nextPage(
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-      );
+      setState(() {
+        _isSubmitting = true;
+        _accountError = null;
+      });
+      try {
+        await _pageController.nextPage(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
+      }
       return;
     }
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _accountError = null;
+    });
     final name = _nameController.text.trim();
     try {
-      await AppScope.of(context).completeOnboarding(
-        UserProfile(
-          name: name.isEmpty ? 'Maya' : name,
-          ageRange: _age,
-          role: _role,
-          goal: _goal,
-          coachPriority: _coachPriority,
-          wakeHour: _wake,
-          bedHour: _bed,
-        ),
-        email: _emailController.text,
-        password: _passwordController.text,
-        signInToExistingAccount: _signInExisting,
+      final profile = UserProfile(
+        name: name.isEmpty ? 'Maya' : name,
+        ageRange: _age,
+        role: _role,
+        goal: _goal,
+        coachPriority: _coachPriority,
+        wakeHour: _wake,
+        bedHour: _bed,
       );
+      if (_existingAccountVerified) {
+        await controller.completeAuthenticatedOnboarding(profile);
+      } else {
+        await controller.completeOnboarding(
+          profile,
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+      }
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_accountError(error))));
+        setState(() {
+          _accountError = accountErrorMessage(error, signingIn: false);
+        });
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -596,7 +753,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _previous() async {
-    if (_page == 0) return;
+    if (_isSubmitting ||
+        _page == 0 ||
+        (_existingAccountVerified && _page == 2)) {
+      return;
+    }
+    setState(() => _accountError = null);
     await _pageController.previousPage(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOut,
@@ -609,17 +771,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     hour %= 24;
     final displayHour = hour % 12 == 0 ? 12 : hour % 12;
     return '$displayHour:${minute.toString().padLeft(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}';
-  }
-
-  static String _accountError(Object error) {
-    final message = error.toString();
-    if (message.contains('email-already-in-use')) {
-      return 'An account already exists for this email. Choose “Already have an account? Sign in”.';
-    }
-    if (message.contains('network-request-failed')) {
-      return 'Account setup needs a network connection. Please try again.';
-    }
-    return 'Account setup failed. Please verify your details and try again.';
   }
 }
 

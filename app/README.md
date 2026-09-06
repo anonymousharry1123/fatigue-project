@@ -9,6 +9,38 @@ persistence, offline migration/cache behavior, export, and permanent deletion.
 See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) for console setup and the
 environment-safe run command.
 
+### Prep for Version 0.32
+
+Launch from this `app/` directory with Firebase enabled:
+
+```sh
+flutter run --dart-define-from-file=config/firebase_options.json
+```
+
+Open **Profile → Model preparation** while signed in, choose the final date of
+the 30-day window and its timezone, then select **Prepare / inspect 30-day
+snapshot**. The chosen window is saved locally. Repeating it uses the cache;
+**Refresh from Firebase** explicitly repeats the bounded fetch. This flow makes
+no Firebase writes and does not train a model or change confidence.
+
+The account feasibility window is July 2–31, 2026, America/Los_Angeles. Its
+synthetic records are suitable for pipeline QA only. Genuine future outcomes
+require **Profile → Outcome learning** consent before they can become labels.
+Readiness also checks provenance, units, historical availability, feature
+coverage and chronological holdout days. Cognitive remains report-only.
+
+The ignored `build/ml-prep/REPORT.md` and `coverage.json` contain the verified
+account result. To reproduce the report entirely locally from the simulator's
+saved preferences:
+
+```sh
+plutil -convert json -o - /path/to/Library/Preferences/com.example.app.plist |
+  dart run tool/export_ml_prep.dart build/ml-prep
+```
+
+Tests: `flutter test`. Preparation implementation and limits are documented in
+[docs/PLAN.md](docs/PLAN.md). This completes preparation, not the Version 0.32 model.
+
 Version 0.11 adds a Firebase-backed, explainable daily Energy Score. The
 0–100 wellness estimate uses sleep, exercise, hydration, workload, screen time,
 mood, and stress, and stores one private daily snapshot per authenticated user.

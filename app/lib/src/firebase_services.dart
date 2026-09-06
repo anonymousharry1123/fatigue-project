@@ -6,12 +6,19 @@ import 'cloud_repository.dart';
 import 'cloud_schema.dart';
 import 'firebase_options.dart';
 import 'models.dart';
+import 'ml_prep_models.dart';
+import 'ml_prep_repository.dart';
 
 class FirebaseRuntime {
-  const FirebaseRuntime({required this.auth, required this.repository});
+  const FirebaseRuntime({
+    required this.auth,
+    required this.repository,
+    required this.prepSource,
+  });
 
   final AccountAuth auth;
   final CloudRepository repository;
+  final PrepDataSource prepSource;
 
   static Future<FirebaseRuntime?> initialize() async {
     if (!TonyoFirebaseOptions.isConfigured) return null;
@@ -19,6 +26,10 @@ class FirebaseRuntime {
     final auth = FirebaseAccountAuth(FirebaseAuth.instance);
     return FirebaseRuntime(
       auth: auth,
+      prepSource: FirestorePrepDataSource(
+        firestore: FirebaseFirestore.instance,
+        auth: auth,
+      ),
       repository: FirestoreCloudRepository(
         firestore: FirebaseFirestore.instance,
         auth: auth,

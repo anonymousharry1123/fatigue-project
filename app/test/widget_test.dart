@@ -114,7 +114,7 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.byKey(const Key('outcome-learning-setting')),
+      find.byKey(const Key('outcome-learning-setting')).hitTestable(),
       200,
     );
     await tester.tap(find.byKey(const Key('outcome-learning-setting')));

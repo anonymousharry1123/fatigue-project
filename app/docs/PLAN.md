@@ -296,57 +296,113 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Keep reaction tests in `signals` and link future consented results as cognitive outcomes
 - Require both explicit outcome-collection and training-record-use flags on `users/{uid}` before writes; enforce the gate in Security Rules
 
-### Prep for Version 0.32 — Training Schema & Data Research
+### Prep for Version 0.32 — Bounded 30-Day Account Snapshot ✅ Complete
 
-Do this work before implementing personalized training. It is not a shippable product version; it unblocks 0.32 without relaxing privacy rules.
+Engineering prep is complete; this does **not** mark the personalized model or
+this account's training readiness complete. Open **Profile → Model preparation**
+in a Firebase-configured, signed-in build. Select the window end and IANA timezone,
+then use **Prepare / inspect 30-day snapshot**. The selected month survives reopening
+and restart; valid cached prep makes no new reads. **Refresh from Firebase** is
+the explicit opt-in to another bounded fetch. Coverage inspection never turns on consent.
 
-#### Minimal training schema (join, don’t invent a new cloud tree)
+Do this work before personalized training. The first feasibility run must use one explicit 30-day window from the currently authenticated account only. Use the account’s already-populated 30-day window; do not scan all history to discover a better window, silently widen the range, pool other users, or substitute Cohort Lab rows when labels are sparse.
 
-Build an on-device / exported `TrainingExample` row per labeled day (or labeled window). Prefer joining existing Version 0.10-a / 0.31 collections over new Firestore collections for cross-user pooling.
+#### Read the account once, then work locally
+
+- Require `outcomeCollection` and `trainingRecordUse` consent before building training examples. An authorized read-only coverage inspection may report missing consent or labels without changing consent flags or backfilling outcomes.
+- Define one half-open local-time window, `[startOfDay(windowEnd - 29 days), startOfDay(windowEnd + 1 day))`, covering exactly 30 calendar dates. Save the chosen bounds in the prep report so the run is reproducible.
+- Prefer the authenticated account state already loaded in memory when it fully covers the window. Otherwise issue at most one bounded query each for `signals`, `checkIns`, and `outcomes`, in parallel.
+- Never issue one query per day, per signal type, or per outcome. Do not attach Firestore listeners and do not run prep from background HealthKit refresh.
+- Do not query `scoreSnapshots` for labels. Recompute the deterministic Energy reference and any Cognitive context locally from the downloaded signals and check-ins.
+- Apply server-side query limits of 1,500 signal documents, 100 check-ins, and 100 outcomes before fetching; checking counts after an unlimited read does not enforce the budget. If a limit is reached, stop and report that aggregation/pagination design is needed; do not train on a potentially truncated window.
+- Cache the normalized snapshot by `uid + window bounds + timezone + schema/prep version + consent version`, with a stable content fingerprint covering document IDs and all used values/timestamps. Invalidate on known edits, deletions, newly eligible data, or consent changes; counts and the latest timestamp alone cannot detect an edited or deleted row. Reopening must reuse the cache without reads. Remote changes unknown to the app require explicit refresh; show the snapshot's fetched-at time rather than claiming it is always current.
+- The prep path must never call the broad `replaceUser` workflow.
+
+Expected Firestore request budget for one uncached prep run: up to three bounded collection queries, plus one shared user-document read only if consent state is not already loaded, zero writes, and no recurring database traffic. Three requests do not mean three billed reads: these caps allow up to 1,700 returned collection documents; report returned-document counts separately from requests, with any rule/index/minimum-query billing accounted for separately. Reuse the consent result across the three queries.
+
+#### Minimal local `TrainingExample`
+
+Build one local/exported row per eligible outcome. Join data in memory rather than creating a Firestore training collection.
 
 Each example should include:
 
-- **Identity & consent:** `uid` (local only), `outcomeConsent` / `trainingRecordUse` both true, `consentVersion`, example `createdAt`
-- **Time key:** local calendar `day` (and optional `period` morning/evening when the label came from a check-in)
-- **Label:** from `users/{uid}/outcomes/{id}` — `type` (`observedEnergy` | `cognitiveReaction`), `value`, `unit`, `source` (`checkIn` | `reactionSignal` | `coach`), `recordedAt`, optional `recommendationId` / `checkInId` / `signalId`
-- **Feature vector (nullable allowed):** day-scoped aggregates from `signals` + latest relevant `checkIns`, aligned to the label day (or prior night for sleep):
-  - Sleep: total hours, bedtime, optional stage hours (awake/core/deep/REM)
-  - Load: exercise hours, steps, study hours, screen time, caffeine drinks, hydration liters
-  - Physiology: HRV (ms), resting heart rate (bpm) when present
-  - Cognitive input: latest reaction-time ms when the label is cognitive
-  - Check-in context: mood, stress (1–10) when available the same day
-- **Provenance:** per-feature `source` (`manual` | `healthKit` | `model`), freshness, and a **missingness mask** (do not impute away “not logged”)
-- **Non-label baselines:** optional deterministic Energy / Cognitive scores from `scoreSnapshots` for comparison only — never treat `FatigueEngine` or Cohort Lab synthetic scores as training labels
+- **Consent and provenance:** `uid` only in local memory, consent version, feature sources, freshness, and an explicit missingness bit for every feature. Classify known seed IDs/notes as synthetic; `source: manual` alone does not prove a real observation. Synthetic account rows may exercise joins, normalization, and coverage reporting as pipeline QA, but never count toward training readiness, model validation, or labels. Report uncertain provenance separately.
+- **Time key:** local calendar day and optional morning/evening period; prior-night sleep joins to the wake day, while activity and check-in context join to the observation day. Use only evidence available at or before `observedAt`, and exclude the outcome's own `sourceId` from both features and the deterministic reference. End-of-day aggregates cannot supply earlier same-day features. Preserve observation and ingestion/update times separately where available; flag legacy records whose historical availability cannot be established instead of claiming an exact historical replay.
+- **Label and units:** a real, consented `OutcomeRecord` from the selected window. Map `observedEnergy` from its stored 1–10 rating onto the score scale with the fixed formula `energyTarget = (rating - 1) * 100 / 9`, validating the original range first. Keep raw `cognitiveReaction` values in milliseconds for coverage/reporting; a milliseconds label cannot be subtracted from a 0–100 Cognitive Score. Deterministic scores and synthetic data are never labels.
+- **Deterministic reference:** recompute the Energy score locally at each outcome's cutoff, on the same 0–100 scale as `energyTarget`. Rebuild personal baselines from only earlier evidence within the selected 30-day snapshot for each row; do not reuse today's baseline or fetch the usual 42-day history. Report early-window cold-start/missing baseline features. Cognitive Score may be reported as context, but is not a valid millisecond prediction reference.
+- **At most eight normalized features per model head:**
+  - Energy: sleep deviation, one movement value (workout or steps), hydration, combined study/screen load, caffeine, mood, stress, and combined HRV/resting-heart-rate recovery deviation
+  - Cognitive: sleep deviation, prior reaction baseline/trend, study, screen time, caffeine, mood, stress, and the same recovery deviation. The reaction measurement being predicted is the label, never an input feature.
+- **Missingness:** preserve absent values and shrink their learned effect toward zero; never turn “not logged” into a real zero measurement
 
-Acceptance for the schema prep:
+The prep output is a local coverage report plus optional JSON/CSV export containing window bounds, source counts, eligible label counts, missingness by feature, and rejected-row reasons. It must not automatically upload the joined rows.
 
-- One export path (JSON/CSV) that a single consented account can generate from Profile export or a debug builder
-- Documented join rules: outcome day ← sleep night / activity day; skip examples when consent is off
-- Unit tests covering missing caffeine/screen/study without dropping an otherwise labeled day
-- No Security Rules change that lets one account read another user’s `signals` or `outcomes`
+#### Data-readiness gate for this account
 
-#### Research: fill holes without waiting for one perfect public dataset
+- Keep the two outcome heads independent. Energy requires at least 14 distinct genuine, consented labeled days inside the 30-day window. Cognitive remains report-only or unpromoted shadow work until its target, units, and deterministic comparison are explicitly defined; at least 10 valid genuine reaction outcomes is a future minimum, not permission to fit incompatible units. Report reaction outcomes' distinct-day count as well as their total.
+- Reserve the newest 20% of eligible labeled local days (round up, minimum three days) as a chronological holdout, keeping every outcome from one day on the same side. Fit any learned normalization/imputation on training rows only, freeze it for holdout, and keep fixed normalization constants independent of this account's holdout. Never randomly mix future observations into training.
+- If a head lacks labels, feature coverage, or holdout rows, emit the coverage report and continue using `FatigueEngine`; do not expand beyond the requested 30 days or manufacture labels.
+- The implemented conservative coverage gate requires at least four present features
+  per eligible Energy row, with inspectable ingestion/update evidence for every
+  input used by either learned features or the deterministic reference. Legacy
+  unknown availability blocks readiness. Learned mood/stress features use the
+  observation day; the reference retains FatigueEngine's existing 36-hour context.
+- Until the existing deterministic helpers support arbitrary calendars natively,
+  selected account/device historical timezone offsets must agree throughout the
+  window for readiness; mismatches remain clearly labeled inspection-only.
+  Coach source provenance cannot be verified from these three collections, so
+  those labels are rejected as `coach_source_unverified` without adding another query.
+- Public datasets may inform terminology and bounded normalization choices later, but the first personalized fit must use only this account’s consented 30-day data.
 
-A single Kaggle table with sleep + exercise + caffeine + study + screen + mood + reaction + energy labels for adolescents is unlikely. Use public data as **priors / feature-engineering references**, and use **consented longitudinal Tonyo exports** as the personalization train set.
+Acceptance for prep:
 
-Research checklist:
+- A consented account can generate the same deterministic 30-day snapshot twice without extra Firestore reads on the second run.
+- Tests verify the three-query maximum with a shared consent read, server-side document limits, no-write behavior, exact date bounds, consent rejection, cache invalidation for edits/deletes, missing features, prior-only baselines, whole-day temporal holdout, training-only normalization, label-unit compatibility, and exclusion of synthetic rows from readiness/training.
+- The coverage report makes it obvious whether Energy, Cognitive, both, or neither model head is ready.
+- No Security Rules change permits cross-user reads or introduces a shared training-data tree.
 
-1. **Inventory gaps** against `SignalType` + `OutcomeType` (what you already collect vs what public sets never co-occur).
-2. **Specialize by modality** — sleep+HRV (e.g. PhysioNet sleep studies), activity/load, caffeine/nutrition surveys (e.g. NHANES-style), student stress/burnout surveys, reaction-time / PVT open sets. Record license, age of subjects, and whether “fatigue” is self-report or clinical.
-3. **Prefer research hosts** (PhysioNet, Zenodo, OSF, paper supplements) over random Kaggle for anything that might become a prior; keep Kaggle for exploration only.
-4. **Do not force-join strangers** into fake complete days. Train optional heads or priors per modality, then personalize on-device with the user’s consented `TrainingExample` rows.
-5. **Keep `assets/data/synthetic_students.csv` / Cohort Lab** for engine and UI demos only — not as ML labels (`ENGINE_TUNING.md`).
-6. **Write findings** into `DEVELOPMENT_LOG.md` (dataset name, URL, license, overlapping fields, why it is or isn’t usable for 0.32).
+#### Verified account prep inspection — 2026-09-05
 
-Ready for 0.32 when: schema export works on a consented account, missingness is explicit, and the research note lists which holes stay user-only vs which may use a public prior.
+- Cloud user metadata was schema version 7, last updated 2026-08-18: `outcomeCollection` was false and `trainingRecordUse` was absent. No `outcomes` collection was visible during the inspection.
+- The locally cached 30-day window, 2026-07-02 through 2026-07-31 inclusive, contained 222 signals and 60 check-ins. All were identified as synthetic from IDs/notes; the cache contained zero outcomes.
+- This window supports pipeline QA only. Neither head is ready for personalized training, and enabling consent later must not silently turn these seeded records into real labels. The inspection made no cloud writes.
+
+#### Completed implementation and live verification — 2026-09-05
+
+- Implemented `ml_prep_models.dart`, `ml_prep_repository.dart`,
+  `ml_prep_service.dart`, `ml_prep_builder.dart` and the Profile prep screen.
+  Dedicated prep interfaces expose no writes, listeners or broad account replacement.
+- The signed-in simulator fetched `[2026-07-02T07:00:00Z,
+  2026-08-01T07:00:00Z)` in America/Los_Angeles at
+  `2026-09-05T21:37:48.302808Z`. The current account metadata is schema 11;
+  both consent flags evaluated false. This supersedes the earlier schema-7
+  metadata inspection, not its historical findings.
+- The live bounded snapshot returned **222 signals, 60 check-ins and 0 outcomes**.
+  All 282 input documents were identified as synthetic. Energy and Cognitive
+  each have **0 eligible labels and 0 labeled days**: neither is training-ready.
+- The first prep run showed **3 collection queries + 1 shared user-document read,
+  282 returned collection documents, 0 writes**. Reopened July prep showed
+  **0 queries, 0 metadata reads and 0 writes**, reusing the same fetched-at time
+  and fingerprint `4e07fa57d07bc0a3-77234`. These counts cover prep only, not the
+  app's pre-existing startup/sync workflows or Firestore billing overhead.
+- Private local report: `build/ml-prep/REPORT.md` and `coverage.json` (ignored by
+  Git). `tool/export_ml_prep.dart` rebuilds the report from the saved prep cache
+  without network access. No historical outcomes were backfilled, consent was
+  not changed, and no model was trained or promoted.
 
 ## Upcoming Versions
 
 ### Version 0.32 — Personalized ML Model
 
-- Consume the prep `TrainingExample` join (consented user export / on-device) — not other users’ Firestore data
-- Train and evaluate a multimodal fatigue model; run approved inference on-device where possible
-- Retain deterministic scoring as the fallback; store model metadata on `users/{uid}` without raw third-party PII
+- Implement a tiny per-user Energy residual model: `personalized prediction = FatigueEngine prediction + bounded learned correction`, trained against the fixed 0–100 observed-energy target above. Cognitive remains report-only/unpromoted until a separate compatible target/reference specification is defined in this plan; raw reaction milliseconds are never score-point residuals.
+- Use fixed-regularization ridge regression with no neural network, no LLM call, no ML framework, no hyperparameter sweep, and no cross-user training. Keep each head to at most eight feature weights plus an intercept.
+- Train and infer on-device from the cached 30-day `TrainingExample` set. Target an artifact under 4 KB, training under 100 ms, inference under 1 ms, and less than 1 MB temporary working memory in a release build.
+- Clamp the learned correction to ±10 score points and shrink it toward zero as inputs become missing or stale.
+- Promote a head out of shadow mode only when chronological holdout error improves on the deterministic reference by at least 5% and no safety/bounds test regresses. Otherwise discard the candidate and keep `FatigueEngine` unchanged.
+- Retrain only after a new eligible outcome exists, never more than once per 24 hours, and only from an explicit foreground model refresh. Health sync, app launch, forecasts, and screen navigation must not trigger training.
+- Keep weights and the training snapshot on-device. After an accepted model changes, use one targeted merge write (never `replaceUser`) for small metadata only: model/schema version, window bounds, trained-at time, label count, holdout error, deterministic comparison, and feature-coverage summary.
+- Do not write per-inference predictions or duplicated training examples to Firestore; continue using the existing daily `scoreSnapshots` persistence path.
+- Always retain deterministic scoring as the instant fallback for insufficient data, revoked consent, corrupt artifacts, slower-than-budget inference, or validation underperformance.
 
 ### Version 0.33 — Model Transparency
 
@@ -372,7 +428,7 @@ Ready for 0.32 when: schema export works on a consented account, missingness is 
 - `SignalReading`: measurement type, value, unit, observation timestamp, source, quality, and optional sync timestamp → Firestore `users/{uid}/signals/{id}`
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
 - `OutcomeRecord`: consented observed energy or cognitive reaction value, timestamps, source link, consent version, and optional recommendation link → `users/{uid}/outcomes/{id}`
-- `TrainingExample` (prep for 0.32): on-device / export-only join of a day-scoped feature vector + missingness mask to one consented `OutcomeRecord`; not a cross-user Firestore collection
+- `TrainingExample` (prep for 0.32): on-device / export-only join from one bounded 30-day account snapshot, linking a day-scoped feature vector + missingness mask to one consented `OutcomeRecord`; not a cross-user Firestore collection
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
 - `PersonalBaselines`: rolling HRV, resting-heart-rate, sleep, and reaction-time references with sample maturity → embedded in the private daily `scoreSnapshots` document
 - `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
@@ -388,5 +444,6 @@ Firebase Auth identifies `uid`. Passwords never appear in Firestore. Local Share
 - Fixture-backed previews do not count as completed roadmap features.
 - Manual entry remains available when a device integration is denied or unavailable.
 - Deterministic scoring remains available when a personalized model is unavailable or underperforms.
+- Personalized prep/training stays foreground-only, bounded to one account window, and may not add recurring database reads or per-inference writes.
 - From Version 0.10-a onward, new persisted features should use the Firebase schema and user-scoped queries; local cache is allowed for offline use.
 - Tonyo is a wellness and performance tool, not a diagnostic medical product.
