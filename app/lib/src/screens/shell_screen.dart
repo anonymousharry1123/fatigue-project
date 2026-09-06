@@ -17,20 +17,22 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
-  static const screens = [
-    TodayScreen(),
-    ForecastInsightsScreen(),
-    AddDataScreen(),
-    CoachScreen(embedded: true),
-    ProfileScreen(),
+  late final screens = [
+    TodayScreen(onOpenProfile: () => _selectTab(4)),
+    const ForecastInsightsScreen(),
+    const AddDataScreen(),
+    const CoachScreen(embedded: true),
+    const ProfileScreen(),
   ];
+
+  void _selectTab(int index) => setState(() => _index = index);
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: IndexedStack(index: _index, children: screens),
     bottomNavigationBar: NavigationBar(
       selectedIndex: _index,
-      onDestinationSelected: (value) => setState(() => _index = value),
+      onDestinationSelected: _selectTab,
       destinations: [
         const NavigationDestination(
           icon: Icon(Icons.today_outlined),

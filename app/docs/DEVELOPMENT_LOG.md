@@ -67,7 +67,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-09-06 — **244 tests passed**, including local/cloud sign-out, sign-in and prep for Version 0.32; static analysis clean
+- Last verified: 2026-09-06 — **246 tests passed**, including the Today profile shortcut, local/cloud sign-out, sign-in and prep for Version 0.32; static analysis clean
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -105,6 +105,23 @@
 33. Outcome collection (explicit dual consent + linked energy/reaction records) - Complete (v0.31)
 
 ## Day-to-Day Entries
+
+### 2026-09-06 — Clickable Today profile avatar
+
+**Branch:** `main`
+
+**Prompt:** “make profile icon top right corner clickable”
+
+**Change:** The top-right Today avatar now selects the existing Profile tab
+through the shell's shared tab-selection callback. Bottom navigation stays in
+sync, tab state is preserved, and no duplicate Profile route is pushed. The
+avatar retains its appearance with a minimum 48-by-48 tap target and an
+accessible Open profile label/tooltip. No account or database behavior changes.
+
+**Verification:** Two new widget tests cover the button label/touch target,
+repeated avatar navigation, selected Profile destination and absence of pushed
+or duplicate Profile routes. `flutter test` passes **246 tests**,
+`flutter analyze` reports no issues, and `git diff --check` passes.
 
 ### 2026-09-06 — Return local and cloud sign-out to Welcome
 
@@ -1203,6 +1220,15 @@ created.
 ---
 
 ## Prompts Used
+
+### Screen: Today profile shortcut
+**Prompt:** “make profile icon top right corner clickable”
+
+**Result:** The avatar opens the existing Profile tab, including its settings
+and Sign out button, with a labeled button and a larger touch target.
+
+**Modifications:** Today header, shell navigation callback, regression tests
+and this log; no data or authentication changes.
 
 ### UI: Explicit sign-out button
 **Prompt:** “add a signout button”

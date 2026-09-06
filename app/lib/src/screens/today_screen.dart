@@ -8,7 +8,9 @@ import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
 
 class TodayScreen extends StatelessWidget {
-  const TodayScreen({super.key});
+  const TodayScreen({super.key, required this.onOpenProfile});
+
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +28,10 @@ class TodayScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             sliver: SliverList.list(
               children: [
-                _Header(name: controller.profile.name),
+                _Header(
+                  name: controller.profile.name,
+                  onOpenProfile: onOpenProfile,
+                ),
                 const SizedBox(height: 18),
                 TonyoCard(
                   key: const Key('energy-score-card'),
@@ -270,9 +275,10 @@ class TodayScreen extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.name});
+  const _Header({required this.name, required this.onOpenProfile});
 
   final String name;
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -292,14 +298,23 @@ class _Header extends StatelessWidget {
           ],
         ),
       ),
-      CircleAvatar(
-        radius: 22,
-        backgroundColor: TonyoColors.primary.withValues(alpha: .22),
-        child: Text(
-          name.trim().isEmpty
-              ? 'T'
-              : name.trim().characters.first.toUpperCase(),
-          style: const TextStyle(fontWeight: FontWeight.w900),
+      IconButton(
+        key: const Key('today-profile-button'),
+        tooltip: 'Open profile',
+        onPressed: onOpenProfile,
+        padding: const EdgeInsets.all(2),
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        icon: ExcludeSemantics(
+          child: CircleAvatar(
+            radius: 22,
+            backgroundColor: TonyoColors.primary.withValues(alpha: .22),
+            child: Text(
+              name.trim().isEmpty
+                  ? 'T'
+                  : name.trim().characters.first.toUpperCase(),
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
         ),
       ),
     ],
