@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/demo_data.dart';
@@ -9,11 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  AppController readyController() => AppController()
-    ..isReady = true
-    ..onboardingComplete = true
-    ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
-    ..checkIns = buildDemoCheckIns(DateTime(2026, 7, 21, 9));
+  AppController readyController() =>
+      AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+        ..isReady = true
+        ..onboardingComplete = true
+        ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
+        ..checkIns = buildDemoCheckIns(DateTime(2026, 7, 21, 9));
 
   testWidgets(
     'Today profile shortcut is labelled and has a full touch target',

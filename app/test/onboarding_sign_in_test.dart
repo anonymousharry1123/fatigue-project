@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'privacy_test_support.dart';
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -22,9 +24,7 @@ void main() {
     if (controller.isSignedOut) {
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     } else {
-      await tester.tap(find.text('Create my account'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Already have an account? Sign in'));
+      await tester.tap(find.byKey(const Key('onboarding-welcome-sign-in')));
     }
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -32,7 +32,6 @@ void main() {
       'returning@example.com',
     );
     await tester.enterText(find.byKey(const Key('password-field')), 'secret');
-    await tester.tap(find.byType(Checkbox));
     await tester.pump();
   }
 
@@ -166,10 +165,18 @@ void main() {
         expect(find.text('Make it yours'), findsNothing);
         auth.succeed();
         await tester.pumpAndSettle();
-        expect(find.text('Make it yours'), findsOneWidget);
+        expect(find.text('Privacy center'), findsOneWidget);
         expect(controller.isCloudAuthenticated, isTrue);
         expect(controller.onboardingComplete, isFalse);
         expect(repository.writes, 0);
+
+        await acknowledgeAdultPrivacy(tester);
+        await tester.ensureVisible(
+          find.byKey(const Key('privacy-accept-button')),
+        );
+        await tester.tap(find.byKey(const Key('privacy-accept-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Make it yours'), findsOneWidget);
 
         await tester.tap(find.text('Set my schedule'));
         await tester.pumpAndSettle();
@@ -359,6 +366,7 @@ CloudUserState _savedState() => CloudUserState(
   onboardingComplete: true,
   notificationsEnabled: false,
   outcomeConsent: false,
+  privacyConsent: testAdultPrivacyConsent,
   healthAuthorized: false,
   migrationVersion: localMigrationVersion,
   signals: [

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../account_error.dart';
 import '../app.dart';
 import '../models.dart';
+import '../privacy_consent.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'privacy_center_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -15,26 +17,51 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final _pageController = PageController();
+  late final PageController _pageController;
+  bool _initializedPage = false;
   final _accountFormKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _nameController = TextEditingController(text: 'Maya');
+  final _nameController = TextEditingController();
   int _page = 0;
   bool _acceptedPrivacy = false;
+  PrivacyAgeBand? _ageBand;
+  PrivacyRegion? _region;
+  bool _ageLocked = false;
   bool _isSubmitting = false;
   bool _signInExisting = false;
   bool _existingAccountVerified = false;
   String? _accountError;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  String _age = '16–18';
   String _role = 'Student athlete';
   String _goal = 'Balance focus and training';
   CoachPriority _coachPriority = CoachPriority.balanced;
   double _wake = 7;
   double _bed = 23;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initializedPage) return;
+    _initializedPage = true;
+    final controller = AppScope.of(context);
+    // The privacy gate may replace this route after verified sign-in. Restore
+    // only that authenticated, successfully loaded account's remaining setup;
+    // never ask it to register or verify the password again.
+    if (controller.isCloudAuthenticated &&
+        !controller.isSignedOut &&
+        !controller.onboardingComplete &&
+        !controller.privacyReviewRequired &&
+        controller.cloudSyncError == null) {
+      _existingAccountVerified = true;
+      _page = 3;
+      _ageBand = controller.privacyConsent?.ageBand;
+      _region = controller.privacyConsent?.region;
+    }
+    _pageController = PageController(initialPage: _page);
+  }
 
   @override
   void dispose() {
@@ -58,6 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               onPageChanged: (value) => setState(() => _page = value),
               children: [
                 _welcome(context),
+                _privacyReview(context),
                 _account(context),
                 _profile(context),
                 _schedule(context),
@@ -84,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
-                    4,
+                    5,
                     (index) => AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: index == _page ? 24 : 7,
@@ -102,10 +130,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
                   child: FilledButton(
-                    onPressed: _isSubmitting ? null : _next,
+                    onPressed: _isSubmitting || (_page == 1 && _ageLocked)
+                        ? null
+                        : _next,
                     style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -134,11 +167,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                       ? 'Sign in'
                                       : 'Create my account'
                                 : _page == 1
+                                ? _ageLocked
+                                      ? 'Guardian setup unavailable'
+                                      : 'Continue with these choices'
+                                : _page == 2
                                 ? _signInExisting &&
                                           AppScope.of(context).cloudEnabled
                                       ? 'Sign in'
                                       : 'Continue to my profile'
-                                : _page == 2
+                                : _page == 3
                                 ? 'Set my schedule'
                                 : _existingAccountVerified
                                 ? 'Finish account setup'
@@ -149,10 +186,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(height: 10),
                 Text(
                   AppScope.of(context).cloudEnabled
-                      ? 'Private by design. Your data syncs only to your account.'
+                      ? 'Your data choices come before account setup.'
                       : AppScope.of(context).canResumeLocalProfile
                       ? 'Local mode. No password verification or Firebase sign-in.'
-                      : 'Offline demo mode. Your data stays on this device.',
+                      : 'Local mode. No Firebase account is created.',
                   style: TextStyle(color: TonyoColors.muted, fontSize: 11),
                 ),
               ],
@@ -196,10 +233,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: TextButton(
               onPressed: _isSubmitting
                   ? null
-                  : () => setState(() {
-                      _signInExisting = !_signInExisting;
-                      _accountError = null;
-                    }),
+                  : () async {
+                      if (_signInExisting) {
+                        setState(() {
+                          _signInExisting = false;
+                          _accountError = null;
+                        });
+                        await _pageController.animateToPage(
+                          1,
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOut,
+                        );
+                      } else {
+                        setState(() {
+                          _signInExisting = true;
+                          _accountError = null;
+                        });
+                      }
+                    },
               child: Text(
                 _signInExisting
                     ? 'Create a new account instead'
@@ -305,21 +356,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 : null,
           ),
         ],
-        const SizedBox(height: 14),
-        CheckboxListTile(
-          value: _acceptedPrivacy,
-          onChanged: _isSubmitting
-              ? null
-              : (value) => setState(() => _acceptedPrivacy = value ?? false),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: Text(
-            AppScope.of(context).cloudEnabled
-                ? 'I understand Tonyo stores wellness data in my private cloud account and keeps an offline cache on this device.'
-                : 'I understand this demo stores my account email and app data locally on this device.',
-            style: TextStyle(fontSize: 12),
-          ),
-        ),
         const SizedBox(height: 10),
         TonyoCard(
           child: Row(
@@ -343,6 +379,68 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ],
     ),
+  );
+
+  Widget _privacyReview(BuildContext context) => ListView(
+    key: const Key('onboarding-privacy-scroll'),
+    padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+    children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: IconButton.filledTonal(
+          tooltip: 'Back to welcome',
+          onPressed: _isSubmitting ? null : _previous,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+      ),
+      const SizedBox(height: 20),
+      Text(
+        'Before you begin',
+        style: Theme.of(context).textTheme.headlineLarge,
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Your choices come first. Account details come later.',
+        style: TextStyle(color: TonyoColors.muted),
+      ),
+      if (AppScope.of(context).cloudEnabled) ...[
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('onboarding-privacy-existing-account'),
+            onPressed: _isSubmitting ? null : _openExistingAccount,
+            child: const Text('Already have an account? Sign in'),
+          ),
+        ),
+      ],
+      const SizedBox(height: 20),
+      if (_ageLocked && _ageBand != null) ...[
+        Text(
+          'Selected age band: ${_ageBand!.label}',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+      ],
+      PrivacyChoicesForm(
+        ageBand: _ageBand,
+        region: _region,
+        acknowledged: _acceptedPrivacy,
+        enabled: !_isSubmitting && !_ageLocked,
+        locked: _ageLocked,
+        cloudEnabled: AppScope.of(context).cloudEnabled,
+        onAgeChanged: (value) => setState(() {
+          _ageBand = value;
+          _acceptedPrivacy = false;
+          _ageLocked = value != null && value != PrivacyAgeBand.adult;
+        }),
+        onRegionChanged: (value) => setState(() {
+          _region = value;
+          _acceptedPrivacy = false;
+        }),
+        onAcknowledged: (value) => setState(() => _acceptedPrivacy = value),
+      ),
+    ],
   );
 
   Widget _welcome(BuildContext context) => ListView(
@@ -377,10 +475,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 8),
       const Text(
-        'Your personal AI that forecasts fatigue before it hits — and tells you exactly what to do about it.',
+        'Make more informed choices about focus and recovery with estimates shaped by your daily signals.',
         textAlign: TextAlign.center,
         style: TextStyle(color: TonyoColors.muted, height: 1.45),
       ),
+      if (AppScope.of(context).cloudEnabled &&
+          !AppScope.of(context).canResumeLocalProfile) ...[
+        const SizedBox(height: 12),
+        TextButton(
+          key: const Key('onboarding-welcome-sign-in'),
+          onPressed: _isSubmitting ? null : _openExistingAccount,
+          child: const Text('Already have an account? Sign in'),
+        ),
+      ],
       if (AppScope.of(context).canResumeLocalProfile) ...[
         const SizedBox(height: 18),
         const Text(
@@ -395,15 +502,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const Wrap(
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Text(
                   'Tomorrow’s energy forecast',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 Text(
-                  '92% confident',
+                  'Illustrative demo',
                   style: TextStyle(
                     color: TonyoColors.mint,
                     fontSize: 11,
@@ -480,13 +588,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         decoration: const InputDecoration(labelText: 'First name'),
       ),
       const SizedBox(height: 14),
-      DropdownButtonFormField<String>(
-        initialValue: _age,
-        decoration: const InputDecoration(labelText: 'Age range'),
-        items: ['13–15', '16–18', '18+']
-            .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-            .toList(),
-        onChanged: (value) => setState(() => _age = value!),
+      Text(
+        'Age band: ${AppScope.of(context).privacyConsent?.ageBand.label ?? _ageBand?.label ?? 'Review required'}',
+        style: const TextStyle(color: TonyoColors.muted),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
@@ -643,20 +747,52 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     if (_page == 0 && controller.isSignedOut && controller.cloudEnabled) {
-      _signInExisting = true;
+      await _openExistingAccount();
+      return;
     }
     if (_page == 1) {
-      final valid = _accountFormKey.currentState?.validate() ?? false;
-      if (!valid || !_acceptedPrivacy) {
-        if (!_acceptedPrivacy) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Confirm the data privacy notice to continue.'),
-            ),
+      if (_ageBand == null || _region == null || !_acceptedPrivacy) {
+        setState(
+          () => _accountError = _ageLocked
+              ? 'New account setup is paused until verified guardian setup is available. You can still sign in to an existing account.'
+              : 'Choose your age band and region, then read and acknowledge the data-use notice.',
+        );
+        return;
+      }
+      if (_ageBand != PrivacyAgeBand.adult) {
+        setState(
+          () => _accountError =
+              'New account setup is paused until verified guardian setup is available.',
+        );
+        return;
+      }
+      setState(() {
+        _isSubmitting = true;
+        _accountError = null;
+      });
+      try {
+        await controller.acceptPrivacy(
+          ageBand: _ageBand!,
+          region: _region!,
+          acknowledged: _acceptedPrivacy,
+        );
+      } on Object {
+        if (mounted) {
+          setState(
+            () => _accountError =
+                controller.privacyOperationError ??
+                'Your privacy choices could not be saved. Please try again.',
           );
         }
         return;
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
       }
+      if (!mounted) return;
+    }
+    if (_page == 2) {
+      final valid = _accountFormKey.currentState?.validate() ?? false;
+      if (!valid) return;
       if (_signInExisting && controller.cloudEnabled) {
         // Stay on the account form until Firebase verifies these credentials.
         // Existing users restore their profile rather than redoing onboarding.
@@ -702,7 +838,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
     }
-    if (_page < 3) {
+    if (_page < 4) {
       setState(() {
         _isSubmitting = true;
         _accountError = null;
@@ -724,8 +860,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = _nameController.text.trim();
     try {
       final profile = UserProfile(
-        name: name.isEmpty ? 'Maya' : name,
-        ageRange: _age,
+        name: name.isEmpty ? 'Your profile' : name,
+        ageRange:
+            controller.privacyConsent?.ageBand.label ??
+            _ageBand?.label ??
+            'Not provided',
         role: _role,
         goal: _goal,
         coachPriority: _coachPriority,
@@ -741,6 +880,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           password: _passwordController.text,
         );
       }
+      _passwordController.clear();
+      _confirmPasswordController.clear();
     } on Object catch (error) {
       if (mounted) {
         setState(() {
@@ -755,12 +896,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _previous() async {
     if (_isSubmitting ||
         _page == 0 ||
-        (_existingAccountVerified && _page == 2)) {
+        (_existingAccountVerified && _page == 3)) {
       return;
     }
     setState(() => _accountError = null);
     await _pageController.previousPage(
       duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _openExistingAccount() async {
+    if (_isSubmitting) return;
+    setState(() {
+      _signInExisting = true;
+      _accountError = null;
+    });
+    await _pageController.animateToPage(
+      2,
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeOut,
     );
   }

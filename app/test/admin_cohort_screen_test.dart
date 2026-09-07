@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/screens/admin/admin_cohort_screen.dart';
 import 'package:app/src/theme.dart';
@@ -10,7 +11,9 @@ void main() {
   testWidgets('Cohort Lab overview renders empty state and load control', (
     tester,
   ) async {
-    final controller = AppController();
+    final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
     await tester.pumpWidget(
       MaterialApp(
         theme: buildTonyoTheme(),

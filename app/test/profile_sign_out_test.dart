@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'dart:async';
 
 import 'package:app/src/app.dart';
@@ -76,6 +77,7 @@ void main() {
     repository = MemoryCloudRepository(signedInUid: 'profile-user');
     controller =
         AppController(
+            initialPrivacyConsent: testAdultPrivacyConsent,
             accountAuth: auth,
             cloudRepository: repository,
             healthService: _SignOutHealthService(),
@@ -107,6 +109,7 @@ void main() {
     repository.seed(
       'profile-user',
       CloudUserState(
+        privacyConsent: testAdultPrivacyConsent,
         profile: controller.profile,
         accountEmail: controller.accountEmail!,
         onboardingComplete: true,

@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'dart:async';
 
 import 'package:app/src/app.dart';
@@ -54,8 +55,6 @@ void main() {
       _session.email,
     );
     await tester.enterText(find.byKey(const Key('password-field')), 'secret');
-    await tester.tap(find.byType(Checkbox));
-    await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pump();
   }
@@ -91,6 +90,7 @@ void main() {
       final restartedHealth = _TrackingHealth();
       final restartedScreenTime = _TrackingScreenTime();
       final restarted = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: restartedHealth,
         screenTimeService: restartedScreenTime,
         notificationService: _TrackingNotifications(),
@@ -140,6 +140,7 @@ void main() {
       final notifications = _TrackingNotifications()
         ..schedulingSupported = true;
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: health,
         screenTimeService: screenTime,
         notificationService: notifications,
@@ -252,6 +253,7 @@ void main() {
       // gate or trigger hydration until the person explicitly signs in again.
       final staleAuth = _ControlledAuth();
       final restarted = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: staleAuth,
         cloudRepository: repository,
         healthService: restartedHealth,
@@ -442,6 +444,7 @@ AppController _readyController({
 }) {
   final saved = _savedState();
   return AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
       healthService: health ?? _TrackingHealth(),
@@ -458,6 +461,7 @@ AppController _readyController({
 }
 
 CloudUserState _savedState({bool enableServices = false}) => CloudUserState(
+  privacyConsent: testAdultPrivacyConsent,
   profile: const UserProfile(name: 'Saved Maya', wakeHour: 6),
   accountEmail: _session.email,
   onboardingComplete: true,

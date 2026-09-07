@@ -111,7 +111,7 @@ void main() {
     final data = signalToCloud(original);
     expect(data['recordedAt'], recordedAt);
     expect(data['timestamp'], observedAt);
-    expect(data['schemaVersion'], 12);
+    expect(data['schemaVersion'], cloudSchemaVersion);
     final decoded = signalFromCloud(original.id, data);
     expect(decoded.toJson(), original.toJson());
   });
@@ -121,7 +121,7 @@ void main() {
     final data = checkInToCloud(original);
     expect(data['recordedAt'], recordedAt);
     expect(data['timestamp'], observedAt);
-    expect(data['schemaVersion'], 12);
+    expect(data['schemaVersion'], cloudSchemaVersion);
     final decoded = checkInFromCloud(original.id, data);
     expect(decoded.toJson(), original.toJson());
   });

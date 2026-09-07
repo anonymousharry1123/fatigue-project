@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
@@ -48,6 +49,7 @@ void main() {
         ..seed(
           'insights-uid',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(name: 'Insight Maya'),
             accountEmail: 'insights@example.com',
             onboardingComplete: true,
@@ -61,6 +63,7 @@ void main() {
           ),
         );
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );

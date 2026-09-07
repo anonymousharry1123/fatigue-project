@@ -15,7 +15,7 @@ void main() {
         'allow create, update: if isOwner(uid) && outcomeConsentGranted(uid)',
       ),
     );
-    expect(rules, contains('allow read, delete: if isOwner(uid)'));
+    expect(rules, contains('allow get, list, delete: if isOwner(uid)'));
   });
 
   test(
@@ -41,8 +41,8 @@ void main() {
       );
       expect(rules, contains('data.consentFlags.outcomeCollection == true'));
       expect(rules, contains('data.consentFlags.trainingRecordUse == true'));
-      expect(rules, contains('allow read, delete: if isOwner(uid)'));
-      expect(rules, contains("if isOwner(uid) && collection != 'outcomes'"));
+      expect(rules, contains('allow get, list, delete: if isOwner(uid)'));
+      expect(rules, contains('&& ownerDataWritable(uid)'));
       expect(rules, contains('allow read, write: if false'));
     },
   );
@@ -87,4 +87,28 @@ void main() {
       expect(rules, isNot(contains('match /models/')));
     },
   );
+
+  test('Version 0.34 denies listing users and arbitrary child writes', () {
+    final rules = File('firestore.rules').readAsStringSync();
+    expect(rules, contains('allow get: if isOwner(uid)'));
+    expect(rules, contains('allow list: if false'));
+    expect(rules, isNot(contains("collection != 'outcomes'")));
+    expect(rules, contains("collection in ['signals', 'checkIns'"));
+    expect(rules, contains('getAfter('));
+    expect(
+      rules,
+      contains("request.auth.token.get('guardianConsentVerified', false)"),
+    );
+    expect(
+      rules,
+      contains("request.auth.token.get('guardianConsentPolicyVersion', 0)"),
+    );
+    expect(
+      rules,
+      contains("request.auth.token.get('syntheticLabAdmin', false)"),
+    );
+    expect(rules, isNot(contains('if isSignedIn()')));
+    expect(rules, contains('&& recentAuthentication()'));
+    expect(rules, contains('!deletionPending(resource.data)'));
+  });
 }

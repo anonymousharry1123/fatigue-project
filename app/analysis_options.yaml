@@ -3,3 +3,6 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - build/**
+    # Test-only Firebase CLI dependencies include unrelated Dart templates.
+    - tool/security_rules/node_modules/**
+    - tool/security_rules/.pnpm-store/**

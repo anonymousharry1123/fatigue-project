@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
@@ -15,6 +16,7 @@ void main() {
 
   AppController controllerFor(MemoryCloudRepository repository) =>
       AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: MemoryAccountAuth(
           session: const AccountSession(
             uid: uid,
@@ -77,7 +79,9 @@ void main() {
         );
         expect(signals.every((signal) => signal.value > 0), isTrue);
       }
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       addTearDown(restored.dispose);
       await restored.load();
       expect(

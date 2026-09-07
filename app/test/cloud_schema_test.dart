@@ -251,7 +251,105 @@ void main() {
       expect(restored.cognitive, 0);
       expect(restored.hasCognitiveScore, isFalse);
       expect(restored.cognitiveChange, isNull);
+      expect(restored.energyModelVersion, isNull);
+      expect(restored.cognitiveModelVersion, isNull);
+      final roundTrip = scoreSnapshotFromCloud(
+        scoreSnapshotToCloud(snapshot: restored, day: restored.day!),
+      );
+      expect(roundTrip.hasCognitiveScore, isFalse);
+      expect(roundTrip.energyModelVersion, isNull);
+      expect(roundTrip.cognitiveModelVersion, isNull);
+      expect(roundTrip.calculatedAt, isNull);
     });
+
+    test(
+      'Version 0.33 persists actual rules versions and both heads provenance',
+      () {
+        final day = DateTime.utc(2026, 9, 7);
+        final score = ScoreSnapshot(
+          energy: 70,
+          cognitive: 65,
+          confidence: .8,
+          energyModelVersion: 'energy-rules-v1',
+          cognitiveModelVersion: 'cognitive-rules-v1',
+          drivers: const [
+            ScoreDriver(
+              'Mixed movement',
+              3,
+              'Imported activity with a manual adjustment',
+              source: SignalSource.healthKit,
+              evidenceSources: [SignalSource.manual, SignalSource.healthKit],
+              containsDemoEvidence: false,
+            ),
+          ],
+          cognitiveDrivers: const [
+            ScoreDriver(
+              'Demo reaction',
+              2,
+              'Preview only',
+              source: SignalSource.manual,
+              evidenceSources: [SignalSource.manual],
+              containsDemoEvidence: true,
+            ),
+          ],
+        );
+        final cloud = scoreSnapshotToCloud(snapshot: score, day: day);
+        expect(cloud['schemaVersion'], cloudSchemaVersion);
+        final restored = scoreSnapshotFromCloud(cloud);
+        expect(restored.energyModelVersion, 'energy-rules-v1');
+        expect(restored.cognitiveModelVersion, 'cognitive-rules-v1');
+        expect(restored.drivers.single.evidenceSources, [
+          SignalSource.manual,
+          SignalSource.healthKit,
+        ]);
+        expect(restored.drivers.single.containsDemoEvidence, isFalse);
+        expect(restored.cognitiveDrivers.single.evidenceSources, [
+          SignalSource.manual,
+        ]);
+        expect(restored.cognitiveDrivers.single.containsDemoEvidence, isTrue);
+      },
+    );
+
+    test(
+      'legacy and malformed provenance remain unknown without false claims',
+      () {
+        final cloud = <String, dynamic>{
+          'energy': 72,
+          'confidence': .8,
+          'day': DateTime.utc(2026, 9, 7),
+          'energyModelVersion': 1,
+          'cognitiveModelVersion': false,
+          'drivers': [
+            {'label': 'Legacy', 'contribution': 2, 'detail': 'Earlier result'},
+            {
+              'label': 'Unsupported provenance',
+              'contribution': 1,
+              'detail': 'Unknown source',
+              'source': 'future-source',
+              'evidenceSources': ['manual', 'future-source', 'manual', 5],
+              'containsDemoEvidence': 'false',
+            },
+          ],
+        };
+        final restored = scoreSnapshotFromCloud(cloud);
+        expect(restored.energyModelVersion, isNull);
+        expect(restored.cognitiveModelVersion, isNull);
+        expect(restored.drivers.first.evidenceSources, isEmpty);
+        expect(restored.drivers.first.containsDemoEvidence, isNull);
+        expect(restored.drivers.last.source, isNull);
+        expect(restored.drivers.last.evidenceSources, isEmpty);
+        expect(restored.drivers.last.containsDemoEvidence, isNull);
+        final written = scoreSnapshotToCloud(
+          snapshot: restored,
+          day: restored.day!,
+        );
+        expect(written, isNot(contains('energyModelVersion')));
+        expect(
+          (written['drivers'] as List).first,
+          isNot(contains('containsDemoEvidence')),
+        );
+      },
+    );
 
     test('derived collection serializers match roadmap field names', () {
       final forecastUpdatedAt = DateTime.utc(2026, 7, 28, 8, 30);
@@ -382,6 +480,35 @@ void main() {
       expect(restoredAlert.signalEvidenceIds, ['sleep-1']);
       expect(restoredAlert.dismissed, isFalse);
     });
+
+    test(
+      'unknown aggregate sources cannot imply exclusively measured data',
+      () {
+        for (final sources in <Object?>[
+          ['healthKit', 'futureSource'],
+          ['healthKit', 7],
+          'healthKit',
+        ]) {
+          final snapshot = scoreSnapshotFromCloud({
+            'energy': 70,
+            'confidence': .8,
+            'day': DateTime.utc(2026, 9, 7),
+            'drivers': [
+              {
+                'label': 'Mixed evidence',
+                'contribution': 2,
+                'detail': 'Not exclusively verified',
+                'source': 'healthKit',
+                'evidenceSources': sources,
+                'containsDemoEvidence': false,
+              },
+            ],
+          });
+          expect(snapshot.drivers.single.evidenceSources, isEmpty);
+          expect(snapshot.drivers.single.containsDemoEvidence, isNull);
+        }
+      },
+    );
 
     test('rejects invalid persisted forecast values', () {
       expect(

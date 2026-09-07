@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'dart:convert';
 
 import 'package:app/src/app_controller.dart';
@@ -92,6 +93,7 @@ class _Harness {
       ..seed(
         snapshot.uid,
         CloudUserState(
+          privacyConsent: testAdultPrivacyConsent,
           profile: const UserProfile(name: 'Isolated integration test'),
           accountEmail: 'isolated@example.com',
           onboardingComplete: true,
@@ -140,6 +142,7 @@ class _Harness {
   }
 
   AppController createController() => AppController(
+    initialPrivacyConsent: testAdultPrivacyConsent,
     accountAuth: auth,
     cloudRepository: repository,
     prepDataSource: source,

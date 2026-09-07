@@ -110,12 +110,15 @@ training promotion or production database writes occurred during this work.
 Local rules restrict new/changed `personalizedEnergyModel` summaries to the
 owner with both consent flags, exact metadata fields and bounded values. The
 field-difference guard follows [Firebase's documented field-access rules](https://firebase.google.com/docs/firestore/security/rules-fields).
-Rules have unit/pattern checks, **not emulator or production-deployment
-verification** in this session; Firebase CLI was not available. Verify and
-deploy the checked-in rules through the normal release process before relying
-on the new server-side metadata guard. No existing cross-user grants were added.
+Version 0.34 added **24 passing executable Firestore emulator tests**, including
+the owner/dual-consent metadata guard, guardian gating and atomic-batch checks.
+See the [security harness](../tool/security_rules/README.md). Production rules
+deployment and backend IAM remain unverified; deploy and audit through the normal
+release process before relying on these guards in a live account. No cross-user
+grants were added.
 
 Before final release sign-off: measure on the target iPhone, verify the actual
 temporary heap, validate/deploy rules, and test acceptance on genuine consented
-data once enough labeled days exist. Version 0.33 transparency work has not been
-started or marked complete.
+data once enough labeled days exist. Version 0.33's separate
+[transparency screen](MODEL_TRANSPARENCY.md) explains the active score and saved
+model metadata; it does not complete those outstanding release checks.

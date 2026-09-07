@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-store/
+.runtime/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log

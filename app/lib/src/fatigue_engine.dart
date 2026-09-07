@@ -7,6 +7,10 @@ import 'screen_time_logic.dart';
 import 'sleep_sync_logic.dart';
 
 abstract final class FatigueEngine {
+  // Versioned separately from the app and the optional learned correction.
+  static const energyModelVersion = 'energy-rules-v1';
+  static const cognitiveModelVersion = 'cognitive-rules-v1';
+
   static ScoreSnapshot score({
     required List<SignalReading> signals,
     required List<DailyCheckIn> checkIns,
@@ -484,6 +488,8 @@ abstract final class FatigueEngine {
       cognitiveFreshness: cognitiveFreshness,
       personalBaselines: personalBaselines,
       baselineConfidence: personalBaselines?.overallReadiness ?? 0,
+      energyModelVersion: energyModelVersion,
+      cognitiveModelVersion: cognitiveModelVersion,
     );
   }
 
@@ -529,6 +535,16 @@ abstract final class FatigueEngine {
       ),
       source: sorted.firstOrNull?.source,
       evidenceAt: sorted.firstOrNull?.timestamp,
+      evidenceSources: List.unmodifiable(
+        sorted.map((reading) => reading.source).toSet(),
+      ),
+      containsDemoEvidence: sorted.any(
+        (reading) => _hasDemoMarker([
+          reading.id,
+          reading.groupId ?? '',
+          reading.note ?? '',
+        ]),
+      ),
     );
   }
 
@@ -549,7 +565,18 @@ abstract final class FatigueEngine {
       maximumAge: const Duration(hours: 36),
     ),
     evidenceAt: checkIn.timestamp,
+    source: SignalSource.manual,
+    evidenceSources: const [SignalSource.manual],
+    containsDemoEvidence: _hasDemoMarker([checkIn.id, checkIn.note]),
   );
+
+  static final _demoMarker = RegExp(
+    r'(^|[^a-z])(seed(?:ed)?|synthetic|fake|demo|fixture|cohort)([^a-z]|$)',
+    caseSensitive: false,
+  );
+
+  static bool _hasDemoMarker(Iterable<String> values) =>
+      values.any(_demoMarker.hasMatch);
 
   static double _signalFreshness(
     List<SignalReading> readings, {

@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/health_service.dart';
@@ -16,6 +17,7 @@ void main() {
     (tester) async {
       final controller =
           AppController(
+              initialPrivacyConsent: testAdultPrivacyConsent,
               healthService: _NoHealth(),
               screenTimeService: _NoScreenTime(),
               notificationService: _NoNotifications(),

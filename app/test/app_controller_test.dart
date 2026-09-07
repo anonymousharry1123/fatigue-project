@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/cloud_repository.dart';
@@ -16,14 +17,18 @@ void main() {
   test(
     'Version 0.5 restores onboarding and profile from local storage',
     () async {
-      final first = AppController();
+      final first = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await first.load();
       await first.completeOnboarding(
         const UserProfile(name: 'Jordan', role: 'Athlete'),
         email: 'Jordan@Example.com',
       );
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
 
       expect(restored.onboardingComplete, isTrue);
@@ -36,12 +41,16 @@ void main() {
   );
 
   test('reset removes the persisted Version 0.5 state', () async {
-    final controller = AppController();
+    final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
     await controller.load();
     await controller.completeOnboarding(const UserProfile());
     await controller.reset();
 
-    final restored = AppController();
+    final restored = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
     await restored.load();
     expect(restored.onboardingComplete, isFalse);
     expect(restored.accountEmail, isNull);
@@ -49,9 +58,11 @@ void main() {
   });
 
   test(
-    'Version 0.10-a migrates local JSON on first signed-in launch',
+    'Version 0.34 does not auto-migrate a cached profile into a missing cloud account',
     () async {
-      final local = AppController();
+      final local = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await local.load();
       await local.completeOnboarding(
         const UserProfile(name: 'Legacy Maya'),
@@ -72,6 +83,7 @@ void main() {
       );
       final repository = MemoryCloudRepository(signedInUid: 'maya-uid');
       final migrated = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -79,22 +91,19 @@ void main() {
       await migrated.load();
 
       final cloud = await repository.readUser('maya-uid');
-      expect(cloud, isNotNull);
-      expect(cloud!.migrationVersion, localMigrationVersion);
-      expect(cloud.profile.name, 'Legacy Maya');
-      expect(
-        cloud.checkIns.any(
-          (value) => value.timestamp == DateTime(2026, 7, 28, 9),
-        ),
-        isTrue,
-      );
+      expect(cloud, isNull);
+      expect(repository.replaceUserCallCount, 0);
+      expect(migrated.privacyReviewRequired, isTrue);
+      expect(migrated.onboardingComplete, isFalse);
+      expect(migrated.signals, isEmpty);
+      expect(migrated.checkIns, isEmpty);
       expect(migrated.isCloudAuthenticated, isTrue);
       expect(migrated.cloudSyncError, isNull);
     },
   );
 
   test('Version 0.10-a uses existing cloud state over local cache', () async {
-    final local = AppController();
+    final local = AppController(initialPrivacyConsent: testAdultPrivacyConsent);
     await local.load();
     await local.completeOnboarding(
       const UserProfile(name: 'Local name'),
@@ -107,7 +116,8 @@ void main() {
     final repository = MemoryCloudRepository(signedInUid: 'maya-uid')
       ..seed(
         'maya-uid',
-        const CloudUserState(
+        CloudUserState(
+          privacyConsent: testAdultPrivacyConsent,
           profile: UserProfile(name: 'Cloud name'),
           accountEmail: 'maya@example.com',
           onboardingComplete: true,
@@ -120,6 +130,7 @@ void main() {
         ),
       );
     final restored = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
     );
@@ -136,7 +147,8 @@ void main() {
     final repository = MemoryCloudRepository(signedInUid: 'test-uid')
       ..seed(
         'test-uid',
-        const CloudUserState(
+        CloudUserState(
+          privacyConsent: testAdultPrivacyConsent,
           profile: UserProfile(name: 'Returning Maya'),
           accountEmail: 'maya@example.com',
           onboardingComplete: true,
@@ -149,6 +161,7 @@ void main() {
         ),
       );
     final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
     );
@@ -178,7 +191,8 @@ void main() {
       final repository = MemoryCloudRepository(signedInUid: 'outcome-uid')
         ..seed(
           'outcome-uid',
-          const CloudUserState(
+          CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: UserProfile(name: 'Outcome Maya'),
             accountEmail: 'outcomes@example.com',
             onboardingComplete: false,
@@ -191,6 +205,7 @@ void main() {
           ),
         );
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         clock: () => now,
@@ -265,6 +280,7 @@ void main() {
     final auth = MemoryAccountAuth();
     final repository = MemoryCloudRepository(signedInUid: 'test-uid');
     final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
     );
@@ -284,7 +300,7 @@ void main() {
     );
     expect(await controller.exportAllData(), contains('"uid": "test-uid"'));
 
-    await controller.deleteAccountData();
+    await controller.deleteAccountData(password: 'secure-pass');
     expect(await repository.readUser('test-uid'), isNull);
     expect(controller.onboardingComplete, isFalse);
     expect(auth.currentSession, isNull);
@@ -296,6 +312,7 @@ void main() {
       final auth = MemoryAccountAuth();
       final repository = MemoryCloudRepository(signedInUid: 'test-uid');
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -344,6 +361,7 @@ void main() {
         ..seed(
           'score-uid',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(name: 'Score Maya'),
             accountEmail: 'score@example.com',
             onboardingComplete: true,
@@ -402,6 +420,7 @@ void main() {
         ),
       );
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -444,6 +463,7 @@ void main() {
         ..seed(
           'dashboard-uid',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(name: 'Dashboard Maya'),
             accountEmail: 'dashboard@example.com',
             onboardingComplete: true,
@@ -499,6 +519,7 @@ void main() {
         ),
       );
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -529,6 +550,7 @@ void main() {
       ..seed(
         'upgrade-uid',
         CloudUserState(
+          privacyConsent: testAdultPrivacyConsent,
           profile: const UserProfile(name: 'Upgrade Maya'),
           accountEmail: 'upgrade@example.com',
           onboardingComplete: true,
@@ -558,6 +580,7 @@ void main() {
       ),
     );
     final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
     );
@@ -587,6 +610,7 @@ void main() {
         ..seed(
           'forecast-uid',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(name: 'Forecast Maya'),
             accountEmail: 'forecast@example.com',
             onboardingComplete: true,
@@ -626,6 +650,7 @@ void main() {
           ),
         );
       final first = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -652,6 +677,7 @@ void main() {
       expect(first.forecastError, isNull);
 
       final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -698,6 +724,7 @@ void main() {
         );
       }
       final refreshed = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
       );
@@ -729,6 +756,7 @@ void main() {
         ..seed(
           'guidance-uid',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(
               name: 'Guidance Maya',
               coachPriority: CoachPriority.training,
@@ -821,6 +849,7 @@ void main() {
         );
       }
       final first = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         clock: () => now,
@@ -906,6 +935,7 @@ void main() {
       expect(first.alerts.map((item) => item.id), isNot(contains(dismissedId)));
 
       final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         clock: () => now,
@@ -940,7 +970,9 @@ void main() {
   test(
     'Version 0.8 stores morning/evening check-ins on a 1–10 scale',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
 
       await controller.addCheckIn(
@@ -963,7 +995,9 @@ void main() {
       expect(controller.checkIns.last.period, CheckInPeriod.morning);
       expect(controller.checkIns.last.mood, 7);
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(restored.checkIns, hasLength(2));
       expect(restored.checkIns.first.period, CheckInPeriod.evening);
@@ -974,7 +1008,9 @@ void main() {
   test(
     'Version 0.8 period follows the check-in timestamp, not a manual choice',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
 
       await controller.addCheckIn(
@@ -998,7 +1034,9 @@ void main() {
   );
 
   test('Version 0.8 rejects ratings outside 1–10', () async {
-    final controller = AppController();
+    final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
     await controller.load();
 
     expect(
@@ -1014,7 +1052,9 @@ void main() {
   test(
     'Version 0.9 saves reaction benchmarks and exposes a baseline',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
 
       await controller.addReactionResult(290);
@@ -1023,7 +1063,9 @@ void main() {
 
       expect(controller.reactionBaseline, closeTo(270, 0.01));
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(
         restored.signals.where((item) => item.type == SignalType.reactionTime),
@@ -1034,7 +1076,9 @@ void main() {
   );
 
   test('Version 0.9 rejects invalid reaction averages', () async {
-    final controller = AppController();
+    final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
     await controller.load();
 
     expect(() => controller.addReactionResult(50), throwsArgumentError);
@@ -1044,7 +1088,9 @@ void main() {
   test(
     'Version 0.6 saves, validates, edits, and restores activity logs',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
 
       await controller.saveActivityLog(
@@ -1088,7 +1134,9 @@ void main() {
       );
       expect(controller.activityLogs, hasLength(1));
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(restored.activityLogs, hasLength(1));
       expect(restored.activityLogs.single.screenTimeHours, 5);
@@ -1098,7 +1146,9 @@ void main() {
   test(
     'Version 0.7 calculates sleep duration and bedtime consistency',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
 
       await controller.addSleep(
@@ -1141,7 +1191,9 @@ void main() {
         throwsArgumentError,
       );
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(restored.sleepLogs, hasLength(2));
       expect(restored.sleepLogs.first.durationHours, 8.5);
@@ -1151,7 +1203,9 @@ void main() {
   test(
     'activity logs display omitted fields as zero without saving signals',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
       await controller.saveActivityLog(
         hydrationLiters: 2.2,
@@ -1182,7 +1236,9 @@ void main() {
         isEmpty,
       );
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(restored.activityLogs.single.hydrationLiters, 2.2);
       expect(restored.activityLogs.single.studyHours, 0);
@@ -1194,7 +1250,9 @@ void main() {
   test(
     'Version 0.10 history persists, edits, and deletes manual entries',
     () async {
-      final controller = AppController();
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await controller.load();
       final day = DateTime(2026, 7, 23);
       await controller.saveActivityLog(
@@ -1230,7 +1288,9 @@ void main() {
       expect(controller.checkIns.single.energy, 6);
       expect(controller.checkIns.single.note, 'Updated');
 
-      final restored = AppController();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+      );
       await restored.load();
       expect(restored.dailyHistory.single.completionCount, 3);
       expect(restored.checkIns.single.energy, 6);
@@ -1249,7 +1309,10 @@ void main() {
         status: HealthAuthorizationState.notDetermined,
         requestResult: HealthAuthorizationState.denied,
       );
-      final controller = AppController(healthService: health);
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        healthService: health,
+      );
       await controller.load();
       final manual = SignalReading(
         id: 'manual-hydration',
@@ -1318,8 +1381,10 @@ void main() {
           email: 'health@example.com',
         ),
       );
-      final repository = MemoryCloudRepository(signedInUid: 'health-user');
+      final repository = MemoryCloudRepository(signedInUid: 'health-user')
+        ..seed('health-user', _consentedCloudFixture('health@example.com'));
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: health,
         accountAuth: auth,
         cloudRepository: repository,
@@ -1373,7 +1438,10 @@ void main() {
         sleepSyncError: const HealthSyncException('Sleep query failed.'),
         activitySyncError: const HealthSyncException('Activity query failed.'),
       );
-      final controller = AppController(healthService: health);
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        healthService: health,
+      );
       await controller.load();
       final manual = SignalReading(
         id: 'manual-heart',
@@ -1435,8 +1503,10 @@ void main() {
           email: 'sleep@example.com',
         ),
       );
-      final repository = MemoryCloudRepository(signedInUid: 'sleep-user');
+      final repository = MemoryCloudRepository(signedInUid: 'sleep-user')
+        ..seed('sleep-user', _consentedCloudFixture('sleep@example.com'));
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: health,
         accountAuth: auth,
         cloudRepository: repository,
@@ -1503,8 +1573,10 @@ void main() {
           email: 'activity@example.com',
         ),
       );
-      final repository = MemoryCloudRepository(signedInUid: 'activity-user');
+      final repository = MemoryCloudRepository(signedInUid: 'activity-user')
+        ..seed('activity-user', _consentedCloudFixture('activity@example.com'));
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: health,
         accountAuth: auth,
         cloudRepository: repository,
@@ -1599,8 +1671,10 @@ void main() {
           email: 'refresh@example.com',
         ),
       );
-      final repository = MemoryCloudRepository(signedInUid: 'refresh-user');
+      final repository = MemoryCloudRepository(signedInUid: 'refresh-user')
+        ..seed('refresh-user', _consentedCloudFixture('refresh@example.com'));
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         healthService: health,
         accountAuth: auth,
         cloudRepository: repository,
@@ -1650,6 +1724,7 @@ void main() {
         ..seed(
           'baseline-user',
           CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
             profile: const UserProfile(name: 'Baseline Maya'),
             accountEmail: 'baseline@example.com',
             onboardingComplete: true,
@@ -1690,6 +1765,7 @@ void main() {
           ),
         );
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         clock: () => today.add(const Duration(hours: 12)),
@@ -1721,7 +1797,10 @@ void main() {
         status: ScreenTimeAuthorizationState.entitlementRequired,
         requestResult: ScreenTimeAuthorizationState.authorized,
       );
-      final controller = AppController(screenTimeService: screenTime);
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        screenTimeService: screenTime,
+      );
 
       await controller.load();
       expect(
@@ -1787,6 +1866,19 @@ void main() {
     );
   });
 }
+
+CloudUserState _consentedCloudFixture(String email) => CloudUserState(
+  privacyConsent: testAdultPrivacyConsent,
+  profile: const UserProfile(),
+  accountEmail: email,
+  onboardingComplete: false,
+  notificationsEnabled: false,
+  outcomeConsent: false,
+  healthAuthorized: false,
+  migrationVersion: localMigrationVersion,
+  signals: const [],
+  checkIns: const [],
+);
 
 class _FakeHealthService extends HealthService {
   _FakeHealthService({

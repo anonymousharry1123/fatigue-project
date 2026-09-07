@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -5,8 +7,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
 import 'energy_model_repository.dart';
+import 'energy_model_summary.dart';
 import 'firebase_options.dart';
 import 'models.dart';
+import 'privacy_consent.dart';
 import 'ml_prep_models.dart';
 import 'ml_prep_repository.dart';
 
@@ -49,6 +53,9 @@ class FirebaseAccountAuth implements AccountAuth {
   FirebaseAccountAuth(this._auth);
 
   final FirebaseAuth _auth;
+  String? _verifiedGuardianUid;
+  bool _guardianConsentVerified = false;
+  int _privacyClaimsGeneration = 0;
 
   @override
   bool get isConfigured => true;
@@ -59,7 +66,12 @@ class FirebaseAccountAuth implements AccountAuth {
     final email = user?.email;
     return user == null || email == null
         ? null
-        : AccountSession(uid: user.uid, email: email);
+        : AccountSession(
+            uid: user.uid,
+            email: email,
+            guardianConsentVerified:
+                _verifiedGuardianUid == user.uid && _guardianConsentVerified,
+          );
   }
 
   @override
@@ -67,6 +79,7 @@ class FirebaseAccountAuth implements AccountAuth {
     required String email,
     required String password,
   }) async {
+    _clearPrivacyClaims();
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email.trim().toLowerCase(),
       password: password,
@@ -79,6 +92,7 @@ class FirebaseAccountAuth implements AccountAuth {
     required String email,
     required String password,
   }) async {
+    _clearPrivacyClaims();
     final credential = await _auth.signInWithEmailAndPassword(
       email: email.trim().toLowerCase(),
       password: password,
@@ -87,11 +101,59 @@ class FirebaseAccountAuth implements AccountAuth {
   }
 
   @override
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    _clearPrivacyClaims();
+    await _auth.signOut();
+  }
+
+  void _clearPrivacyClaims() {
+    _privacyClaimsGeneration++;
+    _verifiedGuardianUid = null;
+    _guardianConsentVerified = false;
+  }
+
+  @override
+  Future<void> refreshPrivacyClaims() async {
+    _clearPrivacyClaims();
+    final generation = _privacyClaimsGeneration;
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+    final token = await user.getIdTokenResult(true);
+    if (_auth.currentUser?.uid != uid ||
+        generation != _privacyClaimsGeneration) {
+      throw StateError('Account changed while verifying privacy permissions.');
+    }
+    _verifiedGuardianUid = uid;
+    _guardianConsentVerified =
+        token.claims?['guardianConsentVerified'] == true &&
+        token.claims?['guardianConsentPolicyVersion'] == 1;
+  }
+
+  @override
+  Future<void> reauthenticate({required String password}) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) {
+      throw StateError('Sign in before verifying this account.');
+    }
+    if (password.isEmpty) {
+      throw ArgumentError('Enter the account password to continue.');
+    }
+    final uid = user.uid;
+    final result = await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+    if (_auth.currentUser?.uid != uid || result.user?.uid != uid) {
+      throw StateError('Account changed while verifying the password.');
+    }
+  }
 
   @override
   Future<void> deleteCurrentAccount() async {
-    await _auth.currentUser?.delete();
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Sign in before deleting this account.');
+    await user.delete();
   }
 
   static AccountSession _session(User? user) {
@@ -110,16 +172,6 @@ class FirestoreCloudRepository implements CloudRepository {
   }) : this._(firestore, auth);
 
   FirestoreCloudRepository._(this._firestore, this._auth);
-
-  static const _childCollections = [
-    'signals',
-    'checkIns',
-    'scoreSnapshots',
-    'forecastPoints',
-    'recommendations',
-    'outcomes',
-    'riskAlerts',
-  ];
 
   final FirebaseFirestore _firestore;
   final AccountAuth _auth;
@@ -147,16 +199,121 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<AccountPrivacySnapshot> readAccountPrivacy(String uid) async {
+    final snapshot = await _user(
+      uid,
+    ).get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    final data = snapshot.data();
+    if (data == null) {
+      throw StateError('The account privacy record is unavailable.');
+    }
+    return _accountPrivacy(data);
+  }
+
+  @override
+  Future<PrivacyConsent> savePrivacyConsent(
+    String uid,
+    PrivacyConsent receipt,
+  ) async {
+    _authorize(uid);
+    if (PrivacyConsent.tryParse(receipt.toJson()) == null) {
+      throw ArgumentError(
+        'A current explicit privacy acknowledgement is required.',
+      );
+    }
+    final user = _user(uid);
+    await user.set({
+      'privacyConsent': {
+        ...receipt.toCloud(),
+        'acceptedAt': FieldValue.serverTimestamp(),
+      },
+      'consentFlags': {
+        'outcomeCollection': false,
+        'trainingRecordUse': false,
+        'wellnessOnlyAcknowledged': true,
+      },
+      'outcomeConsentUpdatedAt': FieldValue.serverTimestamp(),
+      'schemaVersion': cloudSchemaVersion,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    _authorize(uid);
+    final snapshot = await user.get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    final data = snapshot.data();
+    final saved = data == null ? null : _accountPrivacy(data);
+    final accepted = saved?.consent;
+    if (accepted == null ||
+        !accepted.sameIdentity(receipt) ||
+        saved!.deletionPending ||
+        saved.outcomeConsentUpdatedAt == null) {
+      throw StateError(
+        'The server could not confirm the privacy acknowledgement.',
+      );
+    }
+    return accepted;
+  }
+
+  @override
+  Future<DateTime> saveOutcomeConsent(String uid, bool enabled) async {
+    final user = _user(uid);
+    await user.set({
+      'consentFlags': {
+        'outcomeCollection': enabled,
+        'trainingRecordUse': enabled,
+      },
+      'outcomeConsentUpdatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    _authorize(uid);
+    final snapshot = await user.get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    final data = snapshot.data();
+    final saved = data == null ? null : _accountPrivacy(data);
+    final flags = data?['consentFlags'];
+    if (saved == null ||
+        saved.deletionPending ||
+        saved.outcomeConsentUpdatedAt == null ||
+        flags is! Map ||
+        flags['outcomeCollection'] != enabled ||
+        flags['trainingRecordUse'] != enabled) {
+      throw StateError(
+        'The server could not confirm the outcome-learning choice.',
+      );
+    }
+    return saved.outcomeConsentUpdatedAt!;
+  }
+
+  static AccountPrivacySnapshot _accountPrivacy(Map<String, dynamic> data) {
+    final flags = data['consentFlags'];
+    return (
+      consent: PrivacyConsent.tryParse(
+        _normalizeCloudValue(data['privacyConsent']),
+      ),
+      deletionPending: data.containsKey('privacyDeletion'),
+      outcomeConsent:
+          flags is Map &&
+          flags['outcomeCollection'] == true &&
+          flags['trainingRecordUse'] == true,
+      outcomeConsentUpdatedAt: _dateTimeOrNull(
+        data['outcomeConsentUpdatedAt'],
+      )?.toUtc(),
+    );
+  }
+
+  @override
   Future<CloudUserState?> readUser(String uid) async {
     final user = _user(uid);
     final values = await Future.wait([
-      user.get(),
+      user.get(const GetOptions(source: Source.server)),
       user.collection('signals').get(),
       user.collection('checkIns').get(),
     ]);
+    _authorize(uid);
     final profileSnapshot = values[0] as DocumentSnapshot<Map<String, dynamic>>;
     if (!profileSnapshot.exists) return null;
     final data = profileSnapshot.data()!;
+    final privacy = _accountPrivacy(data);
     final prefs = (data['prefs'] as Map?)?.cast<String, dynamic>() ?? const {};
     final notificationPrefsVersion =
         (prefs['notificationPreferencesVersion'] as num?)?.round() ?? 0;
@@ -167,11 +324,14 @@ class FirestoreCloudRepository implements CloudRepository {
     final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
     final checkInSnapshot = values[2] as QuerySnapshot<Map<String, dynamic>>;
     return CloudUserState(
-      profile: UserProfile.fromJson(
-        (data['profile'] as Map).cast<String, dynamic>(),
-      ),
-      accountEmail: data['accountEmail'] as String,
-      onboardingComplete: data['onboardingComplete'] as bool? ?? true,
+      profile: data['profile'] is Map
+          ? UserProfile.fromJson(
+              (data['profile'] as Map).cast<String, dynamic>(),
+            )
+          : const UserProfile(),
+      accountEmail:
+          data['accountEmail'] as String? ?? _auth.currentSession!.email,
+      onboardingComplete: data['onboardingComplete'] as bool? ?? false,
       notificationsEnabled:
           notificationPrefsVersion >= notificationPreferencesVersion &&
           (prefs['notificationsEnabled'] as bool? ?? false),
@@ -198,6 +358,13 @@ class FirestoreCloudRepository implements CloudRepository {
       healthBackgroundRefreshEnabled:
           healthSync['backgroundRefreshEnabled'] as bool? ?? false,
       migrationVersion: data['localMigrationVersion'] as int? ?? 0,
+      personalizedEnergyModel: _readEnergyModelSummary(
+        data['personalizedEnergyModel'],
+      ),
+      userUpdatedAt: _dateTimeOrNull(data['updatedAt'])?.toUtc(),
+      privacyConsent: privacy.consent,
+      deletionPending: privacy.deletionPending,
+      outcomeConsentUpdatedAt: privacy.outcomeConsentUpdatedAt,
       signals: signalSnapshot.docs
           .map(
             (document) =>
@@ -652,46 +819,41 @@ class FirestoreCloudRepository implements CloudRepository {
   }
 
   @override
-  Future<Map<String, Object?>> exportUser(String uid) async {
-    final state = await readUser(uid);
-    final export = <String, Object?>{
-      'uid': uid,
-      if (state != null) ...state.toExportJson(),
-      'reservedCollections': <String, Object?>{},
-    };
-    final reserved = export['reservedCollections']! as Map<String, Object?>;
-    for (final collectionName in _childCollections.skip(2)) {
-      final snapshot = await _user(uid).collection(collectionName).get();
-      reserved[collectionName] = {
-        for (final document in snapshot.docs)
-          document.id: _jsonSafe(document.data()),
-      };
-    }
-    return export;
-  }
+  Future<Map<String, Object?>> exportUser(String uid) =>
+      _dataLifecycle.exportUser(uid);
 
   @override
-  Future<void> deleteUserTree(String uid) async {
-    final user = _user(uid);
-    for (final collectionName in _childCollections) {
-      while (true) {
-        final snapshot = await user.collection(collectionName).limit(100).get();
-        if (snapshot.docs.isEmpty) break;
-        final batch = _firestore.batch();
-        for (final document in snapshot.docs) {
-          batch.delete(document.reference);
-        }
-        await batch.commit();
-      }
-    }
-    await user.delete();
-  }
+  Future<void> deleteUserTree(String uid) => _dataLifecycle.deleteUserTree(uid);
+
+  AccountDataLifecycle get _dataLifecycle => AccountDataLifecycle(
+    store: _FirestoreUserDataLifecycleStore(_firestore, _auth),
+    currentUid: () => _auth.currentSession?.uid,
+  );
 
   static Map<String, dynamic> _normalizeDates(Map<String, dynamic> data) =>
       data.map(
         (key, value) =>
             MapEntry(key, value is Timestamp ? value.toDate() : value),
       );
+
+  static Object? _normalizeCloudValue(Object? value) => switch (value) {
+    Timestamp timestamp => timestamp.toDate().toUtc(),
+    Map map => map.map(
+      (key, child) => MapEntry(key.toString(), _normalizeCloudValue(child)),
+    ),
+    Iterable iterable => iterable.map(_normalizeCloudValue).toList(),
+    _ => value,
+  };
+
+  static EnergyModelSummary? _readEnergyModelSummary(Object? value) {
+    if (value is! Map || value.keys.any((key) => key is! String)) return null;
+    final normalized = _normalizeDates(value.cast<String, dynamic>());
+    final window = normalized['window'];
+    if (window is Map && window.keys.every((key) => key is String)) {
+      normalized['window'] = _normalizeDates(window.cast<String, dynamic>());
+    }
+    return EnergyModelSummary.tryParse(normalized);
+  }
 
   static DateTime? _dateTimeOrNull(Object? value) => switch (value) {
     Timestamp timestamp => timestamp.toDate(),
@@ -706,7 +868,33 @@ class FirestoreCloudRepository implements CloudRepository {
       left.day == right.day;
 
   static Object? _jsonSafe(Object? value) => switch (value) {
-    Timestamp timestamp => timestamp.toDate().toIso8601String(),
+    // Preserve Firestore's nanoseconds and special values without silently
+    // truncating or dropping unknown metadata from the canonical raw export.
+    Timestamp timestamp => {
+      '__firestoreType': 'timestamp',
+      'seconds': timestamp.seconds,
+      'nanoseconds': timestamp.nanoseconds,
+      'iso8601': timestamp.toDate().toUtc().toIso8601String(),
+    },
+    GeoPoint point => {
+      '__firestoreType': 'geopoint',
+      'latitude': point.latitude,
+      'longitude': point.longitude,
+    },
+    Blob blob => {
+      '__firestoreType': 'bytes',
+      'base64': base64Encode(blob.bytes),
+    },
+    DocumentReference reference => {
+      '__firestoreType': 'reference',
+      'projectId': reference.firestore.app.options.projectId,
+      'databaseId': reference.firestore.databaseId,
+      'path': reference.path,
+    },
+    double number when !number.isFinite => {
+      '__firestoreType': 'double',
+      'value': number.toString(),
+    },
     DateTime dateTime => dateTime.toIso8601String(),
     Map map => map.map(
       (key, child) => MapEntry(key.toString(), _jsonSafe(child)),
@@ -714,4 +902,110 @@ class FirestoreCloudRepository implements CloudRepository {
     Iterable iterable => iterable.map(_jsonSafe).toList(),
     _ => value,
   };
+}
+
+class _FirestoreUserDataLifecycleStore implements UserDataLifecycleStore {
+  _FirestoreUserDataLifecycleStore(this.firestore, this.auth);
+
+  final FirebaseFirestore firestore;
+  final AccountAuth auth;
+
+  void _authorize(String uid) {
+    if (uid.isEmpty || auth.currentSession?.uid != uid) {
+      throw StateError('Cross-user repository access denied.');
+    }
+  }
+
+  DocumentReference<Map<String, dynamic>> _user(String uid) {
+    _authorize(uid);
+    return firestore.collection('users').doc(uid);
+  }
+
+  CollectionReference<Map<String, dynamic>> _collection(
+    String uid,
+    String name,
+  ) {
+    if (!userDataChildCollections.contains(name)) {
+      throw ArgumentError('Unknown user data collection.');
+    }
+    return _user(uid).collection(name);
+  }
+
+  @override
+  Future<void> beginDeletion(String uid) async {
+    await _user(uid).set({
+      'privacyDeletion': {
+        'version': 1,
+        'requestedAt': FieldValue.serverTimestamp(),
+      },
+    }, SetOptions(merge: true));
+    _authorize(uid);
+  }
+
+  @override
+  Future<Map<String, Object?>?> readUserDocument(String uid) async {
+    final document = await _user(
+      uid,
+    ).get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    final data = document.data();
+    return data == null
+        ? null
+        : (FirestoreCloudRepository._jsonSafe(data) as Map)
+              .cast<String, Object?>();
+  }
+
+  @override
+  Future<List<UserDataDocument>> readCollectionPage(
+    String uid,
+    String collection, {
+    required int limit,
+    String? afterId,
+  }) async {
+    if (limit < 1 || limit > AccountDataLifecycle.pageSize) {
+      throw ArgumentError('Invalid user data page size.');
+    }
+    Query<Map<String, dynamic>> query = _collection(
+      uid,
+      collection,
+    ).orderBy(FieldPath.documentId).limit(limit);
+    if (afterId != null) query = query.startAfter([afterId]);
+    final page = await query.get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    return page.docs
+        .map(
+          (document) => UserDataDocument(
+            document.id,
+            (FirestoreCloudRepository._jsonSafe(document.data()) as Map)
+                .cast<String, Object?>(),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<void> deleteDocuments(
+    String uid,
+    String collection,
+    List<String> ids,
+  ) async {
+    _authorize(uid);
+    if (ids.isEmpty || ids.length > AccountDataLifecycle.pageSize) {
+      throw ArgumentError('Invalid user data deletion batch size.');
+    }
+    final documents = _collection(uid, collection);
+    final batch = firestore.batch();
+    for (final id in ids) {
+      batch.delete(documents.doc(id));
+    }
+    _authorize(uid);
+    await batch.commit();
+    _authorize(uid);
+  }
+
+  @override
+  Future<void> deleteUserDocument(String uid) async {
+    await _user(uid).delete();
+    _authorize(uid);
+  }
 }

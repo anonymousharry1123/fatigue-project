@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'dart:convert';
 
 import 'package:app/src/app_controller.dart';
@@ -153,7 +154,10 @@ void main() {
       'requests permission only during explicit opt-in and persists it',
       () async {
         final service = _FakeNotificationService();
-        final controller = AppController(notificationService: service);
+        final controller = AppController(
+          initialPrivacyConsent: testAdultPrivacyConsent,
+          notificationService: service,
+        );
         await controller.load();
 
         expect(controller.notificationsEnabled, isFalse);
@@ -170,7 +174,10 @@ void main() {
         expect(export['notificationPreferencesVersion'], 1);
         expect(export['notificationsEnabled'], isTrue);
 
-        final restored = AppController(notificationService: service);
+        final restored = AppController(
+          initialPrivacyConsent: testAdultPrivacyConsent,
+          notificationService: service,
+        );
         await restored.load();
         expect(restored.notificationsEnabled, isTrue);
         expect(service.permissionRequests, 1);
@@ -192,7 +199,10 @@ void main() {
         }),
       });
       final service = _FakeNotificationService();
-      final controller = AppController(notificationService: service);
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        notificationService: service,
+      );
 
       await controller.load();
 
@@ -205,7 +215,10 @@ void main() {
       final service = _FakeNotificationService(
         permission: NotificationPermissionState.denied,
       );
-      final controller = AppController(notificationService: service);
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        notificationService: service,
+      );
       await controller.load();
 
       final result = await controller.setNotifications(true);

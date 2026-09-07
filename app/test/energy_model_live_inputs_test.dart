@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/ml_prep_builder.dart';
 import 'package:app/src/ml_prep_models.dart';
@@ -18,7 +19,10 @@ void main() {
           : 'Etc/UTC';
       final window = PrepWindow.endingOn(DateTime(2026, 7, 31), timezone: zone);
       var at = window.start;
-      final controller = AppController(clock: () => at)..outcomeConsent = true;
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        clock: () => at,
+      )..outcomeConsent = true;
       addTearDown(controller.dispose);
       for (var day = 0; day < 14; day++) {
         at = window.start.add(Duration(days: day, hours: 9));

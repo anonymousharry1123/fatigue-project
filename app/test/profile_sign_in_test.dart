@@ -1,3 +1,4 @@
+import 'privacy_test_support.dart';
 import 'dart:async';
 
 import 'package:app/src/app.dart';
@@ -69,8 +70,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     auth = _ControlledAuth();
     repository = _ControlledRepository();
-    controller = AppController(accountAuth: auth, cloudRepository: repository)
-      ..isReady = true;
+    controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+      accountAuth: auth,
+      cloudRepository: repository,
+    )..isReady = true;
   });
 
   tearDown(() => controller.dispose());

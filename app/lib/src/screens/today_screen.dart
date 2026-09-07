@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../today_dashboard_logic.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
+import 'model_transparency_screen.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key, required this.onOpenProfile});
@@ -157,6 +158,32 @@ class TodayScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  key: const Key('today-score-transparency'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          ModelTransparencyScreen(controller: controller),
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: TonyoColors.text,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.insights_rounded, size: 20),
+                      SizedBox(width: 10),
+                      Expanded(child: Text('Why these scores?')),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_rounded, size: 18),
                     ],
                   ),
                 ),

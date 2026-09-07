@@ -1,8 +1,8 @@
 # Tonyo Product Roadmap
 
 Last updated: September 7, 2026
-Current implementation: **Version 0.32 — Personalized ML Model**
-Remaining release QA: iPhone performance/heap profiling and Firestore emulator/deployment verification.
+Current implementation: **Version 0.34 — Privacy and Youth Safety safeguards**
+Remaining Version 0.32 release QA: iPhone performance/heap profiling and production rules deployment/IAM verification. Executable rules emulator validation passed during 0.34.
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -431,23 +431,70 @@ Acceptance for prep:
   this implementation performed no live Firebase reads/writes.
 - Remaining verification: release-mode iPhone latency and **actual per-fit heap**
   (<1 MB target, not inferred from numeric-buffer estimates or process RSS),
-  and Firestore emulator/deployment validation. See `ENERGY_MODEL.md` for the
-  reproducible Mac AOT benchmark and limitations. Version 0.33 has not started.
+  and production Firestore deployment/IAM validation (emulator coverage passed
+  during 0.34). See `ENERGY_MODEL.md` for the
+  reproducible Mac AOT benchmark and limitations. Version 0.33 is tracked below.
 
-## Upcoming Versions
-
-### Version 0.33 — Model Transparency
+### Version 0.33 — Model Transparency ✅
 
 - Display model version, confidence, and last update from Firebase user/model metadata
 - Explain the signals driving each prediction via `scoreSnapshots.drivers`
 - Distinguish measured, estimated, and missing data using `source` / completeness from the Version 0.10-a schema
 
-### Version 0.34 — Privacy and Youth Safety
+#### Implemented on September 7, 2026
+
+- Added **Today → Why these scores?** and **Profile → How your scores work**,
+  with a read-only Energy/Cognitive selector, evidence-quality confidence,
+  expandable ranked saved drivers and explicit missing-input inventory.
+- Separated rules-model version, the correction actually applied to this score,
+  a valid local model, and Firebase's historical metadata-only summary. A summary
+  never claims to install weights or activate personalization on another phone.
+- Displayed score calculation, model training, account-document update and
+  metadata-load times distinctly. Older snapshots retain unknown model versions,
+  source provenance and calculation times rather than acquiring invented values.
+- Schema 13 adds small rules-version and current/recent observation provenance
+  fields to ordinary daily snapshots. All recorded observation sources, recognized
+  demo markers and unknown/mixed sources are represented conservatively;
+  historical baseline provenance remains explicitly unverified.
+- Confidence remains the existing evidence heuristic, not a probability of being
+  correct. Energy's capped seven-input counter is explained separately from its
+  ten-factor inventory. Zero-point observed inputs are present, absent inputs are
+  not zero, and neither training nor duplicate records automatically raises
+  confidence. No scoring formulas or model-training gates changed.
+- Existing account reads supply the strictly validated model summary. Opening,
+  selecting or expanding the screen adds no reads, writes, listeners or training.
+  Cached metadata is owner-scoped and dated, and sign-out hides private details.
+  Session/generation guards also prevent delayed old-account or superseded score
+  loads from restoring stale drivers to the current screen.
+- Automated parser, projection, repository-budget, account/offline, legacy,
+  navigation and narrow/large-text UI tests pass; rendered widget captures were
+  visually checked. See [transparency notes](MODEL_TRANSPARENCY.md). No live
+  account changes, model promotion, rules deployment or iPhone installation were
+  performed. Version 0.32 device/heap and deployment release checks remain open.
+
+## Upcoming Versions
+
+### Version 0.34 — Privacy and Youth Safety — implemented; youth launch gated
 
 - Add age-appropriate onboarding and consent; store consent timestamps on `users/{uid}`
 - Add guardian consent where legally required
 - Complete export and deletion against the full Version 0.10-a user subtree; review wellness language
 - Audit Security Rules so minors’ data cannot be listed or shared across accounts
+
+Implemented September 7, 2026: neutral pre-account age/region review; explicit
+server-timestamped privacy and separate optional-learning receipts; required
+review for legacy accounts; conservative trusted-claim guardian gate; complete
+known-schema raw export and reauthenticated, journaled, retry-safe deletion;
+owner-only allowlisted rules and executable emulator coverage. New tracking,
+Health imports and learning pause during privacy/deletion recovery. Privacy
+screens include deliberate clipboard/deletion confirmation, honest scope and
+device-only recovery. See [privacy safety notes](PRIVACY_SAFETY.md).
+
+**Not a completed youth release:** launch countries/ages and a real verified
+guardian service have not been selected. Under-18 use remains blocked unless a
+trusted backend supplies reviewed verification. Production rule deployment/IAM,
+guardian withdrawal/correction, retention/provider-backup policy and real-iPhone
+lifecycle QA remain required. No live-account data or consent was modified.
 
 ### Version 0.35 — Production Polish
 
@@ -461,8 +508,9 @@ Acceptance for prep:
 - `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), optional notes and current-version `recordedAt` availability → `users/{uid}/checkIns/{id}`
 - `OutcomeRecord`: consented observed energy or cognitive reaction value, timestamps, source link, consent version, and optional recommendation link → `users/{uid}/outcomes/{id}`
 - `TrainingExample` (prep for 0.32): on-device / export-only join from one bounded 30-day account snapshot, linking a day-scoped feature vector + missingness mask to one consented `OutcomeRecord`; not a cross-user Firestore collection
-- `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
+- `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, calculation time, rules versions and drivers with optional current/recent observation source/demo provenance → `users/{uid}/scoreSnapshots/{id}`; legacy unknown fields remain unknown
 - `EnergyResidualModel` (0.32): checksummed owner-scoped local artifact; only compact accepted-fit metadata enters `users/{uid}.personalizedEnergyModel`. Personalized score snapshots preserve deterministic Energy and model version for safe fallback.
+- `EnergyModelSummary` / `ModelTransparencyState` (0.33): strict read-only account metadata projection plus the already-loaded score; never executable weights, training labels or additional database requests
 - `PersonalBaselines`: rolling HRV, resting-heart-rate, sleep, and reaction-time references with sample maturity → embedded in the private daily `scoreSnapshots` document
 - `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
 - `ForecastWindow`: peak, crash, or recovery period (derived; may be stored or computed from `forecastPoints`)

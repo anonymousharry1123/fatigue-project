@@ -1,5 +1,7 @@
+import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
+import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/ml_prep_models.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screens/ml_prep_screen.dart';
@@ -57,7 +59,10 @@ void main() {
   testWidgets(
     'unconfigured build explains Firebase blocker and disables reads',
     (tester) async {
-      await open(tester, AppController());
+      await open(
+        tester,
+        AppController(initialPrivacyConsent: testAdultPrivacyConsent),
+      );
       expect(find.textContaining('Firebase is not configured'), findsOneWidget);
       final prepare = tester.widget<FilledButton>(
         find.byKey(const Key('prepare-model-snapshot')),
@@ -74,6 +79,7 @@ void main() {
     await open(
       tester,
       AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: MemoryCloudRepository(signedInUid: null),
         prepDataSource: source,
@@ -96,6 +102,7 @@ void main() {
     final source = _PrepSource(auth);
     final repository = MemoryCloudRepository(signedInUid: 'prep-user');
     final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: repository,
       prepDataSource: source,
@@ -142,6 +149,7 @@ void main() {
       );
       final source = _PrepSource(auth);
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: MemoryCloudRepository(signedInUid: 'prep-user'),
         prepDataSource: source,
@@ -177,7 +185,23 @@ void main() {
       );
       final source = _PrepSource(auth);
       final repository = MemoryCloudRepository(signedInUid: 'prep-user');
+      repository.seed(
+        'prep-user',
+        CloudUserState(
+          privacyConsent: testAdultPrivacyConsent,
+          profile: const UserProfile(),
+          accountEmail: 'prep@example.com',
+          onboardingComplete: false,
+          notificationsEnabled: false,
+          outcomeConsent: false,
+          healthAuthorized: false,
+          migrationVersion: localMigrationVersion,
+          signals: const [],
+          checkIns: const [],
+        ),
+      );
       final original = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         prepDataSource: source,
@@ -190,6 +214,7 @@ void main() {
       expect(original.lastModelPreparationWindow?.toJson(), window.toJson());
 
       final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
         prepDataSource: source,
@@ -206,6 +231,7 @@ void main() {
       expect(source.collectionQueries, 3);
 
       final otherAccount = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: MemoryAccountAuth(
           session: const AccountSession(
             uid: 'other-user',
@@ -230,6 +256,7 @@ void main() {
     );
     final source = _PrepSource(auth);
     final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
       accountAuth: auth,
       cloudRepository: MemoryCloudRepository(signedInUid: 'prep-user'),
       prepDataSource: source,
@@ -268,6 +295,7 @@ void main() {
       );
       final source = _PrepSource(auth);
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: MemoryCloudRepository(signedInUid: 'prep-user'),
         prepDataSource: source,
@@ -305,6 +333,7 @@ void main() {
       );
       final source = _PrepSource(auth);
       final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: MemoryCloudRepository(signedInUid: 'prep-user'),
         prepDataSource: source,

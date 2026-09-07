@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'privacy_test_support.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -21,6 +23,7 @@ void main() {
   }) {
     final controller =
         AppController(
+            initialPrivacyConsent: testAdultPrivacyConsent,
             notificationService: notificationService,
             healthService: healthService,
             screenTimeService: screenTimeService,
@@ -123,10 +126,7 @@ void main() {
     expect(find.text('Outcome learning'), findsWidgets);
     expect(find.text('Observed energy'), findsOneWidget);
     expect(find.text('Cognitive outcomes'), findsOneWidget);
-    expect(
-      find.textContaining('not train a personalized model'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Training starts only'), findsOneWidget);
     expect(controller.outcomeConsent, isFalse);
 
     await tester.tap(find.byKey(const Key('outcome-consent-switch')));
@@ -150,31 +150,32 @@ void main() {
   ) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final controller = AppController()
-      ..isReady = true
-      ..onboardingComplete = true
-      ..signals = [
-        for (var index = 0; index < 7; index++) ...[
-          SignalReading(
-            id: 'insight-sleep-$index',
-            type: SignalType.sleep,
-            value: 6.5 + index * .2,
-            timestamp: today.subtract(Duration(days: 6 - index)),
-          ),
-          SignalReading(
-            id: 'insight-study-$index',
-            type: SignalType.study,
-            value: 1 + index * .5,
-            timestamp: today.subtract(Duration(days: 6 - index)),
-          ),
-          SignalReading(
-            id: 'insight-exercise-$index',
-            type: SignalType.exercise,
-            value: .4 + index * .1,
-            timestamp: today.subtract(Duration(days: 6 - index)),
-          ),
-        ],
-      ];
+    final controller =
+        AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+          ..isReady = true
+          ..onboardingComplete = true
+          ..signals = [
+            for (var index = 0; index < 7; index++) ...[
+              SignalReading(
+                id: 'insight-sleep-$index',
+                type: SignalType.sleep,
+                value: 6.5 + index * .2,
+                timestamp: today.subtract(Duration(days: 6 - index)),
+              ),
+              SignalReading(
+                id: 'insight-study-$index',
+                type: SignalType.study,
+                value: 1 + index * .5,
+                timestamp: today.subtract(Duration(days: 6 - index)),
+              ),
+              SignalReading(
+                id: 'insight-exercise-$index',
+                type: SignalType.exercise,
+                value: .4 + index * .1,
+                timestamp: today.subtract(Duration(days: 6 - index)),
+              ),
+            ],
+          ];
     await controller.refreshInsights();
     await tester.pumpWidget(TonyoApp(controller: controller));
 
@@ -421,39 +422,40 @@ void main() {
   ) async {
     final now = DateTime.now();
     final recordedAt = now;
-    final controller = AppController()
-      ..isReady = true
-      ..onboardingComplete = true
-      ..signals = [
-        for (final entry in const {
-          SignalType.sleep: 8.0,
-          SignalType.hydration: 2.2,
-          SignalType.study: 3.0,
-          SignalType.exercise: .75,
-          SignalType.screenTime: 2.5,
-        }.entries)
-          SignalReading(
-            id: entry.key.name,
-            type: entry.key,
-            value: entry.value,
-            timestamp: recordedAt,
-          ),
-        SignalReading(
-          id: 'reaction',
-          type: SignalType.reactionTime,
-          value: 270,
-          timestamp: recordedAt,
-        ),
-      ]
-      ..checkIns = [
-        DailyCheckIn(
-          id: 'today',
-          timestamp: recordedAt,
-          energy: 7,
-          mood: 8,
-          stress: 3,
-        ),
-      ];
+    final controller =
+        AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+          ..isReady = true
+          ..onboardingComplete = true
+          ..signals = [
+            for (final entry in const {
+              SignalType.sleep: 8.0,
+              SignalType.hydration: 2.2,
+              SignalType.study: 3.0,
+              SignalType.exercise: .75,
+              SignalType.screenTime: 2.5,
+            }.entries)
+              SignalReading(
+                id: entry.key.name,
+                type: entry.key,
+                value: entry.value,
+                timestamp: recordedAt,
+              ),
+            SignalReading(
+              id: 'reaction',
+              type: SignalType.reactionTime,
+              value: 270,
+              timestamp: recordedAt,
+            ),
+          ]
+          ..checkIns = [
+            DailyCheckIn(
+              id: 'today',
+              timestamp: recordedAt,
+              energy: 7,
+              mood: 8,
+              stress: 3,
+            ),
+          ];
     await controller.refreshEnergyScore();
 
     await tester.pumpWidget(TonyoApp(controller: controller));
@@ -486,35 +488,36 @@ void main() {
     tester,
   ) async {
     final now = DateTime.now();
-    final controller = AppController()
-      ..isReady = true
-      ..onboardingComplete = true
-      ..signals = [
-        for (final entry in const {
-          SignalType.sleep: 5.0,
-          SignalType.hydration: 3.0,
-          SignalType.study: 7.0,
-          SignalType.exercise: 1.0,
-          SignalType.screenTime: 8.0,
-          SignalType.reactionTime: 245.0,
-        }.entries)
-          SignalReading(
-            id: entry.key.name,
-            type: entry.key,
-            value: entry.value,
-            timestamp: now,
-            source: SignalSource.healthKit,
-          ),
-      ]
-      ..checkIns = [
-        DailyCheckIn(
-          id: 'today',
-          timestamp: now,
-          energy: 7,
-          mood: 9,
-          stress: 8,
-        ),
-      ];
+    final controller =
+        AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+          ..isReady = true
+          ..onboardingComplete = true
+          ..signals = [
+            for (final entry in const {
+              SignalType.sleep: 5.0,
+              SignalType.hydration: 3.0,
+              SignalType.study: 7.0,
+              SignalType.exercise: 1.0,
+              SignalType.screenTime: 8.0,
+              SignalType.reactionTime: 245.0,
+            }.entries)
+              SignalReading(
+                id: entry.key.name,
+                type: entry.key,
+                value: entry.value,
+                timestamp: now,
+                source: SignalSource.healthKit,
+              ),
+          ]
+          ..checkIns = [
+            DailyCheckIn(
+              id: 'today',
+              timestamp: now,
+              energy: 7,
+              mood: 9,
+              stress: 8,
+            ),
+          ];
     await controller.refreshEnergyScore();
     await tester.pumpWidget(TonyoApp(controller: controller));
 
@@ -570,33 +573,34 @@ void main() {
     tester,
   ) async {
     final now = DateTime.now().subtract(const Duration(minutes: 5));
-    final controller = AppController()
-      ..isReady = true
-      ..onboardingComplete = true
-      ..signals = [
-        for (final entry in const {
-          SignalType.sleep: 8.0,
-          SignalType.bedtime: 23.0,
-          SignalType.hydration: 2.4,
-          SignalType.study: 4.0,
-          SignalType.exercise: .75,
-        }.entries)
-          SignalReading(
-            id: '${entry.key.name}-live',
-            type: entry.key,
-            value: entry.value,
-            timestamp: now,
-          ),
-      ]
-      ..checkIns = [
-        DailyCheckIn(
-          id: 'check-in-live',
-          timestamp: now,
-          energy: 7,
-          mood: 8,
-          stress: 4,
-        ),
-      ];
+    final controller =
+        AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+          ..isReady = true
+          ..onboardingComplete = true
+          ..signals = [
+            for (final entry in const {
+              SignalType.sleep: 8.0,
+              SignalType.bedtime: 23.0,
+              SignalType.hydration: 2.4,
+              SignalType.study: 4.0,
+              SignalType.exercise: .75,
+            }.entries)
+              SignalReading(
+                id: '${entry.key.name}-live',
+                type: entry.key,
+                value: entry.value,
+                timestamp: now,
+              ),
+          ]
+          ..checkIns = [
+            DailyCheckIn(
+              id: 'check-in-live',
+              timestamp: now,
+              energy: 7,
+              mood: 8,
+              stress: 4,
+            ),
+          ];
     await tester.pumpWidget(TonyoApp(controller: controller));
     await tester.tap(
       find.descendant(
@@ -630,48 +634,49 @@ void main() {
     'Versions 0.18–0.31 show plan actions, outcomes, and wellness flags',
     (tester) async {
       final now = DateTime.now();
-      final controller = AppController()
-        ..isReady = true
-        ..onboardingComplete = true
-        ..outcomeConsent = true
-        ..profile = const UserProfile(coachPriority: CoachPriority.recovery)
-        ..signals = [
-          for (var index = 0; index < 4; index++)
-            SignalReading(
-              id: 'short-sleep-$index',
-              type: SignalType.sleep,
-              value: 5.5,
-              timestamp: now.subtract(Duration(days: index)),
-            ),
-          SignalReading(
-            id: 'bedtime-live',
-            type: SignalType.bedtime,
-            value: 1,
-            timestamp: now,
-          ),
-          SignalReading(
-            id: 'study-live',
-            type: SignalType.study,
-            value: 6,
-            timestamp: now,
-          ),
-          SignalReading(
-            id: 'hydration-live',
-            type: SignalType.hydration,
-            value: .6,
-            timestamp: now,
-          ),
-        ]
-        ..checkIns = [
-          for (var index = 0; index < 3; index++)
-            DailyCheckIn(
-              id: 'strained-$index',
-              timestamp: now.subtract(Duration(days: index)),
-              energy: 3,
-              mood: 4,
-              stress: 9,
-            ),
-        ];
+      final controller =
+          AppController(initialPrivacyConsent: testAdultPrivacyConsent)
+            ..isReady = true
+            ..onboardingComplete = true
+            ..outcomeConsent = true
+            ..profile = const UserProfile(coachPriority: CoachPriority.recovery)
+            ..signals = [
+              for (var index = 0; index < 4; index++)
+                SignalReading(
+                  id: 'short-sleep-$index',
+                  type: SignalType.sleep,
+                  value: 5.5,
+                  timestamp: now.subtract(Duration(days: index)),
+                ),
+              SignalReading(
+                id: 'bedtime-live',
+                type: SignalType.bedtime,
+                value: 1,
+                timestamp: now,
+              ),
+              SignalReading(
+                id: 'study-live',
+                type: SignalType.study,
+                value: 6,
+                timestamp: now,
+              ),
+              SignalReading(
+                id: 'hydration-live',
+                type: SignalType.hydration,
+                value: .6,
+                timestamp: now,
+              ),
+            ]
+            ..checkIns = [
+              for (var index = 0; index < 3; index++)
+                DailyCheckIn(
+                  id: 'strained-$index',
+                  timestamp: now.subtract(Duration(days: index)),
+                  energy: 3,
+                  mood: 4,
+                  stress: 9,
+                ),
+            ];
       await controller.refreshGuidance();
       final alertId = controller.alerts.first.id;
       final focusId = controller.recommendations
@@ -845,6 +850,7 @@ void main() {
   ) async {
     final controller =
         AppController(
+            initialPrivacyConsent: testAdultPrivacyConsent,
             accountAuth: MemoryAccountAuth(
               session: const AccountSession(
                 uid: 'empty-forecast',
@@ -999,34 +1005,36 @@ void main() {
     expect(find.text('Create my account'), findsOneWidget);
   });
 
-  testWidgets('welcome leads to account creation before profile setup', (
-    tester,
-  ) async {
-    final controller = AppController()..isReady = true;
-    await tester.pumpWidget(TonyoApp(controller: controller));
+  testWidgets(
+    'welcome leads through explicit privacy before account creation',
+    (tester) async {
+      final controller = AppController()..isReady = true;
+      await tester.pumpWidget(TonyoApp(controller: controller));
 
-    await tester.tap(find.text('Create my account'));
-    await tester.pumpAndSettle();
-    expect(find.text('Create your account'), findsOneWidget);
+      await tester.tap(find.text('Create my account'));
+      await tester.pumpAndSettle();
+      expect(find.text('Before you begin'), findsOneWidget);
+      await finishOnboardingPrivacyStep(tester);
+      expect(find.text('Create your account'), findsOneWidget);
 
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email'),
-      'maya@example.com',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Password'),
-      'tonyo-pass',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Confirm password'),
-      'tonyo-pass',
-    );
-    await tester.tap(find.byType(Checkbox));
-    await tester.tap(find.text('Continue to my profile'));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Email'),
+        'maya@example.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Password'),
+        'tonyo-pass',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Confirm password'),
+        'tonyo-pass',
+      );
+      await tester.tap(find.text('Continue to my profile'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Make it yours'), findsOneWidget);
-  });
+      expect(find.text('Make it yours'), findsOneWidget);
+    },
+  );
 
   testWidgets('confirm password can be edited and revealed independently', (
     tester,
@@ -1035,6 +1043,7 @@ void main() {
     await tester.pumpWidget(TonyoApp(controller: controller));
     await tester.tap(find.text('Create my account'));
     await tester.pumpAndSettle();
+    await finishOnboardingPrivacyStep(tester);
 
     final passwordFinder = find.byKey(const Key('password-field'));
     final confirmFinder = find.byKey(const Key('confirm-password-field'));

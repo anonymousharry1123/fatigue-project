@@ -6,13 +6,117 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
+    function isSyntheticLabAdmin() {
+      // Set only by a trusted Admin SDK, never by a user-document checkbox.
+      return request.auth != null
+        && request.auth.token.get('syntheticLabAdmin', false) == true;
+    }
+
+    function recentAuthentication() {
+      let signedInAt = request.auth.token.get('auth_time', 0);
+      return signedInAt is int && signedInAt > 0
+        && timestamp.value(signedInAt * 1000) <= request.time
+        && request.time - timestamp.value(signedInAt * 1000)
+          <= duration.value(5, 'm');
+    }
+
+    function validPrivacyConsent(consent) {
+      return consent is map
+        && consent.keys().hasAll(['policyVersion', 'ageBand', 'region',
+          'acceptedAt', 'wellnessAcknowledged'])
+        && consent.keys().hasOnly(['policyVersion', 'ageBand', 'region',
+          'acceptedAt', 'wellnessAcknowledged'])
+        && consent.policyVersion == 1
+        && consent.ageBand in ['under13', '13to15', '16to17', '18plus']
+        && consent.region in ['us', 'other', 'unknown']
+        && consent.acceptedAt is timestamp
+        && consent.acceptedAt <= request.time
+        && consent.wellnessAcknowledged == true;
+    }
+
+    function privacyAllowed(data) {
+      // Conservative release policy: under-18 use needs externally verified
+      // guardian consent. This is not a claim of universal legal sufficiency.
+      let consent = data.get('privacyConsent', null);
+      return validPrivacyConsent(consent)
+        && (consent.ageBand == '18plus'
+          || (request.auth.token.get('guardianConsentVerified', false) == true
+            && request.auth.token.get('guardianConsentPolicyVersion', 0) == 1));
+    }
+
+    function deletionPending(data) {
+      return data.keys().hasAny(['privacyDeletion']);
+    }
+
+    function ownerDataWritable(uid) {
+      let data = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      return isOwner(uid) && !deletionPending(data) && privacyAllowed(data);
+    }
+
+    function clientProfileFields() {
+      return ['profile', 'accountEmail', 'prefs', 'consentFlags',
+        'onboardingComplete', 'lastHealthSync', 'healthSync',
+        'localMigrationVersion', 'schemaVersion', 'updatedAt',
+        'personalizedEnergyModel', 'privacyConsent', 'outcomeConsentUpdatedAt'];
+    }
+
+    function validConsentFlags(data) {
+      let flags = data.get('consentFlags', null);
+      return flags is map
+        && flags.keys().hasAll(['wellnessOnlyAcknowledged',
+          'outcomeCollection', 'trainingRecordUse'])
+        && flags.keys().hasOnly(['wellnessOnlyAcknowledged',
+          'outcomeCollection', 'trainingRecordUse'])
+        && flags.wellnessOnlyAcknowledged is bool
+        && flags.outcomeCollection is bool
+        && flags.trainingRecordUse is bool;
+    }
+
+    function freshPrivacyConsent(data) {
+      return validPrivacyConsent(data.get('privacyConsent', null))
+        && data.privacyConsent.acceptedAt == request.time;
+    }
+
+    function safeOutcomeConsentTimestamp() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return !changed.hasAny(['consentFlags', 'outcomeConsentUpdatedAt'])
+        || request.resource.data.get('outcomeConsentUpdatedAt', null) == request.time;
+    }
+
+    function safePrivacyUpdate() {
+      let previous = resource.data.get('privacyConsent', null);
+      let next = request.resource.data.get('privacyConsent', null);
+      return next == previous || (freshPrivacyConsent(request.resource.data)
+        && (previous == null
+          || (next.ageBand == previous.ageBand && next.region == previous.region)));
+    }
+
+    function validDeletionRequest() {
+      let marker = request.resource.data.get('privacyDeletion', null);
+      return recentAuthentication()
+        && marker is map
+        && marker.keys().hasAll(['version', 'requestedAt'])
+        && marker.keys().hasOnly(['version', 'requestedAt'])
+        && marker.version == 1
+        && marker.requestedAt == request.time;
+    }
+
+    function safetyRevocationOnly() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['consentFlags', 'personalizedEnergyModel',
+          'outcomeConsentUpdatedAt', 'updatedAt'])
+        && validConsentFlags(data)
+        && data.consentFlags.outcomeCollection == false
+        && data.consentFlags.trainingRecordUse == false
+        && (!changed.hasAny(['personalizedEnergyModel'])
+          || !data.keys().hasAny(['personalizedEnergyModel']));
     }
 
     function outcomeConsentGranted(uid) {
-      let flags = get(/databases/$(database)/documents/users/$(uid)).data.consentFlags;
-      return flags.outcomeCollection == true && flags.trainingRecordUse == true;
+      let flags = getAfter(/databases/$(database)/documents/users/$(uid)).data.consentFlags;
+      return ownerDataWritable(uid)
+        && flags.outcomeCollection == true && flags.trainingRecordUse == true;
     }
 
     function modelFraction(value) {
@@ -70,44 +174,69 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, delete: if isOwner(uid);
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow delete: if isOwner(uid) && deletionPending(resource.data)
+        && recentAuthentication();
       allow create: if isOwner(uid)
-        && (!request.resource.data.keys().hasAny(['personalizedEnergyModel'])
-          || validEnergyModelMetadata(request.resource.data));
-      // Ordinary profile sync and consent revocation may preserve an unchanged
-      // summary. Owners can remove it without re-enabling learning consent.
+        && ((request.resource.data.keys().hasOnly(['privacyDeletion'])
+            && validDeletionRequest())
+          || (request.resource.data.keys().hasOnly(clientProfileFields())
+            && freshPrivacyConsent(request.resource.data)
+            && privacyAllowed(request.resource.data)
+            && request.resource.data.get('outcomeConsentUpdatedAt', null) == request.time
+            && validConsentFlags(request.resource.data)
+            && request.resource.data.consentFlags.wellnessOnlyAcknowledged == true
+            && (!request.resource.data.keys().hasAny(['personalizedEnergyModel'])
+              || validEnergyModelMetadata(request.resource.data))));
       allow update: if isOwner(uid)
-        && (!request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['personalizedEnergyModel'])
-          || !request.resource.data.keys().hasAny(['personalizedEnergyModel'])
-          || validEnergyModelMetadata(request.resource.data));
+        && ((request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['privacyDeletion']) && validDeletionRequest())
+          || (!deletionPending(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(clientProfileFields())
+            && safePrivacyUpdate()
+            && safeOutcomeConsentTimestamp()
+            && (safetyRevocationOnly()
+              || (privacyAllowed(request.resource.data)
+                && validConsentFlags(request.resource.data)
+                && request.resource.data.consentFlags.wellnessOnlyAcknowledged == true
+                && (!request.resource.data.diff(resource.data).affectedKeys()
+                    .hasAny(['personalizedEnergyModel'])
+                  || !request.resource.data.keys().hasAny(['personalizedEnergyModel'])
+                  || validEnergyModelMetadata(request.resource.data))))));
 
       match /outcomes/{outcomeId} {
         // Owners can always inspect or delete their records. Creating or
         // changing a training-eligible record requires both explicit flags.
-        allow read, delete: if isOwner(uid);
+        allow get, list, delete: if isOwner(uid);
         allow create, update: if isOwner(uid) && outcomeConsentGranted(uid);
       }
 
       match /{collection}/{document} {
-        allow read, create, update, delete:
-          if isOwner(uid) && collection != 'outcomes';
+        // Keep this list aligned with userDataChildCollections. No arbitrary
+        // client collections, nested records, model weights or training rows.
+        allow get, list, delete: if isOwner(uid)
+          && collection in ['signals', 'checkIns', 'scoreSnapshots',
+            'forecastPoints', 'recommendations', 'riskAlerts'];
+        allow create, update: if collection in ['signals', 'checkIns',
+            'scoreSnapshots', 'forecastPoints', 'recommendations', 'riskAlerts']
+          && ownerDataWritable(uid);
       }
     }
 
-    // Synthetic cohort lab (non-PII fake students). Authenticated Tonyo
-    // accounts may read/write so the Flutter Admin screen can publish without
-    // the Admin SDK. Real users/{uid} trees stay owner-only above.
+    // Synthetic labs are not a second public data-sharing channel. Only a
+    // trusted operator account with a server-issued claim can access them.
     match /syntheticUsers/{studentId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read, create, update, delete: if isSyntheticLabAdmin();
 
       match /{document=**} {
-        allow read, create, update, delete: if isSignedIn();
+        allow read, create, update, delete: if isSyntheticLabAdmin();
       }
     }
 
     match /syntheticCohort/{docId} {
-      allow read, create, update, delete: if isSignedIn();
+      allow read, create, update, delete: if isSyntheticLabAdmin();
     }
 
     // No collection-group or other top-level access is granted.

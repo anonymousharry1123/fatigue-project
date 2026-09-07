@@ -1,11 +1,21 @@
+import 'dart:convert';
+
 import 'cloud_schema.dart';
 import 'models.dart';
+import 'privacy_consent.dart';
 
 class AccountSession {
-  const AccountSession({required this.uid, required this.email});
+  const AccountSession({
+    required this.uid,
+    required this.email,
+    this.guardianConsentVerified = false,
+  });
 
   final String uid;
   final String email;
+
+  /// Trusted, current-version server Auth claim; never a profile checkbox.
+  final bool guardianConsentVerified;
 }
 
 abstract interface class AccountAuth {
@@ -23,6 +33,10 @@ abstract interface class AccountAuth {
   });
 
   Future<void> signOut();
+
+  /// Verifies the current account without signing in again or loading its data.
+  Future<void> reauthenticate({required String password});
+  Future<void> refreshPrivacyClaims();
   Future<void> deleteCurrentAccount();
 }
 
@@ -52,14 +66,28 @@ class LocalOnlyAccountAuth implements AccountAuth {
   Future<void> signOut() async {}
 
   @override
+  Future<void> reauthenticate({required String password}) async =>
+      throw StateError('Firebase is not configured.');
+
+  @override
+  Future<void> refreshPrivacyClaims() async {}
+
+  @override
   Future<void> deleteCurrentAccount() async {}
 }
 
 class MemoryAccountAuth implements AccountAuth {
-  MemoryAccountAuth({this.session, this.configured = true});
+  MemoryAccountAuth({
+    this.session,
+    this.configured = true,
+    this.expectedPassword,
+  });
 
   AccountSession? session;
   final bool configured;
+
+  /// Optional deterministic credential check for tests; never persisted.
+  String? expectedPassword;
 
   @override
   bool get isConfigured => configured;
@@ -73,6 +101,7 @@ class MemoryAccountAuth implements AccountAuth {
     required String password,
   }) async {
     if (!configured) throw StateError('Firebase is not configured.');
+    expectedPassword = password;
     session = AccountSession(
       uid: 'test-uid',
       email: email.trim().toLowerCase(),
@@ -92,13 +121,41 @@ class MemoryAccountAuth implements AccountAuth {
   }
 
   @override
+  Future<void> reauthenticate({required String password}) async {
+    if (!configured || session == null || session!.email.isEmpty) {
+      throw StateError('Sign in before verifying this account.');
+    }
+    if (password.isEmpty ||
+        (expectedPassword != null && password != expectedPassword)) {
+      throw StateError('The password could not be verified.');
+    }
+  }
+
+  @override
+  Future<void> refreshPrivacyClaims() async {}
+
+  @override
   Future<void> deleteCurrentAccount() async {
     session = null;
   }
 }
 
+typedef AccountPrivacySnapshot = ({
+  PrivacyConsent? consent,
+  bool deletionPending,
+  bool outcomeConsent,
+  DateTime? outcomeConsentUpdatedAt,
+});
+
 abstract interface class CloudRepository {
   Future<CloudUserState?> readUser(String uid);
+  Future<AccountPrivacySnapshot> readAccountPrivacy(String uid);
+
+  /// Explicit acknowledgement only; returns the server-stamped receipt.
+  Future<PrivacyConsent> savePrivacyConsent(String uid, PrivacyConsent receipt);
+
+  /// Narrow optional-learning consent change, independent of profile sync.
+  Future<DateTime> saveOutcomeConsent(String uid, bool enabled);
 
   /// Replaces the user profile, signals, and check-ins with a single logical
   /// snapshot. Implementations must reject a uid other than the signed-in uid.
@@ -201,11 +258,253 @@ abstract interface class CloudRepository {
   Future<void> deleteUserTree(String uid);
 }
 
+/// The complete flat, client-writable Version 0.10-a user subtree. Keep this
+/// list aligned with Security Rules. Firestore clients cannot discover unknown
+/// collections or recursively enumerate administrator-created nested data.
+const userDataChildCollections = <String>[
+  'signals',
+  'checkIns',
+  'scoreSnapshots',
+  'forecastPoints',
+  'recommendations',
+  'outcomes',
+  'riskAlerts',
+];
+
+class UserDataDocument {
+  const UserDataDocument(this.id, this.data);
+
+  final String id;
+  final Map<String, Object?> data;
+}
+
+/// Server-backed implementations must bypass cache and order pages by document
+/// ID. The lifecycle rechecks ownership after every async boundary.
+abstract interface class UserDataLifecycleStore {
+  Future<Map<String, Object?>?> readUserDocument(String uid);
+
+  /// Persist an owner-scoped deletion marker before deleting any documents.
+  /// Security Rules block normal writes while the marker exists.
+  Future<void> beginDeletion(String uid);
+  Future<List<UserDataDocument>> readCollectionPage(
+    String uid,
+    String collection, {
+    required int limit,
+    String? afterId,
+  });
+  Future<void> deleteDocuments(String uid, String collection, List<String> ids);
+  Future<void> deleteUserDocument(String uid);
+}
+
+/// Explicit, bounded privacy operations. Failures never return a partial
+/// export; interrupted deletion is safe to retry and retains the root until
+/// every known child collection has been confirmed empty on the server.
+class AccountDataLifecycle {
+  AccountDataLifecycle({
+    required this.store,
+    required this.currentUid,
+    DateTime Function()? now,
+    this.maxDocuments = 100000,
+    this.maxExportBytes = 64 * 1024 * 1024,
+    this.maxRequests = 5000,
+  }) : now = now ?? DateTime.now;
+
+  static const pageSize = 100;
+  final UserDataLifecycleStore store;
+  final String? Function() currentUid;
+  final DateTime Function() now;
+  final int maxDocuments;
+  final int maxExportBytes;
+  final int maxRequests;
+
+  void _authorize(String uid) {
+    if (uid.isEmpty || currentUid() != uid) {
+      throw StateError('Account changed. The privacy operation was stopped.');
+    }
+  }
+
+  Future<Map<String, Object?>> exportUser(String uid) async {
+    _authorize(uid);
+    var requests = 0;
+    var documents = 0;
+    var bytes = 0;
+    void request() {
+      _authorize(uid);
+      if (++requests > maxRequests) {
+        throw StateError(
+          'Export exceeded its read limit. No file was created.',
+        );
+      }
+    }
+
+    void accountFor(Object? data) {
+      bytes += utf8.encode(jsonEncode(_exportSafe(data))).length;
+      if (bytes > maxExportBytes) {
+        throw StateError(
+          'Export exceeded its size limit. No file was created.',
+        );
+      }
+    }
+
+    request();
+    final userDocument = await store.readUserDocument(uid);
+    _authorize(uid);
+    accountFor(userDocument);
+    final collections = <String, Map<String, Object?>>{};
+    for (final collection in userDataChildCollections) {
+      final exported = <String, Object?>{};
+      collections[collection] = exported;
+      String? afterId;
+      while (true) {
+        request();
+        final page = await store.readCollectionPage(
+          uid,
+          collection,
+          limit: pageSize,
+          afterId: afterId,
+        );
+        _authorize(uid);
+        if (page.length > pageSize) {
+          throw StateError(
+            'Export returned an invalid page. No file was created.',
+          );
+        }
+        for (final document in page) {
+          if (document.id.isEmpty || exported.containsKey(document.id)) {
+            throw StateError('Export pagination failed. No file was created.');
+          }
+          if (++documents > maxDocuments) {
+            throw StateError(
+              'Export exceeded its document limit. No file was created.',
+            );
+          }
+          accountFor({document.id: document.data});
+          exported[document.id] = _exportSafe(document.data);
+          afterId = document.id;
+        }
+        if (page.length < pageSize) break;
+      }
+    }
+    final result = buildUserDataExport(
+      uid: uid,
+      userDocument: userDocument,
+      collections: collections,
+      exportedAt: now(),
+    );
+    // Includes compatibility aliases; the complete generated JSON is bounded.
+    if (utf8.encode(jsonEncode(result)).length > maxExportBytes) {
+      throw StateError('Export exceeded its size limit. No file was created.');
+    }
+    _authorize(uid);
+    return result;
+  }
+
+  Future<void> deleteUserTree(String uid) async {
+    _authorize(uid);
+    var requests = 0;
+    var documents = 0;
+    void request() {
+      _authorize(uid);
+      if (++requests > maxRequests) {
+        throw StateError(
+          'Deletion paused at its request limit. Retry to finish.',
+        );
+      }
+    }
+
+    request();
+    await store.beginDeletion(uid);
+    _authorize(uid);
+    // The server marker blocks normal writes from every device. Re-scanning
+    // also catches a write already in flight before the marker was committed.
+    while (true) {
+      for (final collection in userDataChildCollections) {
+        while (true) {
+          request();
+          final page = await store.readCollectionPage(
+            uid,
+            collection,
+            limit: pageSize,
+          );
+          _authorize(uid);
+          if (page.isEmpty) break;
+          if (page.length > pageSize ||
+              page.any((document) => document.id.isEmpty)) {
+            throw StateError(
+              'Deletion received an invalid page. Retry to finish.',
+            );
+          }
+          documents += page.length;
+          if (documents > maxDocuments) {
+            throw StateError(
+              'Deletion paused at its document limit. Retry to finish.',
+            );
+          }
+          request();
+          await store.deleteDocuments(
+            uid,
+            collection,
+            page.map((document) => document.id).toList(),
+          );
+          _authorize(uid);
+        }
+      }
+      var allEmpty = true;
+      for (final collection in userDataChildCollections) {
+        request();
+        final page = await store.readCollectionPage(uid, collection, limit: 1);
+        _authorize(uid);
+        if (page.isNotEmpty) {
+          allEmpty = false;
+          break;
+        }
+      }
+      if (allEmpty) break;
+    }
+    request();
+    await store.deleteUserDocument(uid);
+    _authorize(uid);
+  }
+}
+
+Map<String, Object?> buildUserDataExport({
+  required String uid,
+  required Map<String, Object?>? userDocument,
+  required Map<String, Map<String, Object?>> collections,
+  required DateTime exportedAt,
+}) => {
+  'exportVersion': 2,
+  'uid': uid,
+  'exportedAt': exportedAt.toUtc().toIso8601String(),
+  'userDocument': _exportSafe(userDocument),
+  'collections': _exportSafe(collections),
+  'scope': {
+    'collectionNames': userDataChildCollections,
+    'nestedCollectionsIncluded': false,
+    'pointInTimeSnapshot': false,
+  },
+  // Compatibility aliases for earlier Tonyo exports. Canonical raw records
+  // above retain unknown fields, metadata and original Firestore document IDs.
+  if (userDocument?['profile'] != null)
+    'profile': _exportSafe(userDocument!['profile']),
+  for (final collection in const ['signals', 'checkIns'])
+    collection: [
+      for (final entry in (collections[collection] ?? const {}).entries)
+        {...(entry.value as Map).cast<String, Object?>(), 'id': entry.key},
+    ],
+  'reservedCollections': {
+    for (final collection in userDataChildCollections.skip(2))
+      collection: collections[collection] ?? const <String, Object?>{},
+  },
+};
+
 /// A uid-enforcing repository for deterministic unit tests and offline demos.
 class MemoryCloudRepository implements CloudRepository {
-  MemoryCloudRepository({required this.signedInUid});
+  MemoryCloudRepository({required this.signedInUid, DateTime Function()? now})
+    : _now = now ?? DateTime.now;
 
   String? signedInUid;
+  final DateTime Function() _now;
   final Map<String, CloudUserState> _users = {};
   final Map<String, Map<String, ScoreSnapshot>> _scores = {};
   final Map<String, Map<String, ForecastPoint>> _forecasts = {};
@@ -240,10 +539,101 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<AccountPrivacySnapshot> readAccountPrivacy(String uid) async {
+    _authorize(uid);
+    final state = _users[uid];
+    if (state == null) {
+      throw StateError('The account privacy record is unavailable.');
+    }
+    return (
+      consent: state.privacyConsent,
+      deletionPending: state.deletionPending,
+      outcomeConsent: state.outcomeConsent,
+      outcomeConsentUpdatedAt: state.outcomeConsentUpdatedAt,
+    );
+  }
+
+  @override
+  Future<PrivacyConsent> savePrivacyConsent(
+    String uid,
+    PrivacyConsent receipt,
+  ) async {
+    _authorize(uid);
+    if (PrivacyConsent.tryParse(receipt.toJson()) == null) {
+      throw ArgumentError(
+        'A current explicit privacy acknowledgement is required.',
+      );
+    }
+    final old = _users[uid];
+    if (old?.privacyConsent != null &&
+        !old!.privacyConsent!.sameIdentity(receipt)) {
+      throw StateError(
+        'Age band and region cannot be changed by a consent refresh.',
+      );
+    }
+    if (old?.deletionPending == true) {
+      throw StateError(
+        'Account deletion is pending. Retry deletion to finish.',
+      );
+    }
+    final now = _now().toUtc();
+    final accepted = PrivacyConsent(
+      ageBand: receipt.ageBand,
+      region: receipt.region,
+      acceptedAt: now,
+    );
+    _users[uid] =
+        (old ??
+                const CloudUserState(
+                  profile: UserProfile(),
+                  accountEmail: '',
+                  onboardingComplete: false,
+                  notificationsEnabled: false,
+                  outcomeConsent: false,
+                  healthAuthorized: false,
+                  signals: [],
+                  checkIns: [],
+                ))
+            .copyWith(
+              privacyConsent: accepted,
+              outcomeConsent: false,
+              outcomeConsentUpdatedAt: now,
+            );
+    return accepted;
+  }
+
+  @override
+  Future<DateTime> saveOutcomeConsent(String uid, bool enabled) async {
+    _authorize(uid);
+    final old = _users[uid];
+    if (old == null || old.deletionPending) {
+      throw StateError(
+        'A current account is required to change outcome learning.',
+      );
+    }
+    if (enabled && old.privacyConsent?.validAt(_now().toUtc()) != true) {
+      throw StateError(
+        'Review privacy and consent before enabling outcome learning.',
+      );
+    }
+    final now = _now().toUtc();
+    _users[uid] = old.copyWith(
+      outcomeConsent: enabled,
+      outcomeConsentUpdatedAt: now,
+    );
+    return now;
+  }
+
+  @override
   Future<void> replaceUser(String uid, CloudUserState state) async {
     _authorize(uid);
     replaceUserCallCount += 1;
-    _users[uid] = state;
+    final existing = _users[uid];
+    _users[uid] = state.copyWith(
+      privacyConsent: existing?.privacyConsent,
+      deletionPending: existing?.deletionPending,
+      outcomeConsentUpdatedAt: existing?.outcomeConsentUpdatedAt,
+    );
   }
 
   @override
@@ -568,10 +958,59 @@ class MemoryCloudRepository implements CloudRepository {
   @override
   Future<Map<String, Object?>> exportUser(String uid) async {
     _authorize(uid);
-    return {
-      'uid': uid,
-      if (_users[uid] case final state?) ...state.toExportJson(),
-      'reservedCollections': {
+    final state = _users[uid];
+    final userDocument = state == null
+        ? null
+        : <String, Object?>{
+            ...profileToCloud(
+              profile: state.profile,
+              email: state.accountEmail,
+              onboardingComplete: state.onboardingComplete,
+              notificationsEnabled: state.notificationsEnabled,
+              crashNotificationsEnabled: state.crashNotificationsEnabled,
+              recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
+              notificationPrefsVersion: state.notificationPrefsVersion,
+              outcomeConsent: state.outcomeConsent,
+              healthAuthorized: state.healthAuthorized,
+              lastSync: state.lastSync,
+              healthSyncStatus: state.healthSyncStatus,
+              lastHealthRefreshReason: state.lastHealthRefreshReason,
+              lastHealthSyncAttempt: state.lastHealthSyncAttempt,
+              lastHealthChangeAt: state.lastHealthChangeAt,
+              healthBackgroundRefreshEnabled:
+                  state.healthBackgroundRefreshEnabled,
+              migrationVersion: state.migrationVersion,
+              updatedAt: state.userUpdatedAt,
+            ),
+            if (state.personalizedEnergyModel != null)
+              'personalizedEnergyModel': state.personalizedEnergyModel!
+                  .toJson(),
+            if (state.privacyConsent != null)
+              'privacyConsent': state.privacyConsent!.toCloud(),
+            if (state.privacyConsent != null)
+              'consentFlags': {
+                'wellnessOnlyAcknowledged':
+                    state.privacyConsent!.wellnessAcknowledged,
+                'outcomeCollection': state.outcomeConsent,
+                'trainingRecordUse': state.outcomeConsent,
+              },
+            if (state.outcomeConsentUpdatedAt != null)
+              'outcomeConsentUpdatedAt': state.outcomeConsentUpdatedAt,
+            if (state.deletionPending) 'privacyDeletion': {'version': 1},
+          };
+    return buildUserDataExport(
+      uid: uid,
+      userDocument: userDocument,
+      exportedAt: DateTime.now(),
+      collections: {
+        'signals': {
+          for (final signal in state?.signals ?? const <SignalReading>[])
+            signal.id: _exportSafe(signalToCloud(signal)),
+        },
+        'checkIns': {
+          for (final checkIn in state?.checkIns ?? const <DailyCheckIn>[])
+            checkIn.id: _exportSafe(checkInToCloud(checkIn)),
+        },
         'scoreSnapshots': {
           for (final entry in (_scores[uid] ?? const {}).entries)
             entry.key: _exportSafe(
@@ -598,7 +1037,7 @@ class MemoryCloudRepository implements CloudRepository {
             entry.key: _exportSafe(riskAlertToCloud(entry.value)),
         },
       },
-    };
+    );
   }
 
   @override

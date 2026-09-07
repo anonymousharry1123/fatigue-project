@@ -519,6 +519,8 @@ class ScoreDriver {
     this.freshness,
     this.source,
     this.evidenceAt,
+    this.evidenceSources = const [],
+    this.containsDemoEvidence,
   });
 
   final String label;
@@ -528,6 +530,16 @@ class ScoreDriver {
   final double? freshness;
   final SignalSource? source;
   final DateTime? evidenceAt;
+
+  /// Sources of the current/recent observations, not just the latest sample.
+  /// Historical baseline provenance is not recorded in this field. Absent on
+  /// older snapshots; an empty list does not establish provenance.
+  final List<SignalSource> evidenceSources;
+
+  /// Whether recognized demo/seed markers were in the current/recent inputs.
+  /// This does not audit historical baseline observations.
+  /// Null means this check was not recorded, rather than verified real data.
+  final bool? containsDemoEvidence;
 
   bool get isPositive => contribution > .01;
   bool get isNegative => contribution < -.01;
@@ -632,6 +644,8 @@ class ScoreSnapshot {
     this.baselineConfidence = 0,
     this.deterministicEnergy,
     this.personalizedModelVersion,
+    this.energyModelVersion,
+    this.cognitiveModelVersion,
   });
 
   final int energy;
@@ -656,6 +670,8 @@ class ScoreSnapshot {
   /// restored on another device that has no local weights or valid consent.
   final int? deterministicEnergy;
   final String? personalizedModelVersion;
+  final String? energyModelVersion;
+  final String? cognitiveModelVersion;
 
   ScoreSnapshot withoutPersonalization() => deterministicEnergy == null
       ? this
@@ -692,6 +708,8 @@ class ScoreSnapshot {
           explanation:
               'Validated against held-out days. Not a medical assessment; confidence is unchanged.',
           source: SignalSource.model,
+          evidenceSources: const [SignalSource.model],
+          containsDemoEvidence: false,
         ),
     ],
     cognitiveConfidence: cognitiveConfidence,
@@ -709,6 +727,8 @@ class ScoreSnapshot {
     baselineConfidence: baselineConfidence,
     deterministicEnergy: reference,
     personalizedModelVersion: version,
+    energyModelVersion: energyModelVersion,
+    cognitiveModelVersion: cognitiveModelVersion,
   );
 
   int? get cognitiveChange =>

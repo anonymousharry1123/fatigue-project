@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/privacy_center_screen.dart';
 import 'screens/shell_screen.dart';
 import 'theme.dart';
 
@@ -47,13 +48,24 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
         builder: (context, _) => MaterialApp(
           // Reset the navigator as well as the home screen: a pushed private
           // route must not remain visible or reachable with Back after sign-out.
-          key: ValueKey(controller.isSignedOut),
+          key: ValueKey((
+            controller.isSignedOut,
+            controller.deletionPending,
+            controller.onboardingComplete && controller.privacyReviewRequired,
+          )),
           title: 'Tonyo',
           debugShowCheckedModeBanner: false,
           scrollBehavior: const TonyoScrollBehavior(),
           theme: buildTonyoTheme(),
           home: !controller.isReady
               ? const _LoadingScreen()
+              : !controller.isSignedOut &&
+                    (controller.deletionPending ||
+                        ((controller.onboardingComplete ||
+                                (controller.isCloudAuthenticated &&
+                                    controller.cloudSyncError == null)) &&
+                            controller.privacyReviewRequired))
+              ? PrivacyCenterScreen(controller: controller, requireReview: true)
               : controller.onboardingComplete && !controller.isSignedOut
               ? const ShellScreen()
               : const OnboardingScreen(),

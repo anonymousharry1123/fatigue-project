@@ -1,8 +1,10 @@
+import 'energy_model_summary.dart';
 import 'models.dart';
+import 'privacy_consent.dart';
 
-/// Version 12 adds optional observation availability and personalized Energy
-/// fallback fields; missing legacy availability remains unknown.
-const int cloudSchemaVersion = 12;
+/// Version 14 adds explicit privacy receipts and consent-change timestamps.
+/// Optional legacy fields remain unknown rather than acquiring current values.
+const int cloudSchemaVersion = 14;
 
 const int notificationPreferencesVersion = 1;
 
@@ -111,7 +113,6 @@ Map<String, Object?> profileToCloud({
     'healthAuthorized': healthAuthorized,
   },
   'consentFlags': {
-    'wellnessOnlyAcknowledged': true,
     'outcomeCollection': outcomeConsent,
     'trainingRecordUse': outcomeConsent,
   },
@@ -185,6 +186,11 @@ class CloudUserState {
     this.crashNotificationsEnabled = true,
     this.recoveryNotificationsEnabled = true,
     this.notificationPrefsVersion = 0,
+    this.personalizedEnergyModel,
+    this.userUpdatedAt,
+    this.privacyConsent,
+    this.deletionPending = false,
+    this.outcomeConsentUpdatedAt,
   });
 
   final UserProfile profile;
@@ -206,7 +212,20 @@ class CloudUserState {
   final List<SignalReading> signals;
   final List<DailyCheckIn> checkIns;
 
-  CloudUserState copyWith({int? migrationVersion}) => CloudUserState(
+  /// Historical validation metadata only, never executable model weights.
+  final EnergyModelSummary? personalizedEnergyModel;
+  final DateTime? userUpdatedAt;
+  final PrivacyConsent? privacyConsent;
+  final bool deletionPending;
+  final DateTime? outcomeConsentUpdatedAt;
+
+  CloudUserState copyWith({
+    int? migrationVersion,
+    PrivacyConsent? privacyConsent,
+    bool? deletionPending,
+    bool? outcomeConsent,
+    DateTime? outcomeConsentUpdatedAt,
+  }) => CloudUserState(
     profile: profile,
     accountEmail: accountEmail,
     onboardingComplete: onboardingComplete,
@@ -214,7 +233,7 @@ class CloudUserState {
     crashNotificationsEnabled: crashNotificationsEnabled,
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
     notificationPrefsVersion: notificationPrefsVersion,
-    outcomeConsent: outcomeConsent,
+    outcomeConsent: outcomeConsent ?? this.outcomeConsent,
     healthAuthorized: healthAuthorized,
     lastSync: lastSync,
     healthSyncStatus: healthSyncStatus,
@@ -225,6 +244,12 @@ class CloudUserState {
     migrationVersion: migrationVersion ?? this.migrationVersion,
     signals: signals,
     checkIns: checkIns,
+    personalizedEnergyModel: personalizedEnergyModel,
+    userUpdatedAt: userUpdatedAt,
+    privacyConsent: privacyConsent ?? this.privacyConsent,
+    deletionPending: deletionPending ?? this.deletionPending,
+    outcomeConsentUpdatedAt:
+        outcomeConsentUpdatedAt ?? this.outcomeConsentUpdatedAt,
   );
 
   Map<String, Object?> toExportJson() => {
@@ -247,6 +272,16 @@ class CloudUserState {
     'profile': profile.toJson(),
     'signals': signals.map((value) => value.toJson()).toList(),
     'checkIns': checkIns.map((value) => value.toJson()).toList(),
+    if (personalizedEnergyModel != null)
+      'personalizedEnergyModel': personalizedEnergyModel!.toJson(),
+    if (userUpdatedAt != null)
+      'userUpdatedAt': userUpdatedAt!.toUtc().toIso8601String(),
+    if (privacyConsent != null) 'privacyConsent': privacyConsent!.toJson(),
+    'deletionPending': deletionPending,
+    if (outcomeConsentUpdatedAt != null)
+      'outcomeConsentUpdatedAt': outcomeConsentUpdatedAt!
+          .toUtc()
+          .toIso8601String(),
   };
 }
 
@@ -256,11 +291,15 @@ Map<String, Object?> scoreSnapshotToCloud({
   required DateTime day,
 }) => {
   'energy': snapshot.energy,
+  if (snapshot.energyModelVersion != null)
+    'energyModelVersion': snapshot.energyModelVersion,
+  if (snapshot.cognitiveModelVersion != null)
+    'cognitiveModelVersion': snapshot.cognitiveModelVersion,
   if (snapshot.deterministicEnergy != null) ...{
     'deterministicEnergy': snapshot.deterministicEnergy,
     'personalizedModelVersion': snapshot.personalizedModelVersion,
   },
-  'cognitive': snapshot.cognitive,
+  if (snapshot.hasCognitiveScore) 'cognitive': snapshot.cognitive,
   'confidence': snapshot.confidence,
   'cognitiveConfidence': snapshot.cognitiveConfidence,
   'freshness': snapshot.freshness,
@@ -272,42 +311,26 @@ Map<String, Object?> scoreSnapshotToCloud({
   'inputCount': snapshot.inputCount,
   'cognitiveInputCount': snapshot.cognitiveInputCount,
   'isEstimate': snapshot.isEstimate,
-  'drivers': snapshot.drivers
-      .map(
-        (driver) => {
-          'label': driver.label,
-          'contribution': driver.contribution,
-          'detail': driver.detail,
-          'explanation': driver.explanation,
-          'freshness': driver.freshness,
-          'source': driver.source?.name,
-          'evidenceAt': driver.evidenceAt,
-        },
-      )
-      .toList(),
+  'drivers': snapshot.drivers.map(_scoreDriverToCloud).toList(),
   'cognitiveDrivers': snapshot.cognitiveDrivers
-      .map(
-        (driver) => {
-          'label': driver.label,
-          'contribution': driver.contribution,
-          'detail': driver.detail,
-          'explanation': driver.explanation,
-          'freshness': driver.freshness,
-          'source': driver.source?.name,
-          'evidenceAt': driver.evidenceAt,
-        },
-      )
+      .map(_scoreDriverToCloud)
       .toList(),
   'previousCognitive': snapshot.previousCognitive,
   'cognitiveDelta': snapshot.cognitiveChange,
   'day': day,
-  'calculatedAt': snapshot.calculatedAt ?? DateTime.now().toUtc(),
+  if (snapshot.calculatedAt != null) 'calculatedAt': snapshot.calculatedAt,
   'schemaVersion': cloudSchemaVersion,
 };
 
 ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
     ScoreSnapshot(
       energy: (data['energy'] as num).round(),
+      energyModelVersion: data['energyModelVersion'] is String
+          ? data['energyModelVersion'] as String
+          : null,
+      cognitiveModelVersion: data['cognitiveModelVersion'] is String
+          ? data['cognitiveModelVersion'] as String
+          : null,
       deterministicEnergy: (data['deterministicEnergy'] as num?)?.round(),
       personalizedModelVersion: data['personalizedModelVersion'] as String?,
       cognitive: (data['cognitive'] as num?)?.round() ?? 0,
@@ -331,41 +354,63 @@ ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
       calculatedAt: data['calculatedAt'] == null
           ? null
           : cloudDateTime(data['calculatedAt'], field: 'calculatedAt'),
-      drivers: ((data['drivers'] as List?) ?? const []).map((raw) {
-        final driver = (raw as Map).cast<String, dynamic>();
-        return ScoreDriver(
-          driver['label'] as String,
-          (driver['contribution'] as num).toDouble(),
-          driver['detail'] as String,
-          explanation: (driver['explanation'] as String?) ?? '',
-          freshness: (driver['freshness'] as num?)?.toDouble(),
-          source: driver['source'] == null
-              ? null
-              : SignalSource.values.byName(driver['source'] as String),
-          evidenceAt: driver['evidenceAt'] == null
-              ? null
-              : cloudDateTime(driver['evidenceAt'], field: 'evidenceAt'),
-        );
-      }).toList(),
-      cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const []).map((
-        raw,
-      ) {
-        final driver = (raw as Map).cast<String, dynamic>();
-        return ScoreDriver(
-          driver['label'] as String,
-          (driver['contribution'] as num).toDouble(),
-          driver['detail'] as String,
-          explanation: (driver['explanation'] as String?) ?? '',
-          freshness: (driver['freshness'] as num?)?.toDouble(),
-          source: driver['source'] == null
-              ? null
-              : SignalSource.values.byName(driver['source'] as String),
-          evidenceAt: driver['evidenceAt'] == null
-              ? null
-              : cloudDateTime(driver['evidenceAt'], field: 'evidenceAt'),
-        );
-      }).toList(),
+      drivers: ((data['drivers'] as List?) ?? const [])
+          .map(_scoreDriverFromCloud)
+          .toList(),
+      cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const [])
+          .map(_scoreDriverFromCloud)
+          .toList(),
     );
+
+Map<String, Object?> _scoreDriverToCloud(ScoreDriver driver) => {
+  'label': driver.label,
+  'contribution': driver.contribution,
+  'detail': driver.detail,
+  'explanation': driver.explanation,
+  'freshness': driver.freshness,
+  'source': driver.source?.name,
+  'evidenceAt': driver.evidenceAt,
+  if (driver.evidenceSources.isNotEmpty)
+    'evidenceSources': driver.evidenceSources
+        .map((source) => source.name)
+        .toList(),
+  if (driver.containsDemoEvidence != null)
+    'containsDemoEvidence': driver.containsDemoEvidence,
+};
+
+ScoreDriver _scoreDriverFromCloud(Object? raw) {
+  final driver = (raw as Map).cast<String, dynamic>();
+  final sources = driver['evidenceSources'];
+  final hasInvalidSources =
+      sources != null &&
+      (sources is! List ||
+          sources.any(
+            (name) => !SignalSource.values.any((source) => source.name == name),
+          ));
+  return ScoreDriver(
+    driver['label'] as String,
+    (driver['contribution'] as num).toDouble(),
+    driver['detail'] as String,
+    explanation: (driver['explanation'] as String?) ?? '',
+    freshness: (driver['freshness'] as num?)?.toDouble(),
+    source: SignalSource.values
+        .where((source) => source.name == driver['source'])
+        .firstOrNull,
+    evidenceAt: driver['evidenceAt'] == null
+        ? null
+        : cloudDateTime(driver['evidenceAt'], field: 'evidenceAt'),
+    evidenceSources: !hasInvalidSources && sources is List
+        ? [
+            for (final source in SignalSource.values)
+              if (sources.contains(source.name)) source,
+          ]
+        : const [],
+    containsDemoEvidence:
+        !hasInvalidSources && driver['containsDemoEvidence'] is bool
+        ? driver['containsDemoEvidence'] as bool
+        : null,
+  );
+}
 
 Map<String, Object?> personalBaselinesToCloud(PersonalBaselines baselines) => {
   'generatedAt': baselines.generatedAt,

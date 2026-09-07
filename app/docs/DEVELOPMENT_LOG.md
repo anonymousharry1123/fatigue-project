@@ -4,9 +4,18 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current implementation:** Version 0.32 — Lightweight personalized Energy model (as of 2026-09-07); iPhone/heap profiling and Firestore rules release checks remain pending.
+- **Current implementation:** Version 0.34 — Privacy and Youth Safety safeguards (as of 2026-09-07). Youth launch remains gated on policy/verified-guardian infrastructure; iPhone/heap and production rules deployment/IAM checks remain pending.
 
 ## Implementation Report
+
+### Version 0.34 implementation — 2026-09-07
+
+Privacy/youth-safety work adds explicit versioned consent, a conservative
+server-verified guardian gate, complete known-schema account export/deletion,
+and executable Firestore security-rule tests. Existing accounts must review
+privacy before new collection; legacy booleans are not inferred consent.
+Launch ages/jurisdictions and a real guardian-verification service remain
+release decisions. No live account data has been deleted or consent changed.
 
 | Version | Feature | Status |
 | --- | --- | --- |
@@ -45,7 +54,9 @@
 | 0.31 | Consent-gated observed-energy and cognitive outcome records | Complete |
 | Prep for 0.32 | Bounded account snapshot, local eligibility pipeline and readiness UI | Complete; account not training-ready |
 | 0.32 | Lightweight on-device Energy residual model | Implemented; account not promoted; iPhone/heap and rules release QA pending |
-| 0.33+ | Transparency, privacy, and production polish | Not started |
+| 0.33 | Model versions, confidence, driver evidence and update history | Complete; local tests and rendered UI verification |
+| 0.34 | Privacy and youth safety safeguards | Implemented and locally verified; youth launch and production deployment gated |
+| 0.35 | Production polish | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -68,7 +79,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-09-07 — **348 tests passed**, including the Version 0.32 model, storage, cancellation, UI, inference and record-availability regressions; `flutter analyze` reports no issues.
+- Last verified: 2026-09-07 — **508 Flutter tests passed** with no missed-tap warnings; **24 executable Firestore emulator cases passed**. `flutter analyze` and `git diff --check` report no issues.
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -105,8 +116,127 @@
 32. Recommendation feedback (direct status/helpfulness writes + 30-day private-history ranking) - Complete (v0.30)
 33. Outcome collection (explicit dual consent + linked energy/reaction records) - Complete (v0.31)
 34. Lightweight personalized Energy model (eight-weight ridge residual, local artifacts, explicit bounded refresh and deterministic fallback) - Implemented; release QA pending (v0.32)
+35. Model transparency (score guide, exact saved drivers, evidence kinds, model versions and dated account metadata) - Complete (v0.33)
+36. Privacy/youth safeguards (explicit receipts, required review, guardian authority gate, raw export, reauthenticated recovery-safe deletion, executable owner rules) - Implemented; youth launch/deployment gates remain (v0.34)
 
 ## Day-to-Day Entries
+
+### 2026-09-07 — Version 0.34 Privacy and Youth Safety safeguards
+
+**Branch:** `main`
+
+**Prompt:** “now do .34 really good”
+
+**Implementation:** Added a neutral pre-identifier age/region step, unchecked
+data-use acknowledgement and schema-14 server-stamped receipts. Existing users
+with only legacy flags must review privacy before tracking, Health imports,
+scoring writes or prep resumes. Optional learning stays separate and uses a
+narrow consent write instead of the broad profile/history sync. Claims and a
+server root read verify permission at startup/sign-in; foreground checks add
+only one narrow root read, with no history scan, listener or training loop.
+
+**Policy boundary:** Asked for launch countries/ages; no decision supplied this
+session. Implemented a conservative under-18 trusted-guardian gate, not a fake
+guardian checkbox. No guardian verification provider exists in this build and
+no legal-compliance claim is made. Users can still export/delete existing data.
+Trusted server claims, token-expiry withdrawal limits, account corrections,
+backend IAM and production deployment are explicit release requirements.
+
+**Lifecycle fixes:** The old typed export omitted root metadata. Version 2 now
+exports the raw root and every document/ID in all seven flat known collections,
+plus matching device state and real owner-bound model/prep cache envelopes.
+Server-only 100-record pages have explicit document, byte and request caps;
+failures never return a truncated success. Unknown Admin-created nesting,
+provider backups, Health originals and other device copies are excluded honestly.
+
+Deletion now reauthenticates the existing Firebase user before changing any
+data, then journals recovery and marks the server account before bounded child
+deletion. It verifies emptiness, removes the root, deletes Auth, then clears the
+device cache. Partial/Auth/local-cleanup failures remain paused across restart.
+Auth-null recovery distinguishes clearing only this device from confirming cloud
+deletion. A missing cloud root can no longer trigger automatic cache resurrection.
+No live account data, credentials, consent or deployed rules were changed.
+
+**Race review:** Added owner/session/request-generation checks for scores,
+forecasts, guidance, outcomes, insights and scheduled notifications. Late success
+or failure cannot restore previous-account state or resume paused collection.
+Prep is invalidated on privacy loss; overlapping foreground privacy reads cannot
+undo a newer withdrawal. Health/permission callbacks are likewise session-checked.
+One export test initially used a fictitious `snapshot.uid`; it now builds real
+UID-free prep envelopes and verifies the owner request key, identity and checksum.
+
+**UI QA:** Privacy center explains storage, wellness limitations and separate
+permissions, shows dated receipts, previews export counts and requires a second
+clipboard confirmation. Destructive dialogs require typed `DELETE`, plus the
+cloud password where applicable. Empty authenticated accounts resume setup after
+privacy review without duplicate registration. Five rendered phone/320px large-
+text captures were visually checked. A discovered offscreen checkbox tap in the
+large-text test was fixed by targeting the actual checkbox and asserting the
+submitted receipt; warnings were not suppressed.
+
+**Rules QA:** 24 executable tests passed against the actual rules on Firestore
+emulator 1.22.0 / Java 21, using a credential-stripped demo-only runner and pinned
+test dependencies. These cover owner/directory isolation, guardian/operator
+authority, optional consent, 100-document batches, deletion retry and same-batch
+bypasses. Synthetic cloud lab trees now require a trusted operator claim.
+See [privacy notes](PRIVACY_SAFETY.md) and the executable harness README.
+
+**Final verification:** `flutter test --no-pub --reporter failures-only` passed
+**508 tests**, `flutter analyze --no-pub` found no issues, and `git diff --check`
+was clean. This includes 90 additional Flutter tests beyond the 0.33 baseline.
+The security emulator adds 24 independent executable cases. Version is
+`0.34.0+35`; no new runtime dependency was added.
+
+### 2026-09-07 — Version 0.33 Model Transparency
+
+**Branch:** `main`
+
+**Prompt:** “do .33, make it really good”
+
+**Goal:** Make the displayed Energy/Cognitive scores inspectable from Today and
+Profile, with exact stored drivers, evidence quality, honest source/missingness
+labels, and an explicit distinction between executable local models and
+Firebase's historical metadata. No screen-entry reads, writes or training.
+
+**Implementation:** Added a pure explanation projection, strict
+read-only metadata parser, existing-user-read integration with owner-scoped
+offline caching, and schema-13 rules/provenance fields for new score snapshots.
+Legacy fields stay unknown. The existing Energy confidence counter caps at
+seven despite ten current factor categories; this is explained explicitly
+without silently altering score or confidence formulas. Account document
+updates, metadata fetches, training times and score calculations are kept
+separate. Today and Profile open the new dark, accessible score guide with
+separate Energy/Cognitive views, expandable exact ranked drivers, evidence-kind
+labels, model status and dated validation summaries. A Firebase summary never
+claims that executable weights are installed or a correction is being applied.
+
+**Review fixes:** Unknown aggregate source names invalidate provenance rather
+than silently becoming measured-only data. Baseline-capable driver labels clarify
+that source/demo metadata covers current/recent observations, not historical
+baseline inputs. Missing Cognitive snapshots no longer display default
+confidence, and legacy cloud serialization preserves an unknown calculation
+time. Metadata from a failed cross-account restoration does not change the saved
+cache. A discovered pre-existing score-refresh race now uses session and request
+generation guards so delayed old-account/superseded results cannot restore stale
+scores, drivers or signal summaries. An absent cloud summary does not imply the
+local model is newer; that comparison requires two actual training timestamps.
+
+**Verification:** `flutter test --reporter failures-only` passes **418 tests**;
+`flutter analyze` reports no issues. New coverage exercises the real repository's
+existing read budget, strict parser and unknown metadata, exact driver projection,
+zero versus missing evidence, seeded/mixed and baseline provenance, account-safe
+offline/restart behavior, request races and no navigation-triggered work. Widget
+tests cover both routes, all drivers, state changes, legacy/empty/offline views,
+and full scrolling with 320-pixel width and 2× text. Rendered captures with actual
+text/icons were visually inspected at standard and large-text sizes. Corrected
+two older schema-version assertions when schema 13 was introduced; did not weaken
+the sign-in or data-preservation expectations. See
+[transparency notes](MODEL_TRANSPARENCY.md).
+
+**Scope:** No production Firebase writes, private-account fetches, historical
+backfills, model training/promotion, consent changes, rules deployment or phone
+installation. Version 0.32 real-device/heap/rules QA stays pending, and Version
+0.34 privacy/youth-consent work has not started.
 
 ### 2026-09-07 — Version 0.32 lightweight personalized Energy model
 
@@ -1299,6 +1429,27 @@ created.
 
 ## Prompts Used
 
+### Feature: Version 0.34 Privacy and Youth Safety
+
+- **Prompt:** “now do .34 really good”
+- **Result:** Implemented explicit consent and youth access safeguards, a complete
+  known-schema privacy center, safe account export/deletion and executable rules
+  validation. Verified guardian infrastructure and launch policy remain open.
+- **Modifications:** Schema 14, server-confirmed targeted consent operations,
+  owner-bound exports, durable deletion recovery, stronger async boundaries,
+  explicit adult regression fixtures, accessible UI tests and rendered QA.
+
+### Feature: Version 0.33 Model Transparency
+
+- **Prompt:** “do .33, make it really good”
+- **Result:** Added a polished read-only score guide from Today/Profile with
+  separate heads, exact saved drivers, explicit data quality and unknown states,
+  and accurate local-model versus Firebase-summary status.
+- **Modifications:** Optional schema-13 rules/provenance fields, safe account
+  metadata projection/cache, asynchronous score isolation, legacy timestamp
+  preservation, tests, rendered UI QA and documentation. No new per-view database
+  work, score-formula changes, training or privacy-consent scope expansion.
+
 ### Feature: Version 0.32 lightweight Energy model
 
 - **Prompt:** “you can continue on the next step on plan.md”
@@ -1694,6 +1845,16 @@ Energy inputs named by the roadmap.
 
 ## Challenges & Solutions
 
+### Challenge: Transparency without inventing provenance or adding database work
+
+**Problem:** Saved scores and account model summaries describe different times
+and devices. Legacy sources, capped input counts and a current measured sample
+cannot establish complete historical provenance or active local weights.
+**Solution:** Project the exact saved drivers, preserve unknown fields, distinguish
+observation versus baseline evidence, and read model summaries only through the
+existing account load. Protect both metadata and score results against async
+account switches. **Prompt used:** “do .33, make it really good”.
+
 ### Challenge: Sign-in UI implied success before verification
 **Problem:** Navigation and dialog dismissal preceded credential verification,
 even though Firebase correctly awaited authentication before account reads.
@@ -1730,6 +1891,7 @@ state.
 **Prompt used:** Version 0.17 Key Windows prompt.
 
 ## What I Learned
+- Keep model availability, actual score application, validation error and confidence separate; a readable explanation must not turn absent metadata into evidence.
 - Fixture-backed UI previews are not “done” until data is validated, persisted, and covered by tests (`PLAN.md` release rules).
 - Extracting pure helpers (`CheckInLogic`, `ReactionTestLogic`) makes feature behavior easy to unit test without driving the full UI.
 - Widget tests against scrollable forms need explicit scroll-into-view for lazily built children.
@@ -1759,5 +1921,10 @@ state.
 - [x] Implement Version 0.29 priority-aware morning-to-evening AI Coach plan
 - [x] Implement Version 0.30 persisted recommendation feedback and ranking
 - [x] Implement Version 0.31 explicit-consent outcome collection and lifecycle handling
+- [x] Implement Version 0.32 lightweight Energy model (release profiling/rules QA remains pending)
+- [x] Implement Version 0.33 read-only score/model transparency with legacy and account-safe behavior
+- [x] Implement Version 0.34 privacy safeguards and executable security/lifecycle tests
+- [ ] Complete youth-launch policy, verified guardian provider and withdrawal/correction workflow
+- [ ] Deploy/audit production rules and IAM; complete real-iPhone privacy/deletion QA
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history

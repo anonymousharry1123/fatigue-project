@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../app.dart';
 import '../app_controller.dart';
@@ -13,6 +12,8 @@ import '../widgets/common_widgets.dart';
 import 'account_sign_in_dialog.dart';
 import 'admin/admin_cohort_screen.dart';
 import 'ml_prep_screen.dart';
+import 'model_transparency_screen.dart';
+import 'privacy_center_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -200,6 +201,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onTap: () => _notifications(context),
           ),
           _SettingTile(
+            key: const Key('model-transparency-setting'),
+            icon: Icons.insights_rounded,
+            title: 'How your scores work',
+            subtitle: 'Evidence, confidence & the model on this device',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ModelTransparencyScreen(controller: controller),
+              ),
+            ),
+          ),
+          _SettingTile(
             key: const Key('outcome-learning-setting'),
             icon: Icons.fact_check_outlined,
             title: 'Outcome learning',
@@ -212,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             key: const Key('model-preparation-setting'),
             icon: Icons.dataset_outlined,
             title: 'Model preparation',
-            subtitle: 'Read-only 30-day snapshot · no model training',
+            subtitle: 'Inspect 30 days · refresh Energy model separately',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => MlPrepScreen(controller: controller),
@@ -220,10 +232,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           _SettingTile(
+            key: const Key('privacy-center-setting'),
             icon: Icons.privacy_tip_outlined,
-            title: 'Model & data privacy',
-            subtitle:
-                '${controller.signals.length} signals · ${controller.isCloudAuthenticated ? 'private cloud + cache' : 'local cache'}',
+            title: 'Privacy center',
+            subtitle: 'Data choices, youth protections, export & deletion',
             onTap: () => _privacy(context, controller),
           ),
           _SettingTile(
@@ -518,154 +530,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  static void _privacy(
-    BuildContext context,
-    AppController controller,
-  ) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: TonyoColors.surface,
-    builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Model & data privacy',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              controller.isCloudAuthenticated
-                  ? 'Tonyo stores your profile, preferences, signals, and check-ins under your Firebase user ID. Firestore rules restrict access to that account. A local cache keeps the demo usable offline. Passwords are handled only by Firebase Authentication.'
-                  : 'This build currently stores your profile, preferences, signals, and check-ins in the on-device offline cache. Passwords are never saved by Tonyo.',
-              style: TextStyle(color: TonyoColors.muted),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.copy_rounded, color: TonyoColors.blue),
-              title: const Text('Copy my data export'),
-              onTap: () async {
-                final export = await controller.exportAllData();
-                await Clipboard.setData(ClipboardData(text: export));
-                if (context.mounted) Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.restart_alt_rounded,
-                color: TonyoColors.amber,
-              ),
-              title: const Text('Reset tracking data'),
-              subtitle: const Text(
-                'Clear check-ins, activity, sleep, and scores. Keep account.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
-              ),
-              onTap: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (dialogContext) => AlertDialog(
-                    title: const Text('Reset tracking data?'),
-                    content: const Text(
-                      'This clears your check-ins, signals (activity, sleep, reaction, etc.), and saved energy score snapshots so you can start a blank manual tracking period.\n\nYour account, profile, and login stay. This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(dialogContext, true),
-                        child: const Text('Reset tracking'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed != true) return;
-                try {
-                  await controller.clearTrackingData();
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Tracking data cleared. You can start logging from blank.',
-                        ),
-                      ),
-                    );
-                  }
-                } on Object {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Reset could not finish. Check your connection and retry.',
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.delete_outline_rounded,
-                color: TonyoColors.coral,
-              ),
-              title: Text(
-                controller.isCloudAuthenticated
-                    ? 'Permanently delete account data'
-                    : 'Delete local data',
-              ),
-              onTap: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (dialogContext) => AlertDialog(
-                    title: const Text('Delete all Tonyo data?'),
-                    content: Text(
-                      controller.isCloudAuthenticated
-                          ? 'This permanently deletes your Firestore data, Firebase account, and local cache. This cannot be undone.'
-                          : 'This permanently deletes the Tonyo data cached on this device. This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(dialogContext, true),
-                        child: const Text('Delete permanently'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed != true) return;
-                try {
-                  await controller.deleteAccountData();
-                  if (context.mounted) Navigator.pop(context);
-                } on Object {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Deletion could not finish. Sign in again and retry.',
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        ),
+  static void _privacy(BuildContext context, AppController controller) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PrivacyCenterScreen(controller: controller),
       ),
-    ),
-  );
+    );
+  }
 
   static void _outcomeLearning(BuildContext context) =>
       showModalBottomSheet<void>(
@@ -706,7 +577,7 @@ class _OutcomeLearningSheet extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             const Text(
-              'Optional outcome records can support future personalization. Tonyo does not train a personalized model in this release.',
+              'Optional outcome records can support an on-device Energy model. Training starts only when you separately choose Refresh Energy model.',
               style: TextStyle(color: TonyoColors.muted, fontSize: 12),
             ),
             const SizedBox(height: 14),
@@ -741,7 +612,11 @@ class _OutcomeLearningSheet extends StatelessWidget {
                 style: TextStyle(color: TonyoColors.muted, fontSize: 11),
               ),
               value: controller.outcomeConsent,
-              onChanged: controller.isOutcomeLoading
+              onChanged:
+                  controller.isOutcomeLoading ||
+                      controller.isPrivacyBusy ||
+                      (!controller.privacyFeaturesAllowed &&
+                          !controller.outcomeConsent)
                   ? null
                   : (value) => _setConsent(context, controller, value),
             ),
@@ -789,7 +664,7 @@ class _OutcomeLearningSheet extends StatelessWidget {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Allow outcome learning?'),
           content: const Text(
-            'Tonyo will create private training-eligible records from future energy check-ins, reaction tests, and optional completed-plan ratings. They stay under your user ID and are not used to train a model yet.',
+            'Tonyo will create private training-eligible records from future energy check-ins, reaction tests, and optional completed-plan ratings. They stay under your user ID. Training is a separate action in Model preparation; this switch does not start training.',
           ),
           actions: [
             TextButton(

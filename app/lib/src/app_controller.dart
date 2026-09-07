@@ -16,6 +16,7 @@ import 'demo_data.dart';
 import 'fatigue_engine.dart';
 import 'energy_model_repository.dart';
 import 'energy_model_service.dart';
+import 'energy_model_summary.dart';
 import 'health_service.dart';
 import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
@@ -23,9 +24,11 @@ import 'ml_prep_models.dart';
 import 'ml_prep_builder.dart';
 import 'ml_prep_service.dart';
 import 'models.dart';
+import 'model_transparency_state.dart';
 import 'notification_logic.dart';
 import 'notification_service.dart';
 import 'personal_baseline_logic.dart';
+import 'privacy_consent.dart';
 import 'reaction_test_logic.dart';
 import 'recommendation_feedback_logic.dart';
 import 'screen_time_service.dart';
@@ -43,6 +46,7 @@ class AppController extends ChangeNotifier {
     EnergyModelStore? energyModelStore,
     this.energyModelMetadataWriter,
     this.cloudRepository,
+    PrivacyConsent? initialPrivacyConsent,
   }) : _healthService = healthService ?? const HealthService(),
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
@@ -55,11 +59,16 @@ class AppController extends ChangeNotifier {
            : MlPrepService(
                source: prepDataSource,
                cache: SharedPreferencesPrepCache(),
-             );
+             ) {
+    _privacyConsent = initialPrivacyConsent;
+    _privacyOwnerUid = _accountAuth.currentSession?.uid;
+    _cloudPrivacyVerified = initialPrivacyConsent != null;
+  }
 
   static const _storageKey = 'tonyo_state_v1';
   // Device navigation state, deliberately separate from profile/cloud data.
   static const _signedOutKey = 'tonyo_signed_out_v1';
+  static const _deletionKey = 'tonyo_privacy_deletion_v1';
   static const _prepWindowKeyPrefix = 'tonyo_ml_prep_window_v1_';
   static const forecastDayCount = 7;
   static const forecastFreshnessWindow = Duration(hours: 12);
@@ -77,7 +86,7 @@ class AppController extends ChangeNotifier {
     store: _energyModelStore,
     writer: energyModelMetadataWriter,
     currentUid: () => cloudUid,
-    consentAllowed: () => outcomeConsent && !isSignedOut && !_isSigningOut,
+    consentAllowed: () => outcomeConsent && _canProcessData,
     now: _now,
   );
   PrepRun? _preparedModelRun;
@@ -143,6 +152,127 @@ class AppController extends ChangeNotifier {
   bool isSignedOut = false;
   bool _isSigningOut = false;
   int _sessionRevision = 0;
+  PrivacyConsent? _privacyConsent;
+  String? _privacyOwnerUid;
+  bool _cloudPrivacyVerified = false;
+  int _privacyRefreshGeneration = 0;
+  String? _deletionOwner;
+  String? _deletionStage;
+  DateTime? outcomeConsentUpdatedAt;
+  PrivacyConsent? get privacyConsent => _privacyConsent;
+  bool get guardianConsentVerified =>
+      _accountAuth.currentSession?.guardianConsentVerified ?? false;
+  bool get deletionPending => _deletionOwner != null;
+  bool isDeletingAccount = false;
+  bool isExportingData = false;
+  bool _isSavingPrivacy = false;
+  bool get isPrivacyBusy =>
+      isDeletingAccount || isExportingData || _isSavingPrivacy;
+  String? privacyOperationError;
+  String? get guardianConsentBlocker =>
+      _privacyConsent?.guardianRequired == true && !guardianConsentVerified
+      ? 'Guardian verification is required. This build cannot verify a guardian '
+            'yet. New tracking and uploads stay paused; export and deletion '
+            'remain available.'
+      : null;
+  bool get privacyFeaturesAllowed =>
+      !deletionPending &&
+      (!cloudEnabled || isCloudAuthenticated || !onboardingComplete) &&
+      _privacyConsent?.validAt(_now()) == true &&
+      guardianConsentBlocker == null &&
+      (!isCloudAuthenticated ||
+          (_cloudPrivacyVerified && _privacyOwnerUid == cloudUid));
+  bool get privacyReviewRequired => !privacyFeaturesAllowed;
+  bool get _canProcessData =>
+      privacyFeaturesAllowed &&
+      !isSignedOut &&
+      !_isSigningOut &&
+      !isDeletingAccount &&
+      (!cloudEnabled || isCloudAuthenticated);
+
+  void _requirePrivacy() {
+    if (!_canProcessData) {
+      throw StateError(
+        deletionPending
+            ? 'Account deletion is pending. Retry it in Privacy center.'
+            : guardianConsentBlocker ??
+                  'Review your privacy choices before continuing.',
+      );
+    }
+  }
+
+  void Function() _beginMutation() {
+    _requirePrivacy();
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    return () {
+      _requirePrivacy();
+      if (revision != _sessionRevision || uid != cloudUid) {
+        throw StateError('Account changed. The previous action was stopped.');
+      }
+    };
+  }
+
+  Future<void> acceptPrivacy({
+    required PrivacyAgeBand ageBand,
+    required PrivacyRegion region,
+    required bool acknowledged,
+  }) async {
+    if (isPrivacyBusy || deletionPending) {
+      throw StateError('Finish the current privacy operation first.');
+    }
+    if (!acknowledged) {
+      throw ArgumentError('Please acknowledge the data use notice.');
+    }
+    final receipt = PrivacyConsent(
+      ageBand: ageBand,
+      region: region,
+      acceptedAt: _now(),
+    );
+    if (_privacyConsent != null && !_privacyConsent!.sameIdentity(receipt)) {
+      throw StateError(
+        'Age band and region cannot be changed to bypass verification. Contact support for a correction.',
+      );
+    }
+    if (receipt.guardianRequired && !guardianConsentVerified) {
+      throw StateError(
+        'Verified guardian setup is required before collecting personal information. It is not available in this build.',
+      );
+    }
+    _isSavingPrivacy = true;
+    _privacyRefreshGeneration++;
+    privacyOperationError = null;
+    notifyListeners();
+    try {
+      final uid = cloudUid;
+      final saved = uid == null || cloudRepository == null
+          ? receipt
+          : await cloudRepository!.savePrivacyConsent(uid, receipt);
+      if (uid != cloudUid || deletionPending) {
+        throw StateError('Account changed. Retry privacy review.');
+      }
+      _privacyConsent = saved;
+      _privacyOwnerUid = uid;
+      _cloudPrivacyVerified = uid != null;
+      // This notice never opts anyone into optional learning.
+      outcomeConsent = false;
+      outcomeConsentUpdatedAt = saved.acceptedAt;
+      await _discardPersonalizedModel();
+      await _writeLocal();
+    } on Object {
+      privacyOperationError =
+          'Privacy choices were not saved. Check your connection and retry.';
+      rethrow;
+    } finally {
+      _isSavingPrivacy = false;
+      notifyListeners();
+    }
+    if (onboardingComplete && _canProcessData) {
+      await handleAppResumed();
+      await refreshScores();
+    }
+  }
+
   bool get canResumeLocalProfile =>
       isSignedOut && onboardingComplete && !cloudEnabled;
   bool notificationsEnabled = false;
@@ -202,6 +332,11 @@ class AppController extends ChangeNotifier {
   List<DailyCheckIn> checkIns = [];
   List<OutcomeRecord> _outcomes = [];
   ScoreSnapshot? _scoreSnapshot;
+  int _scoreRefreshGeneration = 0;
+  EnergyModelSummary? _cloudEnergySummary;
+  String? _cloudMetadataUid;
+  DateTime? _cloudMetadataFetchedAt;
+  DateTime? _cloudUserUpdatedAt;
   List<SignalReading> _todaySignals = [];
   bool _scoreLoadedFromSnapshot = false;
   bool _forecastLoadedFromCloud = false;
@@ -231,6 +366,10 @@ class AppController extends ChangeNotifier {
       return 'Sign in through Profile → Cloud account before preparing your '
           '30-day account snapshot.';
     }
+    if (!_canProcessData) {
+      return guardianConsentBlocker ??
+          'Review your privacy choices before preparing a model.';
+    }
     return null;
   }
 
@@ -242,8 +381,11 @@ class AppController extends ChangeNotifier {
     final blocker = modelPreparationBlocker;
     if (blocker != null) throw StateError(blocker);
     final uid = cloudUid;
+    final sessionRevision = _sessionRevision;
     await _rememberModelPreparationWindow(window);
-    if (cloudUid != uid) {
+    if (cloudUid != uid ||
+        !_canProcessData ||
+        sessionRevision != _sessionRevision) {
       throw StateError('Account changed during preparation.');
     }
     final revision = _modelPreparationRevision;
@@ -254,7 +396,8 @@ class AppController extends ChangeNotifier {
     );
     if (cloudUid != uid ||
         revision != _modelPreparationRevision ||
-        isSignedOut) {
+        sessionRevision != _sessionRevision ||
+        !_canProcessData) {
       throw StateError(
         'Account data changed during preparation. Prepare again.',
       );
@@ -267,9 +410,11 @@ class AppController extends ChangeNotifier {
       '$_prepWindowKeyPrefix${prepFingerprint({'uid': uid})}';
 
   Future<void> _rememberModelPreparationWindow(PrepWindow window) async {
+    final ensureCurrent = _beginMutation();
     final uid = cloudUid;
     if (uid == null) throw StateError('Sign in to select an account window.');
     final preferences = await SharedPreferences.getInstance();
+    ensureCurrent();
     if (cloudUid != uid) {
       throw StateError('Account changed during preparation.');
     }
@@ -281,6 +426,7 @@ class AppController extends ChangeNotifier {
     )) {
       throw StateError('Could not save the selected preparation window.');
     }
+    ensureCurrent();
   }
 
   void _restoreModelPreparationWindow(SharedPreferences preferences) {
@@ -509,10 +655,54 @@ class AppController extends ChangeNotifier {
   ScoreSnapshot get score {
     final value =
         _scoreSnapshot ??
-        FatigueEngine.score(signals: signals, checkIns: checkIns);
+        FatigueEngine.score(signals: signals, checkIns: checkIns, now: _now());
     return _energyModelService.model == null
         ? value.withoutPersonalization()
         : value;
+  }
+
+  /// Opening transparency only projects already loaded state. No model load,
+  /// collection query, metadata write or consent mutation happens here.
+  ModelTransparencyState get modelTransparency {
+    final visible = !isSignedOut && !_isSigningOut;
+    final accountVisible = visible && isCloudAuthenticated;
+    final sameOwner = accountVisible && cloudUid == _cloudMetadataUid;
+    final local = accountVisible ? _energyModelService.model : null;
+    final at = _now();
+    return ModelTransparencyState(
+      snapshot: visible
+          ? score
+          : const ScoreSnapshot(
+              energy: 0,
+              cognitive: 0,
+              confidence: 0,
+              drivers: [],
+              hasCognitiveScore: false,
+            ),
+      viewedAt: at,
+      scoreFromCloud: visible && _scoreLoadedFromSnapshot,
+      offline:
+          accountVisible &&
+          (cloudSyncError != null || energyScoreError != null),
+      signedIn: accountVisible,
+      consentEnabled: visible && outcomeConsent,
+      loading: visible && isScoreLoading,
+      localModel: local == null
+          ? null
+          : EnergyModelSummary.tryParse(local.metadata),
+      cloudModel:
+          sameOwner && _cloudEnergySummary?.trainedAt.isAfter(at) == false
+          ? _cloudEnergySummary
+          : null,
+      metadataFetchedAt:
+          sameOwner && _cloudMetadataFetchedAt?.isAfter(at) == false
+          ? _cloudMetadataFetchedAt
+          : null,
+      accountUpdatedAt: sameOwner && _cloudUserUpdatedAt?.isAfter(at) == false
+          ? _cloudUserUpdatedAt
+          : null,
+      localModelStatus: accountVisible ? _energyModelService.status : '',
+    );
   }
 
   ScoreSnapshot _personalizeEnergy(
@@ -611,6 +801,7 @@ class AppController extends ChangeNotifier {
     bool notify = true,
     bool forceRecalculate = false,
   }) async {
+    if (!_canProcessData) return;
     final currentTime = _now();
     final target = day ?? currentTime;
     final start = DateTime(target.year, target.month, target.day);
@@ -620,6 +811,13 @@ class AppController extends ChangeNotifier {
         : end.subtract(const Duration(microseconds: 1));
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
+    final revision = _sessionRevision;
+    final generation = ++_scoreRefreshGeneration;
+    bool currentRequest() =>
+        revision == _sessionRevision &&
+        generation == _scoreRefreshGeneration &&
+        cloudUid == session?.uid &&
+        _canProcessData;
 
     isEnergyScoreLoading = true;
     energyScoreError = null;
@@ -635,6 +833,7 @@ class AppController extends ChangeNotifier {
           repository.scoreSnapshotForDay(session.uid, start),
           repository.signalsByRange(session.uid, start: start, end: end),
         ]);
+        if (!currentRequest()) return;
         final savedSnapshot = dashboardResults[0] as ScoreSnapshot?;
         _todaySignals = dashboardResults[1]! as List<SignalReading>;
         if (!forceRecalculate &&
@@ -671,6 +870,7 @@ class AppController extends ChangeNotifier {
             start.subtract(const Duration(days: 1)),
           ),
         ]);
+        if (!currentRequest()) return;
         scoringSignals = scoringResults[0]! as List<SignalReading>;
         scoringCheckIns = scoringResults[1]! as List<DailyCheckIn>;
         previousDay = scoringResults[2] as ScoreSnapshot?;
@@ -704,11 +904,14 @@ class AppController extends ChangeNotifier {
         calculationTime,
       );
       if (canUseCloud) {
+        if (!currentRequest()) return;
         await repository.upsertScoreSnapshot(session.uid, snapshot);
+        if (!currentRequest()) return;
       }
       _scoreSnapshot = snapshot;
       _scoreLoadedFromSnapshot = false;
     } on Object {
+      if (!currentRequest()) return;
       // A network/query failure must not make the wellness estimate disappear.
       _scoreSnapshot = FatigueEngine.score(
         signals: signals,
@@ -729,14 +932,24 @@ class AppController extends ChangeNotifier {
       _scoreLoadedFromSnapshot = false;
       energyScoreError = 'Cloud scoring unavailable · using cached inputs';
     } finally {
-      isEnergyScoreLoading = false;
-      if (notify) notifyListeners();
+      if (revision == _sessionRevision &&
+          generation == _scoreRefreshGeneration &&
+          cloudUid == session?.uid) {
+        isEnergyScoreLoading = false;
+        if (notify) notifyListeners();
+      }
     }
   }
 
   /// Compatibility entry point retained for Version 0.11 callers.
   Future<void> refreshEnergyScore({DateTime? day, bool notify = true}) =>
       refreshScores(day: day, notify: notify, forceRecalculate: true);
+
+  int _forecastRefreshGeneration = 0;
+  int _guidanceRefreshGeneration = 0;
+  int _notificationRefreshGeneration = 0;
+  int _insightsRefreshGeneration = 0;
+  int _outcomeRefreshGeneration = 0;
 
   /// Loads or regenerates Today and Tomorrow hourly forecasts. Authenticated
   /// users read and write their private forecastPoints collection; local and
@@ -746,6 +959,7 @@ class AppController extends ChangeNotifier {
     bool notify = true,
     bool forceRecalculate = false,
   }) async {
+    if (!_canProcessData) return;
     final clock = DateTime.now();
     final target = day ?? clock;
     final firstDay = DateTime(target.year, target.month, target.day);
@@ -756,6 +970,13 @@ class AppController extends ChangeNotifier {
     final rangeEnd = days.last.add(const Duration(days: 1));
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
+    final revision = _sessionRevision;
+    final generation = ++_forecastRefreshGeneration;
+    bool sameRequest() =>
+        revision == _sessionRevision &&
+        generation == _forecastRefreshGeneration &&
+        cloudUid == session?.uid;
+    bool currentRequest() => sameRequest() && _canProcessData;
 
     isForecastLoading = true;
     forecastError = null;
@@ -768,6 +989,7 @@ class AppController extends ChangeNotifier {
             start: firstDay,
             end: rangeEnd,
           );
+          if (!currentRequest()) return;
           final savedByDay = _groupForecasts(saved);
           if (days.every((targetDay) {
             final points = savedByDay[_dayKey(targetDay)] ?? const [];
@@ -795,6 +1017,7 @@ class AppController extends ChangeNotifier {
             end: rangeEnd,
           ),
         ]);
+        if (!currentRequest()) return;
         final forecastSignals = inputs[0] as List<SignalReading>;
         final forecastCheckIns = inputs[1] as List<DailyCheckIn>;
         final generated = {
@@ -816,6 +1039,7 @@ class AppController extends ChangeNotifier {
               points: generated[_dayKey(targetDay)]!,
             ),
         ]);
+        if (!currentRequest()) return;
         _forecastsByDay.addAll(generated);
         _forecastLoadedFromCloud = false;
         return;
@@ -824,18 +1048,22 @@ class AppController extends ChangeNotifier {
       _generateLocalForecasts(days, generatedAt: clock);
       _forecastLoadedFromCloud = false;
     } on Object {
+      if (!currentRequest()) return;
       _generateLocalForecasts(days, generatedAt: clock);
       _forecastLoadedFromCloud = false;
       forecastError = 'Cloud forecast unavailable · using cached inputs';
     } finally {
-      isForecastLoading = false;
-      if (notify) notifyListeners();
+      if (sameRequest()) {
+        isForecastLoading = false;
+        if (notify) notifyListeners();
+      }
     }
   }
 
   /// Builds Version 0.30's feedback-ranked daily plan plus Version 0.19 alerts
   /// from owner-scoped inputs, then replaces today's private documents.
   Future<void> refreshGuidance({DateTime? day, bool notify = true}) async {
+    if (!_canProcessData) return;
     final clock = _now();
     final target = day ?? clock;
     final targetDay = DateTime(target.year, target.month, target.day);
@@ -843,6 +1071,13 @@ class AppController extends ChangeNotifier {
     final rangeEnd = targetDay.add(const Duration(days: 1));
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
+    final revision = _sessionRevision;
+    final generation = ++_guidanceRefreshGeneration;
+    bool sameRequest() =>
+        revision == _sessionRevision &&
+        generation == _guidanceRefreshGeneration &&
+        cloudUid == session?.uid;
+    bool currentRequest() => sameRequest() && _canProcessData;
 
     isGuidanceLoading = true;
     guidanceError = null;
@@ -925,6 +1160,7 @@ class AppController extends ChangeNotifier {
           ),
           repository.riskAlertsForDay(session.uid, targetDay),
         ]);
+        if (!currentRequest()) return;
         derive(
           sourceSignals: values[0] as List<SignalReading>,
           sourceCheckIns: values[1] as List<DailyCheckIn>,
@@ -944,27 +1180,37 @@ class AppController extends ChangeNotifier {
             alerts: _riskAlerts,
           ),
         ]);
+        if (!currentRequest()) return;
         _guidanceSavedToCloud = true;
         return;
       }
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
       _guidanceSavedToCloud = false;
     } on Object {
+      if (!currentRequest()) return;
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
       _guidanceSavedToCloud = false;
       guidanceError = 'Cloud guidance unavailable · using cached inputs';
     } finally {
-      isGuidanceLoading = false;
-      if (notificationsEnabled) {
+      if (sameRequest()) isGuidanceLoading = false;
+      if (currentRequest() && notificationsEnabled) {
         await refreshNotifications(notify: false);
       }
-      if (notify) notifyListeners();
+      if (sameRequest() && notify) notifyListeners();
     }
   }
 
   Future<void> refreshNotifications({bool notify = true}) async {
+    if (!_canProcessData) return;
     if (isSignedOut || _isSigningOut) return;
     final sessionRevision = _sessionRevision;
+    final uid = cloudUid;
+    final generation = ++_notificationRefreshGeneration;
+    bool sameRequest() =>
+        sessionRevision == _sessionRevision &&
+        generation == _notificationRefreshGeneration &&
+        cloudUid == uid;
+    bool currentRequest() => sameRequest() && _canProcessData;
     isNotificationSyncing = true;
     notificationError = null;
     if (notify) notifyListeners();
@@ -989,12 +1235,12 @@ class AppController extends ChangeNotifier {
         notificationError = 'Scheduled alerts are unavailable on this device.';
         return;
       }
-      notificationPermission = await _notificationService.permissionStatus();
-      if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
-        return;
-      }
+      final permission = await _notificationService.permissionStatus();
+      if (!currentRequest()) return;
+      notificationPermission = permission;
       if (notificationPermission != NotificationPermissionState.granted) {
         await _notificationService.cancelGuidance();
+        if (!currentRequest()) return;
         notificationError =
             notificationPermission == NotificationPermissionState.denied
             ? 'Notifications are blocked in system settings.'
@@ -1002,18 +1248,22 @@ class AppController extends ChangeNotifier {
         return;
       }
       await _notificationService.reconcile(_notificationPlan.notifications);
-      if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
+      if (!currentRequest()) {
         await _notificationService.cancelGuidance();
       }
     } on Object {
+      if (!currentRequest()) return;
       notificationError = 'Notification schedule unavailable · try again';
     } finally {
-      isNotificationSyncing = false;
-      if (notify) notifyListeners();
+      if (sameRequest()) {
+        isNotificationSyncing = false;
+        if (notify) notifyListeners();
+      }
     }
   }
 
   Future<void> refreshInsights({DateTime? day, bool notify = true}) async {
+    if (!_canProcessData) return;
     final clock = day ?? DateTime.now();
     final targetDay = DateTime(clock.year, clock.month, clock.day);
     final rangeStart = targetDay.subtract(
@@ -1022,6 +1272,13 @@ class AppController extends ChangeNotifier {
     final rangeEnd = targetDay.add(const Duration(days: 1));
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
+    final revision = _sessionRevision;
+    final generation = ++_insightsRefreshGeneration;
+    bool sameRequest() =>
+        revision == _sessionRevision &&
+        generation == _insightsRefreshGeneration &&
+        cloudUid == session?.uid;
+    bool currentRequest() => sameRequest() && _canProcessData;
 
     isInsightsLoading = true;
     insightsError = null;
@@ -1040,6 +1297,7 @@ class AppController extends ChangeNotifier {
             end: rangeEnd,
           ),
         ]);
+        if (!currentRequest()) return;
         _insightsSnapshot = InsightsLogic.build(
           now: clock,
           signals: values[0] as List<SignalReading>,
@@ -1055,6 +1313,7 @@ class AppController extends ChangeNotifier {
       );
       insightsLoadedFromCloud = false;
     } on Object {
+      if (!currentRequest()) return;
       _insightsSnapshot = InsightsLogic.build(
         now: clock,
         signals: signals,
@@ -1063,13 +1322,16 @@ class AppController extends ChangeNotifier {
       insightsLoadedFromCloud = false;
       insightsError = 'Cloud insights unavailable · using cached entries';
     } finally {
-      isInsightsLoading = false;
-      if (notify) notifyListeners();
+      if (sameRequest()) {
+        isInsightsLoading = false;
+        if (notify) notifyListeners();
+      }
     }
   }
 
   /// Loads only consented, owner-scoped Version 0.31 outcome records.
   Future<void> refreshOutcomes({bool notify = true}) async {
+    if (!_canProcessData) return;
     if (!outcomeConsent) {
       _outcomes = [];
       outcomeError = null;
@@ -1080,6 +1342,13 @@ class AppController extends ChangeNotifier {
     final now = _now();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
+    final revision = _sessionRevision;
+    final generation = ++_outcomeRefreshGeneration;
+    bool sameRequest() =>
+        revision == _sessionRevision &&
+        generation == _outcomeRefreshGeneration &&
+        cloudUid == session?.uid;
+    bool currentRequest() => sameRequest() && _canProcessData && outcomeConsent;
     isOutcomeLoading = true;
     outcomeError = null;
     if (notify) notifyListeners();
@@ -1090,9 +1359,11 @@ class AppController extends ChangeNotifier {
           start: now.subtract(outcomeHistoryWindow),
           end: now.add(const Duration(days: 1)),
         );
+        if (!currentRequest()) return;
         if (jsonEncode(_outcomes.map((item) => item.toJson()).toList()) !=
             jsonEncode(refreshed.map((item) => item.toJson()).toList())) {
           await _invalidateModelPreparation();
+          if (!currentRequest()) return;
         }
         _outcomes = refreshed;
         await _writeLocal();
@@ -1114,10 +1385,13 @@ class AppController extends ChangeNotifier {
               );
       }
     } on Object {
+      if (!currentRequest()) return;
       outcomeError = 'Private outcomes unavailable · cached records retained';
     } finally {
-      isOutcomeLoading = false;
-      if (notify) notifyListeners();
+      if (sameRequest()) {
+        isOutcomeLoading = false;
+        if (notify) notifyListeners();
+      }
     }
   }
 
@@ -1143,20 +1417,36 @@ class AppController extends ChangeNotifier {
         'On Flutter web, use a fixed --web-port so localhost storage persists.',
       );
     }
+    await _restoreDeletionJournal(preferences);
     // A saved local profile is not an active session. Do not hydrate cloud
     // state or resume health/model work behind the welcome screen.
-    if (isSignedOut) {
+    if (isSignedOut || deletionPending) {
+      isReady = true;
+      notifyListeners();
+      return;
+    }
+    if (isCloudAuthenticated) {
+      _cloudPrivacyVerified = false;
+      try {
+        await _accountAuth.refreshPrivacyClaims();
+      } on Object {
+        privacyOperationError =
+            'Account privacy could not be verified. Reconnect and retry.';
+        isReady = true;
+        notifyListeners();
+        return;
+      }
+      await _hydrateOrMigrateCloud();
+      await _writeLocal();
+      if (!outcomeConsent) await _discardPersonalizedModel();
+    }
+    if (!_canProcessData) {
       isReady = true;
       notifyListeners();
       return;
     }
     await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
-    if (isCloudAuthenticated) {
-      await _hydrateOrMigrateCloud();
-      await _writeLocal();
-      if (!outcomeConsent) await _discardPersonalizedModel();
-    }
     await _energyModelService.load();
     if (outcomeConsent) await refreshOutcomes(notify: false);
     if (healthAuthorized &&
@@ -1178,7 +1468,55 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> handleAppResumed() async {
-    if (isSignedOut) return;
+    if (isSignedOut || deletionPending || isPrivacyBusy) return;
+    final revision = _sessionRevision;
+    final owner = cloudUid;
+    final generation = ++_privacyRefreshGeneration;
+    bool current() =>
+        revision == _sessionRevision &&
+        owner == cloudUid &&
+        generation == _privacyRefreshGeneration &&
+        !isSignedOut &&
+        !isPrivacyBusy;
+    if (isCloudAuthenticated && cloudRepository != null) {
+      final uid = cloudUid!;
+      try {
+        await _accountAuth.refreshPrivacyClaims();
+        if (!current() || deletionPending) return;
+        final state = await cloudRepository!.readAccountPrivacy(uid);
+        if (!current() || deletionPending) return;
+        _privacyConsent = state.consent;
+        _privacyOwnerUid = uid;
+        _cloudPrivacyVerified = true;
+        privacyOperationError = null;
+        outcomeConsent = state.outcomeConsent;
+        outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
+        if (state.deletionPending) await _saveDeletionJournal(uid, 'requested');
+        if (!current()) return;
+        if (!outcomeConsent) await _discardPersonalizedModel();
+        if (!current()) return;
+        await _writeLocal();
+      } on Object {
+        if (!current()) return;
+        _cloudPrivacyVerified = false;
+        privacyOperationError =
+            'Privacy status could not be verified. Reconnect and reopen Tonyo before new collection.';
+      }
+    }
+    if (!current()) return;
+    if (!_canProcessData) {
+      await _invalidateModelPreparation();
+      await _healthService.disableBackgroundUpdates();
+      healthBackgroundRefreshEnabled = false;
+      _energyModelService.unload();
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        /* fail closed collection */
+      }
+      notifyListeners();
+      return;
+    }
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     if (status == HealthAuthorizationState.authorized && healthAuthorized) {
@@ -1196,6 +1534,9 @@ class AppController extends ChangeNotifier {
     bool signInToExistingAccount = false,
   }) async {
     final normalizedEmail = email?.trim().toLowerCase();
+    if (!signInToExistingAccount && !privacyFeaturesAllowed) {
+      throw StateError('Complete privacy review before creating an account.');
+    }
     if (cloudEnabled) {
       if (normalizedEmail == null ||
           normalizedEmail.isEmpty ||
@@ -1209,6 +1550,16 @@ class AppController extends ChangeNotifier {
         return;
       } else {
         await _accountAuth.register(email: normalizedEmail, password: password);
+        final uid = cloudUid;
+        if (uid == null || cloudRepository == null) {
+          throw StateError('Cloud account storage is unavailable.');
+        }
+        _privacyConsent = await cloudRepository!.savePrivacyConsent(
+          uid,
+          _privacyConsent!,
+        );
+        _privacyOwnerUid = uid;
+        _cloudPrivacyVerified = true;
         await _clearModelPreparationWindow();
         await _invalidateModelPreparation();
       }
@@ -1219,6 +1570,7 @@ class AppController extends ChangeNotifier {
   /// Finish setup only after the account form has authenticated with Firebase.
   /// Returning accounts with a saved profile must never be replaced by defaults.
   Future<void> completeAuthenticatedOnboarding(UserProfile newProfile) async {
+    _requirePrivacy();
     if (!cloudEnabled || !isCloudAuthenticated) {
       throw StateError('Sign in before finishing account setup.');
     }
@@ -1233,6 +1585,9 @@ class AppController extends ChangeNotifier {
     UserProfile newProfile, {
     String? email,
   }) async {
+    if (!privacyFeaturesAllowed) {
+      throw StateError('Complete privacy review before setup.');
+    }
     profile = newProfile;
     accountEmail = _accountAuth.currentSession?.email ?? email ?? accountEmail;
     onboardingComplete = true;
@@ -1245,10 +1600,29 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> signIn({required String email, required String password}) async {
+    if (isPrivacyBusy) {
+      throw StateError('Finish pending privacy operations first.');
+    }
     if (!cloudEnabled) throw StateError('Firebase is not configured.');
     final wasSignedOut = isSignedOut;
     // A rejected password must not change local account state or prep caches.
     await _accountAuth.signIn(email: email, password: password);
+    _sessionRevision++;
+    _cloudPrivacyVerified = false;
+    try {
+      await _accountAuth.refreshPrivacyClaims();
+    } on Object {
+      cloudSyncError =
+          'Account privacy could not be verified. Reconnect and retry sign-in.';
+      rethrow;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await _restoreDeletionJournal(preferences);
+    if (deletionPending) {
+      await _setSignedOut(false);
+      notifyListeners();
+      return;
+    }
     await _clearModelPreparationWindow();
     await _invalidateModelPreparation();
     await _hydrateOrMigrateCloud();
@@ -1257,7 +1631,12 @@ class AppController extends ChangeNotifier {
         'Your account data could not be restored. Please retry.',
       );
     }
+    await _setSignedOut(false);
     await _writeLocal();
+    if (!_canProcessData) {
+      notifyListeners();
+      return;
+    }
     if (!outcomeConsent) await _discardPersonalizedModel();
     if (outcomeConsent) await refreshOutcomes(notify: false);
     if (onboardingComplete) {
@@ -1304,9 +1683,18 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    if (isPrivacyBusy) {
+      throw StateError('Wait for the privacy operation to finish.');
+    }
     if (isSignedOut || _isSigningOut) return;
     _isSigningOut = true;
     _sessionRevision += 1;
+    isForecastLoading = false;
+    isGuidanceLoading = false;
+    isInsightsLoading = false;
+    isOutcomeLoading = false;
+    isNotificationSyncing = false;
+    isEnergyScoreLoading = false;
     _energyModelService.unload();
     try {
       await _clearModelPreparationWindow();
@@ -1341,11 +1729,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> updateProfile(UserProfile value) async {
+    final ensureCurrent = _beginMutation();
     profile = value;
     await _commit(forecastInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> addSignal(SignalType type, double value, {String? note}) async {
+    final ensureCurrent = _beginMutation();
     final now = _now();
     signals.insert(
       0,
@@ -1359,6 +1750,7 @@ class AppController extends ChangeNotifier {
       ),
     );
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> saveActivityLog({
@@ -1369,6 +1761,7 @@ class AppController extends ChangeNotifier {
     double? screenTimeHours,
     DateTime? timestamp,
   }) async {
+    final ensureCurrent = _beginMutation();
     final hydration = ActivityLogLogic.valueOrZero(hydrationLiters);
     final study = ActivityLogLogic.valueOrZero(studyHours);
     final exercise = ActivityLogLogic.valueOrZero(exerciseHours);
@@ -1402,6 +1795,7 @@ class AppController extends ChangeNotifier {
     final recordedAt = timestamp ?? now;
     if (signals.any((item) => item.groupId == groupId)) {
       await _discardPersonalizedModel();
+      ensureCurrent();
     }
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(
@@ -1425,12 +1819,16 @@ class AppController extends ChangeNotifier {
           ),
     );
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> deleteActivityLog(String id) async {
+    final ensureCurrent = _beginMutation();
     await _discardPersonalizedModel();
+    ensureCurrent();
     signals.removeWhere((item) => item.groupId == id);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> addSleep({
@@ -1439,6 +1837,7 @@ class AppController extends ChangeNotifier {
     required DateTime wakeTime,
     required double quality,
   }) async {
+    final ensureCurrent = _beginMutation();
     final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: bedtime,
       wakeTime: wakeTime,
@@ -1457,6 +1856,7 @@ class AppController extends ChangeNotifier {
         id ?? 'sleep-${recordedAt.microsecondsSinceEpoch}-${signals.length}';
     if (signals.any((item) => item.groupId == groupId)) {
       await _discardPersonalizedModel();
+      ensureCurrent();
     }
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(0, [
@@ -1480,12 +1880,16 @@ class AppController extends ChangeNotifier {
       ),
     ]);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> deleteSleepLog(String id) async {
+    final ensureCurrent = _beginMutation();
     await _discardPersonalizedModel();
+    ensureCurrent();
     signals.removeWhere((item) => item.groupId == id);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
   Future<void> addCheckIn({
@@ -1496,6 +1900,7 @@ class AppController extends ChangeNotifier {
     String note = '',
     DateTime? timestamp,
   }) async {
+    final ensureCurrent = _beginMutation();
     if (!CheckInLogic.isValidRating(energy) ||
         !CheckInLogic.isValidRating(mood) ||
         !CheckInLogic.isValidRating(stress)) {
@@ -1508,6 +1913,7 @@ class AppController extends ChangeNotifier {
     final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
     if (checkIns.any((item) => item.id == checkInId)) {
       await _discardPersonalizedModel();
+      ensureCurrent();
     }
     final checkIn = DailyCheckIn(
       id: checkInId,
@@ -1523,6 +1929,7 @@ class AppController extends ChangeNotifier {
     checkIns.removeWhere((item) => item.id == checkInId);
     checkIns.insert(0, checkIn);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
     if (outcomeConsent) {
       await _saveOutcome(
         OutcomeRecord(
@@ -1539,6 +1946,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> addReactionResult(double averageMs, {String? note}) async {
+    final ensureCurrent = _beginMutation();
     if (!ReactionTestLogic.isValidReaction(averageMs.round())) {
       throw ArgumentError(
         'Reaction average must be between '
@@ -1560,6 +1968,7 @@ class AppController extends ChangeNotifier {
       ),
     );
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
     if (outcomeConsent) {
       await _saveOutcome(
         OutcomeRecord(
@@ -1580,6 +1989,7 @@ class AppController extends ChangeNotifier {
     String? recommendationId,
     DateTime? observedAt,
   }) async {
+    _requirePrivacy();
     if (!outcomeConsent) {
       throw StateError('Outcome learning requires explicit consent.');
     }
@@ -1611,18 +2021,22 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _saveOutcome(OutcomeRecord outcome) async {
+    final ensureCurrent = _beginMutation();
     if (!outcomeConsent) {
       throw StateError('Outcome learning requires explicit consent.');
     }
     await _invalidateModelPreparation();
+    ensureCurrent();
     if (_outcomes.any((item) => item.id == outcome.id)) {
       await _discardPersonalizedModel();
+      ensureCurrent();
     }
     _outcomes.removeWhere((item) => item.id == outcome.id);
     _outcomes.insert(0, outcome);
     outcomeError = null;
     notifyListeners();
     await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1636,23 +2050,32 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> deleteSignal(String id) async {
+    final ensureCurrent = _beginMutation();
     await _discardPersonalizedModel();
+    ensureCurrent();
     signals.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
     await _deleteOutcome('reaction-$id');
   }
 
   Future<void> deleteCheckIn(String id) async {
+    final ensureCurrent = _beginMutation();
     await _discardPersonalizedModel();
+    ensureCurrent();
     checkIns.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
     await _deleteOutcome('energy-checkin-$id');
   }
 
   Future<void> _deleteOutcome(String outcomeId) async {
+    final ensureCurrent = _beginMutation();
     await _invalidateModelPreparation();
+    ensureCurrent();
     _outcomes.removeWhere((item) => item.id == outcomeId);
     await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1669,6 +2092,7 @@ class AppController extends ChangeNotifier {
     String id,
     RecommendationStatus status,
   ) async {
+    final ensureCurrent = _beginMutation();
     _recommendationStatuses[id] = status;
     _recommendations = _recommendations
         .map((item) => item.id == id ? item.copyWith(status: status) : item)
@@ -1676,6 +2100,7 @@ class AppController extends ChangeNotifier {
     guidanceError = null;
     notifyListeners();
     await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1694,6 +2119,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> setRecommendationFeedback(String id, bool helpful) async {
+    final ensureCurrent = _beginMutation();
     _recommendationFeedback[id] = helpful;
     _recommendations = _recommendations
         .map((item) => item.id == id ? item.copyWith(helpful: helpful) : item)
@@ -1701,6 +2127,7 @@ class AppController extends ChangeNotifier {
     guidanceError = null;
     notifyListeners();
     await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1718,6 +2145,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> dismissRiskAlert(String id) async {
+    final ensureCurrent = _beginMutation();
     _dismissedRiskAlertIds.add(id);
     _riskAlerts = _riskAlerts
         .map((item) => item.id == id ? item.copyWith(dismissed: true) : item)
@@ -1725,6 +2153,7 @@ class AppController extends ChangeNotifier {
     guidanceError = null;
     notifyListeners();
     await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
@@ -1743,6 +2172,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<NotificationPermissionState> setNotifications(bool value) async {
+    _requirePrivacy();
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    bool current() =>
+        revision == _sessionRevision && uid == cloudUid && _canProcessData;
     if (!value) {
       notificationsEnabled = false;
       notificationError = null;
@@ -1763,7 +2197,9 @@ class AppController extends ChangeNotifier {
     notificationError = null;
     notifyListeners();
     try {
-      notificationPermission = await _notificationService.requestPermission();
+      final permission = await _notificationService.requestPermission();
+      if (!current()) return notificationPermission;
+      notificationPermission = permission;
       notificationsEnabled =
           notificationPermission == NotificationPermissionState.granted;
       if (!notificationsEnabled) {
@@ -1776,6 +2212,7 @@ class AppController extends ChangeNotifier {
         };
       }
     } on Object {
+      if (!current()) return notificationPermission;
       notificationsEnabled = false;
       notificationPermission = NotificationPermissionState.unknown;
       notificationError = 'Could not request notification permission.';
@@ -1788,29 +2225,67 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> setCrashNotifications(bool value) async {
+    final ensureCurrent = _beginMutation();
     crashNotificationsEnabled = value;
     await _commit();
+    ensureCurrent();
     await refreshNotifications();
   }
 
   Future<void> setRecoveryNotifications(bool value) async {
+    final ensureCurrent = _beginMutation();
     recoveryNotificationsEnabled = value;
     await _commit();
+    ensureCurrent();
     await refreshNotifications();
   }
 
   Future<void> setOutcomeConsent(bool value) async {
-    outcomeConsent = value;
-    outcomeError = null;
-    if (!value) {
-      _outcomes = [];
-      await _discardPersonalizedModel();
+    if (isPrivacyBusy || deletionPending || isSignedOut) {
+      throw StateError('Finish pending privacy operations first.');
     }
-    await _commit();
-    if (value) await refreshOutcomes();
+    if (value) _requirePrivacy();
+    _isSavingPrivacy = true;
+    _privacyRefreshGeneration++;
+    privacyOperationError = null;
+    final uid = cloudUid;
+    final revision = _sessionRevision;
+    try {
+      if (!value) {
+        outcomeConsent = false;
+        _outcomes = [];
+        await _discardPersonalizedModel();
+        await _writeLocal();
+      }
+      final at = uid != null && cloudRepository != null
+          ? await cloudRepository!.saveOutcomeConsent(uid, value)
+          : _now();
+      if (uid != cloudUid || revision != _sessionRevision) {
+        throw StateError('Account changed while saving consent.');
+      }
+      outcomeConsent = value;
+      outcomeConsentUpdatedAt = at;
+      outcomeError = null;
+      await _invalidateModelPreparation();
+      await _writeLocal();
+      if (value) await refreshOutcomes();
+    } on Object {
+      privacyOperationError = value
+          ? 'Outcome learning was not enabled. Reconnect and retry.'
+          : 'Learning is paused on this device, but cloud consent was not updated. Reconnect and turn it off again.';
+      rethrow;
+    } finally {
+      _isSavingPrivacy = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> connectHealth() async {
+    _requirePrivacy();
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    bool current() =>
+        revision == _sessionRevision && uid == cloudUid && _canProcessData;
     if (!healthAvailable) return false;
     isHealthAuthorizing = true;
     healthError = null;
@@ -1819,7 +2294,9 @@ class AppController extends ChangeNotifier {
     activitySyncError = null;
     notifyListeners();
     try {
-      healthAuthorization = await _healthService.requestAuthorization();
+      final status = await _healthService.requestAuthorization();
+      if (!current()) return false;
+      healthAuthorization = status;
       healthAvailable =
           healthAuthorization != HealthAuthorizationState.unavailable;
       healthAuthorized =
@@ -1834,6 +2311,7 @@ class AppController extends ChangeNotifier {
         };
       }
     } on Object {
+      if (!current()) return false;
       healthAuthorization = HealthAuthorizationState.error;
       healthAuthorized = false;
       healthError = 'Apple Health permissions could not be requested.';
@@ -1851,8 +2329,12 @@ class AppController extends ChangeNotifier {
   Future<HealthAuthorizationState> refreshHealthAuthorization({
     bool notify = true,
   }) async {
+    final revision = _sessionRevision;
     final previous = healthAuthorization;
     final status = await _healthService.authorizationStatus();
+    if (revision != _sessionRevision || deletionPending || isSignedOut) {
+      return healthAuthorization;
+    }
     healthAvailable = status != HealthAuthorizationState.unavailable;
     if (status != HealthAuthorizationState.error) healthError = null;
     // A Tonyo-level disconnect remains in force until the person explicitly
@@ -1914,11 +2396,18 @@ class AppController extends ChangeNotifier {
   }
 
   Future<ScreenTimeAuthorizationState> authorizeScreenTimeReport() async {
+    _requirePrivacy();
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    bool current() =>
+        revision == _sessionRevision && uid == cloudUid && _canProcessData;
     isScreenTimeAuthorizing = true;
     screenTimeError = null;
     notifyListeners();
     try {
-      screenTimeAuthorization = await _screenTimeService.requestAuthorization();
+      final status = await _screenTimeService.requestAuthorization();
+      if (!current()) return screenTimeAuthorization;
+      screenTimeAuthorization = status;
       screenTimeError = switch (screenTimeAuthorization) {
         ScreenTimeAuthorizationState.denied =>
           'Screen Time report permission was not granted.',
@@ -1929,6 +2418,7 @@ class AppController extends ChangeNotifier {
         _ => null,
       };
     } on Object {
+      if (!current()) return screenTimeAuthorization;
       screenTimeAuthorization = ScreenTimeAuthorizationState.error;
       screenTimeError = 'Screen Time report permission could not be requested.';
     } finally {
@@ -1939,6 +2429,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<bool> showScreenTimeReport() async {
+    _requirePrivacy();
     if (screenTimeAuthorization != ScreenTimeAuthorizationState.authorized) {
       screenTimeError = 'Allow the private Screen Time report first.';
       notifyListeners();
@@ -1956,6 +2447,7 @@ class AppController extends ChangeNotifier {
     HealthRefreshReason reason = HealthRefreshReason.foreground,
     bool notify = true,
   }) async {
+    if (!_canProcessData) return;
     if (isSignedOut) return;
     final now = _now();
     if (!ContinuousRefreshLogic.shouldRefresh(
@@ -1972,13 +2464,13 @@ class AppController extends ChangeNotifier {
     HealthRefreshReason reason = HealthRefreshReason.manual,
     bool notify = true,
   }) async {
-    if (isSignedOut || _isSigningOut || !healthAuthorized || isSyncing) {
+    if (!_canProcessData || !healthAuthorized || isSyncing) {
       return null;
     }
     final sessionRevision = _sessionRevision;
     bool sessionEnded() {
       if (!isSignedOut &&
-          !_isSigningOut &&
+          _canProcessData &&
           sessionRevision == _sessionRevision) {
         return false;
       }
@@ -2091,6 +2583,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _ensureContinuousHealthUpdates() async {
+    if (!_canProcessData) return;
     if (isSignedOut ||
         _isSigningOut ||
         !healthAuthorized ||
@@ -2167,17 +2660,114 @@ class AppController extends ChangeNotifier {
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());
 
   Future<String> exportAllData() async {
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session == null || repository == null) return exportJson();
-    final exported = await repository.exportUser(session.uid);
-    return const JsonEncoder.withIndent('  ').convert(exported);
+    if (isSignedOut || isPrivacyBusy) {
+      throw StateError(
+        'Sign in and finish pending privacy operations before exporting.',
+      );
+    }
+    isExportingData = true;
+    privacyOperationError = null;
+    notifyListeners();
+    final uid = cloudUid;
+    final revision = _sessionRevision;
+    try {
+      if (cloudEnabled && (uid == null || cloudRepository == null)) {
+        throw StateError('Sign in to export your cloud account.');
+      }
+      final cloud = uid == null ? null : await cloudRepository!.exportUser(uid);
+      final prefs = await SharedPreferences.getInstance();
+      if (uid != cloudUid || revision != _sessionRevision || isSignedOut) {
+        throw StateError(
+          'Account changed during export. Nothing was exported.',
+        );
+      }
+      // Only include this owner's cache. Never attach another signed-out user's
+      // device state to a newly authenticated account's export.
+      final local = uid == _privacyOwnerUid ? _json() : <String, Object?>{};
+      final localCaches = <String, Object?>{};
+      for (final key in prefs.getKeys()) {
+        if (!key.startsWith('tonyo_energy_model_v1_') &&
+            !key.startsWith('tonyo_ml_prep_v1_') &&
+            !key.startsWith(_prepWindowKeyPrefix)) {
+          continue;
+        }
+        final raw = prefs.get(key);
+        if (raw is! String) continue;
+        try {
+          final value = jsonDecode(raw);
+          if (value is Map && uid != null) {
+            final ownedModel =
+                key ==
+                    'tonyo_energy_model_v1_${base64Url.encode(utf8.encode(uid))}' &&
+                value['ownerKey'] == prepFingerprint({'uid': uid});
+            final snapshot = value['snapshot'];
+            var ownedPrep = false;
+            if (key.startsWith('tonyo_ml_prep_v1_') && snapshot is Map) {
+              // Prep snapshots deliberately omit UID. Validate the actual
+              // service envelope (including its content checksum) and bind its
+              // owner through the request key and account-specific identity.
+              final prepared = PrepSnapshot.fromJson(
+                Map<String, dynamic>.from(snapshot),
+                uid: uid,
+              );
+              final requestKey = prepFingerprint({
+                'uid': uid,
+                'window': prepared.window.toJson(),
+                'prepVersion': mlPrepVersion,
+              });
+              final identity = prepFingerprint({
+                'uid': uid,
+                'window': prepared.window.toJson(),
+                'prepVersion': mlPrepVersion,
+                'schemaVersion': prepared.schemaVersion,
+                'consent': prepared.consent.toJson(),
+              });
+              ownedPrep =
+                  key == 'tonyo_ml_prep_v1_$requestKey' &&
+                  value['identity'] == identity;
+            }
+            if (ownedModel || key == _prepWindowKey(uid) || ownedPrep) {
+              localCaches[key] = value;
+            }
+          }
+        } on Object {
+          /* Invalid/unowned cache is not exported as this account. */
+        }
+      }
+      return const JsonEncoder.withIndent('  ').convert({
+        'exportVersion': 2,
+        'exportedAt': _now().toUtc().toIso8601String(),
+        'cloud': cloud,
+        'local': {...local, 'derivedCaches': localCaches},
+        'scope': {
+          'cloudCollections': uid == null
+              ? <String>[]
+              : userDataChildCollections,
+          'pointInTimeSnapshot': false,
+          'excludes': [
+            'Original Apple Health store',
+            'Other devices and previous exports',
+            'Authentication credentials',
+            'Administrator-created unknown or nested collections',
+          ],
+        },
+      });
+    } on Object {
+      privacyOperationError =
+          'Export did not complete. No partial export was returned. Reconnect and retry.';
+      rethrow;
+    } finally {
+      isExportingData = false;
+      notifyListeners();
+    }
   }
 
   /// Clears signals, check-ins, and score snapshots but keeps the account and
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
+    final ensureCurrent = _beginMutation();
     await _discardPersonalizedModel();
+    ensureCurrent();
     signals = [];
     checkIns = [];
     _outcomes = [];
@@ -2221,27 +2811,156 @@ class AppController extends ChangeNotifier {
       await repository.clearOutcomes(session.uid);
     }
     await _commit(energyInputsChanged: true);
+    ensureCurrent();
   }
 
-  /// Permanently removes all documents under users/{uid}, deletes the Firebase
-  /// Auth account, and then clears the local cache.
-  Future<void> deleteAccountData() async {
-    await _clearModelPreparationWindow();
-    await _invalidateModelPreparation();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      await repository.deleteUserTree(session.uid);
-      await _accountAuth.deleteCurrentAccount();
+  /// Erases the known account schema and Auth identity, then this device's
+  /// Tonyo cache. A durable journal prevents migration or sync after failure.
+  Future<void> deleteAccountData({String? password}) async {
+    if (isPrivacyBusy || isSignedOut) {
+      throw StateError('Finish the current operation and sign in first.');
     }
-    await reset();
+    isDeletingAccount = true;
+    privacyOperationError = null;
+    notifyListeners();
+    final uid = cloudUid;
+    try {
+      final authAlreadyDeleted = _deletionStage == 'authDeleted';
+      if (uid != null && cloudRepository == null) {
+        throw StateError(
+          'Cloud storage is unavailable. Restore the connection before deleting the account.',
+        );
+      }
+      if (cloudEnabled && !authAlreadyDeleted) {
+        if (uid == null ||
+            cloudRepository == null ||
+            password == null ||
+            password.isEmpty) {
+          throw StateError(
+            'Enter your current account password before deletion.',
+          );
+        }
+        // Must precede every destructive operation, including local cache work.
+        await _accountAuth.reauthenticate(password: password);
+        if (cloudUid != uid) {
+          throw StateError('Account changed before deletion.');
+        }
+      }
+      if (!authAlreadyDeleted) {
+        await _saveDeletionJournal(uid ?? 'local', 'requested');
+      }
+      _sessionRevision++;
+      _scoreRefreshGeneration++;
+      _energyModelService.unload();
+      await _invalidateModelPreparation();
+      await _healthService.disableBackgroundUpdates();
+      healthBackgroundRefreshEnabled = false;
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        /* cache clearing still proceeds */
+      }
+      if (uid != null && !authAlreadyDeleted) {
+        await cloudRepository!.deleteUserTree(uid);
+        await _saveDeletionJournal(uid, 'cloudDeleted');
+        if (cloudUid != uid) {
+          throw StateError('Account changed before authentication deletion.');
+        }
+        await _accountAuth.deleteCurrentAccount();
+        await _saveDeletionJournal(uid, 'authDeleted');
+      }
+      await reset();
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.remove(_deletionKey)) {
+        throw StateError('Could not clear deletion recovery state.');
+      }
+      _deletionOwner = null;
+      _deletionStage = null;
+    } on Object {
+      privacyOperationError = deletionPending
+          ? 'Deletion is incomplete; some data may already be removed. Sync stays paused. Retry to finish.'
+          : 'Password verification or deletion could not start. No data was deleted. Check your password and connection.';
+      rethrow;
+    } finally {
+      isDeletingAccount = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _saveDeletionJournal(String owner, String stage) async {
+    _deletionOwner = owner;
+    _deletionStage = stage;
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(
+      _deletionKey,
+      jsonEncode({'owner': owner, 'stage': stage}),
+    )) {
+      throw StateError('Could not save deletion recovery state.');
+    }
+  }
+
+  Future<void> _restoreDeletionJournal(SharedPreferences prefs) async {
+    _deletionOwner = null;
+    _deletionStage = null;
+    final raw = prefs.getString(_deletionKey);
+    if (raw == null) return;
+    try {
+      final value = jsonDecode(raw) as Map;
+      final owner = value['owner'] as String;
+      final stage = value['stage'] as String;
+      if (owner == cloudUid ||
+          (owner == 'local' && !cloudEnabled) ||
+          cloudUid == null) {
+        _deletionOwner = owner;
+        _deletionStage = stage;
+      }
+    } on Object {
+      // Corrupt recovery state cannot safely be treated as a fresh account.
+      _deletionOwner = cloudUid ?? 'local';
+      _deletionStage = 'requested';
+    }
+  }
+
+  /// Recovery action with deliberately narrower scope than account deletion.
+  /// The UI must explain that this does not confirm cloud/Auth deletion.
+  Future<void> clearDeviceAfterInterruptedDeletion() async {
+    if (!deletionPending || isCloudAuthenticated || isPrivacyBusy) {
+      throw StateError(
+        'Device-only recovery is only available after interrupted deletion without an active account.',
+      );
+    }
+    isDeletingAccount = true;
+    try {
+      _sessionRevision++;
+      await reset();
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.remove(_deletionKey)) {
+        throw StateError('Could not clear device recovery state.');
+      }
+      _deletionOwner = null;
+      _deletionStage = null;
+    } finally {
+      isDeletingAccount = false;
+      notifyListeners();
+    }
   }
 
   Future<void> reset() async {
+    _sessionRevision++;
+    _scoreRefreshGeneration++;
+    isForecastLoading = false;
+    isGuidanceLoading = false;
+    isOutcomeLoading = false;
+    isEnergyScoreLoading = false;
     _energyModelService.unload();
+    _cloudEnergySummary = null;
+    _cloudMetadataUid = null;
+    _cloudMetadataFetchedAt = null;
+    _cloudUserUpdatedAt = null;
     await _energyModelStore.clear();
     await _clearModelPreparationWindow();
     await _invalidateModelPreparation();
+    await SharedPreferencesPrepCache().clear();
     await _healthService.disableBackgroundUpdates();
     try {
       await _notificationService.cancelGuidance();
@@ -2259,11 +2978,18 @@ class AppController extends ChangeNotifier {
       state: NotificationPlanState.disabled,
     );
     outcomeConsent = false;
+    outcomeConsentUpdatedAt = null;
+    _privacyConsent = null;
+    _privacyOwnerUid = null;
+    _cloudPrivacyVerified = false;
     _outcomes = [];
     isOutcomeLoading = false;
     outcomeError = null;
     healthAuthorized = false;
     isHealthAuthorizing = false;
+    isScreenTimeAuthorizing = false;
+    screenTimeAuthorization = ScreenTimeAuthorizationState.notDetermined;
+    screenTimeError = null;
     healthAuthorization = healthAvailable
         ? HealthAuthorizationState.revoked
         : HealthAuthorizationState.unavailable;
@@ -2311,13 +3037,37 @@ class AppController extends ChangeNotifier {
     insightsLoadedFromCloud = false;
     insightsError = null;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(_storageKey);
-    await preferences.remove(_signedOutKey);
+    for (final key in preferences.getKeys().where(
+      (key) =>
+          key == _storageKey ||
+          key == _signedOutKey ||
+          key.startsWith(_prepWindowKeyPrefix) ||
+          key.startsWith('tonyo_ml_prep_v1_') ||
+          key.startsWith('tonyo_energy_model_v1_'),
+    )) {
+      if (!await preferences.remove(key)) {
+        throw StateError(
+          'Device cache removal did not finish. Retry deletion.',
+        );
+      }
+    }
     isSignedOut = false;
     notifyListeners();
   }
 
   Map<String, Object?> _json() => {
+    'privacyOwnerUid': _privacyOwnerUid,
+    'privacyConsent': _privacyConsent?.toJson(),
+    'outcomeConsentUpdatedAt': outcomeConsentUpdatedAt
+        ?.toUtc()
+        .toIso8601String(),
+    if (_cloudMetadataUid != null)
+      'modelTransparencyCache': {
+        'uid': _cloudMetadataUid,
+        'fetchedAt': _cloudMetadataFetchedAt?.toUtc().toIso8601String(),
+        'userUpdatedAt': _cloudUserUpdatedAt?.toUtc().toIso8601String(),
+        'personalizedEnergyModel': _cloudEnergySummary?.toJson(),
+      },
     'onboardingComplete': onboardingComplete,
     'notificationsEnabled': notificationsEnabled,
     'crashNotificationsEnabled': crashNotificationsEnabled,
@@ -2359,6 +3109,7 @@ class AppController extends ChangeNotifier {
     bool energyInputsChanged = false,
     bool forecastInputsChanged = false,
   }) async {
+    if (!_canProcessData) return;
     await _invalidateModelPreparation();
     notifyListeners();
     await _writeLocal();
@@ -2376,7 +3127,12 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _writeLocal() async {
+    if (deletionPending || isDeletingAccount) return;
+    final revision = _sessionRevision;
     final preferences = await SharedPreferences.getInstance();
+    if (revision != _sessionRevision || deletionPending || isDeletingAccount) {
+      return;
+    }
     await preferences.setString(_storageKey, jsonEncode(_json()));
   }
 
@@ -2384,45 +3140,74 @@ class AppController extends ChangeNotifier {
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
+    final revision = _sessionRevision;
+    _cloudPrivacyVerified = false;
     isCloudSyncing = true;
     cloudSyncError = null;
     notifyListeners();
     try {
       final remote = await repository.readUser(session.uid);
+      if (cloudUid != session.uid ||
+          _sessionRevision != revision ||
+          _isSigningOut ||
+          deletionPending) {
+        return;
+      }
+      final metadataFetchedAt = _now();
       if (remote == null) {
-        if (onboardingComplete) {
-          if (isSignedOut &&
-              accountEmail?.trim().toLowerCase() !=
-                  session.email.trim().toLowerCase()) {
-            throw StateError(
-              'The saved device profile belongs to another account and cannot be migrated.',
-            );
-          }
-          accountEmail = session.email;
-          await repository.replaceUser(
-            session.uid,
-            _cloudState(migrationVersion: localMigrationVersion),
+        if (onboardingComplete &&
+            accountEmail != null &&
+            accountEmail!.trim().toLowerCase() !=
+                session.email.trim().toLowerCase()) {
+          throw StateError(
+            'The saved device profile belongs to another account and cannot be migrated.',
           );
         }
+        // Missing server state is never permission to resurrect a deleted
+        // account or upload another user's cache. New setup is explicit.
+        _privacyConsent = null;
+        _privacyOwnerUid = session.uid;
+        onboardingComplete = false;
+        profile = const UserProfile();
+        accountEmail = session.email;
+        signals = [];
+        checkIns = [];
+        _outcomes = [];
+        outcomeConsent = false;
       } else {
         _applyCloud(remote);
+        _cloudPrivacyVerified = true;
+        if (remote.deletionPending) {
+          await _saveDeletionJournal(session.uid, 'requested');
+        }
         accountEmail = session.email;
-        if (remote.migrationVersion < localMigrationVersion) {
+        if (privacyFeaturesAllowed &&
+            remote.migrationVersion < localMigrationVersion) {
           await repository.replaceUser(
             session.uid,
             remote.copyWith(migrationVersion: localMigrationVersion),
           );
         }
       }
+      if (cloudUid == session.uid &&
+          _sessionRevision == revision &&
+          !_isSigningOut) {
+        _cloudMetadataUid = session.uid;
+        _cloudMetadataFetchedAt = metadataFetchedAt;
+        _cloudEnergySummary = remote?.personalizedEnergyModel;
+        _cloudUserUpdatedAt = remote?.userUpdatedAt;
+      }
     } on Object catch (error) {
-      cloudSyncError = error.toString();
+      if (cloudUid == session.uid && _sessionRevision == revision) {
+        cloudSyncError = error.toString();
+      }
     } finally {
       isCloudSyncing = false;
     }
   }
 
   Future<void> _pushCloud() async {
-    if (isSignedOut || _isSigningOut) return;
+    if (!_canProcessData) return;
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
@@ -2445,6 +3230,12 @@ class AppController extends ChangeNotifier {
   }
 
   CloudUserState _cloudState({required int migrationVersion}) => CloudUserState(
+    privacyConsent: _privacyConsent,
+    outcomeConsentUpdatedAt: outcomeConsentUpdatedAt,
+    personalizedEnergyModel: cloudUid == _cloudMetadataUid
+        ? _cloudEnergySummary
+        : null,
+    userUpdatedAt: cloudUid == _cloudMetadataUid ? _cloudUserUpdatedAt : null,
     profile: profile,
     accountEmail: _accountAuth.currentSession?.email ?? accountEmail ?? '',
     onboardingComplete: onboardingComplete,
@@ -2466,6 +3257,11 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    _privacyConsent = state.privacyConsent;
+    _privacyOwnerUid = cloudUid;
+    outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
+    _scoreRefreshGeneration++;
+    isEnergyScoreLoading = false;
     final prepInputsChanged =
         outcomeConsent != state.outcomeConsent ||
         jsonEncode(signals.map((item) => item.toJson()).toList()) !=
@@ -2540,6 +3336,30 @@ class AppController extends ChangeNotifier {
   }
 
   void _restoreLocal(Map<String, dynamic> json) {
+    _privacyConsent = PrivacyConsent.tryParse(json['privacyConsent']);
+    _privacyOwnerUid = json['privacyOwnerUid'] as String?;
+    outcomeConsentUpdatedAt = DateTime.tryParse(
+      json['outcomeConsentUpdatedAt'] as String? ?? '',
+    );
+    _cloudEnergySummary = null;
+    _cloudMetadataUid = null;
+    _cloudMetadataFetchedAt = null;
+    _cloudUserUpdatedAt = null;
+    final metadata = json['modelTransparencyCache'];
+    if (metadata is Map && metadata['uid'] is String) {
+      _cloudMetadataUid = metadata['uid'] as String;
+      final fetched = metadata['fetchedAt'];
+      final updated = metadata['userUpdatedAt'];
+      _cloudMetadataFetchedAt = fetched is String
+          ? DateTime.tryParse(fetched)
+          : null;
+      _cloudUserUpdatedAt = updated is String
+          ? DateTime.tryParse(updated)
+          : null;
+      _cloudEnergySummary = EnergyModelSummary.tryParse(
+        metadata['personalizedEnergyModel'],
+      );
+    }
     _scoreSnapshot = null;
     _todaySignals = [];
     _scoreLoadedFromSnapshot = false;

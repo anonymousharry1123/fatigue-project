@@ -2,6 +2,18 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
+## Version 0.34 — Privacy center
+
+Open **Profile → Privacy center** for data-use review, separate Outcome learning,
+export and account deletion. Existing accounts must review privacy before new
+collection. Cloud deletion verifies the current password first and supports
+interrupted-operation recovery. No live rules were deployed by this change.
+
+Youth launch is still gated: this build conservatively requires trusted guardian
+verification for under-18 users, and a real verification service/launch policy
+has not been configured. See [privacy safeguards and release requirements](docs/PRIVACY_SAFETY.md)
+and [executable Firestore security tests](tool/security_rules/README.md).
+
 ## Firebase
 
 Version 0.10-a adds Firebase Authentication, user-scoped Cloud Firestore
@@ -25,7 +37,7 @@ no Firebase writes and does not train a model or change confidence.
 
 The account feasibility window is July 2–31, 2026, America/Los_Angeles. Its
 synthetic records are suitable for pipeline QA only. Genuine future outcomes
-require **Profile → Outcome learning** consent before they can become labels.
+require **Profile → Privacy center → Outcome learning** consent before they can become labels.
 Readiness also checks provenance, units, historical availability, feature
 coverage and chronological holdout days. Cognitive remains report-only.
 
@@ -57,8 +69,27 @@ hours since the previous attempt are required before retraining. Launch,
 navigation, Health sync and forecasting never train. Only an accepted change
 sends one small metadata merge; no weights or joined examples are uploaded.
 
-This build is `0.32.0+33`. See [model notes](docs/ENERGY_MODEL.md) for validation,
+See [model notes](docs/ENERGY_MODEL.md) for validation,
 benchmark reproduction and remaining iPhone/heap and Firestore release QA.
+
+### Version 0.33 — Model transparency
+
+Open **Today → Why these scores?** or **Profile → How your scores work**.
+Switch between Energy and Cognitive to see the stored score, confidence and
+coverage, every ranked driver, input sources, and calculation time. Expand a
+driver for its saved explanation and evidence freshness. Missing inputs are
+never presented as zero; demo and legacy/unverified evidence are labeled.
+
+The model section separates standard rules versions, a valid model on this
+device, and the last loaded Firebase summary. Account update time, model
+training time and score calculation time are different. A Firebase summary
+does not install weights on a second phone. Confidence measures available
+evidence, not the probability a prediction is correct; neither more duplicate
+records nor training alone increases it.
+
+This build is `0.33.0+34`. Opening the explanation screen adds **no reads,
+writes, listeners or training**. See [transparency notes](docs/MODEL_TRANSPARENCY.md)
+for source semantics, legacy behavior, and verification details.
 
 Version 0.11 adds a Firebase-backed, explainable daily Energy Score. The
 0–100 wellness estimate uses sleep, exercise, hydration, workload, screen time,
