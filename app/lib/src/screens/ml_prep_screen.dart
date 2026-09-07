@@ -9,7 +9,7 @@ import '../ml_prep_service.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
-/// Preparation is an explicit foreground action, never a navigation side effect.
+/// Preparation and model refresh are separate, explicit foreground actions.
 class MlPrepScreen extends StatefulWidget {
   const MlPrepScreen({super.key, required this.controller});
 
@@ -26,6 +26,14 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
   int? _runRevision;
   String? _error;
   bool _busy = false;
+  bool _modelBusy = false;
+
+  bool get _refreshingModel =>
+      _modelBusy || widget.controller.isRefreshingPersonalizedModel;
+
+  bool _isCurrentRun(PrepRun run) =>
+      _runRevision == widget.controller.modelPreparationRevision &&
+      run.snapshot.uid == widget.controller.cloudUid;
 
   @override
   void initState() {
@@ -51,6 +59,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
       '${day.day.toString().padLeft(2, '0')}';
 
   Future<void> _chooseEndDay() async {
+    if (_busy || _refreshingModel) return;
     final selected = await showDatePicker(
       context: context,
       initialDate: _endDay,
@@ -67,6 +76,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
   }
 
   Future<void> _prepare({bool refresh = false}) async {
+    if (_busy || _refreshingModel) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -91,6 +101,37 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
       if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _refreshModel() async {
+    final run = _run;
+    if (_busy ||
+        _refreshingModel ||
+        run == null ||
+        !_isCurrentRun(run) ||
+        !run.report.energyReady ||
+        widget.controller.personalizedModelBlocker != null) {
+      return;
+    }
+    setState(() {
+      _modelBusy = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.refreshPersonalizedModel(
+        window: run.snapshot.window,
+      );
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error =
+              'The Energy model could not be refreshed. Deterministic scoring '
+              'remains available. Check the model status, then try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _modelBusy = false);
     }
   }
 
@@ -147,7 +188,16 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
     animation: widget.controller,
     builder: (context, _) {
       final blocker = widget.controller.modelPreparationBlocker;
-      final canPrepare = !_busy && blocker == null;
+      final actionsBusy = _busy || _refreshingModel;
+      final canPrepare = !actionsBusy && blocker == null;
+      final run = _run;
+      final modelBlocker = widget.controller.personalizedModelBlocker;
+      final canRefreshModel =
+          !actionsBusy &&
+          run != null &&
+          _isCurrentRun(run) &&
+          run.report.energyReady &&
+          modelBlocker == null;
       final startDay = DateTime(_endDay.year, _endDay.month, _endDay.day - 29);
       return Scaffold(
         appBar: AppBar(title: const Text('Model preparation')),
@@ -161,8 +211,8 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Inspect exactly 30 days from your signed-in account. This '
-                'does not train a model, change confidence, enable consent, '
+                'Inspect exactly 30 days from your signed-in account. Preparing '
+                'a snapshot does not train a model, change confidence, enable consent, '
                 'or upload training rows.',
                 style: TextStyle(color: TonyoColors.muted),
               ),
@@ -173,7 +223,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
               const SectionHeader('Choose the account window'),
               OutlinedButton.icon(
                 key: const Key('prep-window-end'),
-                onPressed: _busy ? null : _chooseEndDay,
+                onPressed: actionsBusy ? null : _chooseEndDay,
                 icon: const Icon(Icons.calendar_month_outlined),
                 label: Text('Window ends ${_date(_endDay)}'),
               ),
@@ -183,7 +233,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
               TextField(
                 key: const Key('prep-timezone'),
                 controller: _timezone,
-                enabled: !_busy,
+                enabled: !actionsBusy,
                 autocorrect: false,
                 decoration: const InputDecoration(
                   labelText: 'Window timezone (IANA name)',
@@ -225,10 +275,81 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                 const SizedBox(height: 16),
                 _notice(_error!),
               ],
+              const SectionHeader('Personalized Energy model'),
+              TonyoCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.controller.personalizedModelStatus,
+                      key: const Key('personalized-energy-model-status'),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Refresh trains a tiny Energy model on this device using '
+                      'only the prepared snapshot. It requires at least 14 '
+                      'genuine, consented labeled days. Preparing or opening '
+                      'this screen never starts training.',
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'The newest 20% of labeled days (at least 3 days) stay '
+                      'out of training. The model is accepted only if its '
+                      'holdout error improves by at least 5%. Corrections are '
+                      'limited to ±10 score points and shrink for missing or '
+                      'stale inputs.',
+                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Refresh is explicit, at most once per 24 hours, and '
+                      'requires a new eligible outcome. Weights and training '
+                      'rows stay on-device; an accepted change sends only one '
+                      'small metadata update to Firebase, not your full account.',
+                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Deterministic scoring remains the fallback. Cognitive '
+                      'is not personalized, and this does not boost confidence.',
+                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (modelBlocker != null && modelBlocker != blocker)
+                _notice(modelBlocker)
+              else if (modelBlocker == null &&
+                  (run == null || !_isCurrentRun(run)))
+                _notice(
+                  'Prepare a current snapshot before refreshing the model.',
+                )
+              else if (modelBlocker == null &&
+                  run != null &&
+                  !run.report.energyReady)
+                _notice(
+                  'This snapshot is not ready for Energy training. Review '
+                  'the readiness reasons below; deterministic scoring continues.',
+                ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                key: const Key('refresh-personalized-energy-model'),
+                onPressed: canRefreshModel ? _refreshModel : null,
+                icon: const Icon(Icons.tune_rounded),
+                label: Text(
+                  _refreshingModel
+                      ? 'Refreshing Energy model…'
+                      : 'Refresh Energy model',
+                ),
+              ),
+              if (_refreshingModel) ...[
+                const SizedBox(height: 8),
+                const LinearProgressIndicator(),
+              ],
               if (_run case final result?)
-                if (_runRevision ==
-                        widget.controller.modelPreparationRevision &&
-                    result.snapshot.uid == widget.controller.cloudUid)
+                if (_isCurrentRun(result))
                   ..._report(result)
                 else ...[
                   const SizedBox(height: 16),
@@ -338,7 +459,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
           : _entriesCard(rejectedCounts),
       const SizedBox(height: 20),
       OutlinedButton.icon(
-        onPressed: () => _exportReport(run),
+        onPressed: _refreshingModel ? null : () => _exportReport(run),
         icon: const Icon(Icons.file_download_outlined),
         label: const Text('View / copy local JSON report'),
       ),
@@ -369,7 +490,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$title: ${status['ready'] == true ? 'data-ready, not trained' : 'not ready'}',
+            '$title: ${status['ready'] == true ? 'snapshot data-ready' : 'not ready'}',
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),

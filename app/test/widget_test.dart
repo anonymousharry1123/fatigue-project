@@ -881,6 +881,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Log today’s activity'), findsOneWidget);
+    expect(
+      find.textContaining('Blank or 0 values are skipped'),
+      findsOneWidget,
+    );
     expect(find.text('None'), findsNothing);
     await tester.enterText(find.byKey(const Key('hydration-field')), '11');
     await tester.ensureVisible(find.text('Save activity'));
@@ -890,6 +894,8 @@ void main() {
     expect(controller.activityLogs, isEmpty);
 
     await tester.enterText(find.byKey(const Key('hydration-field')), '2.5');
+    await tester.enterText(find.byKey(const Key('study-field')), '0');
+    await tester.enterText(find.byKey(const Key('exercise-field')), '0.0');
     await tester.ensureVisible(find.text('Save activity'));
     await tester.tap(find.text('Save activity'));
     await tester.pumpAndSettle();
@@ -903,7 +909,7 @@ void main() {
       controller.signals.where(
         (signal) => signal.groupId == controller.activityLogs.single.id,
       ),
-      hasLength(4),
+      hasLength(1),
     );
     expect(find.text('Last 7 days by category'), findsOneWidget);
     expect(find.text('Hydration'), findsWidgets);

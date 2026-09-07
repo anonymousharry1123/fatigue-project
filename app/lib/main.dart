@@ -13,6 +13,7 @@ Future<void> main() async {
         accountAuth: firebase?.auth,
         cloudRepository: firebase?.repository,
         prepDataSource: firebase?.prepSource,
+        energyModelMetadataWriter: firebase?.energyModelMetadataWriter,
       ),
     ),
   );

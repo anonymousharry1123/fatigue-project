@@ -39,7 +39,26 @@ plutil -convert json -o - /path/to/Library/Preferences/com.example.app.plist |
 ```
 
 Tests: `flutter test`. Preparation implementation and limits are documented in
-[docs/PLAN.md](docs/PLAN.md). This completes preparation, not the Version 0.32 model.
+[docs/PLAN.md](docs/PLAN.md). Preparation remains separate from model fitting.
+
+### Version 0.32 — Lightweight personalized Energy
+
+After preparing a ready snapshot, use the separate **Refresh Energy model**
+button on the same screen. This action trains only on that cached month, with
+no additional collection queries. It requires both outcome-learning consent
+flags and at least 14 genuine labeled days; a chronological holdout must improve
+on deterministic Energy by at least 5%. The saved July fixture month is not
+eligible, and old records are never converted into real labels.
+
+The model has eight weights plus an intercept, no ML framework, and stays on
+this device. Corrections are limited to ±10 points and shrink for missing/stale
+inputs. Cognitive and confidence are unchanged. A new eligible outcome and 24
+hours since the previous attempt are required before retraining. Launch,
+navigation, Health sync and forecasting never train. Only an accepted change
+sends one small metadata merge; no weights or joined examples are uploaded.
+
+This build is `0.32.0+33`. See [model notes](docs/ENERGY_MODEL.md) for validation,
+benchmark reproduction and remaining iPhone/heap and Firestore release QA.
 
 Version 0.11 adds a Firebase-backed, explainable daily Energy Score. The
 0–100 wellness estimate uses sleep, exercise, hydration, workload, screen time,

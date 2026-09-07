@@ -70,6 +70,7 @@ class SignalReading {
     this.note,
     this.groupId,
     this.syncedAt,
+    this.recordedAt,
   });
 
   final String id;
@@ -81,6 +82,34 @@ class SignalReading {
   final String? note;
   final String? groupId;
   final DateTime? syncedAt;
+
+  /// When this manual value was saved or edited, separate from observation
+  /// time. Legacy records stay unknown; never infer this from [timestamp].
+  final DateTime? recordedAt;
+
+  SignalReading copyWith({
+    String? id,
+    SignalType? type,
+    double? value,
+    DateTime? timestamp,
+    SignalSource? source,
+    double? quality,
+    String? note,
+    String? groupId,
+    DateTime? syncedAt,
+    DateTime? recordedAt,
+  }) => SignalReading(
+    id: id ?? this.id,
+    type: type ?? this.type,
+    value: value ?? this.value,
+    timestamp: timestamp ?? this.timestamp,
+    source: source ?? this.source,
+    quality: quality ?? this.quality,
+    note: note ?? this.note,
+    groupId: groupId ?? this.groupId,
+    syncedAt: syncedAt ?? this.syncedAt,
+    recordedAt: recordedAt ?? this.recordedAt,
+  );
 
   /// Age of the underlying observation. A recent import never makes an old
   /// physiological sample look current.
@@ -96,6 +125,7 @@ class SignalReading {
     'note': note,
     'groupId': groupId,
     'syncedAt': syncedAt?.toIso8601String(),
+    if (recordedAt != null) 'recordedAt': recordedAt!.toIso8601String(),
   };
 
   factory SignalReading.fromJson(Map<String, dynamic> json) => SignalReading(
@@ -110,6 +140,9 @@ class SignalReading {
     syncedAt: json['syncedAt'] == null
         ? null
         : DateTime.parse(json['syncedAt'] as String),
+    recordedAt: json['recordedAt'] == null
+        ? null
+        : DateTime.parse(json['recordedAt'] as String),
   );
 }
 
@@ -265,6 +298,7 @@ class DailyCheckIn {
     required this.stress,
     this.period = CheckInPeriod.morning,
     this.note = '',
+    this.recordedAt,
   });
 
   /// Energy, mood, and stress use an intuitive 1–10 scale.
@@ -276,6 +310,10 @@ class DailyCheckIn {
   final CheckInPeriod period;
   final String note;
 
+  /// Actual save/edit time. An older observation date must not imply that a
+  /// retrospectively entered check-in was already available on that date.
+  final DateTime? recordedAt;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'timestamp': timestamp.toIso8601String(),
@@ -284,6 +322,7 @@ class DailyCheckIn {
     'stress': stress,
     'period': period.name,
     'note': note,
+    if (recordedAt != null) 'recordedAt': recordedAt!.toIso8601String(),
   };
 
   factory DailyCheckIn.fromJson(Map<String, dynamic> json) {
@@ -303,6 +342,9 @@ class DailyCheckIn {
       stress: _ratingFromJson(json['stress'], legacyScale: legacyScale),
       period: period,
       note: (json['note'] as String?) ?? '',
+      recordedAt: json['recordedAt'] == null
+          ? null
+          : DateTime.parse(json['recordedAt'] as String),
     );
   }
 
@@ -588,6 +630,8 @@ class ScoreSnapshot {
     this.cognitiveFreshness,
     this.personalBaselines,
     this.baselineConfidence = 0,
+    this.deterministicEnergy,
+    this.personalizedModelVersion,
   });
 
   final int energy;
@@ -607,6 +651,65 @@ class ScoreSnapshot {
   final double? cognitiveFreshness;
   final PersonalBaselines? personalBaselines;
   final double baselineConfidence;
+
+  /// Preserve the instant fallback even when a personalized daily snapshot is
+  /// restored on another device that has no local weights or valid consent.
+  final int? deterministicEnergy;
+  final String? personalizedModelVersion;
+
+  ScoreSnapshot withoutPersonalization() => deterministicEnergy == null
+      ? this
+      : _withEnergy(deterministicEnergy!, null, null);
+
+  ScoreSnapshot withEnergyCorrection(double correction, String modelVersion) {
+    final base = withoutPersonalization();
+    if (!correction.isFinite) return base;
+    final adjusted = (base.energy + correction.clamp(-10, 10)).round().clamp(
+      0,
+      100,
+    );
+    if (adjusted == base.energy) return base;
+    return base._withEnergy(adjusted, base.energy, modelVersion);
+  }
+
+  ScoreSnapshot _withEnergy(
+    int value,
+    int? reference,
+    String? version,
+  ) => ScoreSnapshot(
+    energy: value,
+    cognitive: cognitive,
+    confidence: confidence,
+    drivers: [
+      ...drivers.where(
+        (driver) => driver.label != 'Personalized Energy adjustment',
+      ),
+      if (reference != null)
+        ScoreDriver(
+          'Personalized Energy adjustment',
+          (value - reference).toDouble(),
+          'Bounded on-device correction from your consented Energy outcomes',
+          explanation:
+              'Validated against held-out days. Not a medical assessment; confidence is unchanged.',
+          source: SignalSource.model,
+        ),
+    ],
+    cognitiveConfidence: cognitiveConfidence,
+    cognitiveDrivers: cognitiveDrivers,
+    cognitiveInputCount: cognitiveInputCount,
+    hasCognitiveScore: hasCognitiveScore,
+    previousCognitive: previousCognitive,
+    day: day,
+    calculatedAt: calculatedAt,
+    inputCount: inputCount,
+    isEstimate: isEstimate,
+    freshness: freshness,
+    cognitiveFreshness: cognitiveFreshness,
+    personalBaselines: personalBaselines,
+    baselineConfidence: baselineConfidence,
+    deterministicEnergy: reference,
+    personalizedModelVersion: version,
+  );
 
   int? get cognitiveChange =>
       previousCognitive == null ? null : cognitive - previousCognitive!;

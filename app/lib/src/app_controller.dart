@@ -14,10 +14,13 @@ import 'daily_history_logic.dart';
 import 'daily_plan_logic.dart';
 import 'demo_data.dart';
 import 'fatigue_engine.dart';
+import 'energy_model_repository.dart';
+import 'energy_model_service.dart';
 import 'health_service.dart';
 import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
 import 'ml_prep_models.dart';
+import 'ml_prep_builder.dart';
 import 'ml_prep_service.dart';
 import 'models.dart';
 import 'notification_logic.dart';
@@ -37,12 +40,16 @@ class AppController extends ChangeNotifier {
     NotificationService? notificationService,
     DateTime Function()? clock,
     PrepDataSource? prepDataSource,
+    EnergyModelStore? energyModelStore,
+    this.energyModelMetadataWriter,
     this.cloudRepository,
   }) : _healthService = healthService ?? const HealthService(),
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
        _notificationService = notificationService ?? LocalNotificationService(),
        _now = clock ?? DateTime.now,
+       _energyModelStore =
+           energyModelStore ?? SharedPreferencesEnergyModelStore(),
        _mlPrepService = prepDataSource == null
            ? null
            : MlPrepService(
@@ -64,6 +71,64 @@ class AppController extends ChangeNotifier {
   final DateTime Function() _now;
   final CloudRepository? cloudRepository;
   final MlPrepService? _mlPrepService;
+  final EnergyModelStore _energyModelStore;
+  final EnergyModelMetadataWriter? energyModelMetadataWriter;
+  late final _energyModelService = EnergyModelService(
+    store: _energyModelStore,
+    writer: energyModelMetadataWriter,
+    currentUid: () => cloudUid,
+    consentAllowed: () => outcomeConsent && !isSignedOut && !_isSigningOut,
+    now: _now,
+  );
+  PrepRun? _preparedModelRun;
+  bool get isRefreshingPersonalizedModel => _energyModelService.busy;
+  String get personalizedModelStatus => _energyModelService.status;
+  String? get personalizedModelBlocker =>
+      modelPreparationBlocker ??
+      (!outcomeConsent
+          ? 'Enable Outcome learning before training your Energy model.'
+          : energyModelMetadataWriter == null
+          ? 'Model metadata sync is not configured in this build.'
+          : null);
+
+  Future<void> refreshPersonalizedModel({required PrepWindow window}) async {
+    if (isRefreshingPersonalizedModel) return;
+    final blocker = personalizedModelBlocker;
+    if (blocker != null) throw StateError(blocker);
+    final run = _preparedModelRun;
+    if (run == null ||
+        run.snapshot.uid != cloudUid ||
+        canonicalPrepJson(run.snapshot.window.toJson()) !=
+            canonicalPrepJson(window.toJson())) {
+      throw StateError(
+        'Prepare the selected 30-day snapshot before refreshing the model.',
+      );
+    }
+    final task = _energyModelService.refresh(run);
+    notifyListeners();
+    try {
+      await task;
+      // Local recomputation only. Ordinary score refresh owns the next daily
+      // snapshot write; fitting adds no score queries or broad account writes.
+      if (!isSignedOut) {
+        _scoreSnapshot = _personalizeEnergy(
+          (_scoreSnapshot ??
+                  FatigueEngine.score(
+                    signals: signals,
+                    checkIns: checkIns,
+                    now: _now(),
+                  ))
+              .withoutPersonalization(),
+          signals,
+          checkIns,
+          _now(),
+        );
+      }
+    } finally {
+      notifyListeners();
+    }
+  }
+
   int _modelPreparationRevision = 0;
   int get modelPreparationRevision => _modelPreparationRevision;
   PrepWindow? _lastModelPreparationWindow;
@@ -162,7 +227,7 @@ class AppController extends ChangeNotifier {
           '--dart-define-from-file=config/firebase_options.json to connect '
           'your account.';
     }
-    if (!isCloudAuthenticated) {
+    if (!isCloudAuthenticated || isSignedOut || _isSigningOut) {
       return 'Sign in through Profile → Cloud account before preparing your '
           '30-day account snapshot.';
     }
@@ -181,11 +246,21 @@ class AppController extends ChangeNotifier {
     if (cloudUid != uid) {
       throw StateError('Account changed during preparation.');
     }
-    return _mlPrepService!.prepare(
+    final revision = _modelPreparationRevision;
+    final run = await _mlPrepService!.prepare(
       window: window,
       refresh: refresh,
       coverageOnly: true,
     );
+    if (cloudUid != uid ||
+        revision != _modelPreparationRevision ||
+        isSignedOut) {
+      throw StateError(
+        'Account data changed during preparation. Prepare again.',
+      );
+    }
+    _preparedModelRun = run;
+    return run;
   }
 
   String _prepWindowKey(String uid) =>
@@ -242,12 +317,20 @@ class AppController extends ChangeNotifier {
 
   Future<void> _invalidateModelPreparation() async {
     _modelPreparationRevision += 1;
+    _preparedModelRun = null;
+    _energyModelService.cancelPending();
     try {
       await _mlPrepService?.invalidate();
     } on Object catch (error) {
       // Prep cache maintenance must not prevent an account edit or sign-out.
       debugPrint('Tonyo could not clear the model preparation cache: $error');
     }
+  }
+
+  Future<void> _discardPersonalizedModel() async {
+    await _energyModelService.discard();
+    _scoreSnapshot = _scoreSnapshot?.withoutPersonalization();
+    _forecastsByDay.clear();
   }
 
   bool get isScoreLoading => isEnergyScoreLoading;
@@ -423,9 +506,45 @@ class AppController extends ChangeNotifier {
     sleepLogs: sleepLogs,
   );
 
-  ScoreSnapshot get score =>
-      _scoreSnapshot ??
-      FatigueEngine.score(signals: signals, checkIns: checkIns);
+  ScoreSnapshot get score {
+    final value =
+        _scoreSnapshot ??
+        FatigueEngine.score(signals: signals, checkIns: checkIns);
+    return _energyModelService.model == null
+        ? value.withoutPersonalization()
+        : value;
+  }
+
+  ScoreSnapshot _personalizeEnergy(
+    ScoreSnapshot score,
+    List<SignalReading> sourceSignals,
+    List<DailyCheckIn> sourceChecks,
+    DateTime at,
+  ) {
+    final base = score.withoutPersonalization();
+    final model = _energyModelService.model;
+    if (model == null || at.isBefore(model.trainedAt)) return base;
+    try {
+      final input = MlPrepBuilder.energyInput(
+        signals: sourceSignals,
+        checkIns: sourceChecks,
+        at: at,
+        timezone: model.window.timezone,
+      );
+      if (input == null) return base;
+      final timer = Stopwatch()..start();
+      final correction = model.correction(
+        features: input.features,
+        featureAgeHours: input.featureAgeHours,
+      );
+      timer.stop();
+      if (correction == null || timer.elapsedMicroseconds >= 1000) return base;
+      return base.withEnergyCorrection(correction, 'energy-ridge-v1');
+    } on Object {
+      return base;
+    }
+  }
+
   PersonalBaselines get personalBaselines =>
       score.personalBaselines ??
       PersonalBaselineLogic.build(signals: signals, asOf: _now());
@@ -524,7 +643,12 @@ class AppController extends ChangeNotifier {
             savedSnapshot.freshness != null &&
             savedSnapshot.cognitiveFreshness != null &&
             savedSnapshot.personalBaselines != null) {
-          _scoreSnapshot = savedSnapshot;
+          _scoreSnapshot = _personalizeEnergy(
+            savedSnapshot,
+            signals,
+            checkIns,
+            calculationTime,
+          );
           _scoreLoadedFromSnapshot = true;
           return;
         }
@@ -562,7 +686,7 @@ class AppController extends ChangeNotifier {
             )
             .toList();
       }
-      final snapshot = FatigueEngine.score(
+      final reference = FatigueEngine.score(
         signals: scoringSignals,
         checkIns: scoringCheckIns,
         now: calculationTime,
@@ -572,6 +696,12 @@ class AppController extends ChangeNotifier {
           signals: scoringSignals,
           asOf: start,
         ),
+      );
+      final snapshot = _personalizeEnergy(
+        reference,
+        scoringSignals,
+        scoringCheckIns,
+        calculationTime,
       );
       if (canUseCloud) {
         await repository.upsertScoreSnapshot(session.uid, snapshot);
@@ -1025,7 +1155,9 @@ class AppController extends ChangeNotifier {
     if (isCloudAuthenticated) {
       await _hydrateOrMigrateCloud();
       await _writeLocal();
+      if (!outcomeConsent) await _discardPersonalizedModel();
     }
+    await _energyModelService.load();
     if (outcomeConsent) await refreshOutcomes(notify: false);
     if (healthAuthorized &&
         healthAuthorization == HealthAuthorizationState.authorized) {
@@ -1126,6 +1258,7 @@ class AppController extends ChangeNotifier {
       );
     }
     await _writeLocal();
+    if (!outcomeConsent) await _discardPersonalizedModel();
     if (outcomeConsent) await refreshOutcomes(notify: false);
     if (onboardingComplete) {
       await refreshScores(notify: false);
@@ -1133,6 +1266,8 @@ class AppController extends ChangeNotifier {
       await refreshGuidance(notify: false);
       await refreshInsights(notify: false);
       await _setSignedOut(false);
+      await _energyModelService.load();
+      _scoreSnapshot = _personalizeEnergy(score, signals, checkIns, _now());
       if (wasSignedOut) {
         await handleAppResumed();
         if (notificationsEnabled) await refreshNotifications(notify: false);
@@ -1172,6 +1307,7 @@ class AppController extends ChangeNotifier {
     if (isSignedOut || _isSigningOut) return;
     _isSigningOut = true;
     _sessionRevision += 1;
+    _energyModelService.unload();
     try {
       await _clearModelPreparationWindow();
       await _invalidateModelPreparation();
@@ -1210,13 +1346,15 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> addSignal(SignalType type, double value, {String? note}) async {
+    final now = _now();
     signals.insert(
       0,
       SignalReading(
-        id: 'manual-${DateTime.now().microsecondsSinceEpoch}',
+        id: 'manual-${now.microsecondsSinceEpoch}-${signals.length}',
         type: type,
         value: value,
-        timestamp: DateTime.now(),
+        timestamp: now,
+        recordedAt: now,
         note: note,
       ),
     );
@@ -1258,35 +1396,39 @@ class AppController extends ChangeNotifier {
         throw ArgumentError.value(entry.value, entry.key.name, message);
       }
     }
-    final now = DateTime.now();
-    final groupId = id ?? 'activity-${now.microsecondsSinceEpoch}';
+    final now = _now();
+    final groupId =
+        id ?? 'activity-${now.microsecondsSinceEpoch}-${signals.length}';
     final recordedAt = timestamp ?? now;
+    if (signals.any((item) => item.groupId == groupId)) {
+      await _discardPersonalizedModel();
+    }
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(
       0,
-      values.entries.map(
-        (entry) => SignalReading(
-          id: '$groupId-${entry.key.name}',
-          groupId: groupId,
-          type: entry.key,
-          value: entry.value,
-          timestamp: recordedAt,
-          note: switch (entry.key) {
-            SignalType.hydration when hydrationLiters != null =>
-              ActivitySyncLogic.manualCorrectionNote,
-            SignalType.exercise when exerciseHours != null =>
-              ActivitySyncLogic.manualCorrectionNote,
-            SignalType.hydration ||
-            SignalType.exercise => ActivitySyncLogic.blankManualValueNote,
-            _ => null,
-          },
-        ),
-      ),
+      values.entries
+          .where((entry) => entry.value > 0)
+          .map(
+            (entry) => SignalReading(
+              id: '$groupId-${entry.key.name}',
+              groupId: groupId,
+              type: entry.key,
+              value: entry.value,
+              timestamp: recordedAt,
+              recordedAt: now,
+              note: switch (entry.key) {
+                SignalType.hydration ||
+                SignalType.exercise => ActivitySyncLogic.manualCorrectionNote,
+                _ => null,
+              },
+            ),
+          ),
     );
     await _commit(energyInputsChanged: true);
   }
 
   Future<void> deleteActivityLog(String id) async {
+    await _discardPersonalizedModel();
     signals.removeWhere((item) => item.groupId == id);
     await _commit(energyInputsChanged: true);
   }
@@ -1310,7 +1452,12 @@ class AppController extends ChangeNotifier {
     );
     if (validation != null) throw ArgumentError(validation);
     final hours = end.difference(start).inMinutes / 60;
-    final groupId = id ?? 'sleep-${DateTime.now().microsecondsSinceEpoch}';
+    final recordedAt = _now();
+    final groupId =
+        id ?? 'sleep-${recordedAt.microsecondsSinceEpoch}-${signals.length}';
+    if (signals.any((item) => item.groupId == groupId)) {
+      await _discardPersonalizedModel();
+    }
     signals.removeWhere((item) => item.groupId == groupId);
     signals.insertAll(0, [
       SignalReading(
@@ -1319,6 +1466,7 @@ class AppController extends ChangeNotifier {
         type: SignalType.sleep,
         value: hours,
         timestamp: end,
+        recordedAt: recordedAt,
         quality: quality / 5,
         note: '${_clock(start)}–${_clock(end)} · quality ${quality.round()}/5',
       ),
@@ -1328,12 +1476,14 @@ class AppController extends ChangeNotifier {
         type: SignalType.bedtime,
         value: start.hour + start.minute / 60,
         timestamp: start,
+        recordedAt: recordedAt,
       ),
     ]);
     await _commit(energyInputsChanged: true);
   }
 
   Future<void> deleteSleepLog(String id) async {
+    await _discardPersonalizedModel();
     signals.removeWhere((item) => item.groupId == id);
     await _commit(energyInputsChanged: true);
   }
@@ -1356,9 +1506,13 @@ class AppController extends ChangeNotifier {
     }
     final when = timestamp ?? _now();
     final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
+    if (checkIns.any((item) => item.id == checkInId)) {
+      await _discardPersonalizedModel();
+    }
     final checkIn = DailyCheckIn(
       id: checkInId,
       timestamp: when,
+      recordedAt: _now(),
       energy: CheckInLogic.clampRating(energy),
       mood: CheckInLogic.clampRating(mood),
       stress: CheckInLogic.clampRating(stress),
@@ -1401,6 +1555,7 @@ class AppController extends ChangeNotifier {
         type: SignalType.reactionTime,
         value: averageMs,
         timestamp: observedAt,
+        recordedAt: _now(),
         note: note ?? 'Three-round reaction test',
       ),
     );
@@ -1460,6 +1615,9 @@ class AppController extends ChangeNotifier {
       throw StateError('Outcome learning requires explicit consent.');
     }
     await _invalidateModelPreparation();
+    if (_outcomes.any((item) => item.id == outcome.id)) {
+      await _discardPersonalizedModel();
+    }
     _outcomes.removeWhere((item) => item.id == outcome.id);
     _outcomes.insert(0, outcome);
     outcomeError = null;
@@ -1478,12 +1636,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> deleteSignal(String id) async {
+    await _discardPersonalizedModel();
     signals.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
     await _deleteOutcome('reaction-$id');
   }
 
   Future<void> deleteCheckIn(String id) async {
+    await _discardPersonalizedModel();
     checkIns.removeWhere((item) => item.id == id);
     await _commit(energyInputsChanged: true);
     await _deleteOutcome('energy-checkin-$id');
@@ -1642,7 +1802,10 @@ class AppController extends ChangeNotifier {
   Future<void> setOutcomeConsent(bool value) async {
     outcomeConsent = value;
     outcomeError = null;
-    if (!value) _outcomes = [];
+    if (!value) {
+      _outcomes = [];
+      await _discardPersonalizedModel();
+    }
     await _commit();
     if (value) await refreshOutcomes();
   }
@@ -2014,6 +2177,7 @@ class AppController extends ChangeNotifier {
   /// Clears signals, check-ins, and score snapshots but keeps the account and
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
+    await _discardPersonalizedModel();
     signals = [];
     checkIns = [];
     _outcomes = [];
@@ -2074,6 +2238,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    _energyModelService.unload();
+    await _energyModelStore.clear();
     await _clearModelPreparationWindow();
     await _invalidateModelPreparation();
     await _healthService.disableBackgroundUpdates();

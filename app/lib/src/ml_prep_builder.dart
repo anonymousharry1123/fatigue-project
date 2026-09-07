@@ -97,6 +97,19 @@ class PrepReport {
   final List<TrainingExample> examples;
   final Map<String, Object?> _summary;
 
+  /// Small identity check for the training kernel without exporting/copying
+  /// all example maps and evidence arrays again.
+  Map<String, Object?> get identity => {
+    for (final key in [
+      'fingerprint',
+      'schemaVersion',
+      'reportVersion',
+      'hostTimezoneCompatible',
+      'window',
+    ])
+      key: _summary[key],
+  };
+
   Map<String, Object?> toJson() => {
     ..._summary,
     'examples': examples.map((row) => row.toJson()).toList(),
@@ -125,6 +138,79 @@ abstract final class MlPrepBuilder {
     'stress',
     'recoveryDeviation',
   ];
+
+  /// Reuse precisely the training feature definitions for a live prediction.
+  /// This bounded local view creates no label and never reads the database.
+  static TrainingExample? energyInput({
+    required List<SignalReading> signals,
+    required List<DailyCheckIn> checkIns,
+    required DateTime at,
+    required String timezone,
+  }) {
+    final probe = PrepWindow.endingOn(at.toLocal(), timezone: timezone);
+    final window = PrepWindow.endingOn(probe.localTime(at), timezone: timezone);
+    if (!_hostTimezoneMatches(window)) return null;
+    final selectedSignals = signals
+        .where(
+          (row) => window.contains(row.timestamp) && !row.timestamp.isAfter(at),
+        )
+        .toList();
+    final selectedChecks = checkIns
+        .where(
+          (row) => window.contains(row.timestamp) && !row.timestamp.isAfter(at),
+        )
+        .toList();
+    if (selectedSignals.length >= PrepCollection.signals.maximumDocuments ||
+        selectedChecks.length >= PrepCollection.checkIns.maximumDocuments) {
+      return null;
+    }
+    final snapshot = PrepSnapshot(
+      uid: 'local-inference',
+      window: window,
+      consent: const PrepConsent(
+        collection: true,
+        trainingUse: true,
+        version: 1,
+      ),
+      fetchedAt: at,
+      schemaVersion: 1,
+      signals: selectedSignals.map((row) => row.toJson()).toList(),
+      checkIns: selectedChecks.map((row) => row.toJson()).toList(),
+      outcomes: [],
+    );
+    final records = <String, Map<String, _Record>>{};
+    for (final collection in {
+      'signals': snapshot.signals,
+      'checkIns': snapshot.checkIns,
+    }.entries) {
+      records[collection.key] = {};
+      for (final raw in collection.value) {
+        try {
+          final origin = _provenance(raw, collection.key);
+          if (origin != 'genuine') continue;
+          final row = _parse(window, raw, collection.key, origin);
+          records[collection.key]![row.id] = row;
+        } on Object {
+          // Invalid or unknown inputs contribute no learned effect.
+        }
+      }
+    }
+    return _example(
+      snapshot,
+      OutcomeRecord(
+        id: 'inference-only',
+        type: OutcomeType.observedEnergy,
+        value: 1,
+        observedAt: at,
+        recordedAt: at,
+        source: OutcomeSource.checkIn,
+        sourceId: '',
+        consentVersion: 1,
+      ),
+      records,
+      hostTimezoneCompatible: true,
+    );
+  }
 
   static PrepReport build(PrepSnapshot snapshot) {
     final hostTimezoneCompatible = _hostTimezoneMatches(snapshot.window);
@@ -793,7 +879,7 @@ abstract final class MlPrepBuilder {
     if (['observed', 'real'].contains(raw['provenance']) ||
         raw['source'] == 'healthKit' ||
         RegExp(
-          r'^(manual|checkin)-\d{10,}',
+          r'^(manual|checkin|activity|sleep)-\d{10,}',
         ).hasMatch(raw['id']?.toString() ?? '') ||
         collection == 'outcomes') {
       return 'genuine';

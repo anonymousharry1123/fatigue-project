@@ -166,6 +166,84 @@ void main() {
     expect(SleepSyncLogic.preferredSleepReadings(result.readings), [manual]);
   });
 
+  test(
+    'identical sleep refresh preserves original availability timestamps',
+    () {
+      final wake = DateTime(2026, 8, 17, 7);
+      final firstSync = wake.add(const Duration(hours: 1));
+      final laterSync = wake.add(const Duration(days: 10));
+      final imported = [
+        sample(
+          id: 'watch-core',
+          type: SignalType.sleepCore,
+          start: wake.subtract(const Duration(hours: 8)),
+          end: wake,
+          source: 'watch',
+        ),
+      ];
+      final first = SleepSyncLogic.merge(
+        existing: const [],
+        imported: imported,
+        syncedAt: firstSync,
+      );
+      // An optional persisted record time must survive unchanged too.
+      final saved = [
+        for (final reading in first.readings)
+          reading.copyWith(recordedAt: firstSync),
+      ];
+      final duplicate = SleepSyncLogic.merge(
+        existing: saved,
+        imported: imported,
+        syncedAt: laterSync,
+      );
+      expect(duplicate.importedSignalCount, 0);
+      expect(duplicate.duplicateCount, saved.length);
+      expect(duplicate.readings.length, saved.length);
+      for (final reading in duplicate.readings) {
+        final original = saved.firstWhere((value) => value.id == reading.id);
+        expect(identical(reading, original), isTrue);
+        expect(reading.syncedAt, firstSync);
+        expect(reading.recordedAt, firstSync);
+        expect(reading.timestamp, original.timestamp);
+      }
+    },
+  );
+
+  test(
+    'changed sleep import receives fresh availability instead of retaining old value',
+    () {
+      final wake = DateTime(2026, 8, 17, 7);
+      final firstSync = wake.add(const Duration(hours: 1));
+      final laterSync = wake.add(const Duration(hours: 2));
+      List<SignalReading> imported(int hours) => [
+        sample(
+          id: 'watch-core',
+          type: SignalType.sleepCore,
+          start: wake.subtract(Duration(hours: hours)),
+          end: wake,
+          source: 'watch',
+        ),
+      ];
+      final first = SleepSyncLogic.merge(
+        existing: const [],
+        imported: imported(7),
+        syncedAt: firstSync,
+      );
+      final changed = SleepSyncLogic.merge(
+        existing: first.readings,
+        imported: imported(8),
+        syncedAt: laterSync,
+      );
+      expect(changed.importedSignalCount, greaterThan(0));
+      final total = changed.readings.singleWhere(
+        (value) => value.type == SignalType.sleep,
+      );
+      expect(total.value, 8);
+      expect(total.syncedAt, laterSync);
+      expect(total.recordedAt, isNull);
+    },
+  );
+
   test('duplicate samples cannot inflate a source completeness score', () {
     final wake = DateTime(2026, 8, 17, 7);
     final start = wake.subtract(const Duration(hours: 8));

@@ -1,7 +1,8 @@
 # Tonyo Product Roadmap
 
-Last updated: September 5, 2026
-Current release: **Version 0.31 — Outcome Collection**
+Last updated: September 7, 2026
+Current implementation: **Version 0.32 — Personalized ML Model**
+Remaining release QA: iPhone performance/heap profiling and Firestore emulator/deployment verification.
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
 
@@ -290,7 +291,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Record whether advice was helpful (`feedback` field from Version 0.10-a schema)
 - Adjust future recommendation ranking from that queried history
 
-### Version 0.31 — Outcome Collection ✅ Current
+### Version 0.31 — Outcome Collection ✅
 
 - Collect optional observed-energy ratings in `users/{uid}/outcomes`, linked to future check-ins or completed Coach blocks
 - Keep reaction tests in `signals` and link future consented results as cognitive outcomes
@@ -390,9 +391,7 @@ Acceptance for prep:
   without network access. No historical outcomes were backfilled, consent was
   not changed, and no model was trained or promoted.
 
-## Upcoming Versions
-
-### Version 0.32 — Personalized ML Model
+### Version 0.32 — Personalized ML Model — Implemented; release QA pending
 
 - Implement a tiny per-user Energy residual model: `personalized prediction = FatigueEngine prediction + bounded learned correction`, trained against the fixed 0–100 observed-energy target above. Cognitive remains report-only/unpromoted until a separate compatible target/reference specification is defined in this plan; raw reaction milliseconds are never score-point residuals.
 - Use fixed-regularization ridge regression with no neural network, no LLM call, no ML framework, no hyperparameter sweep, and no cross-user training. Keep each head to at most eight feature weights plus an intercept.
@@ -403,6 +402,39 @@ Acceptance for prep:
 - Keep weights and the training snapshot on-device. After an accepted model changes, use one targeted merge write (never `replaceUser`) for small metadata only: model/schema version, window bounds, trained-at time, label count, holdout error, deterministic comparison, and feature-coverage summary.
 - Do not write per-inference predictions or duplicated training examples to Firestore; continue using the existing daily `scoreSnapshots` persistence path.
 - Always retain deterministic scoring as the instant fallback for insufficient data, revoked consent, corrupt artifacts, slower-than-budget inference, or validation underperformance.
+
+#### Implemented on September 7, 2026
+
+- Added the fixed nine-parameter ridge kernel, strict checksummed local artifact,
+  owner-keyed local training ledger, and a separate **Refresh Energy model**
+  action in **Profile → Model preparation**. Prepare/inspect remains read-only.
+- Training consumes the already-prepared, still-valid 30-day snapshot; it cannot
+  fetch data. It independently validates whole-day splits, provenance, units,
+  cutoff availability and missingness. The newest 20% of days are held out;
+  accepted weights use training rows only and are never refitted on the holdout.
+- The local ledger requires a new eligible Energy outcome and 24 hours between
+  attempts, including rejected fits; it survives ordinary restart/sign-out.
+  Async account, consent and data changes cancel pending promotion safely.
+- Missing/stale features attenuate weights and intercept. Inference changes only
+  Energy by at most ten points; Cognitive and confidence are unchanged. Daily
+  snapshots retain deterministic Energy for immediate fallback on another
+  device or after consent/model loss. No per-inference writes are introduced.
+- Accepted changes write only the small `users/{uid}.personalizedEnergyModel`
+  summary using one targeted merge. Weights/examples remain local. Failure of
+  that metadata write does not trigger background retry or discard a valid
+  local model. New/changed summaries are owner/dual-consent gated in local rules.
+- New manual records now preserve `recordedAt` separately from observation time
+  (schema 12), including edits. Legacy timestamps are not manufactured. Exact
+  duplicate sleep imports preserve the original availability timestamp.
+- The existing July account inspection still has **zero eligible labels**;
+  nothing was trained/promoted for that account, consent was not changed, and
+  this implementation performed no live Firebase reads/writes.
+- Remaining verification: release-mode iPhone latency and **actual per-fit heap**
+  (<1 MB target, not inferred from numeric-buffer estimates or process RSS),
+  and Firestore emulator/deployment validation. See `ENERGY_MODEL.md` for the
+  reproducible Mac AOT benchmark and limitations. Version 0.33 has not started.
+
+## Upcoming Versions
 
 ### Version 0.33 — Model Transparency
 
@@ -425,11 +457,12 @@ Acceptance for prep:
 
 ## Stable Data Interfaces
 
-- `SignalReading`: measurement type, value, unit, observation timestamp, source, quality, and optional sync timestamp → Firestore `users/{uid}/signals/{id}`
-- `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), and optional notes → `users/{uid}/checkIns/{id}`
+- `SignalReading`: measurement type, value, unit, observation timestamp, source, quality, optional sync timestamp and current-version `recordedAt` availability → Firestore `users/{uid}/signals/{id}`
+- `DailyCheckIn`: morning/evening period, energy, mood, stress (1–10), optional notes and current-version `recordedAt` availability → `users/{uid}/checkIns/{id}`
 - `OutcomeRecord`: consented observed energy or cognitive reaction value, timestamps, source link, consent version, and optional recommendation link → `users/{uid}/outcomes/{id}`
 - `TrainingExample` (prep for 0.32): on-device / export-only join from one bounded 30-day account snapshot, linking a day-scoped feature vector + missingness mask to one consented `OutcomeRecord`; not a cross-user Firestore collection
 - `ScoreSnapshot`: Energy Score, Cognitive Score, confidence, and drivers → `users/{uid}/scoreSnapshots/{id}`
+- `EnergyResidualModel` (0.32): checksummed owner-scoped local artifact; only compact accepted-fit metadata enters `users/{uid}.personalizedEnergyModel`. Personalized score snapshots preserve deterministic Energy and model version for safe fallback.
 - `PersonalBaselines`: rolling HRV, resting-heart-rate, sleep, and reaction-time references with sample maturity → embedded in the private daily `scoreSnapshots` document
 - `ForecastPoint`: predicted energy, timestamp, uncertainty, forecast `updatedAt`, and linked signal/check-in evidence IDs → `users/{uid}/forecastPoints/{id}`
 - `ForecastWindow`: peak, crash, or recovery period (derived; may be stored or computed from `forecastPoints`)

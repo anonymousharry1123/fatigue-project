@@ -117,10 +117,13 @@ class SleepSyncLogic {
         final old = previous[reading.id];
         if (old != null && _equivalent(old, reading)) {
           duplicateCount += 1;
+          // Identical re-imports do not change when this value first became
+          // available. Advancing syncedAt would invalidate historical joins.
+          output.add(old);
         } else {
           importedSignalCount += 1;
+          output.add(reading);
         }
-        output.add(reading);
       }
     }
 

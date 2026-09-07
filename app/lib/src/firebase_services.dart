@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
+import 'energy_model_repository.dart';
 import 'firebase_options.dart';
 import 'models.dart';
 import 'ml_prep_models.dart';
@@ -14,11 +15,13 @@ class FirebaseRuntime {
     required this.auth,
     required this.repository,
     required this.prepSource,
+    required this.energyModelMetadataWriter,
   });
 
   final AccountAuth auth;
   final CloudRepository repository;
   final PrepDataSource prepSource;
+  final EnergyModelMetadataWriter energyModelMetadataWriter;
 
   static Future<FirebaseRuntime?> initialize() async {
     if (!TonyoFirebaseOptions.isConfigured) return null;
@@ -26,6 +29,10 @@ class FirebaseRuntime {
     final auth = FirebaseAccountAuth(FirebaseAuth.instance);
     return FirebaseRuntime(
       auth: auth,
+      energyModelMetadataWriter: FirestoreEnergyModelMetadataWriter(
+        firestore: FirebaseFirestore.instance,
+        auth: auth,
+      ),
       prepSource: FirestorePrepDataSource(
         firestore: FirebaseFirestore.instance,
         auth: auth,
@@ -173,7 +180,9 @@ class FirestoreCloudRepository implements CloudRepository {
       recoveryNotificationsEnabled:
           prefs['recoveryNotificationsEnabled'] as bool? ?? true,
       notificationPrefsVersion: notificationPrefsVersion,
-      outcomeConsent: consent['outcomeCollection'] as bool? ?? false,
+      outcomeConsent:
+          consent['outcomeCollection'] == true &&
+          consent['trainingRecordUse'] == true,
       healthAuthorized: prefs['healthAuthorized'] as bool? ?? false,
       lastSync: _dateTimeOrNull(data['lastHealthSync']),
       healthSyncStatus:

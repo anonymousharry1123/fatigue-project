@@ -215,7 +215,9 @@ class PrepSnapshot {
     'outcomes': _sortedRows(outcomes),
   };
 
-  String get fingerprint => prepFingerprint(_content());
+  // Every input is deeply immutable; compute the content checksum once instead
+  // of sorting/encoding up to 1,699 records for each validation or inference.
+  late final String fingerprint = prepFingerprint(_content());
 
   Map<String, dynamic> toJson() => {
     ..._content(),

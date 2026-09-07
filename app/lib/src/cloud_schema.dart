@@ -1,7 +1,8 @@
 import 'models.dart';
 
-/// Firestore schema version. Version 11 adds consent-gated outcome records.
-const int cloudSchemaVersion = 11;
+/// Version 12 adds optional observation availability and personalized Energy
+/// fallback fields; missing legacy availability remains unknown.
+const int cloudSchemaVersion = 12;
 
 const int notificationPreferencesVersion = 1;
 
@@ -24,6 +25,7 @@ Map<String, Object?> signalToCloud(SignalReading signal) => {
   'note': signal.note,
   'groupId': signal.groupId,
   'syncedAt': signal.syncedAt,
+  if (signal.recordedAt != null) 'recordedAt': signal.recordedAt,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -49,6 +51,9 @@ SignalReading signalFromCloud(String id, Map<String, dynamic> data) {
     syncedAt: data['syncedAt'] == null
         ? null
         : cloudDateTime(data['syncedAt'], field: 'syncedAt'),
+    recordedAt: data['recordedAt'] == null
+        ? null
+        : cloudDateTime(data['recordedAt'], field: 'recordedAt'),
   );
 }
 
@@ -59,6 +64,7 @@ Map<String, Object?> checkInToCloud(DailyCheckIn checkIn) => {
   'stress': checkIn.stress,
   'note': checkIn.note,
   'timestamp': checkIn.timestamp,
+  if (checkIn.recordedAt != null) 'recordedAt': checkIn.recordedAt,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -71,6 +77,9 @@ DailyCheckIn checkInFromCloud(String id, Map<String, dynamic> data) =>
       stress: (data['stress'] as num).toDouble(),
       note: (data['note'] as String?) ?? '',
       timestamp: cloudDateTime(data['timestamp'], field: 'timestamp'),
+      recordedAt: data['recordedAt'] == null
+          ? null
+          : cloudDateTime(data['recordedAt'], field: 'recordedAt'),
     );
 
 Map<String, Object?> profileToCloud({
@@ -247,6 +256,10 @@ Map<String, Object?> scoreSnapshotToCloud({
   required DateTime day,
 }) => {
   'energy': snapshot.energy,
+  if (snapshot.deterministicEnergy != null) ...{
+    'deterministicEnergy': snapshot.deterministicEnergy,
+    'personalizedModelVersion': snapshot.personalizedModelVersion,
+  },
   'cognitive': snapshot.cognitive,
   'confidence': snapshot.confidence,
   'cognitiveConfidence': snapshot.cognitiveConfidence,
@@ -295,6 +308,8 @@ Map<String, Object?> scoreSnapshotToCloud({
 ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
     ScoreSnapshot(
       energy: (data['energy'] as num).round(),
+      deterministicEnergy: (data['deterministicEnergy'] as num?)?.round(),
+      personalizedModelVersion: data['personalizedModelVersion'] as String?,
       cognitive: (data['cognitive'] as num?)?.round() ?? 0,
       confidence: (data['confidence'] as num).toDouble(),
       cognitiveConfidence:

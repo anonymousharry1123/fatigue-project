@@ -9,7 +9,7 @@ abstract final class ActivityLogLogic {
     SignalType.screenTime,
   ];
 
-  /// Blank / omitted fields become 0.
+  /// Normalize blanks to 0 for validation/display; saving skips zero values.
   static double valueOrZero(double? value) => value ?? 0;
 
   static bool hasAnyLoggedValue({

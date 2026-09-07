@@ -1148,45 +1148,48 @@ void main() {
     },
   );
 
-  test('Version 0.6 activity logs treat omitted fields as zero', () async {
-    final controller = AppController();
-    await controller.load();
-    await controller.saveActivityLog(
-      hydrationLiters: 2.2,
-      timestamp: DateTime(2026, 7, 23, 12),
-    );
+  test(
+    'activity logs display omitted fields as zero without saving signals',
+    () async {
+      final controller = AppController();
+      await controller.load();
+      await controller.saveActivityLog(
+        hydrationLiters: 2.2,
+        timestamp: DateTime(2026, 7, 23, 12),
+      );
 
-    expect(controller.activityLogs, hasLength(1));
-    expect(controller.activityLogs.single.hydrationLiters, 2.2);
-    expect(controller.activityLogs.single.studyHours, 0);
-    expect(controller.activityLogs.single.exerciseHours, 0);
-    expect(controller.activityLogs.single.screenTimeHours, 0);
-    expect(
-      controller.signals.where(
-        (signal) => signal.groupId == controller.activityLogs.single.id,
-      ),
-      hasLength(4),
-    );
-    expect(
-      controller.signals
-          .singleWhere((signal) => signal.type == SignalType.hydration)
-          .note,
-      ActivitySyncLogic.manualCorrectionNote,
-    );
-    expect(
-      controller.signals
-          .singleWhere((signal) => signal.type == SignalType.exercise)
-          .note,
-      ActivitySyncLogic.blankManualValueNote,
-    );
+      expect(controller.activityLogs, hasLength(1));
+      expect(controller.activityLogs.single.hydrationLiters, 2.2);
+      expect(controller.activityLogs.single.studyHours, 0);
+      expect(controller.activityLogs.single.exerciseHours, 0);
+      expect(controller.activityLogs.single.screenTimeHours, 0);
+      expect(
+        controller.signals.where(
+          (signal) => signal.groupId == controller.activityLogs.single.id,
+        ),
+        hasLength(1),
+      );
+      expect(
+        controller.signals
+            .singleWhere((signal) => signal.type == SignalType.hydration)
+            .note,
+        ActivitySyncLogic.manualCorrectionNote,
+      );
+      expect(
+        controller.signals.where(
+          (signal) => signal.type == SignalType.exercise,
+        ),
+        isEmpty,
+      );
 
-    final restored = AppController();
-    await restored.load();
-    expect(restored.activityLogs.single.hydrationLiters, 2.2);
-    expect(restored.activityLogs.single.studyHours, 0);
+      final restored = AppController();
+      await restored.load();
+      expect(restored.activityLogs.single.hydrationLiters, 2.2);
+      expect(restored.activityLogs.single.studyHours, 0);
 
-    expect(() => controller.saveActivityLog(), throwsArgumentError);
-  });
+      expect(() => controller.saveActivityLog(), throwsArgumentError);
+    },
+  );
 
   test(
     'Version 0.10 history persists, edits, and deletes manual entries',

@@ -63,7 +63,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Fill any categories you tracked. Blank fields save as 0. Manual exercise and hydration replace Apple Health totals for that day; deleting the manual log restores the imported fallback.',
+              'Fill any categories you tracked. Blank or 0 values are skipped; only values above 0 are saved as signals. Saved manual exercise and hydration replace Apple Health totals for that day; clearing a category or deleting the manual log restores the imported fallback.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 18),

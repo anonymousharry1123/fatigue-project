@@ -4,7 +4,7 @@
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current release:** Version 0.31 — Outcome Collection (as of 2026-08-20)
+- **Current implementation:** Version 0.32 — Lightweight personalized Energy model (as of 2026-09-07); iPhone/heap profiling and Firestore rules release checks remain pending.
 
 ## Implementation Report
 
@@ -44,7 +44,8 @@
 | 0.30 | Persisted recommendation actions, helpfulness, and history ranking | Complete |
 | 0.31 | Consent-gated observed-energy and cognitive outcome records | Complete |
 | Prep for 0.32 | Bounded account snapshot, local eligibility pipeline and readiness UI | Complete; account not training-ready |
-| 0.32+ | Personalized model, transparency, and production polish | Not started |
+| 0.32 | Lightweight on-device Energy residual model | Implemented; account not promoted; iPhone/heap and rules release QA pending |
+| 0.33+ | Transparency, privacy, and production polish | Not started |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -67,7 +68,7 @@
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-09-06 — **246 tests passed**, including the Today profile shortcut, local/cloud sign-out, sign-in and prep for Version 0.32; static analysis clean
+- Last verified: 2026-09-07 — **348 tests passed**, including the Version 0.32 model, storage, cancellation, UI, inference and record-availability regressions; `flutter analyze` reports no issues.
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -103,8 +104,85 @@
 31. AI Coach daily plan (priority/confidence conflict resolution + persisted morning-to-evening timeline) - Complete (v0.29)
 32. Recommendation feedback (direct status/helpfulness writes + 30-day private-history ranking) - Complete (v0.30)
 33. Outcome collection (explicit dual consent + linked energy/reaction records) - Complete (v0.31)
+34. Lightweight personalized Energy model (eight-weight ridge residual, local artifacts, explicit bounded refresh and deterministic fallback) - Implemented; release QA pending (v0.32)
 
 ## Day-to-Day Entries
+
+### 2026-09-07 — Version 0.32 lightweight personalized Energy model
+
+**Branch:** `main`
+
+**Prompt:** “you can continue on the next step on plan.md”
+
+**Change:** Implemented the next roadmap step as an optional on-device Energy
+residual model: eight fixed features plus an intercept, fixed ridge penalty,
+no ML framework, and no changes to Cognitive or confidence. The explicit
+Refresh Energy model button consumes an already-prepared immutable 30-day
+snapshot, with no additional source reads or automatic training. A genuine,
+consented minimum of 14 labeled days, historical availability checks, capped
+inputs, and a newest-day holdout gate training. Promotion requires at least
+5% improvement using the deployed rounded/clamped score. Corrections are
+bounded to ±10 and shrink with missing or stale evidence.
+
+Weights remain owner-local; only an accepted model's small metadata summary
+uses a targeted Firestore merge. A durable local attempt ledger enforces a
+24-hour interval plus a new eligible Energy outcome, including after rejection
+or normal sign-out. Corrupt artifacts, lost consent, unavailable inputs and
+failed budgets retain deterministic scoring. Stored daily scores preserve the
+deterministic base for devices without the model. Account switching and edits
+cancel pending work; stale-write cleanup preserves the old owner's consumed
+attempt without touching a newly loaded account. No model action calls broad
+account replacement or creates a training collection.
+
+Added optional schema-12 `recordedAt` evidence to newly entered/edited manual
+records without backfilling old availability. Unchanged sleep reimports retain
+their original availability. Cached immutable snapshot fingerprints and a
+small report identity remove repeated full-snapshot allocations during fit
+validation. Added owner/consent/shape guards for the metadata field, bumped the
+app to `0.32.0+33`, and updated PLAN and usage documentation.
+
+**Verification:** `flutter test` passes **348 tests**, `flutter analyze` reports
+no issues, and `git diff --check` passes. Coverage includes the numeric kernel,
+held-out integer-score parity, artifact corruption, throttle persistence,
+account/consent races, controller integration, screen states, data availability,
+and unchanged Cognitive/confidence. A Mac arm64 release benchmark near the
+document caps measured 3.513 ms maximum training, an 829-byte artifact and
+0.813 µs mean inference. These are isolated generated fixtures, not account
+validation; the estimated payload and process RSS do not prove the actual
+per-fit heap bound. See [Energy model notes](ENERGY_MODEL.md) for reproducible
+measurements and precise limitations.
+
+**Account/release status:** The previously fetched July account snapshot has
+zero genuine eligible outcomes and has not been promoted. No live account
+queries, consent changes, outcome backfills, production writes, rules deployment
+or device installation occurred. iPhone release/heap profiling and Firestore
+emulator/deployment checks remain explicit release gates. Version 0.33 has not
+been started.
+
+### 2026-09-07 — Skip empty and zero-valued activity signals
+
+**Branch:** `main`
+
+**Prompt:** “when creating signals from activity log, only push the activities
+that hvae data in them, dont push the ones with 0 hours”
+
+**Change:** Activity-log creation now validates all inputs and creates signals
+only for values above zero, across hydration, study, exercise and screen time.
+Blank fields and explicit zero values no longer create placeholder signals in
+the local cache or cloud payload. Editing a log replaces only that log's group
+with its remaining positive categories; unrelated logs and imported Health data
+are preserved. Empty/all-zero submissions remain rejected without saving.
+Positive manual exercise/hydration retain their Apple Health correction notes,
+while skipped categories leave imported data available as fallback. Legacy
+placeholder compatibility is retained; no historical bulk cleanup is performed.
+Updated the activity-form explanation to match the new save behavior.
+
+**Verification:** Eight new regressions cover each category, fractional values,
+blank/zero mixtures, local and cloud persistence, edit removal, preserved
+unrelated/Health records, restored imported fallback, and invalid/all-zero
+submissions without writes. Updated controller and widget expectations for the
+new behavior. `flutter test` passes **254 tests**, `flutter analyze` reports no
+issues, and `git diff --check` passes. No live Firebase data was changed.
 
 ### 2026-09-06 — Clickable Today profile avatar
 
@@ -1220,6 +1298,29 @@ created.
 ---
 
 ## Prompts Used
+
+### Feature: Version 0.32 lightweight Energy model
+
+- **Prompt:** “you can continue on the next step on plan.md”
+- **Result:** Implemented the next roadmap milestone with a tiny local model,
+  explicit refresh from prepared data, owner-local persistence, strict holdout
+  promotion and deterministic fallback. Added one small accepted-model metadata
+  merge, without training collections, uploaded weights or extra refresh reads.
+- **Modifications:** Shared historical/live feature preparation, new-record
+  availability timestamps, duplicate-import timestamp retention, account-safe
+  cancellation and durable throttling, UI/status integration, tests, release
+  benchmark and implementation notes. The saved account is not training-ready;
+  device/heap and rules deployment QA remain pending.
+
+### Feature: Positive-value activity signals
+**Prompt:** “when creating signals from activity log, only push the activities
+that hvae data in them, dont push the ones with 0 hours”
+
+**Result:** New and edited logs create signals only for positive values; blanks
+and zero values do not become records or manual Apple Health overrides.
+
+**Modifications:** Activity-log save filtering, form copy, helper documentation
+and regression tests. No live Firebase changes or historical bulk deletion.
 
 ### Screen: Today profile shortcut
 **Prompt:** “make profile icon top right corner clickable”

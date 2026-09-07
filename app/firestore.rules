@@ -15,8 +15,72 @@ service cloud.firestore {
       return flags.outcomeCollection == true && flags.trainingRecordUse == true;
     }
 
+    function modelFraction(value) {
+      return value is number && value >= 0 && value <= 1;
+    }
+
+    function modelUtcString(value) {
+      return value is string && value.size() >= 20 && value.size() <= 27
+        && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$');
+    }
+
+    function validEnergyModelMetadata(data) {
+      let model = data.personalizedEnergyModel;
+      let fields = ['modelVersion', 'schemaVersion', 'window', 'trainedAt',
+        'labelCount', 'holdoutMae', 'deterministicMae', 'featureCoverage'];
+      let features = ['sleepDeviation', 'movement', 'hydration',
+        'studyScreenLoad', 'caffeine', 'mood', 'stress', 'recoveryDeviation'];
+      let coverage = model.featureCoverage;
+      // The whitelist and bounded strings/numbers keep the summary below 4 KiB.
+      // Exact 30-calendar-day/IANA-zone validation runs in the client adapter;
+      // Rules cannot parse ISO strings into timezone-aware calendar windows.
+      return data.consentFlags is map
+        && data.consentFlags.outcomeCollection == true
+        && data.consentFlags.trainingRecordUse == true
+        && model is map && model.keys().hasAll(fields)
+        && model.keys().hasOnly(fields)
+        && model.modelVersion is int && model.modelVersion == 1
+        && model.schemaVersion is int && model.schemaVersion == 1
+        && model.window is map
+        && model.window.keys().hasAll(['start', 'end', 'timezone'])
+        && model.window.keys().hasOnly(['start', 'end', 'timezone'])
+        && modelUtcString(model.window.start)
+        && modelUtcString(model.window.end)
+        && model.window.timezone is string
+        && model.window.timezone.size() > 0
+        && model.window.timezone.size() <= 100
+        && modelUtcString(model.trainedAt)
+        && model.labelCount is int
+        && model.labelCount >= 14 && model.labelCount <= 100
+        && model.holdoutMae is number
+        && model.holdoutMae >= 0 && model.holdoutMae <= 100
+        && model.deterministicMae is number
+        && model.deterministicMae > 0 && model.deterministicMae <= 100
+        && model.holdoutMae <= model.deterministicMae * 0.95
+        && coverage is map && coverage.keys().hasAll(features)
+        && coverage.keys().hasOnly(features)
+        && modelFraction(coverage.sleepDeviation)
+        && modelFraction(coverage.movement)
+        && modelFraction(coverage.hydration)
+        && modelFraction(coverage.studyScreenLoad)
+        && modelFraction(coverage.caffeine)
+        && modelFraction(coverage.mood)
+        && modelFraction(coverage.stress)
+        && modelFraction(coverage.recoveryDeviation);
+    }
+
     match /users/{uid} {
-      allow read, create, update, delete: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && (!request.resource.data.keys().hasAny(['personalizedEnergyModel'])
+          || validEnergyModelMetadata(request.resource.data));
+      // Ordinary profile sync and consent revocation may preserve an unchanged
+      // summary. Owners can remove it without re-enabling learning consent.
+      allow update: if isOwner(uid)
+        && (!request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['personalizedEnergyModel'])
+          || !request.resource.data.keys().hasAny(['personalizedEnergyModel'])
+          || validEnergyModelMetadata(request.resource.data));
 
       match /outcomes/{outcomeId} {
         // Owners can always inspect or delete their records. Creating or
