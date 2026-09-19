@@ -57,7 +57,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Daily Score Models'), 250);
+    await _scrollMainListTo(tester, find.text('Daily Score Models'), 250);
     expect(find.text('Daily Score Models'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
@@ -195,17 +195,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('7-day overview'), findsOneWidget);
-    expect(find.text('Avg sleep'), findsOneWidget);
+    expect(find.text('Avg main sleep'), findsOneWidget);
     expect(find.textContaining('no cohort comparisons'), findsOneWidget);
-    await tester.scrollUntilVisible(
+    await _scrollMainListTo(
+      tester,
       find.byKey(const Key('insights-daily-trend')),
       220,
     );
     expect(find.byKey(const Key('insights-daily-trend')), findsOneWidget);
     await tester.tap(find.byKey(const Key('insight-metric-sleep')));
     await tester.pump();
-    expect(find.textContaining('Latest logged sleep duration'), findsOneWidget);
-    await tester.scrollUntilVisible(
+    expect(
+      find.textContaining('Latest main sleep for each day'),
+      findsOneWidget,
+    );
+    await _scrollMainListTo(
+      tester,
       find.byKey(const Key('insights-associations')),
       220,
     );
@@ -382,7 +387,7 @@ void main() {
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Daily check-in'), 200);
+    await _scrollMainListTo(tester, find.text('Daily check-in'), 200);
     await tester.tap(find.text('Daily check-in'));
     await tester.pumpAndSettle();
     expect(find.text('How are you feeling?'), findsOneWidget);
@@ -403,7 +408,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Reaction test'), 200);
+    await _scrollMainListTo(tester, find.text('Reaction test'), 200);
     await tester.tap(find.text('Reaction test'));
     await tester.pumpAndSettle();
     expect(find.text('Reaction Test'), findsOneWidget);
@@ -411,7 +416,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('AI Coach'), 250);
+    await _scrollMainListTo(tester, find.text('AI Coach'), 250);
     await tester.tap(find.text('AI Coach'));
     await tester.pumpAndSettle();
     expect(find.text('Today’s plan'), findsOneWidget);
@@ -536,11 +541,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Daily Score Models'), 250);
+    await _scrollMainListTo(tester, find.text('Daily Score Models'), 250);
     expect(find.text('Daily Score Models'), findsOneWidget);
     expect(find.textContaining('100% coverage'), findsWidgets);
     expect(find.textContaining('% fresh'), findsWidgets);
-    await tester.scrollUntilVisible(find.text('SUPPORTING TODAY'), 250);
+    await _scrollMainListTo(tester, find.text('SUPPORTING TODAY'), 250);
     expect(find.text('SUPPORTING TODAY'), findsWidgets);
     expect(find.text('REDUCING TODAY'), findsWidgets);
     expect(find.textContaining('recovery range'), findsWidgets);
@@ -840,7 +845,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('7-DAY OUTLOOK'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Daily summaries'), 250);
+    await _scrollMainListTo(tester, find.text('Daily summaries'), 250);
     expect(find.text('Daily summaries'), findsOneWidget);
     expect(find.textContaining('Peak '), findsWidgets);
   });
@@ -893,7 +898,7 @@ void main() {
     );
     expect(find.text('None'), findsNothing);
     await tester.enterText(find.byKey(const Key('hydration-field')), '11');
-    await tester.ensureVisible(find.text('Save activity'));
+    await _scrollMainListTo(tester, find.text('Save activity'), 200);
     await tester.tap(find.text('Save activity'));
     await tester.pump();
     expect(find.text('Enter 0–10 liters.'), findsOneWidget);
@@ -902,7 +907,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('hydration-field')), '2.5');
     await tester.enterText(find.byKey(const Key('study-field')), '0');
     await tester.enterText(find.byKey(const Key('exercise-field')), '0.0');
-    await tester.ensureVisible(find.text('Save activity'));
+    await _scrollMainListTo(tester, find.text('Save activity'), 200);
     await tester.tap(find.text('Save activity'));
     await tester.pumpAndSettle();
     expect(find.text('Activity log saved.'), findsOneWidget);
@@ -974,7 +979,7 @@ void main() {
       expect(find.text('Edit activity'), findsOneWidget);
 
       await tester.enterText(find.byKey(const Key('hydration-field')), '3.5');
-      await tester.ensureVisible(find.text('Update activity'));
+      await _scrollMainListTo(tester, find.text('Update activity'), 200);
       await tester.tap(find.text('Update activity'));
       await tester.pumpAndSettle();
       expect(controller.activityLogs.single.hydrationLiters, 3.5);
@@ -1088,6 +1093,29 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+Future<void> _scrollMainListTo(
+  WidgetTester tester,
+  Finder target,
+  double delta,
+) async {
+  // Responsive tab controls and charts can add horizontal Scrollables. Keep
+  // navigation gestures on the visible page's vertical ListView.
+  final mainScrollable = find
+      .descendant(
+        of: find.byType(ListView).first,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        ),
+      )
+      .first;
+  await tester.scrollUntilVisible(target, delta, scrollable: mainScrollable);
+  await Scrollable.ensureVisible(tester.element(target.first), alignment: .5);
+  await tester.pumpAndSettle();
+  expect(target.hitTestable(), findsWidgets);
 }
 
 class _WidgetNotificationService implements NotificationService {

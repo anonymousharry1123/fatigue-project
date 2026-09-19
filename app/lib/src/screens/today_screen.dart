@@ -41,7 +41,11 @@ class TodayScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.spaceBetween,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -67,37 +71,45 @@ class TodayScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 7),
-                                Text(
-                                  status.label.toUpperCase(),
-                                  key: const Key('fatigue-status'),
-                                  style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: .7,
+                                Flexible(
+                                  child: Text(
+                                    status.label.toUpperCase(),
+                                    key: const Key('fatigue-status'),
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: .7,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Spacer(),
-                          Icon(
-                            controller.scoreLoadedFromSnapshot
-                                ? Icons.cloud_done_rounded
-                                : Icons.auto_awesome_rounded,
-                            color: TonyoColors.muted,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            controller.scoreLoadedFromSnapshot
-                                ? 'Saved snapshot'
-                                : 'Live estimate',
-                            style: const TextStyle(
-                              color: TonyoColors.muted,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                controller.scoreLoadedFromSnapshot
+                                    ? Icons.cloud_done_rounded
+                                    : Icons.auto_awesome_rounded,
+                                color: TonyoColors.muted,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  controller.scoreLoadedFromSnapshot
+                                      ? 'Saved snapshot'
+                                      : 'Live estimate',
+                                  style: const TextStyle(
+                                    color: TonyoColors.muted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -119,44 +131,64 @@ class TodayScreen extends StatelessWidget {
                         padding: EdgeInsets.symmetric(vertical: 16),
                         child: Divider(color: TonyoColors.border, height: 1),
                       ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _ScoreTile(
-                              value: score.energy,
-                              label: 'Energy',
-                              eyebrow: 'ESTIMATED ENERGY SCORE',
-                              completeness: _confidenceLine(
-                                '${score.inputCount}/7 inputs',
-                                score.confidence,
-                                score.freshness,
-                              ),
-                              color: TonyoColors.violet,
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final stackScores =
+                              constraints.maxWidth <
+                              240 * MediaQuery.textScalerOf(context).scale(1);
+                          final energy = _ScoreTile(
+                            value: score.energy,
+                            label: 'Energy',
+                            eyebrow: 'ESTIMATED ENERGY SCORE',
+                            completeness: _confidenceLine(
+                              '${score.inputCount}/7 inputs',
+                              score.confidence,
+                              score.freshness,
                             ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 126,
-                            margin: const EdgeInsets.symmetric(horizontal: 12),
-                            color: TonyoColors.border,
-                          ),
-                          Expanded(
-                            child: _ScoreTile(
-                              key: const Key('cognitive-score-card'),
-                              value: score.cognitive,
-                              label: 'Cognitive',
-                              eyebrow: 'ESTIMATED COGNITIVE SCORE',
-                              completeness: _confidenceLine(
-                                '${score.cognitiveInputCount}/6 cognitive inputs',
-                                score.cognitiveConfidence,
-                                score.cognitiveFreshness,
-                              ),
-                              color: TonyoColors.blue,
-                              comparison: _cognitiveComparison(score),
+                            color: TonyoColors.violet,
+                          );
+                          final cognitive = _ScoreTile(
+                            key: const Key('cognitive-score-card'),
+                            value: score.cognitive,
+                            label: 'Cognitive',
+                            eyebrow: 'ESTIMATED COGNITIVE SCORE',
+                            completeness: _confidenceLine(
+                              '${score.cognitiveInputCount}/6 cognitive inputs',
+                              score.cognitiveConfidence,
+                              score.cognitiveFreshness,
                             ),
-                          ),
-                        ],
+                            color: TonyoColors.blue,
+                            comparison: _cognitiveComparison(score),
+                          );
+                          if (stackScores) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                energy,
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 18),
+                                  child: Divider(color: TonyoColors.border),
+                                ),
+                                cognitive,
+                              ],
+                            );
+                          }
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: energy),
+                              Container(
+                                width: 1,
+                                height: 126,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                color: TonyoColors.border,
+                              ),
+                              Expanded(child: cognitive),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -203,7 +235,13 @@ class TodayScreen extends StatelessWidget {
                 LayoutBuilder(
                   key: const Key('recent-signal-grid'),
                   builder: (context, constraints) {
-                    final width = (constraints.maxWidth - 10) / 2;
+                    final columns =
+                        constraints.maxWidth >=
+                            280 * MediaQuery.textScalerOf(context).scale(1)
+                        ? 2
+                        : 1;
+                    final width =
+                        (constraints.maxWidth - (columns - 1) * 10) / columns;
                     return Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -308,44 +346,61 @@ class _Header extends StatelessWidget {
   final VoidCallback onOpenProfile;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _dateLabel(),
-              style: const TextStyle(color: TonyoColors.muted, fontSize: 12),
-            ),
-            Text(
-              '${_greeting()}, $name',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      IconButton(
-        key: const Key('today-profile-button'),
-        tooltip: 'Open profile',
-        onPressed: onOpenProfile,
-        padding: const EdgeInsets.all(2),
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        icon: ExcludeSemantics(
-          child: CircleAvatar(
-            radius: 22,
-            backgroundColor: TonyoColors.primary.withValues(alpha: .22),
-            child: Text(
-              name.trim().isEmpty
-                  ? 'T'
-                  : name.trim().characters.first.toUpperCase(),
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
+  Widget build(BuildContext context) {
+    final date = Text(
+      _dateLabel(),
+      style: const TextStyle(color: TonyoColors.muted, fontSize: 12),
+    );
+    final greeting = Text(
+      '${_greeting()}, $name',
+      style: Theme.of(context).textTheme.headlineMedium,
+    );
+    final profile = IconButton(
+      key: const Key('today-profile-button'),
+      tooltip: 'Open profile',
+      onPressed: onOpenProfile,
+      padding: const EdgeInsets.all(2),
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      icon: ExcludeSemantics(
+        child: CircleAvatar(
+          radius: 22,
+          backgroundColor: TonyoColors.primary.withValues(alpha: .22),
+          child: Text(
+            name.trim().isEmpty
+                ? 'T'
+                : name.trim().characters.first.toUpperCase(),
+            style: const TextStyle(fontWeight: FontWeight.w900),
           ),
         ),
       ),
-    ],
-  );
+    );
+    if (MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: date),
+              profile,
+            ],
+          ),
+          const SizedBox(height: 4),
+          greeting,
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [date, greeting],
+          ),
+        ),
+        profile,
+      ],
+    );
+  }
 
   static String _greeting() => switch (DateTime.now().hour) {
     < 12 => 'Morning',
@@ -426,8 +481,6 @@ class _ScoreTile extends StatelessWidget {
         Text(
           comparison!,
           textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: TonyoColors.mint,
             fontSize: 8.5,
@@ -460,8 +513,6 @@ class _SignalSummaryCard extends StatelessWidget {
               children: [
                 Text(
                   summary.type.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: TonyoColors.muted,
                     fontSize: 9,
@@ -652,8 +703,6 @@ class _DriverRow extends StatelessWidget {
                 ),
                 Text(
                   driver.detail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
                 ),
               ],

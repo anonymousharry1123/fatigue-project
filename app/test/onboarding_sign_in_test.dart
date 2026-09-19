@@ -187,6 +187,12 @@ void main() {
         expect(auth.signInCalls, 1);
         expect(auth.registerCalls, 0);
         expect(repository.writes, 1);
+        expect(repository.inputPatchCallCount, 1);
+        expect(repository.replaceUserCallCount, 0);
+        final saved = (await repository.readUser('returning-uid'))!;
+        expect(saved.onboardingComplete, isTrue);
+        expect(saved.profile.toJson(), controller.profile.toJson());
+        expect(saved.privacyConsent, isNotNull);
       },
     );
   }
@@ -365,6 +371,7 @@ CloudUserState _savedState() => CloudUserState(
   accountEmail: 'returning@example.com',
   onboardingComplete: true,
   notificationsEnabled: false,
+  notificationPrefsVersion: notificationPreferencesVersion,
   outcomeConsent: false,
   privacyConsent: testAdultPrivacyConsent,
   healthAuthorized: false,
@@ -413,7 +420,7 @@ class _ControlledAuth extends MemoryAccountAuth {
 class _TrackingRepository extends MemoryCloudRepository {
   _TrackingRepository() : super(signedInUid: 'returning-uid');
   int reads = 0;
-  int writes = 0;
+  int get writes => replaceUserCallCount + inputPatchCallCount;
   bool failReads = false;
 
   @override
@@ -421,11 +428,5 @@ class _TrackingRepository extends MemoryCloudRepository {
     reads++;
     if (failReads) throw StateError('Cloud is offline.');
     return super.readUser(uid);
-  }
-
-  @override
-  Future<void> replaceUser(String uid, CloudUserState state) {
-    writes++;
-    return super.replaceUser(uid, state);
   }
 }

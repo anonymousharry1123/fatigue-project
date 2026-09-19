@@ -17,6 +17,14 @@ void main() {
       expect(ReactionTestLogic.isComplete([240, 250, 260]), isTrue);
     });
 
+    test('completion requires exactly three valid uninterrupted rounds', () {
+      expect(ReactionTestLogic.isComplete([]), isFalse);
+      expect(ReactionTestLogic.isComplete([240, 99, 260]), isFalse);
+      expect(ReactionTestLogic.isComplete([240, 250, 1501]), isFalse);
+      expect(ReactionTestLogic.isComplete([240, 250, 260, 270]), isFalse);
+      expect(ReactionTestLogic.isComplete([100, 250, 1500]), isTrue);
+    });
+
     test('builds a personal baseline from prior reaction signals', () {
       final now = DateTime(2026, 7, 23, 9);
       final signals = [

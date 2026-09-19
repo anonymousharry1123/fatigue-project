@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
+import 'cloud_sync.dart';
 import 'energy_model_repository.dart';
 import 'energy_model_summary.dart';
 import 'firebase_options.dart';
@@ -306,13 +308,37 @@ class FirestoreCloudRepository implements CloudRepository {
     final user = _user(uid);
     final values = await Future.wait([
       user.get(const GetOptions(source: Source.server)),
-      user.collection('signals').get(),
-      user.collection('checkIns').get(),
+      // Conflict recovery requires server-confirmed inputs, not SDK cache.
+      user.collection('signals').get(const GetOptions(source: Source.server)),
+      user.collection('checkIns').get(const GetOptions(source: Source.server)),
     ]);
     _authorize(uid);
     final profileSnapshot = values[0] as DocumentSnapshot<Map<String, dynamic>>;
     if (!profileSnapshot.exists) return null;
-    final data = profileSnapshot.data()!;
+    final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
+    final checkInSnapshot = values[2] as QuerySnapshot<Map<String, dynamic>>;
+    return _stateFromData(
+      profileSnapshot.data()!,
+      signals: signalSnapshot.docs
+          .map(
+            (document) =>
+                signalFromCloud(document.id, _normalizeDates(document.data())),
+          )
+          .toList(),
+      checkIns: checkInSnapshot.docs
+          .map(
+            (document) =>
+                checkInFromCloud(document.id, _normalizeDates(document.data())),
+          )
+          .toList(),
+    );
+  }
+
+  CloudUserState _stateFromData(
+    Map<String, dynamic> data, {
+    List<SignalReading> signals = const [],
+    List<DailyCheckIn> checkIns = const [],
+  }) {
     final privacy = _accountPrivacy(data);
     final prefs = (data['prefs'] as Map?)?.cast<String, dynamic>() ?? const {};
     final notificationPrefsVersion =
@@ -321,8 +347,6 @@ class FirestoreCloudRepository implements CloudRepository {
         (data['consentFlags'] as Map?)?.cast<String, dynamic>() ?? const {};
     final healthSync =
         (data['healthSync'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
-    final checkInSnapshot = values[2] as QuerySnapshot<Map<String, dynamic>>;
     return CloudUserState(
       profile: data['profile'] is Map
           ? UserProfile.fromJson(
@@ -365,18 +389,8 @@ class FirestoreCloudRepository implements CloudRepository {
       privacyConsent: privacy.consent,
       deletionPending: privacy.deletionPending,
       outcomeConsentUpdatedAt: privacy.outcomeConsentUpdatedAt,
-      signals: signalSnapshot.docs
-          .map(
-            (document) =>
-                signalFromCloud(document.id, _normalizeDates(document.data())),
-          )
-          .toList(),
-      checkIns: checkInSnapshot.docs
-          .map(
-            (document) =>
-                checkInFromCloud(document.id, _normalizeDates(document.data())),
-          )
-          .toList(),
+      signals: signals,
+      checkIns: checkIns,
     );
   }
 
@@ -412,6 +426,105 @@ class FirestoreCloudRepository implements CloudRepository {
       user.collection('checkIns'),
       state.checkIns.map((value) => (value.id, checkInToCloud(value))),
     );
+  }
+
+  @override
+  Future<void> applyInputPatch(String uid, InputSyncPatch patch) async {
+    if (patch.isEmpty) return;
+    final user = _user(uid);
+    final edits = [
+      for (final edit in patch.signals) (collection: 'signals', edit: edit),
+      for (final edit in patch.checkIns) (collection: 'checkIns', edit: edit),
+    ];
+    // Chunk commits are idempotent: retry accepts an already-applied value.
+    // Never enumerate or delete documents that were not explicitly edited.
+    const chunkSize = 200;
+    for (
+      var offset = 0;
+      offset < edits.length || offset == 0;
+      offset += chunkSize
+    ) {
+      _authorize(uid);
+      final chunk = edits.skip(offset).take(chunkSize).toList();
+      final last = offset + chunk.length >= edits.length;
+      await _firestore.runTransaction((transaction) async {
+        _authorize(uid);
+        final account = await transaction.get(user);
+        if (!account.exists ||
+            _accountPrivacy(account.data()!).deletionPending) {
+          throw StateError('The account is unavailable for syncing.');
+        }
+        if (last) {
+          final actual = InputSyncSnapshot.fromState(
+            _stateFromData(account.data()!),
+          );
+          for (final item in patch.root.entries) {
+            checkSyncValue(
+              'profile',
+              actual.root[item.key],
+              item.value.before,
+              item.value.after,
+            );
+          }
+        }
+        final snapshots = [
+          for (final item in chunk)
+            await transaction.get(
+              user.collection(item.collection).doc(item.edit.id),
+            ),
+        ];
+        for (var i = 0; i < chunk.length; i++) {
+          final item = chunk[i];
+          final data = snapshots[i].data();
+          // Canonical serializers preserve legacy defaults while comparing only
+          // the writable input schema. Unknown fields survive merged writes.
+          final actual = data == null
+              ? null
+              : item.collection == 'signals'
+              ? signalToCloud(
+                  signalFromCloud(item.edit.id, _normalizeDates(data)),
+                )
+              : checkInToCloud(
+                  checkInFromCloud(item.edit.id, _normalizeDates(data)),
+                );
+          checkSyncValue(
+            item.collection == 'signals' ? 'signal' : 'check-in',
+            actual,
+            item.edit.before,
+            item.edit.after,
+          );
+        }
+        _authorize(uid);
+        for (final item in chunk) {
+          final ref = user.collection(item.collection).doc(item.edit.id);
+          if (item.edit.after == null) {
+            transaction.delete(ref);
+          } else {
+            transaction.set(ref, {
+              ...syncMergedData(item.edit.before, item.edit.after!),
+              'schemaVersion': cloudSchemaVersion,
+            }, SetOptions(merge: true));
+          }
+        }
+        if (last && patch.root.isNotEmpty) {
+          transaction.set(user, {
+            ...syncMergedData(
+              {
+                for (final item in patch.root.entries)
+                  item.key: item.value.before,
+              },
+              {
+                for (final item in patch.root.entries)
+                  item.key: item.value.after,
+              },
+            ),
+            'schemaVersion': cloudSchemaVersion,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+      });
+      if (last) break;
+    }
   }
 
   Future<void> _replaceCollection(
@@ -577,8 +690,8 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime day,
     required List<ForecastPoint> points,
   }) async {
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(day);
+    final end = localDay(start, 1);
     if (points.any(
       (point) => point.time.isBefore(start) || !point.time.isBefore(end),
     )) {
@@ -609,7 +722,7 @@ class FirestoreCloudRepository implements CloudRepository {
     String uid,
     DateTime day,
   ) async {
-    final start = DateTime(day.year, day.month, day.day);
+    final start = localDay(day);
     final snapshot = await _user(
       uid,
     ).collection('recommendations').where('day', isEqualTo: start).get();
@@ -663,7 +776,7 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime day,
     required List<Recommendation> recommendations,
   }) async {
-    final start = DateTime(day.year, day.month, day.day);
+    final start = localDay(day);
     if (recommendations.any(
       (item) => item.day == null || !_sameDay(item.day!, start),
     )) {
@@ -755,7 +868,7 @@ class FirestoreCloudRepository implements CloudRepository {
 
   @override
   Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) async {
-    final start = DateTime(day.year, day.month, day.day);
+    final start = localDay(day);
     final snapshot = await _user(
       uid,
     ).collection('riskAlerts').where('day', isEqualTo: start).get();
@@ -776,7 +889,7 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime day,
     required List<RiskAlert> alerts,
   }) async {
-    final start = DateTime(day.year, day.month, day.day);
+    final start = localDay(day);
     if (alerts.any((item) => item.day == null || !_sameDay(item.day!, start))) {
       throw ArgumentError('Every risk alert must belong to the target day.');
     }

@@ -3,6 +3,7 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
+import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screen_time_service.dart';
@@ -516,6 +517,8 @@ void main() {
           ),
           day: day,
           calculatedAt: day.add(const Duration(hours: 6)),
+          energyModelVersion: FatigueEngine.energyModelVersion,
+          cognitiveModelVersion: FatigueEngine.cognitiveModelVersion,
         ),
       );
       final controller = AppController(
@@ -534,6 +537,93 @@ void main() {
       );
       expect(hydration.displayValue, '1.9 L');
       expect(hydration.readingCount, 2);
+    },
+  );
+
+  test(
+    'obsolete rule-version snapshot is recalculated from current inputs',
+    () async {
+      final now = DateTime(2026, 9, 19, 15, 30);
+      final day = DateTime(now.year, now.month, now.day);
+      final repository = MemoryCloudRepository(signedInUid: 'old-rules-uid')
+        ..seed(
+          'old-rules-uid',
+          CloudUserState(
+            privacyConsent: testAdultPrivacyConsent,
+            profile: const UserProfile(name: 'Current inputs'),
+            accountEmail: 'rules@example.com',
+            onboardingComplete: true,
+            notificationsEnabled: false,
+            outcomeConsent: false,
+            healthAuthorized: false,
+            migrationVersion: localMigrationVersion,
+            signals: [
+              SignalReading(
+                id: 'main-sleep',
+                type: SignalType.sleep,
+                value: 8,
+                timestamp: DateTime(2026, 9, 19, 7),
+              ),
+            ],
+            checkIns: const [],
+          ),
+        );
+      await repository.upsertScoreSnapshot(
+        'old-rules-uid',
+        ScoreSnapshot(
+          energy: 99,
+          cognitive: 99,
+          confidence: .9,
+          drivers: const [ScoreDriver('Old rules', 39, 'Obsolete calculation')],
+          freshness: .9,
+          cognitiveFreshness: .9,
+          personalBaselines: PersonalBaselines(
+            generatedAt: day,
+            windowDays: 42,
+            metrics: const [],
+          ),
+          day: day,
+          calculatedAt: now,
+          energyModelVersion: 'energy-rules-v1',
+          cognitiveModelVersion: 'cognitive-rules-v1',
+        ),
+      );
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        cloudRepository: repository,
+        accountAuth: MemoryAccountAuth(
+          session: const AccountSession(
+            uid: 'old-rules-uid',
+            email: 'rules@example.com',
+          ),
+        ),
+        clock: () => now,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.load();
+
+      expect(controller.scoreLoadedFromSnapshot, isFalse);
+      expect(controller.score.energy, 66);
+      expect(controller.score.cognitive, 69);
+      expect(controller.score.drivers.single.label, 'Sleep');
+      expect(
+        controller.score.energyModelVersion,
+        FatigueEngine.energyModelVersion,
+      );
+      expect(
+        controller.score.cognitiveModelVersion,
+        FatigueEngine.cognitiveModelVersion,
+      );
+      final replaced = await repository.scoreSnapshotForDay(
+        'old-rules-uid',
+        day,
+      );
+      expect(replaced?.energyModelVersion, FatigueEngine.energyModelVersion);
+      expect(
+        replaced?.cognitiveModelVersion,
+        FatigueEngine.cognitiveModelVersion,
+      );
     },
   );
 

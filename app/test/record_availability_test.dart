@@ -35,8 +35,9 @@ void main() {
       final encoded = original.toJson();
       expect(encoded['recordedAt'], recordedAt.toIso8601String());
       final decoded = SignalReading.fromJson(encoded);
-      expect(decoded.timestamp, observedAt);
-      expect(decoded.recordedAt, recordedAt);
+      expect(decoded.timestamp.toUtc(), observedAt);
+      expect(decoded.recordedAt?.toUtc(), recordedAt);
+      expect(decoded.timestamp.isUtc, isFalse);
       expect(decoded.syncedAt, isNull);
       expect(decoded.toJson(), encoded);
     },
@@ -47,13 +48,51 @@ void main() {
     final encoded = original.toJson();
     expect(encoded['recordedAt'], recordedAt.toIso8601String());
     final decoded = DailyCheckIn.fromJson(encoded);
-    expect(decoded.timestamp, observedAt);
-    expect(decoded.recordedAt, recordedAt);
+    expect(decoded.timestamp.toUtc(), observedAt);
+    expect(decoded.recordedAt?.toUtc(), recordedAt);
+    expect(decoded.timestamp.isUtc, isFalse);
     expect(decoded.energy, 7);
     expect(decoded.mood, 8);
     expect(decoded.stress, 3);
     expect(decoded.toJson(), encoded);
   });
+
+  test(
+    'local observation and save times persist as unambiguous UTC instants',
+    () {
+      final localObservation = DateTime(2026, 9, 1, 23, 45);
+      final localSave = DateTime(2026, 9, 2, 0, 15);
+      final localSignal = signal().copyWith(
+        timestamp: localObservation,
+        recordedAt: localSave,
+      );
+      final localCheckIn = DailyCheckIn(
+        id: 'local-check-in',
+        timestamp: localObservation,
+        recordedAt: localSave,
+        energy: 7,
+        mood: 8,
+        stress: 3,
+      );
+      for (final encoded in [localSignal.toJson(), localCheckIn.toJson()]) {
+        final observation = DateTime.parse(encoded['timestamp'] as String);
+        final saved = DateTime.parse(encoded['recordedAt'] as String);
+        expect(observation.isUtc, isTrue);
+        expect(saved.isUtc, isTrue);
+        expect(observation.isAtSameMomentAs(localObservation), isTrue);
+        expect(saved.isAtSameMomentAs(localSave), isTrue);
+        expect(saved.difference(observation), const Duration(minutes: 30));
+      }
+      expect(
+        SignalReading.fromJson(localSignal.toJson()).timestamp,
+        localObservation,
+      );
+      expect(
+        DailyCheckIn.fromJson(localCheckIn.toJson()).recordedAt,
+        localSave,
+      );
+    },
+  );
 
   test(
     'legacy local records never infer availability from observation time',
@@ -131,8 +170,14 @@ void main() {
       ..['recordedAt'] = recordedAt.toIso8601String();
     final checkData = checkInToCloud(checkIn())
       ..['recordedAt'] = recordedAt.toIso8601String();
-    expect(signalFromCloud('signal', signalData).recordedAt, recordedAt);
-    expect(checkInFromCloud('check', checkData).recordedAt, recordedAt);
+    expect(
+      signalFromCloud('signal', signalData).recordedAt?.toUtc(),
+      recordedAt,
+    );
+    expect(
+      checkInFromCloud('check', checkData).recordedAt?.toUtc(),
+      recordedAt,
+    );
   });
 
   test(

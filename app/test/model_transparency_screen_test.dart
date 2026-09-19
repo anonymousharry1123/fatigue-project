@@ -428,6 +428,10 @@ void main() {
       find.byKey(const Key('model-transparency-setting')),
       250,
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('model-transparency-setting')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('model-transparency-setting')));
     await tester.pumpAndSettle();
     expect(find.byType(ModelTransparencyScreen), findsOneWidget);

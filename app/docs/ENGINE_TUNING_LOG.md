@@ -20,6 +20,67 @@ Timeline left → right: **observe** → **predict** → **edit** → **measure*
 
 
 
+## 2026-09-19 — Separate naps from main sleep
+
+Hypothesis: keeping naps outside the main-sleep average, then applying a small
+temporary recovery contribution, removes the penalty for taking a nap without
+allowing naps to compensate for sustained short main sleep. Main-sleep Energy
+and Cognitive weights, and every other driver family, are unchanged.
+
+The rules are versioned `energy-rules-v2-sleep` and `cognitive-rules-v2-sleep`.
+`SignalType.sleep` continues to represent main sleep; `SignalType.nap` is a
+separate duration whose timestamp is its end. Main sleep still uses up to three
+preferred wake dates. Naps do not enter the main-sleep baseline, duration average,
+sleep-debt alerts, bedtime, or observed waking schedule.
+
+Nap recovery is a deliberately conservative **product heuristic**:
+
+- Energy contribution: 0 to +3; Cognitive contribution: 0 to +2.
+- Duration credit rises linearly up to 30 minutes, then saturates.
+- No credit for the first 30 minutes after waking; linear ramp from 30 to
+  60 minutes; full credit through 120 minutes; linear decay to zero at six hours.
+- Only the strongest eligible nap contributes. Repeated/long naps do not stack
+  credits. Overlapping entries and main-sleep overlaps are reconciled upstream.
+- Credit applies to the local wake day. Future readings cannot contribute.
+- A separate Nap recovery explanation exposes this limited contribution.
+  It does not add an input or increase confidence/freshness. Nap-only records
+  leave both confidence values at the empty-input floor of 0.2.
+- Forecasts remove the current nap credit from the day-wide anchor, then apply
+  credit only at relevant times. A nap does not boost the preceding morning or
+  the next day's forecast.
+- Foreground resume and stale daily-snapshot reads recalculate changing nap
+  credit. Immediate resumes and expired zero credit reuse the current result;
+  this adds no timer, background training or recurring collection query.
+
+The direction is informed by [NHLBI's sleep-duration guidance](https://www.nhlbi.nih.gov/health/sleep-deprivation/how-much-sleep),
+which describes temporary alertness benefits and explains that naps do not
+replace the benefits of main sleep, and [NIOSH's sleep-inertia guidance](https://www.cdc.gov/niosh/work-hour-training-for-nurses/longhours/mod7/03.html),
+which describes variable impairment immediately after waking. **Neither source
+validates these point values or timing constants.** These are bounded model
+choices to be evaluated later against consented real outcomes, not clinical
+predictions or a claimed accuracy improvement.
+
+Local cohort check at a fixed `2026-09-19 12:00` calculation time, using the
+existing 3,000-row CSV through `SyntheticCohortMapper` and `CohortStats`:
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Energy mean / median | 43.271667 / 43 | 43.271667 / 43 |
+| Cognitive mean / median | 45.929667 / 45 | 45.929667 / 45 |
+| Sleep–Energy correlation | 0.867289 | 0.867289 |
+| Sleep–Cognitive correlation | 0.844450 | 0.844450 |
+| Screen–Energy correlation | -0.708944 | -0.708944 |
+| Caffeine–Energy correlation | -0.102103 | -0.102103 |
+| Energy and Cognitive within 0–100 | All 3,000 | All 3,000 |
+
+All 3,000 individual score pairs are unchanged. This is the intended regression
+result because the CSV has main-sleep averages and no nap events; the cohort
+cannot validate nap benefit or real-world predictive accuracy. Dedicated nap
+fixtures verify preserved main-sleep averages/baselines/confidence, limited
+positive recovery, time decay, invalid/future/overlap exclusion, main-sleep
+deficits remaining, and time-local forecast evidence. Local-day tests cover
+both US daylight-saving transitions and UTC-serialized dates.
+
 ## Column guide
 
 

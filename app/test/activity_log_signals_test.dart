@@ -2,6 +2,7 @@ import 'privacy_test_support.dart';
 import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
+import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,25 @@ void main() {
 
   const uid = 'activity-user';
   final day = DateTime(2026, 9, 7);
+
+  MemoryCloudRepository repositoryFor({
+    List<SignalReading> signals = const [],
+  }) => MemoryCloudRepository(signedInUid: uid)
+    ..seed(
+      uid,
+      CloudUserState(
+        profile: const UserProfile(),
+        accountEmail: 'activity@example.com',
+        onboardingComplete: false,
+        notificationsEnabled: false,
+        outcomeConsent: false,
+        healthAuthorized: false,
+        signals: signals,
+        checkIns: const [],
+        migrationVersion: localMigrationVersion,
+        privacyConsent: testAdultPrivacyConsent,
+      ),
+    );
 
   AppController controllerFor(MemoryCloudRepository repository) =>
       AppController(
@@ -30,7 +50,7 @@ void main() {
     test(
       'only positive ${type.name} is saved locally and in the cloud',
       () async {
-        final repository = MemoryCloudRepository(signedInUid: uid);
+        final repository = repositoryFor();
         final controller = controllerFor(repository);
         addTearDown(controller.dispose);
 
@@ -50,7 +70,9 @@ void main() {
           expect(signals.single.value, .25);
           expect(signals.single.groupId, 'activity-single');
         }
-        expect(repository.replaceUserCallCount, 1);
+        expect(repository.inputPatchCallCount, 1);
+        expect(repository.replaceUserCallCount, 0);
+        expect(controller.cloudSyncError, isNull);
         expect(controller.activityLogs, hasLength(1));
       },
     );
@@ -59,7 +81,7 @@ void main() {
   test(
     'mixed positive, zero, and omitted fields create only positive signals',
     () async {
-      final repository = MemoryCloudRepository(signedInUid: uid);
+      final repository = repositoryFor();
       final controller = controllerFor(repository);
       addTearDown(controller.dispose);
 
@@ -96,9 +118,6 @@ void main() {
   test(
     'editing to zero or blank removes only that log category and restores Health fallback',
     () async {
-      final repository = MemoryCloudRepository(signedInUid: uid);
-      final controller = controllerFor(repository);
-      addTearDown(controller.dispose);
       final preserved = [
         SignalReading(
           id: 'health-workout',
@@ -129,6 +148,9 @@ void main() {
           timestamp: day.subtract(const Duration(days: 1)),
         ),
       ];
+      final repository = repositoryFor(signals: preserved);
+      final controller = controllerFor(repository);
+      addTearDown(controller.dispose);
       controller.signals = [...preserved];
 
       await controller.saveActivityLog(
@@ -187,14 +209,16 @@ void main() {
           expect(total.usesManualCorrection, isFalse);
         }
       }
-      expect(repository.replaceUserCallCount, 2);
+      expect(repository.inputPatchCallCount, 2);
+      expect(repository.replaceUserCallCount, 0);
+      expect(controller.cloudSyncError, isNull);
     },
   );
 
   test(
     'all-zero or blank submissions leave existing data and cloud writes unchanged',
     () async {
-      final repository = MemoryCloudRepository(signedInUid: uid);
+      final repository = repositoryFor();
       final controller = controllerFor(repository);
       addTearDown(controller.dispose);
       await controller.saveActivityLog(
@@ -206,7 +230,7 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final persistedBefore = preferences.getString('tonyo_state_v1');
       final cloudBefore = (await repository.readUser(uid))!;
-      final writesBefore = repository.replaceUserCallCount;
+      final writesBefore = repository.inputPatchCallCount;
 
       await expectLater(controller.saveActivityLog(), throwsArgumentError);
       await expectLater(
@@ -223,14 +247,15 @@ void main() {
       expect(controller.exportJson(), before);
       expect(preferences.getString('tonyo_state_v1'), persistedBefore);
       expect(await repository.readUser(uid), same(cloudBefore));
-      expect(repository.replaceUserCallCount, writesBefore);
+      expect(repository.inputPatchCallCount, writesBefore);
+      expect(repository.replaceUserCallCount, 0);
     },
   );
 
   test(
     'invalid supplied values are rejected before filtering or replacing a log',
     () async {
-      final repository = MemoryCloudRepository(signedInUid: uid);
+      final repository = repositoryFor();
       final controller = controllerFor(repository);
       addTearDown(controller.dispose);
       await controller.saveActivityLog(
@@ -240,7 +265,7 @@ void main() {
       );
       final before = controller.exportJson();
       final cloudBefore = (await repository.readUser(uid))!;
-      final writesBefore = repository.replaceUserCallCount;
+      final writesBefore = repository.inputPatchCallCount;
 
       for (final invalid in [
         -.1,
@@ -280,7 +305,8 @@ void main() {
 
       expect(controller.exportJson(), before);
       expect(await repository.readUser(uid), same(cloudBefore));
-      expect(repository.replaceUserCallCount, writesBefore);
+      expect(repository.inputPatchCallCount, writesBefore);
+      expect(repository.replaceUserCallCount, 0);
     },
   );
 }

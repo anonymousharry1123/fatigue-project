@@ -8,8 +8,8 @@ import 'sleep_sync_logic.dart';
 
 abstract final class FatigueEngine {
   // Versioned separately from the app and the optional learned correction.
-  static const energyModelVersion = 'energy-rules-v1';
-  static const cognitiveModelVersion = 'cognitive-rules-v1';
+  static const energyModelVersion = 'energy-rules-v2-sleep';
+  static const cognitiveModelVersion = 'cognitive-rules-v2-sleep';
 
   static ScoreSnapshot score({
     required List<SignalReading> signals,
@@ -20,11 +20,11 @@ abstract final class FatigueEngine {
     PersonalBaselines? personalBaselines,
   }) {
     final clock = now ?? DateTime.now();
-    final target = day ?? clock;
+    final target = (day ?? clock).toLocal();
     final start = DateTime(target.year, target.month, target.day);
-    final end = start.add(const Duration(days: 1));
+    final end = DateTime(start.year, start.month, start.day + 1);
     final cutoff = !clock.isBefore(start) && clock.isBefore(end) ? clock : end;
-    final recentStart = start.subtract(const Duration(days: 6));
+    final recentStart = DateTime(start.year, start.month, start.day - 6);
     final recent =
         signals
             .where(
@@ -53,6 +53,10 @@ abstract final class FatigueEngine {
         ? null
         : sleepReadings.fold<double>(0, (sum, item) => sum + item.value) /
               sleepReadings.length;
+    final napReadings = SleepSyncLogic.preferredNapReadings(
+      recent,
+    ).where((item) => !item.timestamp.isBefore(start)).toList();
+    final napRecovery = _napRecoveryWeight(napReadings, cutoff);
     final hydrationAggregate = ActivitySyncLogic.aggregateForDay(
       targetDay,
       type: SignalType.hydration,
@@ -130,6 +134,11 @@ abstract final class FatigueEngine {
           maximumAge: const Duration(days: 7),
         ),
       );
+    }
+    if (napReadings.isNotEmpty) {
+      final impact = napRecovery * 3;
+      energy += impact;
+      drivers.add(_napDriver(napReadings, impact, cutoff));
     }
     if (personalBaselines != null && currentHrv != null) {
       final readings = readingsFor(SignalType.hrv);
@@ -373,6 +382,11 @@ abstract final class FatigueEngine {
         ),
       );
     }
+    if (napReadings.isNotEmpty) {
+      final impact = napRecovery * 2;
+      cognitive += impact;
+      cognitiveDrivers.add(_napDriver(napReadings, impact, cutoff));
+    }
     if (study != null) {
       final impact = study <= 2
           ? 3.0
@@ -433,8 +447,13 @@ abstract final class FatigueEngine {
     }
 
     _rankDrivers(drivers);
-    final inputCount = drivers.length.clamp(0, 7);
-    final freshness = _averageFreshness(drivers);
+    // A nap supplements the existing sleep input; it is not an independent
+    // measurement of readiness and must not inflate coverage or confidence.
+    final energyEvidence = drivers
+        .where((driver) => driver.label != 'Nap recovery')
+        .toList();
+    final inputCount = energyEvidence.length.clamp(0, 7);
+    final freshness = _averageFreshness(energyEvidence);
     final energyBaselineTypes = <PersonalBaselineType>[
       if (sleep != null) PersonalBaselineType.sleep,
       if (currentHrv != null) PersonalBaselineType.hrv,
@@ -453,8 +472,11 @@ abstract final class FatigueEngine {
       energyBaselineReadiness,
     );
     _rankDrivers(cognitiveDrivers);
-    final cognitiveInputCount = cognitiveDrivers.length.clamp(0, 6);
-    final cognitiveFreshness = _averageFreshness(cognitiveDrivers);
+    final cognitiveEvidence = cognitiveDrivers
+        .where((driver) => driver.label != 'Nap recovery')
+        .toList();
+    final cognitiveInputCount = cognitiveEvidence.length.clamp(0, 6);
+    final cognitiveFreshness = _averageFreshness(cognitiveEvidence);
     final cognitiveBaselineTypes = <PersonalBaselineType>[
       if (sleep != null) PersonalBaselineType.sleep,
       if (currentReaction != null) PersonalBaselineType.reactionTime,
@@ -490,6 +512,51 @@ abstract final class FatigueEngine {
       baselineConfidence: personalBaselines?.overallReadiness ?? 0,
       energyModelVersion: energyModelVersion,
       cognitiveModelVersion: cognitiveModelVersion,
+    );
+  }
+
+  /// Conservative product heuristic, not a measured physiological effect:
+  /// at most 3 Energy / 2 Cognitive points; no credit in the first 30 minutes,
+  /// a gradual rise until 60 minutes, then a decay from 2 to 6 hours after wake.
+  /// Duration saturates at 30 minutes and only the strongest nap counts, so
+  /// longer/repeated naps cannot keep adding recovery credit.
+  static double _napRecoveryWeight(List<SignalReading> readings, DateTime at) {
+    var recovery = 0.0;
+    for (final reading in readings) {
+      final wake = reading.timestamp.toLocal();
+      final localAt = at.toLocal();
+      if (wake.year != localAt.year ||
+          wake.month != localAt.month ||
+          wake.day != localAt.day ||
+          !reading.value.isFinite ||
+          reading.value <= 0) {
+        continue;
+      }
+      final minutesSinceWake = at.difference(reading.timestamp).inSeconds / 60;
+      final settling = ((minutesSinceWake - 30) / 30).clamp(0.0, 1.0);
+      final remaining = ((360 - minutesSinceWake) / 240).clamp(0.0, 1.0);
+      final duration = (reading.value / .5).clamp(0.0, 1.0);
+      recovery = math.max(recovery, duration * settling * remaining);
+    }
+    return recovery;
+  }
+
+  static ScoreDriver _napDriver(
+    List<SignalReading> readings,
+    double impact,
+    DateTime cutoff,
+  ) {
+    final minutes = readings.fold<double>(
+      0,
+      (sum, reading) => sum + reading.value * 60,
+    );
+    return _signalDriver(
+      'Nap recovery',
+      impact,
+      '${minutes.round()} min logged separately · limited temporary benefit',
+      readings: readings,
+      cutoff: cutoff,
+      maximumAge: const Duration(hours: 6),
     );
   }
 
@@ -662,6 +729,10 @@ abstract final class FatigueEngine {
             : negative
             ? 'Recent sleep duration was below the model’s recovery range.'
             : 'Recent sleep duration was close to the neutral range.',
+      'Nap recovery' =>
+        'A small temporary estimate, capped separately from main sleep. '
+            'Credit starts after 30 minutes and fades by six hours; '
+            'naps do not replace main sleep or raise confidence.',
       'Hydration' =>
         positive
             ? 'Logged hydration was above the model’s daily reference level.'
@@ -734,7 +805,9 @@ abstract final class FatigueEngine {
     UserProfile profile = const UserProfile(),
     DateTime? generatedAt,
   }) {
-    final targetDay = DateTime(day.year, day.month, day.day);
+    final localDay = day.toLocal();
+    final targetDay = DateTime(localDay.year, localDay.month, localDay.day);
+    final targetEnd = DateTime(localDay.year, localDay.month, localDay.day + 1);
     final clock = generatedAt ?? DateTime.now();
     final usualWakeHour = profile.wakeHour.isFinite
         ? profile.wakeHour.clamp(4.0, 11.0)
@@ -742,11 +815,12 @@ abstract final class FatigueEngine {
     final usualBedHour = profile.bedHour.isFinite
         ? profile.bedHour.clamp(20.0, 25.0)
         : 23.0;
-    final evidenceCutoff =
-        clock.isBefore(targetDay.add(const Duration(days: 1)))
-        ? clock
-        : targetDay.add(const Duration(days: 1));
-    final recentStart = targetDay.subtract(const Duration(days: 7));
+    final evidenceCutoff = clock.isBefore(targetEnd) ? clock : targetEnd;
+    final recentStart = DateTime(
+      targetDay.year,
+      targetDay.month,
+      targetDay.day - 7,
+    );
     final recentSignals =
         signals
             .where(
@@ -791,18 +865,26 @@ abstract final class FatigueEngine {
     final sleepReadings = SleepSyncLogic.preferredSleepReadings(
       recentSignals,
     ).take(3).toList();
+    final napReadings = SleepSyncLogic.preferredNapReadings(recentSignals);
     final bedtimeReadings = SleepSyncLogic.preferredBedtimeReadings(
       recentSignals,
     ).take(5).toList();
     final sleepHours = average(sleepReadings.map((item) => item.value));
     final observedBedtime = bedtimeReadings.isEmpty
         ? null
-        : circularHourAverage(bedtimeReadings.map((item) => item.value));
+        : circularHourAverage(
+            bedtimeReadings.map((item) {
+              final local = item.timestamp.toUtc().toLocal();
+              return local.hour + local.minute / 60;
+            }),
+          );
     final observedWake = sleepReadings.isEmpty
         ? null
         : average(
             sleepReadings.map(
-              (item) => item.timestamp.hour + item.timestamp.minute / 60,
+              (item) =>
+                  item.timestamp.toLocal().hour +
+                  item.timestamp.toLocal().minute / 60,
             ),
           );
 
@@ -830,7 +912,7 @@ abstract final class FatigueEngine {
         .where(
           (item) =>
               !item.timestamp.isBefore(targetDay) &&
-              item.timestamp.isBefore(targetDay.add(const Duration(days: 1))),
+              item.timestamp.isBefore(targetEnd),
         )
         .toList();
     ({double total, List<SignalReading> evidence}) modeledDailyTotal(
@@ -849,7 +931,7 @@ abstract final class FatigueEngine {
           recentSignals,
           type: type,
           start: recentStart,
-          end: targetDay.add(const Duration(days: 1)),
+          end: targetEnd,
         ).take(3).toList(growable: false);
         return (
           total: average(selectedDays.map((item) => item.total)) ?? 0,
@@ -869,8 +951,7 @@ abstract final class FatigueEngine {
       }
       final byDay = <String, List<SignalReading>>{};
       for (final item in readings(type)) {
-        final key =
-            '${item.timestamp.year}-${item.timestamp.month}-${item.timestamp.day}';
+        final key = _dayIdentifier(item.timestamp);
         byDay.putIfAbsent(key, () => []).add(item);
       }
       final selectedDays = byDay.values.take(3).toList(growable: false);
@@ -955,10 +1036,36 @@ abstract final class FatigueEngine {
     final checkInEvidenceIds = latestCheckIn == null || latestCheckIn.id.isEmpty
         ? const <String>[]
         : <String>[latestCheckIn.id];
+    // Remove the current nap credit before projecting it at each point. Without
+    // this, an afternoon nap would boost the morning and tomorrow's forecast.
+    // Rebuild before rounding/clamping so saturation cannot create a penalty.
+    final hasNapDriver = score.drivers.any(
+      (driver) => driver.label == 'Nap recovery',
+    );
+    final baseWithoutNap = score.drivers
+        .where(
+          (driver) =>
+              driver.label != 'Nap recovery' &&
+              driver.label != 'Personalized Energy adjustment',
+        )
+        .fold<double>(60, (sum, driver) => sum + driver.contribution)
+        .round()
+        .clamp(0, 100);
+    final personalCorrection = score.drivers
+        .where((driver) => driver.label == 'Personalized Energy adjustment')
+        .fold<double>(0, (sum, driver) => sum + driver.contribution);
+    final anchor = hasNapDriver
+        ? (baseWithoutNap + personalCorrection).clamp(0.0, 100.0)
+        : score.energy.toDouble();
 
     return List.generate(forecastEndHour - forecastStartHour + 1, (index) {
       final hour = forecastStartHour + index;
-      final time = targetDay.add(Duration(hours: hour));
+      final time = DateTime(
+        targetDay.year,
+        targetDay.month,
+        targetDay.day,
+        hour,
+      );
       final hoursAwake = hour - circadianWake;
       final circadian =
           10 * math.sin(2 * math.pi * (hour - (circadianWake - 2)) / 24);
@@ -973,8 +1080,13 @@ abstract final class FatigueEngine {
       final moderateMovementRecovery = exerciseHours > 0 && exerciseHours <= 1.5
           ? 2.0 * math.exp(-math.pow((hoursAwake - 11) / 3.0, 2))
           : 0.0;
+      final activeNaps = napReadings
+          .where((reading) => _napRecoveryWeight([reading], time) > 0)
+          .toList();
+      final napRecovery = _napRecoveryWeight(activeNaps, time) * 3;
       final energy =
-          (score.energy +
+          (anchor +
+                  napRecovery +
                   sleepAdjustment +
                   checkInAdjustment +
                   hydrationAdjustment +
@@ -997,7 +1109,12 @@ abstract final class FatigueEngine {
         energy,
         uncertainty,
         updatedAt: clock,
-        signalEvidenceIds: signalEvidenceIds,
+        signalEvidenceIds: [
+          ...signalEvidenceIds,
+          ...activeNaps
+              .map((reading) => reading.id)
+              .where((id) => id.isNotEmpty),
+        ],
         checkInEvidenceIds: checkInEvidenceIds,
       );
     });
@@ -1159,6 +1276,7 @@ abstract final class FatigueEngine {
       ForecastWindowType.recovery => const {
         SignalType.hydration: 0,
         SignalType.exercise: 1,
+        SignalType.nap: 2,
         SignalType.sleep: 3,
         SignalType.bedtime: 4,
         SignalType.study: 5,
@@ -1251,6 +1369,7 @@ abstract final class FatigueEngine {
       switch (signal.type) {
         SignalType.bedtime => 'Bedtime ${_decimalHour(signal.value)}',
         SignalType.sleep => '${signal.value.toStringAsFixed(1)} hr duration',
+        SignalType.nap => '${(signal.value * 60).round()} min nap',
         SignalType.hydration => '${signal.value.toStringAsFixed(1)} L logged',
         SignalType.study => '${signal.value.toStringAsFixed(1)} hr study load',
         SignalType.exercise => '${signal.value.toStringAsFixed(1)} hr exercise',
@@ -1279,7 +1398,7 @@ abstract final class FatigueEngine {
   }) {
     final byType = {for (final window in windows) window.type: window};
     if (!ForecastWindowType.values.every(byType.containsKey)) return const [];
-    final target = day ?? windows.first.start;
+    final target = (day ?? windows.first.start).toLocal();
     final targetDay = DateTime(target.year, target.month, target.day);
     final clock = generatedAt ?? DateTime.now();
 
@@ -1405,10 +1524,10 @@ abstract final class FatigueEngine {
     DateTime? day,
   }) {
     final clock = now ?? DateTime.now();
-    final target = day ?? clock;
+    final target = (day ?? clock).toLocal();
     final targetDay = DateTime(target.year, target.month, target.day);
-    final rangeStart = targetDay.subtract(const Duration(days: 6));
-    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final rangeStart = DateTime(target.year, target.month, target.day - 6);
+    final rangeEnd = DateTime(target.year, target.month, target.day + 1);
     final cutoff = clock.isBefore(rangeEnd) ? clock : rangeEnd;
     final recentSignals =
         signals
@@ -1552,13 +1671,16 @@ abstract final class FatigueEngine {
     ForecastWindowType.recovery => 'recovery',
   };
 
-  static String _dayIdentifier(DateTime day) =>
-      '${day.year.toString().padLeft(4, '0')}-'
-      '${day.month.toString().padLeft(2, '0')}-'
-      '${day.day.toString().padLeft(2, '0')}';
+  static String _dayIdentifier(DateTime day) {
+    final local = day.toLocal();
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')}';
+  }
 
   static String _hour(DateTime date) {
-    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-    return '$hour:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+    final local = date.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    return '$hour:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
   }
 }

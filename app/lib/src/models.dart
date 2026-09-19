@@ -1,5 +1,6 @@
 enum SignalType {
   sleep,
+  nap,
   bedtime,
   hydration,
   study,
@@ -22,6 +23,7 @@ enum SignalSource { manual, healthKit, model }
 extension SignalTypeInfo on SignalType {
   String get label => switch (this) {
     SignalType.sleep => 'Sleep',
+    SignalType.nap => 'Nap',
     SignalType.bedtime => 'Bedtime',
     SignalType.hydration => 'Hydration',
     SignalType.study => 'Study',
@@ -41,6 +43,7 @@ extension SignalTypeInfo on SignalType {
 
   String get unit => switch (this) {
     SignalType.sleep ||
+    SignalType.nap ||
     SignalType.study ||
     SignalType.exercise ||
     SignalType.screenTime ||
@@ -119,30 +122,30 @@ class SignalReading {
     'id': id,
     'type': type.name,
     'value': value,
-    'timestamp': timestamp.toIso8601String(),
+    'timestamp': timestamp.toUtc().toIso8601String(),
     'source': source.name,
     'quality': quality,
     'note': note,
     'groupId': groupId,
-    'syncedAt': syncedAt?.toIso8601String(),
-    if (recordedAt != null) 'recordedAt': recordedAt!.toIso8601String(),
+    'syncedAt': syncedAt?.toUtc().toIso8601String(),
+    if (recordedAt != null) 'recordedAt': recordedAt!.toUtc().toIso8601String(),
   };
 
   factory SignalReading.fromJson(Map<String, dynamic> json) => SignalReading(
     id: json['id'] as String,
     type: SignalType.values.byName(json['type'] as String),
     value: (json['value'] as num).toDouble(),
-    timestamp: DateTime.parse(json['timestamp'] as String),
+    timestamp: DateTime.parse(json['timestamp'] as String).toLocal(),
     source: SignalSource.values.byName((json['source'] as String?) ?? 'manual'),
     quality: (json['quality'] as num?)?.toDouble() ?? 1,
     note: json['note'] as String?,
     groupId: json['groupId'] as String?,
     syncedAt: json['syncedAt'] == null
         ? null
-        : DateTime.parse(json['syncedAt'] as String),
+        : DateTime.parse(json['syncedAt'] as String).toLocal(),
     recordedAt: json['recordedAt'] == null
         ? null
-        : DateTime.parse(json['recordedAt'] as String),
+        : DateTime.parse(json['recordedAt'] as String).toLocal(),
   );
 }
 
@@ -208,18 +211,23 @@ class ActivityLogEntry {
   }
 }
 
+enum SleepKind { mainSleep, nap }
+
 class SleepLogEntry {
   const SleepLogEntry({
     required this.id,
     required this.bedtime,
     required this.wakeTime,
     required this.quality,
+    this.kind = SleepKind.mainSleep,
   });
 
   final String id;
   final DateTime bedtime;
   final DateTime wakeTime;
   final double quality;
+  final SleepKind kind;
+  bool get isNap => kind == SleepKind.nap;
 
   Duration get duration => wakeTime.difference(bedtime);
   double get durationHours => duration.inMinutes / 60;
@@ -251,7 +259,14 @@ class SleepLogEntry {
     // Evening bedtimes (e.g. 23:00) fall after wake on the same calendar day,
     // so they belong to the previous evening.
     if (!bed.isBefore(wake)) {
-      bed = bed.subtract(const Duration(days: 1));
+      // A calendar day may be 23 or 25 hours when the device changes DST.
+      bed = DateTime(
+        wake.year,
+        wake.month,
+        wake.day - 1,
+        bedtime.hour,
+        bedtime.minute,
+      );
     }
     return (bed, wake);
   }
@@ -260,11 +275,19 @@ class SleepLogEntry {
     required DateTime bedtime,
     required DateTime wakeTime,
     required double quality,
+    SleepKind kind = SleepKind.mainSleep,
   }) {
     if (!quality.isFinite || quality < 1 || quality > 5) {
       return 'Sleep quality must be between 1 and 5.';
     }
     final duration = wakeTime.difference(bedtime);
+    if (kind == SleepKind.nap) {
+      if (duration < const Duration(minutes: 5) ||
+          duration > const Duration(hours: 3)) {
+        return 'Nap duration must be between 5 minutes and 3 hours.';
+      }
+      return null;
+    }
     if (duration < const Duration(minutes: 30) ||
         duration > const Duration(hours: 16)) {
       return 'Sleep duration must be between 30 minutes and 16 hours.';
@@ -273,8 +296,8 @@ class SleepLogEntry {
   }
 
   static double bedtimeConsistencyMinutes(Iterable<SleepLogEntry> entries) {
-    final bedtimeMinutes = entries.map((entry) {
-      final time = entry.bedtime;
+    final bedtimeMinutes = entries.where((entry) => !entry.isNap).map((entry) {
+      final time = entry.bedtime.toLocal();
       final minutes = time.hour * 60 + time.minute;
       return minutes < 12 * 60 ? minutes + 24 * 60 : minutes;
     }).toList();
@@ -316,17 +339,17 @@ class DailyCheckIn {
 
   Map<String, Object?> toJson() => {
     'id': id,
-    'timestamp': timestamp.toIso8601String(),
+    'timestamp': timestamp.toUtc().toIso8601String(),
     'energy': energy,
     'mood': mood,
     'stress': stress,
     'period': period.name,
     'note': note,
-    if (recordedAt != null) 'recordedAt': recordedAt!.toIso8601String(),
+    if (recordedAt != null) 'recordedAt': recordedAt!.toUtc().toIso8601String(),
   };
 
   factory DailyCheckIn.fromJson(Map<String, dynamic> json) {
-    final timestamp = DateTime.parse(json['timestamp'] as String);
+    final timestamp = DateTime.parse(json['timestamp'] as String).toLocal();
     final periodName = json['period'] as String?;
     final legacyScale = periodName == null;
     final period = periodName != null
@@ -344,7 +367,7 @@ class DailyCheckIn {
       note: (json['note'] as String?) ?? '',
       recordedAt: json['recordedAt'] == null
           ? null
-          : DateTime.parse(json['recordedAt'] as String),
+          : DateTime.parse(json['recordedAt'] as String).toLocal(),
     );
   }
 
@@ -402,8 +425,8 @@ class OutcomeRecord {
     'id': id,
     'type': type.name,
     'value': value,
-    'observedAt': observedAt.toIso8601String(),
-    'recordedAt': recordedAt.toIso8601String(),
+    'observedAt': observedAt.toUtc().toIso8601String(),
+    'recordedAt': recordedAt.toUtc().toIso8601String(),
     'source': source.name,
     'sourceId': sourceId,
     'recommendationId': recommendationId,
@@ -414,8 +437,8 @@ class OutcomeRecord {
     id: json['id'] as String,
     type: OutcomeType.values.byName(json['type'] as String),
     value: (json['value'] as num).toDouble(),
-    observedAt: DateTime.parse(json['observedAt'] as String),
-    recordedAt: DateTime.parse(json['recordedAt'] as String),
+    observedAt: DateTime.parse(json['observedAt'] as String).toLocal(),
+    recordedAt: DateTime.parse(json['recordedAt'] as String).toLocal(),
     source: OutcomeSource.values.byName(json['source'] as String),
     sourceId: json['sourceId'] as String,
     recommendationId: json['recommendationId'] as String?,

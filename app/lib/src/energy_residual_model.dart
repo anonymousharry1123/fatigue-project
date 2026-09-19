@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'fatigue_engine.dart';
 import 'ml_prep_builder.dart';
 import 'ml_prep_models.dart';
 
@@ -53,6 +54,8 @@ class EnergyResidualModel {
 
   Map<String, Object?> _artifactFields() => {
     ...metadata,
+    // Local compatibility only: cloud summaries contain metadata, not weights.
+    'referenceRulesVersion': FatigueEngine.energyModelVersion,
     'ownerKey': ownerKey,
     'fingerprint': fingerprint,
     'features': featureNames,
@@ -83,11 +86,13 @@ class EnergyResidualModel {
             'weights',
             'intercept',
             'artifactChecksum',
+            'referenceRulesVersion',
           }) ||
           json['modelVersion'] is! int ||
           json['schemaVersion'] is! int ||
           json['modelVersion'] != modelVersion ||
-          json['schemaVersion'] != schemaVersion) {
+          json['schemaVersion'] != schemaVersion ||
+          json['referenceRulesVersion'] != FatigueEngine.energyModelVersion) {
         throw const FormatException('Unsupported Energy model artifact.');
       }
       final fields = {...json}..remove('artifactChecksum');

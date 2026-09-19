@@ -20,7 +20,7 @@ class MlPrepScreen extends StatefulWidget {
 }
 
 class _MlPrepScreenState extends State<MlPrepScreen> {
-  final _timezone = TextEditingController(text: 'America/Los_Angeles');
+  final _timezone = TextEditingController();
   DateTime _endDay = DateTime.now();
   PrepRun? _run;
   int? _runRevision;
@@ -38,6 +38,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
   @override
   void initState() {
     super.initState();
+    _timezone.text = widget.controller.deviceTimezoneIdentifier ?? '';
     final window = widget.controller.lastModelPreparationWindow;
     if (window != null) {
       final last = window.localTime(
@@ -235,10 +236,12 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                 controller: _timezone,
                 enabled: !actionsBusy,
                 autocorrect: false,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Window timezone (IANA name)',
-                  helperText: 'For example America/Los_Angeles or UTC',
-                  border: OutlineInputBorder(),
+                  helperText: widget.controller.deviceTimezoneIdentifier == null
+                      ? 'Device region unavailable. Enter an IANA region or UTC.'
+                      : 'Defaults to your device region. Change for historical data.',
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() {
                   _run = null;

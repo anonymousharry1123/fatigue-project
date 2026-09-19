@@ -680,6 +680,7 @@ abstract final class MlPrepBuilder {
         signals.where(
           (row) => {
             SignalType.sleep,
+            SignalType.nap,
             SignalType.hrv,
             SignalType.restingHeartRate,
             ...SleepSyncLogic.stageTypes,

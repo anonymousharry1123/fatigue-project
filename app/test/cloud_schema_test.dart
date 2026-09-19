@@ -27,12 +27,13 @@ void main() {
       expect(restored.id, signal.id);
       expect(restored.type, signal.type);
       expect(restored.value, signal.value);
-      expect(restored.timestamp, signal.timestamp);
+      expect(restored.timestamp.toUtc(), signal.timestamp);
+      expect(restored.timestamp.isUtc, isFalse);
       expect(restored.source, signal.source);
       expect(restored.quality, signal.quality);
       expect(restored.note, signal.note);
       expect(restored.groupId, signal.groupId);
-      expect(restored.syncedAt, signal.syncedAt);
+      expect(restored.syncedAt?.toUtc(), signal.syncedAt);
     });
 
     test('rejects a stored unit that conflicts with the stable type', () {
@@ -67,7 +68,8 @@ void main() {
       expect(restored.mood, 7);
       expect(restored.stress, 4);
       expect(restored.note, 'Recovered');
-      expect(restored.timestamp, checkIn.timestamp);
+      expect(restored.timestamp.toUtc(), checkIn.timestamp);
+      expect(restored.timestamp.isUtc, isFalse);
     });
 
     test('profile metadata contains prefs and consent but no password', () {
@@ -144,7 +146,7 @@ void main() {
     });
 
     test('Version 0.14 score snapshots round-trip driver evidence', () {
-      final day = DateTime.utc(2026, 7, 28);
+      final day = DateTime(2026, 7, 28);
       final calculatedAt = day.add(const Duration(hours: 15));
       final score = scoreSnapshotToCloud(
         snapshot: ScoreSnapshot(
@@ -422,10 +424,10 @@ void main() {
           'checkInEvidenceIds',
         ]),
       );
-      expect(restoredForecast.time, DateTime.utc(2026, 7, 28, 9));
+      expect(restoredForecast.time.toUtc(), DateTime.utc(2026, 7, 28, 9));
       expect(restoredForecast.energy, 75);
       expect(restoredForecast.uncertainty, 6);
-      expect(restoredForecast.updatedAt, forecastUpdatedAt);
+      expect(restoredForecast.updatedAt?.toUtc(), forecastUpdatedAt);
       expect(restoredForecast.signalEvidenceIds, ['sleep-1', 'hydration-1']);
       expect(restoredForecast.checkInEvidenceIds, ['check-in-1']);
       expect(

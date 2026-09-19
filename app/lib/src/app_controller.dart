@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -9,10 +10,12 @@ import 'activity_sync_logic.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
+import 'cloud_sync.dart';
 import 'continuous_refresh_logic.dart';
 import 'daily_history_logic.dart';
 import 'daily_plan_logic.dart';
 import 'demo_data.dart';
+import 'device_timezone_service.dart';
 import 'fatigue_engine.dart';
 import 'energy_model_repository.dart';
 import 'energy_model_service.dart';
@@ -41,6 +44,7 @@ class AppController extends ChangeNotifier {
     ScreenTimeService? screenTimeService,
     AccountAuth? accountAuth,
     NotificationService? notificationService,
+    DeviceTimezoneService? deviceTimezoneService,
     DateTime Function()? clock,
     PrepDataSource? prepDataSource,
     EnergyModelStore? energyModelStore,
@@ -51,6 +55,8 @@ class AppController extends ChangeNotifier {
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
        _notificationService = notificationService ?? LocalNotificationService(),
+       _deviceTimezoneService =
+           deviceTimezoneService ?? DeviceTimezoneService(),
        _now = clock ?? DateTime.now,
        _energyModelStore =
            energyModelStore ?? SharedPreferencesEnergyModelStore(),
@@ -77,6 +83,11 @@ class AppController extends ChangeNotifier {
   final ScreenTimeService _screenTimeService;
   final AccountAuth _accountAuth;
   final NotificationService _notificationService;
+  final DeviceTimezoneService _deviceTimezoneService;
+  String? get deviceTimezoneIdentifier => _deviceTimezoneService.identifier;
+  String get deviceTimezoneLabel => _deviceTimezoneService.label;
+  String? _lastLocalDay;
+  bool _localClockChanged = false;
   final DateTime Function() _now;
   final CloudRepository? cloudRepository;
   final MlPrepService? _mlPrepService;
@@ -152,6 +163,21 @@ class AppController extends ChangeNotifier {
   bool isSignedOut = false;
   bool _isSigningOut = false;
   int _sessionRevision = 0;
+  int get sessionRevision => _sessionRevision;
+  InputSyncSnapshot? _syncBaseline;
+  String? _syncOwnerUid;
+  Future<void>? _pendingCloudPush;
+  bool cloudSyncConflict = false;
+  bool get hasPendingCloudChanges =>
+      cloudUid != null &&
+      _syncOwnerUid == cloudUid &&
+      _syncBaseline != null &&
+      !InputSyncPatch(
+        _syncBaseline!,
+        InputSyncSnapshot.fromState(
+          _cloudState(migrationVersion: localMigrationVersion),
+        ),
+      ).isEmpty;
   PrivacyConsent? _privacyConsent;
   String? _privacyOwnerUid;
   bool _cloudPrivacyVerified = false;
@@ -205,6 +231,12 @@ class AppController extends ChangeNotifier {
     _requirePrivacy();
     final revision = _sessionRevision;
     final uid = cloudUid;
+    if (uid != null && (_syncBaseline == null || _syncOwnerUid != uid)) {
+      _syncOwnerUid = uid;
+      _syncBaseline = InputSyncSnapshot.fromState(
+        _cloudState(migrationVersion: localMigrationVersion),
+      );
+    }
     return () {
       _requirePrivacy();
       if (revision != _sessionRevision || uid != cloudUid) {
@@ -256,6 +288,7 @@ class AppController extends ChangeNotifier {
       _cloudPrivacyVerified = uid != null;
       // This notice never opts anyone into optional learning.
       outcomeConsent = false;
+      _reconcileOutcomeSync();
       outcomeConsentUpdatedAt = saved.acceptedAt;
       await _discardPersonalizedModel();
       await _writeLocal();
@@ -331,6 +364,141 @@ class AppController extends ChangeNotifier {
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
   List<OutcomeRecord> _outcomes = [];
+  String? _outcomeSyncOwnerUid;
+  DateTime? _outcomeSyncConsentAt;
+  final Map<String, OutcomeRecord?> _pendingOutcomeWrites = {};
+  Future<void>? _pendingOutcomePush;
+  int _outcomeSyncGeneration = 0;
+  bool get hasPendingOutcomeChanges =>
+      cloudUid != null &&
+      _outcomeSyncOwnerUid == cloudUid &&
+      _pendingOutcomeWrites.isNotEmpty;
+
+  void _clearOutcomeSync() {
+    _outcomeSyncGeneration++;
+    _pendingOutcomeWrites.clear();
+    _outcomeSyncOwnerUid = null;
+    _outcomeSyncConsentAt = null;
+  }
+
+  bool _sameOutcomeConsentAt(DateTime? left, DateTime? right) => left == null
+      ? right == null
+      : right != null && left.isAtSameMomentAs(right);
+
+  // A renewed consent receipt never grants permission to upload outcomes
+  // collected under an earlier receipt. Explicit deletes remain safe to retry.
+  void _reconcileOutcomeSync() {
+    if (_outcomeSyncOwnerUid != null &&
+        cloudUid != null &&
+        _outcomeSyncOwnerUid != cloudUid) {
+      _outcomes = [];
+      _clearOutcomeSync();
+      return;
+    }
+    // Authentication can be temporarily unavailable at startup. Preserve an
+    // owner's retry intent until identity is known; no upload can run without it.
+    if (_outcomeSyncOwnerUid != null && cloudUid == null && outcomeConsent) {
+      return;
+    }
+    if (!outcomeConsent) _outcomes = [];
+    if (!outcomeConsent ||
+        !_sameOutcomeConsentAt(
+          _outcomeSyncConsentAt,
+          outcomeConsentUpdatedAt,
+        )) {
+      if (_pendingOutcomeWrites.values.any((value) => value != null)) {
+        final discardedIds = _pendingOutcomeWrites.entries
+            .where((entry) => entry.value != null)
+            .map((entry) => entry.key)
+            .toSet();
+        _outcomes.removeWhere((outcome) => discardedIds.contains(outcome.id));
+        _outcomeSyncGeneration++;
+        _pendingOutcomeWrites.removeWhere((_, value) => value != null);
+      }
+      _outcomeSyncConsentAt = outcomeConsentUpdatedAt;
+    }
+  }
+
+  void _queueOutcomeWrite(String id, OutcomeRecord? outcome) {
+    _reconcileOutcomeSync();
+    if (cloudUid == null || cloudRepository == null) return;
+    _outcomeSyncOwnerUid = cloudUid;
+    _outcomeSyncConsentAt = outcomeConsentUpdatedAt;
+    _pendingOutcomeWrites[id] = outcome;
+  }
+
+  Future<void> _retryOutcomeSync() async {
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    while (_pendingOutcomePush != null) {
+      await _pendingOutcomePush;
+    }
+    if (revision != _sessionRevision || uid != cloudUid || !_canProcessData) {
+      return;
+    }
+    _reconcileOutcomeSync();
+    if (!hasPendingOutcomeChanges) return;
+    final task = _flushOutcomeSync();
+    _pendingOutcomePush = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_pendingOutcomePush, task)) _pendingOutcomePush = null;
+    }
+  }
+
+  Future<void> _flushOutcomeSync() async {
+    final uid = cloudUid;
+    final repository = cloudRepository;
+    if (uid == null || repository == null) return;
+    final revision = _sessionRevision;
+    final generation = _outcomeSyncGeneration;
+    final consentAt = outcomeConsentUpdatedAt;
+    bool current() =>
+        revision == _sessionRevision &&
+        generation == _outcomeSyncGeneration &&
+        uid == cloudUid &&
+        uid == _outcomeSyncOwnerUid &&
+        _canProcessData;
+    try {
+      // Persist the retry intent before sending any writes. A crash after a
+      // successful network write simply repeats the same owner-scoped ID.
+      await _writeLocal();
+      if (!current()) return;
+      for (final entry in _pendingOutcomeWrites.entries.toList()) {
+        if (!current()) return;
+        if (!_pendingOutcomeWrites.containsKey(entry.key) ||
+            !identical(_pendingOutcomeWrites[entry.key], entry.value)) {
+          continue;
+        }
+        if (entry.value == null) {
+          await repository.deleteOutcome(uid, entry.key);
+        } else {
+          if (!outcomeConsent ||
+              !_sameOutcomeConsentAt(consentAt, outcomeConsentUpdatedAt)) {
+            return;
+          }
+          await repository.upsertOutcome(uid, entry.value!);
+        }
+        if (!current()) return;
+        if (_pendingOutcomeWrites.containsKey(entry.key) &&
+            identical(_pendingOutcomeWrites[entry.key], entry.value)) {
+          _pendingOutcomeWrites.remove(entry.key);
+        }
+        await _writeLocal();
+        if (!current()) return;
+      }
+      outcomeError = hasPendingOutcomeChanges
+          ? 'Outcomes saved on this device · cloud update pending'
+          : null;
+    } on Object {
+      // A late response from a signed-out or revoked session cannot change the
+      // new account's visible status or acknowledge its retry journal.
+      if (!current()) return;
+      outcomeError = 'Outcomes saved on this device · cloud update pending';
+    }
+  }
+
   ScoreSnapshot? _scoreSnapshot;
   int _scoreRefreshGeneration = 0;
   EnergyModelSummary? _cloudEnergySummary;
@@ -486,11 +654,7 @@ class AppController extends ChangeNotifier {
   bool get guidanceSavedToCloud => _guidanceSavedToCloud;
   InsightsSnapshot get insightsSnapshot =>
       _insightsSnapshot ??
-      InsightsLogic.build(
-        now: DateTime.now(),
-        signals: const [],
-        checkIns: const [],
-      );
+      InsightsLogic.build(now: _now(), signals: const [], checkIns: const []);
   bool get notificationSchedulingSupported =>
       _notificationService.supportsScheduling;
   bool get screenTimeReportAvailable =>
@@ -574,7 +738,8 @@ class AppController extends ChangeNotifier {
   List<TodaySignalSummary> get todaySignalSummaries =>
       TodayDashboardLogic.summariesForDay(
         _todaySignals.isEmpty ? signals : _todaySignals,
-        day: DateTime.now(),
+        day: _now(),
+        now: _now(),
       );
 
   List<ActivityLogEntry> get activityLogs {
@@ -624,18 +789,35 @@ class AppController extends ChangeNotifier {
     final entries = <SleepLogEntry>[];
     for (final group in grouped.entries) {
       final sleep = group.value
-          .where((item) => item.type == SignalType.sleep)
+          .where(
+            (item) =>
+                item.type == SignalType.sleep || item.type == SignalType.nap,
+          )
           .firstOrNull;
       final bedtime = group.value
           .where((item) => item.type == SignalType.bedtime)
           .firstOrNull;
-      if (sleep == null || bedtime == null) continue;
+      if (sleep == null || (bedtime == null && sleep.type != SignalType.nap)) {
+        continue;
+      }
       entries.add(
         SleepLogEntry(
           id: group.key,
-          bedtime: bedtime.timestamp,
-          wakeTime: sleep.timestamp,
+          bedtime:
+              (bedtime?.timestamp ??
+                      sleep.timestamp.subtract(
+                        Duration(
+                          microseconds:
+                              (sleep.value * Duration.microsecondsPerHour)
+                                  .round(),
+                        ),
+                      ))
+                  .toLocal(),
+          wakeTime: sleep.timestamp.toLocal(),
           quality: sleep.quality * 5,
+          kind: sleep.type == SignalType.nap
+              ? SleepKind.nap
+              : SleepKind.mainSleep,
         ),
       );
     }
@@ -643,7 +825,9 @@ class AppController extends ChangeNotifier {
   }
 
   double get bedtimeConsistencyMinutes =>
-      SleepLogEntry.bedtimeConsistencyMinutes(sleepLogs.take(7));
+      SleepLogEntry.bedtimeConsistencyMinutes(
+        sleepLogs.where((entry) => !entry.isNap).take(7),
+      );
 
   List<DailyHistoryDay> get dailyHistory => DailyHistoryLogic.build(
     signals: signals,
@@ -758,10 +942,10 @@ class AppController extends ChangeNotifier {
     DateTime start, {
     int dayCount = forecastDayCount,
   }) {
-    final firstDay = DateTime(start.year, start.month, start.day);
+    final firstDay = localDay(start);
     final summaries = <ForecastDaySummary>[];
     for (var index = 0; index < dayCount; index++) {
-      final day = firstDay.add(Duration(days: index));
+      final day = localDay(firstDay, index);
       final points = forecastDataFor(day);
       if (points.isNotEmpty) {
         summaries.add(ForecastDaySummary.fromPoints(day, points));
@@ -776,7 +960,7 @@ class AppController extends ChangeNotifier {
     signals: signals,
     checkIns: checkIns,
   );
-  List<ForecastWindow> get windows => windowsFor(DateTime.now());
+  List<ForecastWindow> get windows => windowsFor(_now());
   List<RiskAlert> get alerts =>
       List.unmodifiable(_riskAlerts.where((alert) => !alert.dismissed));
   List<RiskAlert> get allAlerts => List.unmodifiable(_riskAlerts);
@@ -804,8 +988,8 @@ class AppController extends ChangeNotifier {
     if (!_canProcessData) return;
     final currentTime = _now();
     final target = day ?? currentTime;
-    final start = DateTime(target.year, target.month, target.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(target);
+    final end = localDay(start, 1);
     final calculationTime = _sameDay(currentTime, start)
         ? currentTime
         : end.subtract(const Duration(microseconds: 1));
@@ -827,7 +1011,10 @@ class AppController extends ChangeNotifier {
       List<DailyCheckIn> scoringCheckIns = checkIns;
       ScoreSnapshot? previousDay;
       final canUseCloud =
-          session != null && repository != null && cloudSyncError == null;
+          session != null &&
+          repository != null &&
+          cloudSyncError == null &&
+          !hasPendingCloudChanges;
       if (canUseCloud) {
         final dashboardResults = await Future.wait<Object?>([
           repository.scoreSnapshotForDay(session.uid, start),
@@ -841,7 +1028,14 @@ class AppController extends ChangeNotifier {
             savedSnapshot.hasCognitiveScore &&
             savedSnapshot.freshness != null &&
             savedSnapshot.cognitiveFreshness != null &&
-            savedSnapshot.personalBaselines != null) {
+            savedSnapshot.personalBaselines != null &&
+            savedSnapshot.energyModelVersion ==
+                FatigueEngine.energyModelVersion &&
+            savedSnapshot.cognitiveModelVersion ==
+                FatigueEngine.cognitiveModelVersion &&
+            savedSnapshot.day == start &&
+            !(_sameDay(currentTime, start) &&
+                _napScoreNeedsRefresh(savedSnapshot, calculationTime))) {
           _scoreSnapshot = _personalizeEnergy(
             savedSnapshot,
             signals,
@@ -855,9 +1049,7 @@ class AppController extends ChangeNotifier {
         final scoringResults = await Future.wait<Object?>([
           repository.signalsByRange(
             session.uid,
-            start: start.subtract(
-              const Duration(days: PersonalBaselineLogic.windowDays),
-            ),
+            start: localDay(start, -PersonalBaselineLogic.windowDays),
             end: end,
           ),
           repository.checkInsByRange(
@@ -865,10 +1057,7 @@ class AppController extends ChangeNotifier {
             start: start.subtract(const Duration(hours: 36)),
             end: end,
           ),
-          repository.scoreSnapshotForDay(
-            session.uid,
-            start.subtract(const Duration(days: 1)),
-          ),
+          repository.scoreSnapshotForDay(session.uid, localDay(start, -1)),
         ]);
         if (!currentRequest()) return;
         scoringSignals = scoringResults[0]! as List<SignalReading>;
@@ -960,14 +1149,14 @@ class AppController extends ChangeNotifier {
     bool forceRecalculate = false,
   }) async {
     if (!_canProcessData) return;
-    final clock = DateTime.now();
+    final clock = _now();
     final target = day ?? clock;
-    final firstDay = DateTime(target.year, target.month, target.day);
+    final firstDay = localDay(target);
     final days = List.generate(
       forecastDayCount,
-      (index) => firstDay.add(Duration(days: index)),
+      (index) => localDay(firstDay, index),
     );
-    final rangeEnd = days.last.add(const Duration(days: 1));
+    final rangeEnd = localDay(days.last, 1);
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     final revision = _sessionRevision;
@@ -982,7 +1171,10 @@ class AppController extends ChangeNotifier {
     forecastError = null;
     if (notify) notifyListeners();
     try {
-      if (session != null && repository != null) {
+      if (session != null &&
+          repository != null &&
+          cloudSyncError == null &&
+          !hasPendingCloudChanges) {
         if (!forceRecalculate) {
           final saved = await repository.forecastPointsByRange(
             session.uid,
@@ -1008,12 +1200,12 @@ class AppController extends ChangeNotifier {
         final inputs = await Future.wait<Object>([
           repository.signalsByRange(
             session.uid,
-            start: firstDay.subtract(const Duration(days: 7)),
+            start: localDay(firstDay, -7),
             end: rangeEnd,
           ),
           repository.checkInsByRange(
             session.uid,
-            start: firstDay.subtract(const Duration(days: 7)),
+            start: localDay(firstDay, -7),
             end: rangeEnd,
           ),
         ]);
@@ -1047,6 +1239,9 @@ class AppController extends ChangeNotifier {
 
       _generateLocalForecasts(days, generatedAt: clock);
       _forecastLoadedFromCloud = false;
+      if (session != null && repository != null) {
+        forecastError = 'Cloud sync pending · using saved device inputs';
+      }
     } on Object {
       if (!currentRequest()) return;
       _generateLocalForecasts(days, generatedAt: clock);
@@ -1066,9 +1261,9 @@ class AppController extends ChangeNotifier {
     if (!_canProcessData) return;
     final clock = _now();
     final target = day ?? clock;
-    final targetDay = DateTime(target.year, target.month, target.day);
-    final rangeStart = targetDay.subtract(const Duration(days: 6));
-    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final targetDay = localDay(target);
+    final rangeStart = localDay(targetDay, -6);
+    final rangeEnd = localDay(targetDay, 1);
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     final revision = _sessionRevision;
@@ -1138,7 +1333,10 @@ class AppController extends ChangeNotifier {
     }
 
     try {
-      if (session != null && repository != null) {
+      if (session != null &&
+          repository != null &&
+          cloudSyncError == null &&
+          !hasPendingCloudChanges) {
         final values = await Future.wait<Object>([
           repository.signalsByRange(
             session.uid,
@@ -1186,6 +1384,9 @@ class AppController extends ChangeNotifier {
       }
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
       _guidanceSavedToCloud = false;
+      if (session != null && repository != null) {
+        guidanceError = 'Cloud sync pending · using saved device inputs';
+      }
     } on Object {
       if (!currentRequest()) return;
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
@@ -1216,7 +1417,7 @@ class AppController extends ChangeNotifier {
     if (notify) notifyListeners();
 
     try {
-      final now = DateTime.now();
+      final now = _now();
       _notificationPlan = NotificationLogic.build(
         now: now,
         points: forecastDataFor(now),
@@ -1264,12 +1465,13 @@ class AppController extends ChangeNotifier {
 
   Future<void> refreshInsights({DateTime? day, bool notify = true}) async {
     if (!_canProcessData) return;
-    final clock = day ?? DateTime.now();
-    final targetDay = DateTime(clock.year, clock.month, clock.day);
-    final rangeStart = targetDay.subtract(
-      const Duration(days: InsightsLogic.queryLookbackDays - 1),
+    final clock = day ?? _now();
+    final targetDay = localDay(clock);
+    final rangeStart = localDay(
+      targetDay,
+      -(InsightsLogic.queryLookbackDays - 1),
     );
-    final rangeEnd = targetDay.add(const Duration(days: 1));
+    final rangeEnd = localDay(targetDay, 1);
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     final revision = _sessionRevision;
@@ -1284,7 +1486,10 @@ class AppController extends ChangeNotifier {
     insightsError = null;
     if (notify) notifyListeners();
     try {
-      if (session != null && repository != null) {
+      if (session != null &&
+          repository != null &&
+          cloudSyncError == null &&
+          !hasPendingCloudChanges) {
         final values = await Future.wait<Object>([
           repository.signalsByRange(
             session.uid,
@@ -1312,6 +1517,9 @@ class AppController extends ChangeNotifier {
         checkIns: checkIns,
       );
       insightsLoadedFromCloud = false;
+      if (session != null && repository != null) {
+        insightsError = 'Cloud sync pending · using saved device inputs';
+      }
     } on Object {
       if (!currentRequest()) return;
       _insightsSnapshot = InsightsLogic.build(
@@ -1332,10 +1540,13 @@ class AppController extends ChangeNotifier {
   /// Loads only consented, owner-scoped Version 0.31 outcome records.
   Future<void> refreshOutcomes({bool notify = true}) async {
     if (!_canProcessData) return;
+    _reconcileOutcomeSync();
     if (!outcomeConsent) {
       _outcomes = [];
       outcomeError = null;
       isOutcomeLoading = false;
+      await _retryOutcomeSync();
+      await _writeLocal();
       if (notify) notifyListeners();
       return;
     }
@@ -1354,18 +1565,41 @@ class AppController extends ChangeNotifier {
     if (notify) notifyListeners();
     try {
       if (session != null && repository != null) {
+        await _retryOutcomeSync();
+        if (!currentRequest()) return;
         final refreshed = await repository.outcomesByRange(
           session.uid,
           start: now.subtract(outcomeHistoryWindow),
           end: now.add(const Duration(days: 1)),
         );
         if (!currentRequest()) return;
+        // Reads can succeed while uploads are unavailable. Keep pending local
+        // records (and hide pending deletes) until their writes are acknowledged.
+        final reconciled = {
+          for (final outcome in refreshed) outcome.id: outcome,
+        };
+        if (_outcomeSyncOwnerUid == session.uid) {
+          for (final entry in _pendingOutcomeWrites.entries) {
+            if (entry.value == null) {
+              reconciled.remove(entry.key);
+            } else if (!entry.value!.observedAt.isBefore(
+                  now.subtract(outcomeHistoryWindow),
+                ) &&
+                entry.value!.observedAt.isBefore(
+                  now.add(const Duration(days: 1)),
+                )) {
+              reconciled[entry.key] = entry.value!;
+            }
+          }
+        }
+        final visible = reconciled.values.toList()
+          ..sort((left, right) => right.observedAt.compareTo(left.observedAt));
         if (jsonEncode(_outcomes.map((item) => item.toJson()).toList()) !=
-            jsonEncode(refreshed.map((item) => item.toJson()).toList())) {
+            jsonEncode(visible.map((item) => item.toJson()).toList())) {
           await _invalidateModelPreparation();
           if (!currentRequest()) return;
         }
-        _outcomes = refreshed;
+        _outcomes = visible;
         await _writeLocal();
       } else {
         _outcomes =
@@ -1396,6 +1630,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    await _deviceTimezoneService.refresh();
+    _lastLocalDay = _dayKey(_now());
     final preferences = await SharedPreferences.getInstance();
     isSignedOut = preferences.getBool(_signedOutKey) ?? false;
     _restoreModelPreparationWindow(preferences);
@@ -1403,6 +1639,11 @@ class AppController extends ChangeNotifier {
     if (raw != null) {
       try {
         _restoreLocal(jsonDecode(raw) as Map<String, dynamic>);
+        final saved = jsonDecode(raw) as Map<String, dynamic>;
+        _localClockChanged =
+            saved['deviceTimezone'] != deviceTimezoneIdentifier ||
+            saved['deviceUtcOffsetMinutes'] !=
+                _deviceTimezoneService.utcOffset.inMinutes;
       } on Object catch (error) {
         // Keep whatever defaults we have; do not treat a parse failure as a
         // fresh install silently — log so web/debug storage issues are visible.
@@ -1445,10 +1686,13 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (hasPendingCloudChanges) await _pushCloud();
     await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     await _energyModelService.load();
-    if (outcomeConsent) await refreshOutcomes(notify: false);
+    if (outcomeConsent || hasPendingOutcomeChanges) {
+      await refreshOutcomes(notify: false);
+    }
     if (healthAuthorized &&
         healthAuthorization == HealthAuthorizationState.authorized) {
       await _ensureContinuousHealthUpdates();
@@ -1458,16 +1702,64 @@ class AppController extends ChangeNotifier {
       );
     }
     if (onboardingComplete) {
-      await refreshScores(notify: false);
-      await refreshForecasts(notify: false);
+      await refreshScores(notify: false, forceRecalculate: _localClockChanged);
+      await refreshForecasts(
+        notify: false,
+        forceRecalculate: _localClockChanged,
+      );
       await refreshGuidance(notify: false);
       await refreshInsights(notify: false);
     }
+    _localClockChanged = false;
+    await _writeLocal();
     isReady = true;
     notifyListeners();
   }
 
   Future<void> handleAppResumed() async {
+    final timezoneWasInitialized = _deviceTimezoneService.isInitialized;
+    final timezoneChanged = await _deviceTimezoneService.refresh();
+    final resumedAt = _now();
+    final localDay = _dayKey(resumedAt);
+    _localClockChanged =
+        _localClockChanged ||
+        (timezoneWasInitialized && timezoneChanged) ||
+        (_lastLocalDay != null && _lastLocalDay != localDay);
+    _lastLocalDay = localDay;
+    // Nap recovery changes with elapsed time even when no input or region has
+    // changed. Refresh on foreground entry, with a one-minute threshold to
+    // avoid repeated derived-data queries during immediate lifecycle events.
+    final derivedViewsNeedRefresh =
+        _localClockChanged ||
+        _napScoreNeedsRefresh(
+          _scoreSnapshot,
+          resumedAt,
+          minimumAge: const Duration(minutes: 1),
+        );
+    if (_localClockChanged) {
+      // Supersede old-zone async responses before waiting for privacy/network.
+      _scoreRefreshGeneration++;
+      _forecastRefreshGeneration++;
+      _guidanceRefreshGeneration++;
+      _notificationRefreshGeneration++;
+      _insightsRefreshGeneration++;
+      _scoreSnapshot = null;
+      _todaySignals = [];
+      _forecastsByDay.clear();
+      _recommendations = [];
+      _riskAlerts = [];
+      _insightsSnapshot = null;
+      isEnergyScoreLoading = false;
+      isForecastLoading = false;
+      isGuidanceLoading = false;
+      isInsightsLoading = false;
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        /* Foreground regeneration retries guidance scheduling. */
+      }
+    }
+    notifyListeners();
     if (isSignedOut || deletionPending || isPrivacyBusy) return;
     final revision = _sessionRevision;
     final owner = cloudUid;
@@ -1491,6 +1783,7 @@ class AppController extends ChangeNotifier {
         privacyOperationError = null;
         outcomeConsent = state.outcomeConsent;
         outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
+        _reconcileOutcomeSync();
         if (state.deletionPending) await _saveDeletionJournal(uid, 'requested');
         if (!current()) return;
         if (!outcomeConsent) await _discardPersonalizedModel();
@@ -1519,12 +1812,60 @@ class AppController extends ChangeNotifier {
     }
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
+    if (!current()) return;
+    if (derivedViewsNeedRefresh && onboardingComplete) {
+      if (_localClockChanged) {
+        // Recreate local DateTime views from stored instants after travel/DST.
+        signals = signals
+            .map((item) => SignalReading.fromJson(item.toJson()))
+            .toList();
+        checkIns = checkIns
+            .map((item) => DailyCheckIn.fromJson(item.toJson()))
+            .toList();
+      }
+      _scoreSnapshot = null;
+      _forecastsByDay.clear();
+      await refreshScores(notify: false, forceRecalculate: true);
+      if (!current()) return;
+      await refreshForecasts(notify: false, forceRecalculate: true);
+      if (!current()) return;
+      await refreshGuidance(notify: false);
+      if (!current()) return;
+      await refreshInsights(notify: false);
+      if (!current()) return;
+      _localClockChanged = false;
+      await _writeLocal();
+    }
     if (status == HealthAuthorizationState.authorized && healthAuthorized) {
       await _ensureContinuousHealthUpdates();
       await refreshHealthIfDue(reason: HealthRefreshReason.foreground);
     } else {
       notifyListeners();
     }
+  }
+
+  static bool _napScoreNeedsRefresh(
+    ScoreSnapshot? snapshot,
+    DateTime at, {
+    Duration minimumAge = Duration.zero,
+  }) {
+    if (snapshot == null) return false;
+    final nap = snapshot.drivers
+        .where((driver) => driver.label == 'Nap recovery')
+        .firstOrNull;
+    if (nap == null) return false;
+    // Once every logged nap has expired and the stored contribution is already
+    // zero, elapsed time cannot change it again. A stale positive credit still
+    // needs one final recalculation, even after the six-hour window.
+    if (nap.contribution == 0 &&
+        nap.evidenceAt != null &&
+        at.difference(nap.evidenceAt!) >= const Duration(hours: 6)) {
+      return false;
+    }
+    final calculatedAt = snapshot.calculatedAt;
+    if (calculatedAt == null) return true;
+    return !at.isAtSameMomentAs(calculatedAt) &&
+        at.difference(calculatedAt).abs() >= minimumAge;
   }
 
   Future<void> completeOnboarding(
@@ -1588,6 +1929,18 @@ class AppController extends ChangeNotifier {
     if (!privacyFeaturesAllowed) {
       throw StateError('Complete privacy review before setup.');
     }
+    if (cloudUid != null &&
+        cloudRepository != null &&
+        (_syncBaseline == null || _syncOwnerUid != cloudUid)) {
+      final uid = cloudUid!;
+      final revision = _sessionRevision;
+      final remote = await cloudRepository!.readUser(uid);
+      if (revision != _sessionRevision || uid != cloudUid || remote == null) {
+        throw StateError('Account setup changed. Please retry.');
+      }
+      _syncOwnerUid = uid;
+      _syncBaseline = InputSyncSnapshot.fromState(remote);
+    }
     profile = newProfile;
     accountEmail = _accountAuth.currentSession?.email ?? email ?? accountEmail;
     onboardingComplete = true;
@@ -1637,8 +1990,11 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (hasPendingCloudChanges) await _pushCloud();
     if (!outcomeConsent) await _discardPersonalizedModel();
-    if (outcomeConsent) await refreshOutcomes(notify: false);
+    if (outcomeConsent || hasPendingOutcomeChanges) {
+      await refreshOutcomes(notify: false);
+    }
     if (onboardingComplete) {
       await refreshScores(notify: false);
       await refreshForecasts(notify: false);
@@ -1693,6 +2049,7 @@ class AppController extends ChangeNotifier {
     isGuidanceLoading = false;
     isInsightsLoading = false;
     isOutcomeLoading = false;
+    isCloudSyncing = false;
     isNotificationSyncing = false;
     isEnergyScoreLoading = false;
     _energyModelService.unload();
@@ -1836,6 +2193,7 @@ class AppController extends ChangeNotifier {
     required DateTime bedtime,
     required DateTime wakeTime,
     required double quality,
+    SleepKind kind = SleepKind.mainSleep,
   }) async {
     final ensureCurrent = _beginMutation();
     final normalized = SleepLogEntry.normalizeOvernightPair(
@@ -1848,6 +2206,7 @@ class AppController extends ChangeNotifier {
       bedtime: start,
       wakeTime: end,
       quality: quality,
+      kind: kind,
     );
     if (validation != null) throw ArgumentError(validation);
     final hours = end.difference(start).inMinutes / 60;
@@ -1863,21 +2222,22 @@ class AppController extends ChangeNotifier {
       SignalReading(
         id: '$groupId-duration',
         groupId: groupId,
-        type: SignalType.sleep,
+        type: kind == SleepKind.nap ? SignalType.nap : SignalType.sleep,
         value: hours,
         timestamp: end,
         recordedAt: recordedAt,
         quality: quality / 5,
         note: '${_clock(start)}–${_clock(end)} · quality ${quality.round()}/5',
       ),
-      SignalReading(
-        id: '$groupId-bedtime',
-        groupId: groupId,
-        type: SignalType.bedtime,
-        value: start.hour + start.minute / 60,
-        timestamp: start,
-        recordedAt: recordedAt,
-      ),
+      if (kind == SleepKind.mainSleep)
+        SignalReading(
+          id: '$groupId-bedtime',
+          groupId: groupId,
+          type: SignalType.bedtime,
+          value: start.hour + start.minute / 60,
+          timestamp: start,
+          recordedAt: recordedAt,
+        ),
     ]);
     await _commit(energyInputsChanged: true);
     ensureCurrent();
@@ -1945,17 +2305,28 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> addReactionResult(double averageMs, {String? note}) async {
+  Future<void> addReactionResult(
+    double averageMs, {
+    String? note,
+    String? resultId,
+    DateTime? observedAt,
+  }) async {
     final ensureCurrent = _beginMutation();
-    if (!ReactionTestLogic.isValidReaction(averageMs.round())) {
+    if (!averageMs.isFinite ||
+        !ReactionTestLogic.isValidReaction(averageMs.round())) {
       throw ArgumentError(
         'Reaction average must be between '
         '${ReactionTestLogic.minValidMs} and ${ReactionTestLogic.maxValidMs} ms',
       );
     }
-    final observedAt = _now();
+    observedAt ??= _now();
     final signalId =
+        resultId ??
         'manual-${observedAt.microsecondsSinceEpoch}-${signals.length}';
+    if (signalId.contains('/') || signalId.isEmpty || !averageMs.isFinite) {
+      throw ArgumentError('Invalid reaction result.');
+    }
+    signals.removeWhere((item) => item.id == signalId);
     signals.insert(
       0,
       SignalReading(
@@ -2022,31 +2393,38 @@ class AppController extends ChangeNotifier {
 
   Future<void> _saveOutcome(OutcomeRecord outcome) async {
     final ensureCurrent = _beginMutation();
+    final consentAt = outcomeConsentUpdatedAt;
+    void ensureConsent() {
+      ensureCurrent();
+      if (!outcomeConsent ||
+          !_sameOutcomeConsentAt(consentAt, outcomeConsentUpdatedAt)) {
+        throw StateError(
+          'Outcome learning consent changed. The record was stopped.',
+        );
+      }
+    }
+
     if (!outcomeConsent) {
       throw StateError('Outcome learning requires explicit consent.');
     }
     await _invalidateModelPreparation();
-    ensureCurrent();
+    ensureConsent();
     if (_outcomes.any((item) => item.id == outcome.id)) {
       await _discardPersonalizedModel();
-      ensureCurrent();
+      ensureConsent();
     }
+    _queueOutcomeWrite(outcome.id, outcome);
     _outcomes.removeWhere((item) => item.id == outcome.id);
     _outcomes.insert(0, outcome);
+    _outcomeRefreshGeneration++;
+    isOutcomeLoading = false;
     outcomeError = null;
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      try {
-        await repository.upsertOutcome(session.uid, outcome);
-      } on Object {
-        outcomeError = 'Outcome saved on this device · cloud update pending';
-        notifyListeners();
-      }
-    }
+    await _retryOutcomeSync();
+    ensureCurrent();
+    notifyListeners();
   }
 
   Future<void> deleteSignal(String id) async {
@@ -2074,18 +2452,14 @@ class AppController extends ChangeNotifier {
     await _invalidateModelPreparation();
     ensureCurrent();
     _outcomes.removeWhere((item) => item.id == outcomeId);
+    _queueOutcomeWrite(outcomeId, null);
+    _outcomeRefreshGeneration++;
+    isOutcomeLoading = false;
     await _writeLocal();
     ensureCurrent();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      try {
-        await repository.deleteOutcome(session.uid, outcomeId);
-      } on Object {
-        outcomeError = 'Outcome deletion pending · retry when connected';
-        notifyListeners();
-      }
-    }
+    await _retryOutcomeSync();
+    ensureCurrent();
+    notifyListeners();
   }
 
   Future<void> setRecommendationStatus(
@@ -2254,6 +2628,7 @@ class AppController extends ChangeNotifier {
       if (!value) {
         outcomeConsent = false;
         _outcomes = [];
+        _reconcileOutcomeSync();
         await _discardPersonalizedModel();
         await _writeLocal();
       }
@@ -2265,6 +2640,7 @@ class AppController extends ChangeNotifier {
       }
       outcomeConsent = value;
       outcomeConsentUpdatedAt = at;
+      _reconcileOutcomeSync();
       outcomeError = null;
       await _invalidateModelPreparation();
       await _writeLocal();
@@ -2766,11 +3142,18 @@ class AppController extends ChangeNotifier {
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
     final ensureCurrent = _beginMutation();
+    // Finish an already-issued outcome upload before clearing its collection;
+    // otherwise a late success could recreate data after the clear completes.
+    while (_pendingOutcomePush != null) {
+      await _pendingOutcomePush;
+      ensureCurrent();
+    }
     await _discardPersonalizedModel();
     ensureCurrent();
     signals = [];
     checkIns = [];
     _outcomes = [];
+    _clearOutcomeSync();
     outcomeError = null;
     lastSync = null;
     lastHealthSyncAttempt = null;
@@ -2983,6 +3366,7 @@ class AppController extends ChangeNotifier {
     _privacyOwnerUid = null;
     _cloudPrivacyVerified = false;
     _outcomes = [];
+    _clearOutcomeSync();
     isOutcomeLoading = false;
     outcomeError = null;
     healthAuthorized = false;
@@ -3014,6 +3398,9 @@ class AppController extends ChangeNotifier {
     lastActivityImportCount = 0;
     lastActivityDuplicateCount = 0;
     lastActivityRejectedCount = 0;
+    _syncBaseline = null;
+    _syncOwnerUid = null;
+    cloudSyncConflict = false;
     accountEmail = null;
     profile = const UserProfile();
     signals = [];
@@ -3056,6 +3443,14 @@ class AppController extends ChangeNotifier {
   }
 
   Map<String, Object?> _json() => {
+    if (_syncBaseline != null && _syncOwnerUid != null)
+      'inputSync': {
+        'version': 1,
+        'uid': _syncOwnerUid,
+        'baseline': _syncBaseline!.toJson(),
+      },
+    'deviceTimezone': deviceTimezoneIdentifier,
+    'deviceUtcOffsetMinutes': _deviceTimezoneService.utcOffset.inMinutes,
     'privacyOwnerUid': _privacyOwnerUid,
     'privacyConsent': _privacyConsent?.toJson(),
     'outcomeConsentUpdatedAt': outcomeConsentUpdatedAt
@@ -3088,9 +3483,9 @@ class AppController extends ChangeNotifier {
     'lastActivityDuplicateCount': lastActivityDuplicateCount,
     'lastActivityRejectedCount': lastActivityRejectedCount,
     'accountEmail': accountEmail,
-    'lastSync': lastSync?.toIso8601String(),
-    'lastHealthSyncAttempt': lastHealthSyncAttempt?.toIso8601String(),
-    'lastHealthChangeAt': lastHealthChangeAt?.toIso8601String(),
+    'lastSync': lastSync?.toUtc().toIso8601String(),
+    'lastHealthSyncAttempt': lastHealthSyncAttempt?.toUtc().toIso8601String(),
+    'lastHealthChangeAt': lastHealthChangeAt?.toUtc().toIso8601String(),
     'healthSyncStatus': healthSyncStatus.name,
     'lastHealthRefreshReason': lastHealthRefreshReason?.name,
     'healthBackgroundRefreshEnabled': healthBackgroundRefreshEnabled,
@@ -3098,6 +3493,16 @@ class AppController extends ChangeNotifier {
     'signals': signals.map((item) => item.toJson()).toList(),
     'checkIns': checkIns.map((item) => item.toJson()).toList(),
     'outcomes': _outcomes.map((item) => item.toJson()).toList(),
+    if (_outcomeSyncOwnerUid != null && _pendingOutcomeWrites.isNotEmpty)
+      'outcomeSync': {
+        'version': 1,
+        'uid': _outcomeSyncOwnerUid,
+        'consentAt': _outcomeSyncConsentAt?.toUtc().toIso8601String(),
+        'writes': {
+          for (final entry in _pendingOutcomeWrites.entries)
+            entry.key: entry.value?.toJson(),
+        },
+      },
     'recommendationStatuses': _recommendationStatuses.map(
       (key, value) => MapEntry(key, value.name),
     ),
@@ -3110,16 +3515,26 @@ class AppController extends ChangeNotifier {
     bool forecastInputsChanged = false,
   }) async {
     if (!_canProcessData) return;
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    bool current() =>
+        revision == _sessionRevision && uid == cloudUid && _canProcessData;
     await _invalidateModelPreparation();
+    if (!current()) return;
     notifyListeners();
     await _writeLocal();
+    if (!current()) return;
     await _pushCloud();
+    if (!current()) return;
     if (energyInputsChanged && onboardingComplete) {
       await refreshScores(forceRecalculate: true);
+      if (!current()) return;
     }
     if ((energyInputsChanged || forecastInputsChanged) && onboardingComplete) {
       await refreshForecasts(forceRecalculate: true);
+      if (!current()) return;
       await refreshGuidance();
+      if (!current()) return;
     }
     if (energyInputsChanged && onboardingComplete) {
       await refreshInsights();
@@ -3133,7 +3548,11 @@ class AppController extends ChangeNotifier {
     if (revision != _sessionRevision || deletionPending || isDeletingAccount) {
       return;
     }
-    await preferences.setString(_storageKey, jsonEncode(_json()));
+    if (!await preferences.setString(_storageKey, jsonEncode(_json()))) {
+      throw StateError(
+        'Could not save to this device. Keep this screen open and retry.',
+      );
+    }
   }
 
   Future<void> _hydrateOrMigrateCloud() async {
@@ -3141,6 +3560,14 @@ class AppController extends ChangeNotifier {
     final repository = cloudRepository;
     if (session == null || repository == null) return;
     final revision = _sessionRevision;
+    final pending = _syncOwnerUid == session.uid && _syncBaseline != null
+        ? InputSyncPatch(
+            _syncBaseline!,
+            InputSyncSnapshot.fromState(
+              _cloudState(migrationVersion: localMigrationVersion),
+            ),
+          )
+        : null;
     _cloudPrivacyVerified = false;
     isCloudSyncing = true;
     cloudSyncError = null;
@@ -3165,6 +3592,8 @@ class AppController extends ChangeNotifier {
         }
         // Missing server state is never permission to resurrect a deleted
         // account or upload another user's cache. New setup is explicit.
+        _syncBaseline = null;
+        _syncOwnerUid = null;
         _privacyConsent = null;
         _privacyOwnerUid = session.uid;
         onboardingComplete = false;
@@ -3175,19 +3604,22 @@ class AppController extends ChangeNotifier {
         _outcomes = [];
         outcomeConsent = false;
       } else {
-        _applyCloud(remote);
+        final remoteInputs = InputSyncSnapshot.fromState(remote);
+        if (pending != null && !pending.isEmpty) {
+          _syncBaseline = remoteInputs.overlay(pending, useBefore: true);
+          _applyCloud(remoteInputs.overlay(pending).toState(remote));
+        } else {
+          _syncBaseline = remoteInputs;
+          _applyCloud(remote);
+        }
+        _syncOwnerUid = session.uid;
         _cloudPrivacyVerified = true;
         if (remote.deletionPending) {
           await _saveDeletionJournal(session.uid, 'requested');
         }
         accountEmail = session.email;
-        if (privacyFeaturesAllowed &&
-            remote.migrationVersion < localMigrationVersion) {
-          await repository.replaceUser(
-            session.uid,
-            remote.copyWith(migrationVersion: localMigrationVersion),
-          );
-        }
+        // The ordinary pending patch upgrades only the migration field. Never
+        // replace whole input collections while restoring an older account.
       }
       if (cloudUid == session.uid &&
           _sessionRevision == revision &&
@@ -3202,30 +3634,166 @@ class AppController extends ChangeNotifier {
         cloudSyncError = error.toString();
       }
     } finally {
-      isCloudSyncing = false;
+      if (cloudUid == session.uid && _sessionRevision == revision) {
+        isCloudSyncing = false;
+      }
     }
   }
 
   Future<void> _pushCloud() async {
+    // Serialize commits; a later local edit is compared against the last
+    // acknowledged snapshot after the current request finishes.
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    while (_pendingCloudPush != null) {
+      await _pendingCloudPush;
+    }
+    if (revision != _sessionRevision || uid != cloudUid) return;
+    final task = _pushCloudNow();
+    _pendingCloudPush = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_pendingCloudPush, task)) _pendingCloudPush = null;
+    }
+  }
+
+  Future<void> _pushCloudNow() async {
     if (!_canProcessData) return;
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
+    final revision = _sessionRevision;
+    bool current() =>
+        revision == _sessionRevision &&
+        cloudUid == session.uid &&
+        _canProcessData;
     isCloudSyncing = true;
     cloudSyncError = null;
+    cloudSyncConflict = false;
     notifyListeners();
     try {
-      await repository.replaceUser(
-        session.uid,
+      if (_syncBaseline == null || _syncOwnerUid != session.uid) {
+        final remote = await repository.readUser(session.uid);
+        if (!current()) return;
+        if (remote == null) {
+          throw StateError('Restore the cloud account before syncing.');
+        }
+        final known = InputSyncSnapshot.fromState(remote);
+        // First setup may upload local records, but cannot delete unseen ones.
+        _syncBaseline = InputSyncSnapshot(
+          root: known.root,
+          signals: {},
+          checkIns: {},
+        );
+        _syncOwnerUid = session.uid;
+      }
+      final desired = InputSyncSnapshot.fromState(
         _cloudState(migrationVersion: localMigrationVersion),
       );
+      final patch = InputSyncPatch(_syncBaseline!, desired);
+      await _writeLocal(); // durable retry baseline before any network write
+      if (!current()) return;
+      if (!patch.isEmpty) await repository.applyInputPatch(session.uid, patch);
+      if (!current()) return;
+      _syncBaseline = desired;
+      await _writeLocal();
     } on Object catch (error) {
-      // SharedPreferences remains the authoritative offline cache. A later
-      // successful commit retries the complete user-scoped snapshot.
-      cloudSyncError = error.toString();
+      if (!current()) return;
+      cloudSyncConflict = error is InputSyncConflict;
+      cloudSyncError = cloudSyncConflict
+          ? 'Another device changed the same data. Your edits are saved here. Review sync in Profile.'
+          : 'Saved on this device. Cloud sync is pending; retry in Profile when connected.';
     } finally {
-      isCloudSyncing = false;
-      notifyListeners();
+      if (revision == _sessionRevision && cloudUid == session.uid) {
+        isCloudSyncing = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> retryCloudSync() async {
+    final ensureCurrent = _beginMutation();
+    await _pushCloud();
+    ensureCurrent();
+    if (outcomeConsent || hasPendingOutcomeChanges) {
+      await refreshOutcomes(notify: false);
+      ensureCurrent();
+    }
+    if (cloudSyncError == null && onboardingComplete) {
+      await refreshScores(forceRecalculate: true);
+      ensureCurrent();
+      await refreshForecasts(forceRecalculate: true);
+      ensureCurrent();
+      await refreshGuidance();
+      ensureCurrent();
+      await refreshInsights();
+      ensureCurrent();
+    }
+    notifyListeners();
+  }
+
+  /// Explicit UI-confirmed discard of pending local input edits only.
+  Future<void> useCloudInputs() async {
+    final ensureCurrent = _beginMutation();
+    while (_pendingCloudPush != null) {
+      await _pendingCloudPush;
+      ensureCurrent();
+    }
+    final task = _useCloudInputsNow(ensureCurrent);
+    _pendingCloudPush = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_pendingCloudPush, task)) _pendingCloudPush = null;
+    }
+  }
+
+  Future<void> _useCloudInputsNow(void Function() ensureCurrent) async {
+    final uid = cloudUid;
+    final repository = cloudRepository;
+    if (uid == null || repository == null) return;
+    final original = InputSyncSnapshot.fromState(
+      _cloudState(migrationVersion: localMigrationVersion),
+    );
+    void ensureInputsUnchanged() {
+      ensureCurrent();
+      if (!InputSyncPatch(
+        original,
+        InputSyncSnapshot.fromState(
+          _cloudState(migrationVersion: localMigrationVersion),
+        ),
+      ).isEmpty) {
+        throw StateError(
+          'New data was saved during recovery. Review it and retry.',
+        );
+      }
+    }
+
+    final remote = await repository.readUser(uid);
+    ensureInputsUnchanged();
+    if (remote == null || remote.deletionPending) {
+      throw StateError('Cloud data is unavailable.');
+    }
+    await _discardPersonalizedModel();
+    ensureInputsUnchanged();
+    _syncOwnerUid = uid;
+    _syncBaseline = InputSyncSnapshot.fromState(remote);
+    _applyCloud(remote);
+    cloudSyncError = null;
+    cloudSyncConflict = false;
+    await _writeLocal();
+    ensureCurrent();
+    notifyListeners();
+    if (onboardingComplete) {
+      await refreshScores(forceRecalculate: true);
+      ensureCurrent();
+      await refreshForecasts(forceRecalculate: true);
+      ensureCurrent();
+      await refreshGuidance();
+      ensureCurrent();
+      await refreshInsights();
+      ensureCurrent();
     }
   }
 
@@ -3317,6 +3885,7 @@ class AppController extends ChangeNotifier {
       state: NotificationPlanState.disabled,
     );
     outcomeConsent = state.outcomeConsent;
+    _reconcileOutcomeSync();
     if (!outcomeConsent) _outcomes = [];
     outcomeError = null;
     // Health authorization is device-specific. Cloud state must not turn on
@@ -3336,6 +3905,19 @@ class AppController extends ChangeNotifier {
   }
 
   void _restoreLocal(Map<String, dynamic> json) {
+    final sync = json['inputSync'];
+    if (sync is Map && sync['version'] == 1 && sync['uid'] is String) {
+      try {
+        _syncOwnerUid = sync['uid'] as String;
+        _syncBaseline = InputSyncSnapshot.fromJson(
+          Map<String, dynamic>.from(sync['baseline'] as Map),
+        );
+      } on Object {
+        _syncOwnerUid = null;
+        _syncBaseline = null;
+      }
+    }
+
     _privacyConsent = PrivacyConsent.tryParse(json['privacyConsent']);
     _privacyOwnerUid = json['privacyOwnerUid'] as String?;
     outcomeConsentUpdatedAt = DateTime.tryParse(
@@ -3470,6 +4052,37 @@ class AppController extends ChangeNotifier {
               (left, right) => right.observedAt.compareTo(left.observedAt),
             );
     }
+    _clearOutcomeSync();
+    final outcomeSync = json['outcomeSync'];
+    if (outcomeSync is Map &&
+        outcomeSync['version'] == 1 &&
+        outcomeSync['uid'] is String &&
+        outcomeSync['writes'] is Map) {
+      try {
+        _outcomeSyncOwnerUid = outcomeSync['uid'] as String;
+        _outcomeSyncConsentAt = DateTime.tryParse(
+          outcomeSync['consentAt'] as String? ?? '',
+        );
+        for (final entry in (outcomeSync['writes'] as Map).entries) {
+          final id = entry.key as String;
+          if (id.isEmpty || id.contains('/')) throw const FormatException();
+          final outcome = entry.value == null
+              ? null
+              : OutcomeRecord.fromJson(
+                  (entry.value as Map).cast<String, dynamic>(),
+                );
+          if (outcome != null && outcome.id != id) {
+            throw const FormatException();
+          }
+          _pendingOutcomeWrites[id] = outcome;
+        }
+        // Signed-out caches retain their owner's journal for the next sign-in;
+        // active sessions can never inherit another account's pending records.
+        if (!isSignedOut) _reconcileOutcomeSync();
+      } on Object {
+        _clearOutcomeSync();
+      }
+    }
     final statuses =
         (json['recommendationStatuses'] as Map?)?.cast<String, dynamic>() ??
         const {};
@@ -3497,9 +4110,7 @@ class AppController extends ChangeNotifier {
   }
 
   static bool _sameDay(DateTime left, DateTime right) =>
-      left.year == right.year &&
-      left.month == right.month &&
-      left.day == right.day;
+      sameLocalDay(left, right);
 
   void _generateLocalForecasts(
     List<DateTime> days, {
@@ -3539,15 +4150,13 @@ class AppController extends ChangeNotifier {
         : 23;
     if (points.length != endHour - startHour + 1) return false;
     for (var index = 0; index < points.length; index++) {
-      if (points[index].time != day.add(Duration(hours: startHour + index))) {
+      if (points[index].time !=
+          DateTime(day.year, day.month, day.day, startHour + index)) {
         return false;
       }
     }
     return true;
   }
 
-  static String _dayKey(DateTime day) =>
-      '${day.year.toString().padLeft(4, '0')}-'
-      '${day.month.toString().padLeft(2, '0')}-'
-      '${day.day.toString().padLeft(2, '0')}';
+  static String _dayKey(DateTime day) => localDayKey(day);
 }

@@ -35,17 +35,30 @@ class SectionHeader extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-        ),
-        if (action != null) TextButton(onPressed: onTap, child: Text(action!)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final titleWidget = Semantics(
+      header: true,
+      child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+    );
+    final actionWidget = action == null
+        ? null
+        : TextButton(onPressed: onTap, child: Text(action!));
+    final large = MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
+      child: large
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [titleWidget, ?actionWidget],
+            )
+          : Row(
+              children: [
+                Expanded(child: titleWidget),
+                ?actionWidget,
+              ],
+            ),
+    );
+  }
 }
 
 class MetricIcon extends StatelessWidget {
@@ -83,41 +96,60 @@ class ScoreRing extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        CustomPaint(
-          size: Size.square(size),
-          painter: _RingPainter(value / 100),
-        ),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$value',
-              style: TextStyle(
-                fontSize: size * .28,
-                fontWeight: FontWeight.w900,
-                height: 1,
-              ),
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
+    return Semantics(
+      label: '$label score',
+      value: '$value out of 100',
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final extent = math.min(size * scale, constraints.maxWidth);
+          return SizedBox.square(
+            dimension: extent,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: Size.square(extent),
+                  painter: _RingPainter(value / 100),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$value',
+                          style: TextStyle(
+                            fontSize: size * .28,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: size * .075,
+                            color: TonyoColors.muted,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 3),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: size * .075,
-                color: TonyoColors.muted,
-                fontWeight: FontWeight.w800,
-                letterSpacing: .5,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _RingPainter extends CustomPainter {
@@ -289,6 +321,7 @@ class ForecastPainter extends CustomPainter {
 
 IconData iconForSignal(SignalType type) => switch (type) {
   SignalType.sleep => Icons.bedtime_rounded,
+  SignalType.nap => Icons.airline_seat_individual_suite_rounded,
   SignalType.bedtime => Icons.schedule_rounded,
   SignalType.hydration => Icons.water_drop_rounded,
   SignalType.study => Icons.menu_book_rounded,
@@ -308,6 +341,7 @@ IconData iconForSignal(SignalType type) => switch (type) {
 
 Color colorForSignal(SignalType type) => switch (type) {
   SignalType.sleep || SignalType.bedtime => TonyoColors.blue,
+  SignalType.nap => TonyoColors.violet,
   SignalType.hydration || SignalType.hrv => TonyoColors.mint,
   SignalType.study => TonyoColors.amber,
   SignalType.exercise ||
@@ -323,11 +357,13 @@ Color colorForSignal(SignalType type) => switch (type) {
 };
 
 String formatHour(DateTime value) {
+  value = value.toLocal();
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
   return '$hour:${value.minute.toString().padLeft(2, '0')} ${value.hour >= 12 ? 'PM' : 'AM'}';
 }
 
 String formatDate(DateTime value) {
+  value = value.toLocal();
   const months = [
     'Jan',
     'Feb',

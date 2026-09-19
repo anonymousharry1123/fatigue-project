@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'local_day.dart';
 import 'notification_service.dart';
 
 enum NotificationPlanState {
@@ -65,11 +66,7 @@ abstract final class NotificationLogic {
         .map((item) => item.id)
         .where((id) => id.isNotEmpty)
         .toList(growable: false);
-    final day = DateTime(
-      points.first.time.year,
-      points.first.time.month,
-      points.first.time.day,
-    );
+    final day = localDay(points.first.time);
     final notifications = <GuidanceNotification>[];
     final threshold = now.add(minimumLeadTime);
 

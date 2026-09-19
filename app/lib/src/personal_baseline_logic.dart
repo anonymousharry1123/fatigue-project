@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'models.dart';
 import 'sleep_sync_logic.dart';
 
@@ -11,8 +12,8 @@ abstract final class PersonalBaselineLogic {
     required Iterable<SignalReading> signals,
     required DateTime asOf,
   }) {
-    final cutoff = DateTime(asOf.year, asOf.month, asOf.day);
-    final start = cutoff.subtract(const Duration(days: windowDays));
+    final cutoff = localDay(asOf);
+    final start = localDay(cutoff, -windowDays);
     final historical = signals
         .where(
           (item) =>
@@ -51,8 +52,8 @@ abstract final class PersonalBaselineLogic {
     required Iterable<SignalReading> signals,
     required DateTime day,
   }) {
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(day);
+    final end = localDay(start, 1);
     final readings = signals
         .where(
           (item) =>
@@ -157,8 +158,5 @@ abstract final class PersonalBaselineLogic {
         : (values[middle - 1] + values[middle]) / 2;
   }
 
-  static String _dayKey(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-'
-      '${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')}';
+  static String _dayKey(DateTime value) => localDayKey(value);
 }

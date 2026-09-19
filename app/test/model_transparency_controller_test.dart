@@ -138,7 +138,7 @@ void main() {
         expect(state.metadataFetchedAt, _now);
         expect(state.accountUpdatedAt, DateTime.utc(2026, 8, 3));
         expect(state.modelStatusDetail, contains('not its weights'));
-        expect(state.energyModelVersion, 'energy-rules-v1');
+        expect(state.energyModelVersion, FatigueEngine.energyModelVersion);
       }
       expect(repository.userReads, 1);
       expect(repository.replaceUserCallCount, 0);
@@ -316,7 +316,9 @@ ScoreSnapshot _oldPrivateScore() => ScoreSnapshot(
   freshness: .9,
   cognitiveFreshness: .9,
   calculatedAt: _now,
+  day: DateTime(_now.toLocal().year, _now.toLocal().month, _now.toLocal().day),
   energyModelVersion: FatigueEngine.energyModelVersion,
+  cognitiveModelVersion: FatigueEngine.cognitiveModelVersion,
   personalBaselines: PersonalBaselines(
     generatedAt: _now,
     windowDays: 42,

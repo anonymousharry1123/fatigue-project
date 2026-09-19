@@ -1,7 +1,8 @@
 import 'dart:convert';
 
-import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
+
+import 'timezone_database.dart';
 
 const mlPrepVersion = 1;
 
@@ -18,7 +19,7 @@ class PrepWindow {
   PrepWindow._(this.start, this.end, this.timezone);
 
   factory PrepWindow.endingOn(DateTime endDay, {required String timezone}) {
-    _initializeZones();
+    initializeTimezoneDatabase();
     timezone = timezone == 'UTC' ? 'Etc/UTC' : timezone;
     final location = tz.getLocation(timezone);
     final first = DateTime.utc(endDay.year, endDay.month, endDay.day - 29);
@@ -47,7 +48,7 @@ class PrepWindow {
   }
 
   factory PrepWindow.fromJson(Map<String, dynamic> json) {
-    _initializeZones();
+    initializeTimezoneDatabase();
     final timezone = json['timezone'] as String;
     final end = DateTime.parse(json['end'] as String).toUtc();
     final last = tz.TZDateTime.from(
@@ -64,13 +65,6 @@ class PrepWindow {
       );
     }
     return window;
-  }
-
-  static bool _zonesInitialized = false;
-  static void _initializeZones() {
-    if (_zonesInitialized) return;
-    tzdata.initializeTimeZones();
-    _zonesInitialized = true;
   }
 
   final DateTime start;

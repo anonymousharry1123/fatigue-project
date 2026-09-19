@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'local_day.dart';
 
 /// Builds Version 0.29's grounded, morning-to-evening Coach timeline.
 ///
@@ -18,10 +19,12 @@ class DailyPlanLogic {
     final byType = {for (final window in windows) window.type: window};
     if (!ForecastWindowType.values.every(byType.containsKey)) return const [];
 
-    final targetDay = DateTime(day.year, day.month, day.day);
+    final targetDay = localDay(day);
     final wakeAt = _atDecimalHour(targetDay, profile.wakeHour);
     var bedAt = _atDecimalHour(targetDay, profile.bedHour);
-    if (!bedAt.isAfter(wakeAt)) bedAt = bedAt.add(const Duration(days: 1));
+    if (!bedAt.isAfter(wakeAt)) {
+      bedAt = _atDecimalHour(localDay(targetDay, 1), profile.bedHour);
+    }
 
     final peak = byType[ForecastWindowType.peak]!;
     final crash = byType[ForecastWindowType.crash]!;
@@ -286,7 +289,7 @@ class DailyPlanLogic {
   }
 
   static DateTime _atDecimalHour(DateTime day, double hour) =>
-      day.add(Duration(minutes: ((hour % 24) * 60).round()));
+      DateTime(day.year, day.month, day.day, 0, ((hour % 24) * 60).round());
 
   static DateTime _clamp(DateTime value, DateTime minimum, DateTime maximum) {
     if (maximum.isBefore(minimum)) return minimum;

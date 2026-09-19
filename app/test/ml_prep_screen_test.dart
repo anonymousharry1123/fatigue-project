@@ -2,6 +2,7 @@ import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
+import 'package:app/src/device_timezone_service.dart';
 import 'package:app/src/ml_prep_models.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screens/ml_prep_screen.dart';
@@ -55,6 +56,53 @@ void main() {
           home: MlPrepScreen(controller: controller),
         ),
       );
+
+  testWidgets('new window defaults to the detected device region', (
+    tester,
+  ) async {
+    final deviceTimezone = DeviceTimezoneService(
+      readIdentifier: () async => 'Asia/Tokyo',
+    );
+    await deviceTimezone.refresh();
+    await open(
+      tester,
+      AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        deviceTimezoneService: deviceTimezone,
+      ),
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('prep-timezone')))
+          .controller
+          ?.text,
+      'Asia/Tokyo',
+    );
+  });
+
+  testWidgets('missing device region asks for an explicit historical region', (
+    tester,
+  ) async {
+    final deviceTimezone = DeviceTimezoneService(
+      readIdentifier: () async => null,
+    );
+    await deviceTimezone.refresh();
+    await open(
+      tester,
+      AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        deviceTimezoneService: deviceTimezone,
+      ),
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('prep-timezone')))
+          .controller
+          ?.text,
+      isEmpty,
+    );
+    expect(find.textContaining('Device region unavailable'), findsOneWidget);
+  });
 
   testWidgets(
     'unconfigured build explains Firebase blocker and disables reads',
@@ -110,6 +158,9 @@ void main() {
     await open(tester, controller);
     expect(source.metadataReads, 0);
     expect(source.collectionQueries, 0);
+    // The test host has no native timezone bridge. Choose the historical
+    // region explicitly instead of relying on a hard-coded US default.
+    await tester.enterText(find.byKey(const Key('prep-timezone')), 'UTC');
 
     await tester.ensureVisible(find.byKey(const Key('prepare-model-snapshot')));
     await tester.tap(find.byKey(const Key('prepare-model-snapshot')));
@@ -255,8 +306,13 @@ void main() {
       ),
     );
     final source = _PrepSource(auth);
+    final deviceTimezone = DeviceTimezoneService(
+      readIdentifier: () async => 'Asia/Tokyo',
+    );
+    await deviceTimezone.refresh();
     final controller = AppController(
       initialPrivacyConsent: testAdultPrivacyConsent,
+      deviceTimezoneService: deviceTimezone,
       accountAuth: auth,
       cloudRepository: MemoryCloudRepository(signedInUid: 'prep-user'),
       prepDataSource: source,

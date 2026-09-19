@@ -128,7 +128,7 @@ abstract final class DailyHistoryLogic {
       final isImportedSleep =
           groupId?.startsWith(SleepSyncLogic.importedGroupPrefix) ?? false;
       if (isImportedSleep) {
-        if (signal.type == SignalType.sleep) {
+        if (signal.type == SignalType.sleep || signal.type == SignalType.nap) {
           add(DailyHistoryItem.signal(signal));
         }
         continue;
@@ -152,8 +152,10 @@ abstract final class DailyHistoryLogic {
     return days;
   }
 
-  static DateTime dayFor(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
+  static DateTime dayFor(DateTime value) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
 
   static Set<DailyCompletionCategory> _completedCategories(
     List<DailyHistoryItem> items,
@@ -164,7 +166,7 @@ abstract final class DailyHistoryLogic {
         case DailyHistoryItemKind.activity:
           completed.add(DailyCompletionCategory.activity);
         case DailyHistoryItemKind.sleep:
-          completed.add(DailyCompletionCategory.sleep);
+          if (!item.sleep!.isNap) completed.add(DailyCompletionCategory.sleep);
         case DailyHistoryItemKind.checkIn:
           completed.add(DailyCompletionCategory.checkIn);
         case DailyHistoryItemKind.signal:

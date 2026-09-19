@@ -1,7 +1,7 @@
 # Tonyo Product Roadmap
 
-Last updated: September 7, 2026
-Current implementation: **Version 0.34 — Privacy and Youth Safety safeguards**
+Last updated: September 19, 2026
+Current implementation: **Version 0.35 — Production polish; release QA pending**
 Remaining Version 0.32 release QA: iPhone performance/heap profiling and production rules deployment/IAM verification. Executable rules emulator validation passed during 0.34.
 
 Tonyo is developed through small, runnable releases. Fixture data is used first so each screen can be demonstrated before manual inputs, device integrations, and personalized predictions are introduced.
@@ -496,11 +496,37 @@ trusted backend supplies reviewed verification. Production rule deployment/IAM,
 guardian withdrawal/correction, retention/provider-backup policy and real-iPhone
 lifecycle QA remain required. No live-account data or consent was modified.
 
+### Version 0.34.1 — Local time and separate naps ✅
+
+- Detect the device IANA region on iOS, Android, macOS and web without location
+  permission; show it in Profile and use it as a new model-preparation default.
+  Preserve explicitly saved historical preparation windows.
+- Refresh derived views on foreground region, offset or day changes; use local
+  calendar boundaries across DST and UTC instants for new cached timestamps.
+- Explicit Main sleep / Nap entry, editing and history; separate nap totals.
+  Main sleep averages select the longest eligible main sleep per local wake
+  date. Naps do not affect bedtime consistency or main-sleep baselines.
+- Reconcile known Apple Health main sleep and short secondary sessions,
+  preserving manual precedence and correcting overlapping imported naps.
+- Bound nonstacking nap recovery to +3 Energy / +2 Cognitive, delay and fade
+  the contribution, and keep confidence/core weights unchanged. Version the
+  rules and reject incompatible cached scores/local residual artifacts.
+- Verified no score change for the 3,000-person no-nap synthetic cohort.
+  Real outcome validation and the existing device/release gates remain open.
+
 ### Version 0.35 — Production Polish
 
-- Complete accessibility and dynamic-type improvements
-- Harden offline, error, interrupted-test, and Firestore sync conflict handling
-- Complete performance, security, real-device, and App Store readiness testing
+- [x] Improve narrow-screen and large-text layouts across primary screens and
+  entry forms; add score/chart semantics and labeled controls.
+- [x] Restart interrupted reaction tests safely and preserve failed saves for
+  retry with stable record identities.
+- [x] Replace routine collection replacement with optimistic per-record edits;
+  preserve offline input changes across restart and expose conflict recovery.
+- [ ] Complete physical-device screen-reader, performance/heap, background and
+  two-device Firestore checks, production rules/IAM verification, and App Store
+  readiness. These are release gates, not established by local widget tests.
+
+Implementation and verification: [PRODUCTION_POLISH.md](PRODUCTION_POLISH.md).
 
 ## Stable Data Interfaces
 

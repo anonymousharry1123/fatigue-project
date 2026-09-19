@@ -24,6 +24,8 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final _screenTime = TextEditingController();
   String? _editingId;
   DateTime? _editingTimestamp;
+  String? _pendingCreateId;
+  DateTime? _pendingCreateTimestamp;
   bool _saving = false;
 
   @override
@@ -74,6 +76,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                   children: [
                     _NumberField(
                       key: const Key('hydration-field'),
+                      enabled: !_saving,
                       controller: _hydration,
                       type: SignalType.hydration,
                       label: 'Hydration',
@@ -84,6 +87,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                     const SizedBox(height: 12),
                     _NumberField(
                       key: const Key('study-field'),
+                      enabled: !_saving,
                       controller: _study,
                       type: SignalType.study,
                       label: 'Study time',
@@ -94,6 +98,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                     const SizedBox(height: 12),
                     _NumberField(
                       key: const Key('exercise-field'),
+                      enabled: !_saving,
                       controller: _exercise,
                       type: SignalType.exercise,
                       label: 'Exercise load',
@@ -104,6 +109,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                     const SizedBox(height: 12),
                     _NumberField(
                       key: const Key('screen-time-field'),
+                      enabled: !_saving,
                       controller: _screenTime,
                       type: SignalType.screenTime,
                       label: 'Screen time',
@@ -112,29 +118,26 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       color: TonyoColors.violet,
                     ),
                     const SizedBox(height: 18),
-                    Row(
+                    OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 10,
+                      overflowSpacing: 10,
                       children: [
                         if (_editingId != null) ...[
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _saving ? null : _cancelEdit,
-                              child: const Text('Cancel'),
-                            ),
+                          OutlinedButton(
+                            onPressed: _saving ? null : _cancelEdit,
+                            child: const Text('Cancel'),
                           ),
-                          const SizedBox(width: 10),
                         ],
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: const Icon(Icons.check_rounded),
-                            label: Text(
-                              _saving
-                                  ? 'Saving…'
-                                  : _editingId == null
-                                  ? 'Save activity'
-                                  : 'Update activity',
-                            ),
+                        FilledButton.icon(
+                          onPressed: _saving ? null : _save,
+                          icon: const Icon(Icons.check_rounded),
+                          label: Text(
+                            _saving
+                                ? 'Saving…'
+                                : _editingId == null
+                                ? 'Save activity'
+                                : 'Update activity',
                           ),
                         ),
                       ],
@@ -174,9 +177,8 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _ActivityHistoryCard(
                         log: log,
-                        onEdit: () => _edit(log),
-                        onDelete: () =>
-                            AppScope.of(context).deleteActivityLog(log.id),
+                        onEdit: _saving ? null : () => _edit(log),
+                        onDelete: _saving ? null : () => _delete(log),
                       ),
                     ),
                   ),
@@ -187,6 +189,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     final hydrationValue = _nullableParsed(_hydration);
     final studyValue = _nullableParsed(_study);
@@ -207,31 +210,71 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       );
       return;
     }
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _saving = true);
+    final controller = AppScope.of(context);
+    if (_editingId == null) {
+      _pendingCreateTimestamp ??= DateTime.now();
+      _pendingCreateId ??=
+          'activity-${_pendingCreateTimestamp!.microsecondsSinceEpoch}';
+    }
     try {
-      await AppScope.of(context).saveActivityLog(
-        id: _editingId,
+      await controller.saveActivityLog(
+        id: _editingId ?? _pendingCreateId,
         hydrationLiters: hydrationValue,
         studyHours: studyValue,
         exerciseHours: exerciseValue,
         screenTimeHours: screenTimeValue,
-        timestamp: _editingTimestamp,
+        timestamp: _editingTimestamp ?? _pendingCreateTimestamp,
       );
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            controller.cloudSyncError == null
+                ? 'Activity log saved.'
+                : 'Activity saved on this device. Cloud sync is pending.',
+          ),
+        ),
+      );
       if (widget.initialLog != null) {
         Navigator.of(context).pop();
         return;
       }
       _clearForm();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Activity log saved.')));
     } on ArgumentError catch (error) {
       if (!mounted) return;
-      setState(() => _saving = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('$error')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save activity. Your entries are still here; please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _delete(ActivityLogEntry log) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await AppScope.of(context).deleteActivityLog(log.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete activity. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -240,6 +283,8 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   }
 
   void _loadLog(ActivityLogEntry log) {
+    _pendingCreateId = null;
+    _pendingCreateTimestamp = null;
     _editingId = log.id;
     _editingTimestamp = log.timestamp;
     _hydration.text = _number(log.hydrationLiters ?? 0);
@@ -260,6 +305,8 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     setState(() {
       _editingId = null;
       _editingTimestamp = null;
+      _pendingCreateId = null;
+      _pendingCreateTimestamp = null;
       _saving = false;
       _hydration.clear();
       _study.clear();
@@ -286,6 +333,7 @@ class _NumberField extends StatelessWidget {
     required this.suffix,
     required this.icon,
     required this.color,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -294,27 +342,60 @@ class _NumberField extends StatelessWidget {
   final String suffix;
   final IconData icon;
   final Color color;
+  final bool enabled;
 
   @override
-  Widget build(BuildContext context) => TextFormField(
-    controller: controller,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    inputFormatters: [
-      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Wrap(
+                spacing: 6,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    '($suffix)',
+                    style: const TextStyle(color: TonyoColors.muted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+      Semantics(
+        label: '$label in $suffix',
+        child: TextFormField(
+          enabled: enabled,
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: type == SignalType.screenTime
+              ? TextInputAction.done
+              : TextInputAction.next,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
+          decoration: InputDecoration(hintText: '0 if blank', errorMaxLines: 4),
+          validator: (raw) {
+            final text = raw?.trim() ?? '';
+            if (text.isEmpty) return null;
+            final value = double.tryParse(text);
+            if (value == null) return 'Enter a valid number.';
+            return ActivityLogEntry.validationMessage(type, value);
+          },
+        ),
+      ),
     ],
-    decoration: InputDecoration(
-      labelText: label,
-      hintText: '0 if blank',
-      suffixText: suffix,
-      prefixIcon: Icon(icon, color: color),
-    ),
-    validator: (raw) {
-      final text = raw?.trim() ?? '';
-      if (text.isEmpty) return null;
-      final value = double.tryParse(text);
-      if (value == null) return 'Enter a valid number.';
-      return ActivityLogEntry.validationMessage(type, value);
-    },
   );
 }
 
@@ -333,15 +414,15 @@ class _CategoryWeekCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Icon(_icon(series.type), color: color, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  ActivityLogLogic.categoryTitle(series.type),
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
+              Text(
+                ActivityLogLogic.categoryTitle(series.type),
+                style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               Text(
                 peakLabel,
@@ -354,64 +435,76 @@ class _CategoryWeekCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          SizedBox(
-            height: 124,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: series.values.asMap().entries.map((entry) {
-                final max = series.values.fold<double>(
-                  0,
-                  (peak, value) => value > peak ? value : peak,
-                );
-                final height = max <= 0
-                    ? 10.0
-                    : (10 + (entry.value / max) * 78).clamp(10, 88).toDouble();
-                final isPeak =
-                    series.hasData && entry.key == series.peakDayIndex;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          height: 14,
-                          child: entry.value > 0
-                              ? Text(
-                                  _format(entry.value),
-                                  style: TextStyle(
-                                    color: isPeak ? color : TonyoColors.muted,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: height,
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(6),
+          Semantics(
+            label:
+                '${ActivityLogLogic.categoryTitle(series.type)} over the last seven days. ${List.generate(series.days.length, (index) => '${_weekday(series.days[index])}: ${_format(series.values[index])} $unit').join('. ')}',
+            child: ExcludeSemantics(
+              child: SizedBox(
+                height: 124 + (MediaQuery.textScalerOf(context).scale(14) - 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: series.values.asMap().entries.map((entry) {
+                    final max = series.values.fold<double>(
+                      0,
+                      (peak, value) => value > peak ? value : peak,
+                    );
+                    final height = max <= 0
+                        ? 10.0
+                        : (10 + (entry.value / max) * 78)
+                              .clamp(10, 88)
+                              .toDouble();
+                    final isPeak =
+                        series.hasData && entry.key == series.peakDayIndex;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: MediaQuery.textScalerOf(
+                                context,
+                              ).scale(14),
+                              child: entry.value > 0
+                                  ? Text(
+                                      _format(entry.value),
+                                      style: TextStyle(
+                                        color: isPeak
+                                            ? color
+                                            : TonyoColors.muted,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: isPeak
-                                  ? [color, color.withValues(alpha: .65)]
-                                  : [
-                                      color.withValues(alpha: .35),
-                                      color.withValues(alpha: .18),
-                                    ],
+                            const SizedBox(height: 4),
+                            Container(
+                              height: height,
+                              decoration: BoxDecoration(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(6),
+                                ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: isPeak
+                                      ? [color, color.withValues(alpha: .65)]
+                                      : [
+                                          color.withValues(alpha: .35),
+                                          color.withValues(alpha: .18),
+                                        ],
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -471,8 +564,8 @@ class _ActivityHistoryCard extends StatelessWidget {
   });
 
   final ActivityLogEntry log;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) => TonyoCard(
@@ -481,11 +574,12 @@ class _ActivityHistoryCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              formatDate(log.timestamp),
-              style: const TextStyle(fontWeight: FontWeight.w900),
+            Expanded(
+              child: Text(
+                formatDate(log.timestamp),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
-            const Spacer(),
             IconButton(
               tooltip: 'Edit activity',
               onPressed: onEdit,
@@ -536,9 +630,11 @@ class _ActivityHistoryCard extends StatelessWidget {
     children: [
       Icon(icon, size: 15, color: TonyoColors.muted),
       const SizedBox(width: 4),
-      Text(
-        text,
-        style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+      Flexible(
+        child: Text(
+          text,
+          style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+        ),
       ),
     ],
   );

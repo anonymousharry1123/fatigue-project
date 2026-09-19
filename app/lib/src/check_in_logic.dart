@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'models.dart';
 
 /// Pure helpers for Version 0.8 mood / stress check-ins (1–10 scale).
@@ -13,7 +14,7 @@ abstract final class CheckInLogic {
 
   /// Morning before 14:00 local time; evening at/after 14:00.
   static CheckInPeriod periodFor([DateTime? now]) {
-    final hour = (now ?? DateTime.now()).hour;
+    final hour = (now ?? DateTime.now()).toLocal().hour;
     return hour < 14 ? CheckInPeriod.morning : CheckInPeriod.evening;
   }
 
@@ -39,14 +40,7 @@ abstract final class CheckInLogic {
     List<DailyCheckIn> checkIns,
     DateTime day,
   ) {
-    return checkIns
-        .where(
-          (item) =>
-              item.timestamp.year == day.year &&
-              item.timestamp.month == day.month &&
-              item.timestamp.day == day.day,
-        )
-        .toList()
+    return checkIns.where((item) => sameLocalDay(item.timestamp, day)).toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 

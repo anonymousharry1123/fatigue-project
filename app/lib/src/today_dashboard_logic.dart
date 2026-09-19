@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'activity_sync_logic.dart';
 import 'models.dart';
 import 'sleep_sync_logic.dart';
@@ -59,8 +60,8 @@ abstract final class TodayDashboardLogic {
     required DateTime day,
     DateTime? now,
   }) {
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(day);
+    final end = localDay(start, 1);
     final clock = now ?? DateTime.now();
     final cutoff = !clock.isBefore(start) && clock.isBefore(end) ? clock : end;
     final readings = signals

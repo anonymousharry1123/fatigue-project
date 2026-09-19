@@ -10,6 +10,7 @@ import UserNotifications
   private let healthStore = HKHealthStore()
   private var healthChannel: FlutterMethodChannel?
   private var screenTimeChannel: FlutterMethodChannel?
+  private var timezoneChannel: FlutterMethodChannel?
   private var healthObserverQueries: [HKObserverQuery] = []
 
   override func application(
@@ -39,6 +40,19 @@ import UserNotifications
       self?.handleScreenTimeCall(call, result: result)
     }
     self.screenTimeChannel = screenTimeChannel
+
+    let timezoneChannel = FlutterMethodChannel(
+      name: "tonyo/timezone",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    timezoneChannel.setMethodCallHandler { call, result in
+      guard call.method == "getTimezone" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(TimeZone.autoupdatingCurrent.identifier)
+    }
+    self.timezoneChannel = timezoneChannel
   }
 
   private func handleScreenTimeCall(

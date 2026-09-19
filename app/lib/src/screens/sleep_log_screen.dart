@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../models.dart';
+import '../sleep_sync_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
@@ -18,7 +19,9 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   late DateTime _bedtime;
   late DateTime _wakeTime;
   double _quality = 3;
+  SleepKind _kind = SleepKind.mainSleep;
   String? _editingId;
+  String? _pendingCreateId;
   bool _saving = false;
 
   @override
@@ -35,7 +38,21 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) > 21;
     final logs = controller.sleepLogs;
+    final mainSleepLogs = logs.where((log) => !log.isNap).toList();
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day - 6);
+    final recentNaps = SleepSyncLogic.preferredNapReadings(controller.signals)
+        .where(
+          (reading) =>
+              !reading.timestamp.isBefore(weekStart) &&
+              !reading.timestamp.isAfter(now),
+        );
+    final napMinutes = recentNaps.fold<int>(
+      0,
+      (total, reading) => total + (reading.value * 60).round(),
+    );
     final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: _bedtime,
       wakeTime: _wakeTime,
@@ -59,44 +76,96 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Log sleep timing and quality to build a more useful nightly pattern.',
+              'Keep main sleep and naps separate to preserve your nightly average.',
               style: TextStyle(color: TonyoColors.muted),
             ),
             const SizedBox(height: 18),
             TonyoCard(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TimeButton(
-                          key: const Key('bedtime-button'),
-                          label: 'Bedtime',
-                          time: _bedtime,
-                          icon: Icons.bedtime_rounded,
-                          onTap: () => _pickTime(isBedtime: true),
-                        ),
+                  SegmentedButton<SleepKind>(
+                    key: const Key('sleep-kind-selector'),
+                    direction: largeText ? Axis.vertical : Axis.horizontal,
+                    segments: const [
+                      ButtonSegment(
+                        value: SleepKind.mainSleep,
+                        label: Text('Main sleep'),
+                        icon: Icon(Icons.bedtime_rounded),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _TimeButton(
-                          key: const Key('wake-time-button'),
-                          label: 'Wake time',
-                          time: previewWake,
-                          icon: Icons.wb_sunny_rounded,
-                          onTap: () => _pickTime(isBedtime: false),
-                        ),
+                      ButtonSegment(
+                        value: SleepKind.nap,
+                        label: Text('Nap'),
+                        icon: Icon(Icons.airline_seat_individual_suite_rounded),
                       ),
                     ],
+                    selected: {_kind},
+                    onSelectionChanged: _saving
+                        ? null
+                        : (selection) => _selectKind(selection.single),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _kind == SleepKind.nap
+                        ? 'Naps add daytime rest without changing your main-sleep average or bedtime consistency.'
+                        : 'Your longest planned sleep, including daytime sleep for shift schedules.',
+                    style: const TextStyle(
+                      color: TonyoColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = largeText
+                          ? constraints.maxWidth
+                          : (constraints.maxWidth - 10) / 2;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          SizedBox(
+                            width: width,
+                            child: _TimeButton(
+                              key: const Key('bedtime-button'),
+                              label: _kind == SleepKind.nap
+                                  ? 'Nap start'
+                                  : 'Bedtime',
+                              time: _bedtime,
+                              icon: Icons.bedtime_rounded,
+                              onTap: _saving
+                                  ? null
+                                  : () => _pickTime(isBedtime: true),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _TimeButton(
+                              key: const Key('wake-time-button'),
+                              label: _kind == SleepKind.nap
+                                  ? 'Nap end'
+                                  : 'Wake time',
+                              time: previewWake,
+                              icon: Icons.wb_sunny_rounded,
+                              onTap: _saving
+                                  ? null
+                                  : () => _pickTime(isBedtime: false),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 18),
                   Row(
                     children: [
-                      const Text(
-                        'Sleep quality',
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                      const Expanded(
+                        child: Text(
+                          'Sleep quality',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Text(
                         '${_quality.round()} / 5',
                         style: const TextStyle(
@@ -106,14 +175,23 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       ),
                     ],
                   ),
-                  Slider(
-                    key: const Key('sleep-quality-slider'),
-                    value: _quality,
-                    min: 1,
-                    max: 5,
-                    divisions: 4,
-                    activeColor: TonyoColors.blue,
-                    onChanged: (value) => setState(() => _quality = value),
+                  MergeSemantics(
+                    child: Semantics(
+                      label: 'Sleep quality',
+                      child: Slider(
+                        key: const Key('sleep-quality-slider'),
+                        value: _quality,
+                        min: 1,
+                        max: 5,
+                        divisions: 4,
+                        activeColor: TonyoColors.blue,
+                        semanticFormatterCallback: (value) =>
+                            '${value.round()} out of 5',
+                        onChanged: _saving
+                            ? null
+                            : (value) => setState(() => _quality = value),
+                      ),
+                    ),
                   ),
                   Row(
                     children: [
@@ -153,8 +231,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                             _saving
                                 ? 'Saving…'
                                 : _editingId == null
-                                ? 'Save sleep'
-                                : 'Update sleep',
+                                ? (_kind == SleepKind.nap
+                                      ? 'Save nap'
+                                      : 'Save sleep')
+                                : (_kind == SleepKind.nap
+                                      ? 'Update nap'
+                                      : 'Update sleep'),
                           ),
                         ),
                       ),
@@ -177,8 +259,8 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          logs.length < 2
-                              ? 'Add 2 nights to calculate'
+                          mainSleepLogs.length < 2
+                              ? 'Add 2 main sleeps to calculate'
                               : '±${controller.bedtimeConsistencyMinutes.round()} min',
                           key: const Key('bedtime-consistency'),
                           style: const TextStyle(
@@ -187,7 +269,38 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                           ),
                         ),
                         const Text(
-                          'Average bedtime variation across your 7 most recent manual entries.',
+                          'Average start-time variation across your 7 most recent main sleeps. Naps are excluded.',
+                          style: TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SectionHeader('Naps · last 7 days'),
+            TonyoCard(
+              key: const Key('nap-summary'),
+              child: Row(
+                children: [
+                  const MetricIcon(
+                    icon: Icons.airline_seat_individual_suite_rounded,
+                    color: TonyoColors.violet,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${recentNaps.length} ${recentNaps.length == 1 ? 'nap' : 'naps'} · ${_durationLabel(Duration(minutes: napMinutes))} total',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const Text(
+                          'Tracked separately from main sleep.',
                           style: TextStyle(
                             color: TonyoColors.muted,
                             fontSize: 11,
@@ -203,7 +316,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
             if (logs.isEmpty)
               const TonyoCard(
                 child: Text(
-                  'No manual sleep entries yet. Saved nights will appear here.',
+                  'No sleep entries yet. Main sleep and naps will appear here.',
                   style: TextStyle(color: TonyoColors.muted),
                 ),
               )
@@ -215,9 +328,8 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _SleepHistoryCard(
                         log: log,
-                        onEdit: () => _edit(log),
-                        onDelete: () =>
-                            AppScope.of(context).deleteSleepLog(log.id),
+                        onEdit: _saving ? null : () => _edit(log),
+                        onDelete: _saving ? null : () => _delete(log),
                       ),
                     ),
                   ),
@@ -233,7 +345,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       context: context,
       initialTime: TimeOfDay.fromDateTime(current),
     );
-    if (picked == null) return;
+    if (picked == null || !mounted || _saving) return;
     setState(() {
       final updated = DateTime(
         current.year,
@@ -254,6 +366,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: _bedtime,
       wakeTime: _wakeTime,
@@ -264,6 +377,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       bedtime: start,
       wakeTime: end,
       quality: _quality,
+      kind: _kind,
     );
     if (validation != null) {
       ScaffoldMessenger.of(
@@ -271,22 +385,67 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       ).showSnackBar(SnackBar(content: Text(validation)));
       return;
     }
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _saving = true);
-    await AppScope.of(context).addSleep(
-      id: _editingId,
-      bedtime: start,
-      wakeTime: end,
-      quality: _quality,
-    );
-    if (!mounted) return;
-    if (widget.initialLog != null) {
-      Navigator.of(context).pop();
-      return;
+    final controller = AppScope.of(context);
+    final id =
+        _editingId ??
+        (_pendingCreateId ??= 'sleep-${DateTime.now().microsecondsSinceEpoch}');
+    final savedNap = _kind == SleepKind.nap;
+    try {
+      await controller.addSleep(
+        id: id,
+        bedtime: start,
+        wakeTime: end,
+        quality: _quality,
+        kind: _kind,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            controller.cloudSyncError != null
+                ? '${savedNap ? 'Nap' : 'Sleep'} saved on this device. Cloud sync is pending.'
+                : savedNap
+                ? 'Nap saved.'
+                : 'Sleep log saved.',
+          ),
+        ),
+      );
+      if (widget.initialLog != null) {
+        Navigator.of(context).pop();
+        return;
+      }
+      _clearForm();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save sleep. Your times and quality rating are still here; please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    _clearForm();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Sleep log saved.')));
+  }
+
+  Future<void> _delete(SleepLogEntry log) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await AppScope.of(context).deleteSleepLog(log.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete sleep. Please try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _edit(SleepLogEntry log) {
@@ -294,10 +453,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   }
 
   void _loadLog(SleepLogEntry log) {
+    _pendingCreateId = null;
     _editingId = log.id;
-    _bedtime = log.bedtime;
-    _wakeTime = log.wakeTime;
+    _bedtime = log.bedtime.toLocal();
+    _wakeTime = log.wakeTime.toLocal();
     _quality = log.quality;
+    _kind = log.kind;
   }
 
   void _cancelEdit() {
@@ -311,16 +472,30 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   void _clearForm() {
     setState(() {
       _editingId = null;
+      _pendingCreateId = null;
       _saving = false;
       _resetTimes();
       _quality = 3;
     });
   }
 
+  void _selectKind(SleepKind kind) {
+    setState(() {
+      _kind = kind;
+      // Preserve saved times when correcting an existing entry's kind.
+      if (_editingId == null) _resetTimes();
+    });
+  }
+
   void _resetTimes() {
     final now = DateTime.now();
-    _bedtime = DateTime(now.year, now.month, now.day - 1, 23);
-    _wakeTime = DateTime(now.year, now.month, now.day, 7);
+    if (_kind == SleepKind.nap) {
+      _wakeTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+      _bedtime = _wakeTime.subtract(const Duration(minutes: 30));
+    } else {
+      _bedtime = DateTime(now.year, now.month, now.day - 1, 23);
+      _wakeTime = DateTime(now.year, now.month, now.day, 7);
+    }
   }
 
   static String _durationLabel(Duration duration) {
@@ -342,7 +517,7 @@ class _TimeButton extends StatelessWidget {
   final String label;
   final DateTime time;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => OutlinedButton(
@@ -358,7 +533,7 @@ class _TimeButton extends StatelessWidget {
           children: [
             Icon(icon, size: 16),
             const SizedBox(width: 5),
-            Text(label, style: const TextStyle(fontSize: 11)),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 11))),
           ],
         ),
         const SizedBox(height: 5),
@@ -379,37 +554,42 @@ class _SleepHistoryCard extends StatelessWidget {
   });
 
   final SleepLogEntry log;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) => TonyoCard(
     child: Row(
       children: [
-        const MetricIcon(icon: Icons.bedtime_rounded, color: TonyoColors.blue),
+        MetricIcon(
+          icon: log.isNap
+              ? Icons.airline_seat_individual_suite_rounded
+              : Icons.bedtime_rounded,
+          color: log.isNap ? TonyoColors.violet : TonyoColors.blue,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${formatDate(log.wakeTime)} · ${_SleepLogScreenState._durationLabel(log.duration)}',
+                '${log.isNap ? 'Nap' : 'Main sleep'} · ${_SleepLogScreenState._durationLabel(log.duration)}',
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
               Text(
-                '${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · quality ${log.quality.round()}/5',
+                '${formatDate(log.wakeTime)} · ${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · quality ${log.quality.round()}/5',
                 style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
               ),
             ],
           ),
         ),
         IconButton(
-          tooltip: 'Edit sleep',
+          tooltip: log.isNap ? 'Edit nap' : 'Edit sleep',
           onPressed: onEdit,
           icon: const Icon(Icons.edit_outlined),
         ),
         IconButton(
-          tooltip: 'Delete sleep',
+          tooltip: log.isNap ? 'Delete nap' : 'Delete sleep',
           onPressed: onDelete,
           icon: const Icon(Icons.delete_outline_rounded),
         ),

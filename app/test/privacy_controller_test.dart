@@ -71,6 +71,7 @@ void main() {
       expect(h.health.reads, 0);
       expect(h.screen.reads, 0);
       expect(h.repository.replaceUserCallCount, 0);
+      expect(h.repository.inputPatchCallCount, 0);
       expect(h.repository.scoreUpsertCallCount, 0);
       await expectLater(
         h.controller.addSignal(SignalType.hydration, 2),
@@ -83,6 +84,7 @@ void main() {
       expect(h.controller.signals, hasLength(1));
       expect(h.controller.checkIns, hasLength(1));
       expect(h.repository.replaceUserCallCount, 0);
+      expect(h.repository.inputPatchCallCount, 0);
     },
   );
 
@@ -111,6 +113,7 @@ void main() {
       expect(h.repository.privacyWrites, 1);
       expect(h.repository.outcomeWrites, 0);
       expect(h.repository.replaceUserCallCount, 0);
+      expect(h.repository.inputPatchCallCount, 0);
       await h.controller.setOutcomeConsent(true);
       expect(h.controller.outcomeConsent, true);
       expect(h.controller.outcomeConsentUpdatedAt, _now);
@@ -119,6 +122,7 @@ void main() {
       expect(h.controller.outcomeConsent, false);
       expect(h.repository.outcomeWrites, 2);
       expect(h.repository.replaceUserCallCount, 0);
+      expect(h.repository.inputPatchCallCount, 0);
     },
   );
 
@@ -146,7 +150,18 @@ void main() {
       expect(h.controller.guardianConsentVerified, true);
       expect(h.controller.privacyFeaturesAllowed, true);
       await h.controller.addSignal(SignalType.hydration, 1);
-      expect(h.repository.replaceUserCallCount, 1);
+      expect(h.repository.inputPatchCallCount, 1);
+      expect(h.repository.replaceUserCallCount, 0);
+      final saved = (await h.repository.readUser('owner'))!;
+      expect(saved.signals, hasLength(2));
+      expect(
+        saved.signals.singleWhere((signal) => signal.id != 'saved').value,
+        1,
+      );
+      expect(
+        saved.signals.singleWhere((signal) => signal.id == 'saved').value,
+        1.5,
+      );
     },
   );
 
@@ -364,6 +379,7 @@ void main() {
       expect(h.controller.privacyFeaturesAllowed, false);
       expect(h.health.reads, 0);
       expect(h.repository.replaceUserCallCount, 0);
+      expect(h.repository.inputPatchCallCount, 0);
       expect(h.controller.privacyOperationError, isNotNull);
     },
   );
@@ -377,7 +393,8 @@ void main() {
         'owner',
         _state(receipt: _adult).copyWith(deletionPending: true),
       );
-      final writes = h.repository.replaceUserCallCount;
+      final writes =
+          h.repository.replaceUserCallCount + h.repository.inputPatchCallCount;
       await h.controller.handleAppResumed();
       expect(h.controller.deletionPending, true);
       expect(h.controller.privacyFeaturesAllowed, false);
@@ -385,7 +402,10 @@ void main() {
         h.controller.addSignal(SignalType.hydration, 1),
         throwsStateError,
       );
-      expect(h.repository.replaceUserCallCount, writes);
+      expect(
+        h.repository.replaceUserCallCount + h.repository.inputPatchCallCount,
+        writes,
+      );
       expect(h.auth.deletes, 0);
     },
   );
@@ -449,7 +469,8 @@ void main() {
       final window = PrepWindow.endingOn(_now, timezone: 'UTC').toJson();
       await prefs.setString(windowKey, jsonEncode(window));
       await prefs.setString(otherWindowKey, jsonEncode(window));
-      final writes = h.repository.replaceUserCallCount;
+      final writes =
+          h.repository.replaceUserCallCount + h.repository.inputPatchCallCount;
       final exported = jsonDecode(await h.controller.exportAllData()) as Map;
       expect((exported['cloud'] as Map)['userDocument'], isNotNull);
       expect(
@@ -465,7 +486,10 @@ void main() {
       expect(caches.keys, isNot(contains(otherPrepKey)));
       expect(caches.keys, isNot(contains(otherWindowKey)));
       expect(caches.keys, isNot(contains('tonyo_ml_prep_v1_corrupt')));
-      expect(h.repository.replaceUserCallCount, writes);
+      expect(
+        h.repository.replaceUserCallCount + h.repository.inputPatchCallCount,
+        writes,
+      );
       expect(h.controller.deletionPending, true);
     },
   );

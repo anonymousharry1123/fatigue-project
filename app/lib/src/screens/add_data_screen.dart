@@ -54,7 +54,7 @@ class AddDataScreen extends StatelessWidget {
             icon: Icons.bedtime_rounded,
             color: TonyoColors.blue,
             title: 'Sleep log',
-            detail: 'Bedtime, wake time, quality, and consistency',
+            detail: 'Main sleep, naps, quality, and bedtime consistency',
             badge: '${controller.sleepLogs.length} saved',
             onTap: () => _push(context, const SleepLogScreen()),
           ),
@@ -83,8 +83,8 @@ class AddDataScreen extends StatelessWidget {
             icon: Icons.auto_awesome_rounded,
             color: TonyoColors.mint,
             title: 'AI Coach',
-            detail: 'A fixture-backed day plan using your saved profile',
-            badge: 'Preview',
+            detail: 'Your daily plan from recent entries',
+            badge: 'Open plan',
             onTap: () => _push(context, const CoachScreen()),
           ),
           const SizedBox(height: 18),
@@ -101,15 +101,17 @@ class AddDataScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        controller.isCloudAuthenticated
-                            ? 'Version 0.10-a private cloud inputs'
-                            : 'Version 0.10-a offline inputs',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      const Text(
+                        'Your saved inputs',
+                        style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are ${controller.isCloudAuthenticated ? 'synced to your account and cached offline' : 'saved in the offline cache'}.',
+                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are ${controller.cloudSyncError != null
+                            ? 'saved on this device, with cloud sync pending'
+                            : controller.isCloudAuthenticated
+                            ? 'synced to your account and cached offline'
+                            : 'saved on this device'}.',
                         style: const TextStyle(
                           color: TonyoColors.muted,
                           fontSize: 11,
@@ -148,55 +150,62 @@ class _LaunchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TonyoCard(
     padding: EdgeInsets.zero,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            MetricIcon(icon: icon, color: color, size: 48),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
+    child: Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              MetricIcon(icon: icon, color: color, size: 48),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    detail,
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
-                      fontSize: 11,
+                    const SizedBox(height: 3),
+                    Text(
+                      detail,
+                      style: const TextStyle(
+                        color: TonyoColors.muted,
+                        fontSize: 11,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: .13),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                badge,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: .13),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        badge,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, color: TonyoColors.muted),
-          ],
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right_rounded, color: TonyoColors.muted),
+            ],
+          ),
         ),
       ),
     ),

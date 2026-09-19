@@ -4,7 +4,9 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final day = DateTime.utc(2026, 7, 28);
+  // Repository day APIs accept a local civil day, not UTC midnight (which can
+  // still belong to the previous date on the device).
+  final day = DateTime(2026, 7, 28);
   late MemoryCloudRepository repository;
 
   CloudUserState state({bool outcomeConsent = false}) => CloudUserState(
@@ -307,6 +309,16 @@ void main() {
     expect(stored?.cognitiveDrivers.single.label, 'Sleep');
     expect(stored?.cognitiveChange, 4);
   });
+
+  test(
+    'derived IDs use the same local calendar for UTC and local instants',
+    () {
+      final localTime = DateTime(2026, 7, 28, 9, 15);
+      expect(scoreSnapshotId(localTime.toUtc()), scoreSnapshotId(localTime));
+      expect(forecastPointId(localTime.toUtc()), forecastPointId(localTime));
+      expect(forecastPointId(localTime), '2026-07-28-09-15');
+    },
+  );
 
   test('replaces one forecast day while retaining adjacent days', () async {
     final tomorrow = day.add(const Duration(days: 1));

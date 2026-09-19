@@ -2,6 +2,42 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
+## Version 0.35 — Production polish
+
+Main screens and forms support narrow displays and larger text, with named
+score/chart information for screen readers. Interrupted reaction tests restart
+safely; failed saves retain the form and retry without duplicating entries.
+
+Cloud input saves now update only edited records, preserve pending changes
+across restart, and detect conflicts with another device. **Profile → Cloud
+sync** offers retry and confirmed recovery from the cloud version. See
+[implementation, verification, and remaining release checks](docs/PRODUCTION_POLISH.md).
+
+Build: `0.35.0+37`. Physical-device and production deployment checks remain open.
+
+## Version 0.34.1 — Local time and separate naps
+
+Tonyo detects the device time zone automatically on iOS, Android, macOS and
+web; Profile shows the active region. Launch/resume detects travel, daylight
+saving and day changes, rebuilding the local scores, forecasts and guidance.
+New saved timestamps preserve their UTC instant. See [time-zone behavior and
+platform support](docs/TIMEZONES.md).
+
+In **Add → Sleep log**, choose **Main sleep** or **Nap**. Naps have separate
+history and totals, and do not lower main-sleep averages or change bedtime
+consistency. An older short sleep entry no longer replaces a longer main sleep
+from the same wake date; existing entries can be edited to mark them as naps.
+Apple Health short secondary sessions are separated when main sleep is known;
+clock time alone is never used to classify shift workers' sleep.
+
+Nap recovery is a separate, temporary contribution: at most **+3 Energy / +2
+Cognitive**, with no stacking or increased confidence. Main-sleep weights are
+unchanged. These are bounded product heuristics, not a demonstrated accuracy
+improvement. See [scoring rationale and checks](docs/ENGINE_TUNING_LOG.md).
+
+Build: `0.34.1+36`. Legacy personalized artifacts require a new compatible
+explicit refresh; collection consent and training-readiness requirements remain.
+
 ## Version 0.34 — Privacy center
 
 Open **Profile → Privacy center** for data-use review, separate Outcome learning,

@@ -20,6 +20,7 @@ class SleepSyncMergeResult {
 
 class SleepSyncLogic {
   static const importedGroupPrefix = 'healthkit-sleep-';
+  static const importedNapGroupPrefix = 'healthkit-nap-';
   static const _maximumSessionGap = Duration(hours: 2);
   static const _minimumSleep = Duration(minutes: 30);
   static const _maximumSample = Duration(hours: 24);
@@ -68,19 +69,51 @@ class SleepSyncLogic {
       );
     }
 
-    final candidatesByDay = <String, _ReconciledNight>{};
+    final sessionsByDay = <String, List<_ReconciledNight>>{};
     for (final cluster in _cluster(intervals)) {
       final night = _reconcile(cluster);
       if (night == null ||
-          night.totalSleep < _minimumSleep ||
+          night.totalSleep < const Duration(minutes: 5) ||
           night.end.difference(night.bedtime) > _maximumSessionSpan) {
         rejectedSampleCount += cluster.length;
         continue;
       }
       final key = _dateKey(night.end);
-      final current = candidatesByDay[key];
-      if (current == null || night.totalSleep > current.totalSleep) {
-        candidatesByDay[key] = night;
+      sessionsByDay.putIfAbsent(key, () => []).add(night);
+    }
+
+    final candidatesByDay = <String, _ReconciledNight>{};
+    final naps = <_ReconciledNight>[];
+    for (final entry in sessionsByDay.entries) {
+      final sessions = entry.value
+        ..sort((a, b) => b.totalSleep.compareTo(a.totalSleep));
+      final knownMain = preferredSleepReadings(
+        existingReadings,
+      ).where((item) => _dateKey(item.timestamp) == entry.key).firstOrNull;
+      final longest = sessions.first;
+      final separateKnownMain =
+          knownMain != null &&
+          knownMain.value >= 3 &&
+          (!longest.end.isAfter(_intervalStart(knownMain, existingReadings)) ||
+              !longest.bedtime.isBefore(knownMain.timestamp));
+      // HealthKit has no explicit nap flag. Only classify short secondary
+      // sessions when a separate main sleep is known; never infer from clock
+      // time alone, which would misclassify shift workers' daytime sleep.
+      if (separateKnownMain && longest.totalSleep <= const Duration(hours: 3)) {
+        naps.addAll(
+          sessions.where((item) => item.totalSleep <= const Duration(hours: 3)),
+        );
+      } else {
+        if (longest.totalSleep >= _minimumSleep) {
+          candidatesByDay[entry.key] = longest;
+        }
+        if (longest.totalSleep >= const Duration(hours: 3)) {
+          naps.addAll(
+            sessions
+                .skip(1)
+                .where((item) => item.totalSleep <= const Duration(hours: 3)),
+          );
+        }
       }
     }
 
@@ -88,6 +121,48 @@ class SleepSyncLogic {
     var importedSignalCount = 0;
     var duplicateCount = 0;
     var skippedManualNightCount = 0;
+
+    for (final nap in naps) {
+      final groupId =
+          '$importedNapGroupPrefix${nap.end.microsecondsSinceEpoch}';
+      final reading = SignalReading(
+        id: '$groupId-duration',
+        type: SignalType.nap,
+        value: _hours(nap.totalSleep),
+        timestamp: nap.end,
+        source: SignalSource.healthKit,
+        quality: 1,
+        note:
+            'Additional Apple Health sleep session · separate from main sleep',
+        groupId: groupId,
+        syncedAt: syncedAt ?? DateTime.now().toUtc(),
+      );
+      final previous = output
+          .where((item) => item.id == reading.id)
+          .firstOrNull;
+      // An edited session can have a different wake instant, and therefore a
+      // different generated ID. Retire the prior imported interval so a shorter
+      // correction cannot leave the older, longer nap active forever.
+      output.removeWhere(
+        (item) =>
+            item.id != reading.id &&
+            item.type == SignalType.nap &&
+            item.source == SignalSource.healthKit &&
+            (item.groupId?.startsWith(importedNapGroupPrefix) ?? false) &&
+            item.value.isFinite &&
+            item.value > 0 &&
+            item.value <= 3 &&
+            _intervalStart(item, const []).isBefore(nap.end) &&
+            nap.bedtime.isBefore(item.timestamp),
+      );
+      if (previous != null && _equivalent(previous, reading)) {
+        duplicateCount += 1;
+      } else {
+        output.removeWhere((item) => item.id == reading.id);
+        output.add(reading);
+        importedSignalCount += 1;
+      }
+    }
 
     for (final entry in candidatesByDay.entries) {
       final groupId = '$importedGroupPrefix${entry.key}';
@@ -147,7 +222,13 @@ class SleepSyncLogic {
   ) {
     final all = readings.toList();
     final totalsByDay = <String, List<SignalReading>>{};
-    for (final reading in all.where((item) => item.type == SignalType.sleep)) {
+    for (final reading in all.where(
+      (item) =>
+          item.type == SignalType.sleep &&
+          item.value.isFinite &&
+          item.value > 0 &&
+          item.value <= 16,
+    )) {
       totalsByDay
           .putIfAbsent(_dateKey(reading.timestamp), () => [])
           .add(reading);
@@ -162,7 +243,7 @@ class SleepSyncLogic {
                     item.groupId?.startsWith(importedGroupPrefix) ?? false,
               )
               .toList()
-            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            ..sort(_mainSleepOrder);
       final manual =
           totals
               .where(
@@ -170,7 +251,7 @@ class SleepSyncLogic {
                     !(item.groupId?.startsWith(importedGroupPrefix) ?? false),
               )
               .toList()
-            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            ..sort(_mainSleepOrder);
 
       if (imported.isEmpty) {
         if (manual.isNotEmpty) preferred.add(manual.first);
@@ -205,6 +286,80 @@ class SleepSyncLogic {
 
     preferred.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return preferred;
+  }
+
+  static int _mainSleepOrder(SignalReading a, SignalReading b) {
+    final duration = b.value.compareTo(a.value);
+    return duration != 0 ? duration : b.timestamp.compareTo(a.timestamp);
+  }
+
+  /// Naps are separate evidence, never a nightly-duration or bedtime input.
+  /// Prefer manual corrections and discard overlapping duplicate intervals.
+  static List<SignalReading> preferredNapReadings(
+    Iterable<SignalReading> readings,
+  ) {
+    final all = readings.toList();
+    final main = preferredSleepReadings(all);
+    final naps =
+        all
+            .where(
+              (item) =>
+                  item.type == SignalType.nap &&
+                  item.value.isFinite &&
+                  item.value >= 5 / 60 &&
+                  item.value <= 3,
+            )
+            .toList()
+          ..sort((a, b) {
+            final source = (a.source == SignalSource.manual ? 0 : 1).compareTo(
+              b.source == SignalSource.manual ? 0 : 1,
+            );
+            return source != 0 ? source : _mainSleepOrder(a, b);
+          });
+    bool overlaps(SignalReading a, SignalReading b) {
+      final aStart = _intervalStart(a, all);
+      final bStart = _intervalStart(b, all);
+      return aStart.isBefore(b.timestamp) && bStart.isBefore(a.timestamp);
+    }
+
+    final selected = <SignalReading>[];
+    for (final nap in naps) {
+      if (main.any((item) => overlaps(item, nap)) ||
+          selected.any((item) => item.id == nap.id || overlaps(item, nap))) {
+        continue;
+      }
+      selected.add(nap);
+    }
+    return selected..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  /// Main sleep totals exclude awake periods, so subtracting that total from
+  /// wake time can miss the beginning of the actual session. Prefer its saved
+  /// bedtime when deciding whether another record overlaps the session.
+  static DateTime _intervalStart(
+    SignalReading reading,
+    Iterable<SignalReading> all,
+  ) {
+    if (reading.type == SignalType.sleep && reading.groupId != null) {
+      final bedtimes =
+          all
+              .where(
+                (item) =>
+                    item.type == SignalType.bedtime &&
+                    item.groupId == reading.groupId &&
+                    item.timestamp.isBefore(reading.timestamp) &&
+                    reading.timestamp.difference(item.timestamp) <=
+                        _maximumSessionSpan,
+              )
+              .toList()
+            ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      if (bedtimes.isNotEmpty) return bedtimes.first.timestamp;
+    }
+    return reading.timestamp.subtract(
+      Duration(
+        microseconds: (reading.value * Duration.microsecondsPerHour).round(),
+      ),
+    );
   }
 
   static List<SignalReading> preferredBedtimeReadings(
@@ -470,10 +625,12 @@ class SleepSyncLogic {
   static double _hours(Duration duration) =>
       duration.inMicroseconds / Duration.microsecondsPerHour;
 
-  static String _dateKey(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-'
-      '${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')}';
+  static String _dateKey(DateTime value) {
+    final local = value.toUtc().toLocal();
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')}';
+  }
 }
 
 class _SleepInterval {

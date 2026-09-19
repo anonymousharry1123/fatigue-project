@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'models.dart';
 
 class ActivitySyncMergeResult {
@@ -119,8 +120,8 @@ abstract final class ActivitySyncLogic {
     required DateTime day,
   }) {
     if (!supportedTypes.contains(type)) return null;
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(day);
+    final end = localDay(start, 1);
     final all = readings.where((item) => item.type == type).toList();
     final manual = all
         .where(
@@ -208,14 +209,10 @@ abstract final class ActivitySyncLogic {
     required DateTime start,
     required DateTime end,
   }) {
-    final firstDay = DateTime(start.year, start.month, start.day);
-    final endDay = DateTime(end.year, end.month, end.day);
+    final firstDay = localDay(start);
+    final endDay = localDay(end);
     final output = <ActivityDailyAggregate>[];
-    for (
-      var day = firstDay;
-      day.isBefore(endDay);
-      day = day.add(const Duration(days: 1))
-    ) {
+    for (var day = firstDay; day.isBefore(endDay); day = localDay(day, 1)) {
       final aggregate = aggregateForDay(readings, type: type, day: day);
       if (aggregate != null) output.add(aggregate);
     }

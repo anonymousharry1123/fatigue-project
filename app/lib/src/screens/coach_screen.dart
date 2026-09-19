@@ -373,13 +373,17 @@ class _RiskAlertCard extends StatelessWidget {
             style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
           ),
           const SizedBox(height: 10),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _EvidenceSummary(evidence: alert.evidence)),
-              const SizedBox(width: 8),
+              _EvidenceSummary(evidence: alert.evidence),
+              const SizedBox(height: 8),
               TextButton.icon(
                 key: ValueKey('dismiss-risk-${alert.id}'),
-                onPressed: () => controller.dismissRiskAlert(alert.id),
+                onPressed: () => _saveCoachAction(
+                  context,
+                  () => controller.dismissRiskAlert(alert.id),
+                ),
                 icon: const Icon(Icons.close_rounded, size: 16),
                 label: const Text('Dismiss'),
               ),
@@ -446,16 +450,17 @@ class _RecommendationCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Expanded(
-                        child: Text(
-                          item.timeLabel,
-                          style: const TextStyle(
-                            color: TonyoColors.violet,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                          ),
+                      Text(
+                        item.timeLabel,
+                        style: const TextStyle(
+                          color: TonyoColors.violet,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
                       if (item.priority == RecommendationPriority.important)
@@ -531,14 +536,33 @@ class _RecommendationCard extends StatelessWidget {
   );
 }
 
-class _RecommendationActions extends StatelessWidget {
+class _RecommendationActions extends StatefulWidget {
   const _RecommendationActions({required this.controller, required this.item});
 
   final AppController controller;
   final Recommendation item;
 
   @override
+  State<_RecommendationActions> createState() => _RecommendationActionsState();
+}
+
+class _RecommendationActionsState extends State<_RecommendationActions> {
+  bool _saving = false;
+
+  Future<void> _save(Future<void> Function() action) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await _saveCoachAction(context, action);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final item = widget.item;
     final statusLabel = switch (item.status) {
       RecommendationStatus.suggested => 'SUGGESTED',
       RecommendationStatus.accepted => 'ACCEPTED',
@@ -576,23 +600,27 @@ class _RecommendationActions extends StatelessWidget {
             children: [
               FilledButton.icon(
                 key: ValueKey('accept-recommendation-${item.id}'),
-                onPressed: () async {
-                  await controller.setRecommendationStatus(
-                    item.id,
-                    RecommendationStatus.accepted,
-                  );
-                },
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () => controller.setRecommendationStatus(
+                          item.id,
+                          RecommendationStatus.accepted,
+                        ),
+                      ),
                 icon: const Icon(Icons.check_rounded, size: 16),
                 label: const Text('Accept'),
               ),
               TextButton.icon(
                 key: ValueKey('dismiss-recommendation-${item.id}'),
-                onPressed: () async {
-                  await controller.setRecommendationStatus(
-                    item.id,
-                    RecommendationStatus.dismissed,
-                  );
-                },
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () => controller.setRecommendationStatus(
+                          item.id,
+                          RecommendationStatus.dismissed,
+                        ),
+                      ),
                 icon: const Icon(Icons.close_rounded, size: 16),
                 label: const Text('Dismiss'),
               ),
@@ -605,23 +633,27 @@ class _RecommendationActions extends StatelessWidget {
             children: [
               FilledButton.icon(
                 key: ValueKey('complete-recommendation-${item.id}'),
-                onPressed: () async {
-                  await controller.setRecommendationStatus(
-                    item.id,
-                    RecommendationStatus.completed,
-                  );
-                },
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () => controller.setRecommendationStatus(
+                          item.id,
+                          RecommendationStatus.completed,
+                        ),
+                      ),
                 icon: const Icon(Icons.done_all_rounded, size: 16),
                 label: const Text('Complete'),
               ),
               TextButton.icon(
                 key: ValueKey('dismiss-recommendation-${item.id}'),
-                onPressed: () async {
-                  await controller.setRecommendationStatus(
-                    item.id,
-                    RecommendationStatus.dismissed,
-                  );
-                },
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () => controller.setRecommendationStatus(
+                          item.id,
+                          RecommendationStatus.dismissed,
+                        ),
+                      ),
                 icon: const Icon(Icons.close_rounded, size: 16),
                 label: const Text('Dismiss'),
               ),
@@ -630,34 +662,44 @@ class _RecommendationActions extends StatelessWidget {
         ],
         if (canRate) ...[
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 5,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Expanded(
-                child: Text(
-                  'Was this advice helpful?',
-                  style: TextStyle(
-                    color: TonyoColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
+              const Text(
+                'Was this advice helpful?',
+                style: TextStyle(
+                  color: TonyoColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               IconButton.filledTonal(
                 key: ValueKey('helpful-recommendation-${item.id}'),
                 tooltip: 'Helpful',
                 isSelected: item.helpful == true,
-                onPressed: () =>
-                    controller.setRecommendationFeedback(item.id, true),
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () =>
+                            controller.setRecommendationFeedback(item.id, true),
+                      ),
                 icon: const Icon(Icons.thumb_up_alt_outlined, size: 17),
                 selectedIcon: const Icon(Icons.thumb_up_alt_rounded, size: 17),
               ),
-              const SizedBox(width: 5),
               IconButton.filledTonal(
                 key: ValueKey('not-helpful-recommendation-${item.id}'),
                 tooltip: 'Not helpful',
                 isSelected: item.helpful == false,
-                onPressed: () =>
-                    controller.setRecommendationFeedback(item.id, false),
+                onPressed: _saving
+                    ? null
+                    : () => _save(
+                        () => controller.setRecommendationFeedback(
+                          item.id,
+                          false,
+                        ),
+                      ),
                 icon: const Icon(Icons.thumb_down_alt_outlined, size: 17),
                 selectedIcon: const Icon(
                   Icons.thumb_down_alt_rounded,
@@ -697,7 +739,11 @@ class _RecommendationActions extends StatelessWidget {
           else
             OutlinedButton.icon(
               key: ValueKey('record-outcome-${item.id}'),
-              onPressed: () => _recordObservedEnergy(context, controller, item),
+              onPressed: _saving
+                  ? null
+                  : () => _save(
+                      () => _recordObservedEnergy(context, controller, item),
+                    ),
               icon: const Icon(Icons.bolt_rounded, size: 16),
               label: const Text('Log observed energy'),
             ),
@@ -712,59 +758,104 @@ class _RecommendationActions extends StatelessWidget {
     Recommendation item,
   ) async {
     var energy = 6.0;
-    final result = await showDialog<double>(
+    var saving = false;
+    String? errorMessage;
+    await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Observed energy'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Optional: how energized did you feel after this completed block?',
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${energy.round()}/10',
-                key: const Key('observed-energy-value'),
-                style: const TextStyle(
-                  color: TonyoColors.mint,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
+        builder: (context, setState) => PopScope(
+          canPop: !saving,
+          child: AlertDialog(
+            scrollable: true,
+            title: const Text('Observed energy'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Optional: how energized did you feel after this completed block?',
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  '${energy.round()}/10',
+                  key: const Key('observed-energy-value'),
+                  style: const TextStyle(
+                    color: TonyoColors.mint,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Semantics(
+                  label: 'Observed energy',
+                  child: Slider(
+                    key: const Key('observed-energy-slider'),
+                    value: energy,
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: energy.round().toString(),
+                    semanticFormatterCallback: (value) =>
+                        '${value.round()} out of 10',
+                    onChanged: saving
+                        ? null
+                        : (value) => setState(() => energy = value),
+                  ),
+                ),
+                const Text(
+                  'Saved only because outcome learning is on. This release does not train a personalized model.',
+                  style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      errorMessage!,
+                      style: const TextStyle(color: TonyoColors.coral),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Skip'),
               ),
-              Slider(
-                key: const Key('observed-energy-slider'),
-                value: energy,
-                min: 1,
-                max: 10,
-                divisions: 9,
-                label: energy.round().toString(),
-                onChanged: (value) => setState(() => energy = value),
-              ),
-              const Text(
-                'Saved only because outcome learning is on. This release does not train a personalized model.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+              FilledButton(
+                key: const Key('save-observed-energy'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setState(() {
+                          saving = true;
+                          errorMessage = null;
+                        });
+                        try {
+                          await controller.recordObservedEnergy(
+                            energy,
+                            recommendationId: item.id,
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        } catch (_) {
+                          if (!dialogContext.mounted) return;
+                          setState(() {
+                            saving = false;
+                            errorMessage =
+                                'Could not save your energy rating. Please try again.';
+                          });
+                        }
+                      },
+                child: Text(saving ? 'Saving…' : 'Save outcome'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Skip'),
-            ),
-            FilledButton(
-              key: const Key('save-observed-energy'),
-              onPressed: () => Navigator.pop(dialogContext, energy),
-              child: const Text('Save outcome'),
-            ),
-          ],
         ),
       ),
     );
-    if (result == null) return;
-    await controller.recordObservedEnergy(result, recommendationId: item.id);
   }
 }
 
@@ -801,8 +892,6 @@ class _EvidenceSummary extends StatelessWidget {
         Expanded(
           child: Text(
             labels.join(' \u00b7 '),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: TonyoColors.mint,
               fontSize: 10,
@@ -811,6 +900,22 @@ class _EvidenceSummary extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+Future<void> _saveCoachAction(
+  BuildContext context,
+  Future<void> Function() action,
+) async {
+  try {
+    await action();
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not save this change. Please try again.'),
+      ),
     );
   }
 }

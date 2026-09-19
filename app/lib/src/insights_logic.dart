@@ -1,3 +1,4 @@
+import 'local_day.dart';
 import 'dart:math' as math;
 
 import 'activity_sync_logic.dart';
@@ -120,17 +121,11 @@ abstract final class InsightsLogic {
     required List<DailyCheckIn> checkIns,
   }) {
     final today = _day(now);
-    final currentStart = today.subtract(
-      const Duration(days: currentDayCount - 1),
-    );
-    final previousStart = currentStart.subtract(
-      const Duration(days: currentDayCount),
-    );
-    final rangeEnd = today.add(const Duration(days: 1));
+    final currentStart = localDay(today, -(currentDayCount - 1));
+    final previousStart = localDay(currentStart, -currentDayCount);
+    final rangeEnd = localDay(today, 1);
     final cutoff = now.isBefore(rangeEnd) ? now : rangeEnd;
-    final modelStart = today.subtract(
-      const Duration(days: queryLookbackDays - 1),
-    );
+    final modelStart = localDay(today, -(queryLookbackDays - 1));
     final scopedSignals = signals
         .where(
           (item) =>
@@ -148,7 +143,7 @@ abstract final class InsightsLogic {
         .toList(growable: false);
 
     final allDays = List.generate(currentDayCount * 2, (index) {
-      final day = previousStart.add(Duration(days: index));
+      final day = localDay(previousStart, index);
       return _buildDay(
         day: day,
         now: now,
@@ -189,7 +184,7 @@ abstract final class InsightsLogic {
     required List<SignalReading> signals,
     required List<DailyCheckIn> checkIns,
   }) {
-    final end = day.add(const Duration(days: 1));
+    final end = localDay(day, 1);
     final cutoff = _sameDay(day, now)
         ? now
         : end.subtract(const Duration(microseconds: 1));
@@ -352,13 +347,10 @@ abstract final class InsightsLogic {
       ? null
       : values.fold<double>(0, (sum, value) => sum + value) / values.length;
 
-  static DateTime _day(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
+  static DateTime _day(DateTime value) => localDay(value);
 
   static bool _sameDay(DateTime left, DateTime right) =>
-      left.year == right.year &&
-      left.month == right.month &&
-      left.day == right.day;
+      sameLocalDay(left, right);
 
   static String _title(String value) =>
       '${value[0].toUpperCase()}${value.substring(1)}';

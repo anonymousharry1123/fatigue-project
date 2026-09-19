@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../app_controller.dart';
+import '../local_day.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -20,7 +21,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final today = DateTime.now();
-    final selectedDay = today.add(Duration(days: _range == 1 ? 1 : 0));
+    final selectedDay = localDay(today, _range == 1 ? 1 : 0);
     final points = controller.forecastDataFor(selectedDay);
     final windows = _range == 2
         ? const <ForecastWindow>[]
@@ -43,6 +44,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
               ),
               IconButton.filledTonal(
                 tooltip: 'Refresh forecast',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: controller.isForecastLoading
                     ? null
                     : () => controller.refreshForecasts(forceRecalculate: true),
@@ -62,6 +64,9 @@ class _ForecastScreenState extends State<ForecastScreen> {
           ),
           const SizedBox(height: 14),
           SegmentedButton<int>(
+            direction: MediaQuery.textScalerOf(context).scale(1) > 1.3
+                ? Axis.vertical
+                : Axis.horizontal,
             segments: const [
               ButtonSegment(value: 0, label: Text('Today')),
               ButtonSegment(value: 1, label: Text('Tomorrow')),
@@ -71,6 +76,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
             showSelectedIcon: false,
             onSelectionChanged: (value) => setState(() => _range = value.first),
             style: SegmentedButton.styleFrom(
+              minimumSize: const Size(48, 48),
               backgroundColor: TonyoColors.surface,
               selectedBackgroundColor: TonyoColors.primary,
             ),
@@ -474,31 +480,33 @@ class _ForecastEvidenceRow extends StatelessWidget {
                 '$source · ${formatDate(evidence.timestamp)} at ${formatHour(evidence.timestamp)}',
                 style: const TextStyle(color: TonyoColors.muted, fontSize: 8),
               ),
+              const SizedBox(height: 4),
+              _evidenceTag(kindLabel),
             ],
-          ),
-        ),
-        const SizedBox(width: 6),
-        Tooltip(
-          message: '$kindLabel document ${evidence.id}',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: .1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              kindLabel,
-              style: TextStyle(
-                color: accent,
-                fontSize: 7,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
           ),
         ),
       ],
     );
   }
+
+  Widget _evidenceTag(String kindLabel) => Tooltip(
+    message: '$kindLabel document ${evidence.id}',
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        kindLabel,
+        style: TextStyle(
+          color: accent,
+          fontSize: 7,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    ),
+  );
 }
 
 class _WeekForecast extends StatelessWidget {
@@ -571,67 +579,96 @@ class _WeekForecast extends StatelessWidget {
         ...summaries.map(
           (summary) => Padding(
             padding: const EdgeInsets.only(bottom: 9),
-            child: TonyoCard(
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _shortDay(summary.day),
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        Text(
-                          formatDate(summary.day),
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Peak ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${summary.lowEnergy.round()}–${summary.peakEnergy.round()} range · ±${summary.averageUncertainty.round()}',
-                          style: TextStyle(
-                            color: summary.isLowConfidence
-                                ? TonyoColors.amber
-                                : TonyoColors.muted,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${summary.averageEnergy.round()}',
-                    style: const TextStyle(
-                      color: TonyoColors.mint,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: _DaySummaryCard(summary: summary),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DaySummaryCard extends StatelessWidget {
+  const _DaySummaryCard({required this.summary});
+
+  final ForecastDaySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final date = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _shortDay(summary.day),
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        Text(
+          formatDate(summary.day),
+          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+        ),
+      ],
+    );
+    final detail = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Peak ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${summary.lowEnergy.round()}–${summary.peakEnergy.round()} range · '
+          '±${summary.averageUncertainty.round()}',
+          style: TextStyle(
+            color: summary.isLowConfidence
+                ? TonyoColors.amber
+                : TonyoColors.muted,
+            fontSize: 9,
+          ),
+        ),
+      ],
+    );
+    final average = Semantics(
+      label: 'Average estimated Energy',
+      value: '${summary.averageEnergy.round()} out of 100',
+      excludeSemantics: true,
+      child: Text(
+        '${summary.averageEnergy.round()}',
+        style: const TextStyle(
+          color: TonyoColors.mint,
+          fontSize: 21,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+    return TonyoCard(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth <
+              240 * MediaQuery.textScalerOf(context).scale(1)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: date),
+                    average,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                detail,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              SizedBox(width: 48, child: date),
+              Expanded(child: detail),
+              const SizedBox(width: 8),
+              average,
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -642,53 +679,91 @@ class _WeekChart extends StatelessWidget {
   final List<ForecastDaySummary> summaries;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 180,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (final summary in summaries)
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  '${summary.averageEnergy.round()}',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Container(
-                  height: summary.averageEnergy.clamp(12, 100) * 1.25,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: summary.isLowConfidence
-                          ? [TonyoColors.primary, TonyoColors.amber]
-                          : [TonyoColors.primary, TonyoColors.mint],
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(1);
+      final minimumWidth = summaries.length * 32 * scale;
+      final chart = SingleChildScrollView(
+        key: const Key('forecast-week-chart-scroll'),
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: minimumWidth > constraints.maxWidth
+              ? minimumWidth
+              : constraints.maxWidth,
+          height: 180 + 45 * (scale - 1).clamp(0, double.infinity),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final summary in summaries)
+                Expanded(
+                  child: Semantics(
+                    container: true,
+                    excludeSemantics: true,
+                    label:
+                        '${_shortDay(summary.day)}, '
+                        '${formatDate(summary.day)}, ${summary.day.year}. '
+                        'Average estimated Energy: '
+                        '${summary.averageEnergy.round()} out of 100. '
+                        'Uncertainty: plus or minus '
+                        '${summary.averageUncertainty.round()} points.',
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${summary.averageEnergy.round()}',
+                          style: const TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Container(
+                          height: summary.averageEnergy.clamp(12, 100) * 1.25,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: summary.isLowConfidence
+                                  ? [TonyoColors.primary, TonyoColors.amber]
+                                  : [TonyoColors.primary, TonyoColors.mint],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          _shortDay(summary.day).substring(0, 1),
+                          style: const TextStyle(
+                            color: TonyoColors.muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                const SizedBox(height: 7),
-                Text(
-                  _shortDay(summary.day).substring(0, 1),
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-      ],
-    ),
+        ),
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          chart,
+          if (minimumWidth > constraints.maxWidth)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'Swipe to view more days.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 
@@ -804,9 +879,11 @@ class _MetricPill extends StatelessWidget {
       children: [
         Icon(icon, color: TonyoColors.muted, size: 13),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+          ),
         ),
       ],
     ),
@@ -849,10 +926,10 @@ class _ModelInputRow extends StatelessWidget {
 
 String _dayHeading(DateTime day) {
   final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final target = DateTime(day.year, day.month, day.day);
+  final today = localDay(now);
+  final target = localDay(day);
   if (target == today) return 'TODAY · ${formatDate(day).toUpperCase()}';
-  if (target == today.add(const Duration(days: 1))) {
+  if (target == localDay(today, 1)) {
     return 'TOMORROW · ${formatDate(day).toUpperCase()}';
   }
   return '${_shortDay(day).toUpperCase()} · ${formatDate(day).toUpperCase()}';

@@ -49,6 +49,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
               ),
               IconButton.filledTonal(
                 tooltip: 'Refresh insights',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: controller.isInsightsLoading
                     ? null
                     : controller.refreshInsights,
@@ -322,7 +323,7 @@ class _WeeklyOverview extends StatelessWidget {
     final previous = insights.previousSummary;
     final metrics = [
       _OverviewValue(
-        label: 'Avg sleep',
+        label: 'Avg main sleep',
         value: _hours(current.averageSleepHours),
         comparison: _delta(
           current.averageSleepHours,
@@ -371,7 +372,12 @@ class _WeeklyOverview extends StatelessWidget {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 720 ? 4 : 2;
+            final scale = MediaQuery.textScalerOf(context).scale(1);
+            final columns = constraints.maxWidth >= 720 * scale
+                ? 4
+                : constraints.maxWidth >= 280 * scale
+                ? 2
+                : 1;
             final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
             return Wrap(
               spacing: 10,
@@ -454,7 +460,6 @@ class _OverviewCard extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           value.comparison,
-          maxLines: 2,
           style: const TextStyle(color: TonyoColors.muted, fontSize: 8.5),
         ),
       ],
@@ -500,6 +505,7 @@ class _DailyTrendCard extends StatelessWidget {
               for (final value in InsightTrendMetric.values)
                 ChoiceChip(
                   key: Key('insight-metric-${value.name}'),
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
                   label: Text(_metricLabel(value)),
                   selected: metric == value,
                   onSelected: (_) => onMetricChanged(value),
@@ -507,24 +513,54 @@ class _DailyTrendCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          SizedBox(
-            height: 142,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final day in days)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: _TrendBar(
-                        day: day,
-                        metric: metric,
-                        scaleMaximum: scaleMaximum,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final scale = MediaQuery.textScalerOf(context).scale(1);
+              final minimumWidth = days.length * (28 * scale + 6);
+              final chart = SingleChildScrollView(
+                key: const Key('insights-trend-chart-scroll'),
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: minimumWidth > constraints.maxWidth
+                      ? minimumWidth
+                      : constraints.maxWidth,
+                  height: 142 + 45 * (scale - 1).clamp(0, double.infinity),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final day in days)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: _TrendBar(
+                              day: day,
+                              metric: metric,
+                              scaleMaximum: scaleMaximum,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  chart,
+                  if (minimumWidth > constraints.maxWidth)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Swipe to view more days.',
+                        style: TextStyle(
+                          color: TonyoColors.muted,
+                          fontSize: 10,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 10),
           Text(
@@ -551,7 +587,7 @@ class _DailyTrendCard extends StatelessWidget {
     InsightTrendMetric.energy =>
       'Daily Energy values are recalculated wellness-model estimates, not measurements or diagnoses.',
     InsightTrendMetric.sleep =>
-      'Latest logged sleep duration for each day; missing days remain blank.',
+      'Latest main sleep for each day; naps are tracked separately and missing days remain blank.',
     InsightTrendMetric.training =>
       'Daily total of your exercise entries; missing days are not treated as zero.',
     InsightTrendMetric.study =>
@@ -575,52 +611,65 @@ class _TrendBar extends StatelessWidget {
     final value = day.valueFor(metric);
     final ratio = value == null ? 0.0 : (value / scaleMaximum).clamp(0.0, 1.0);
     final color = _color(metric);
-    return Column(
-      children: [
-        SizedBox(
-          height: 18,
-          child: Text(
-            _valueLabel(value, metric),
-            style: const TextStyle(
-              color: TonyoColors.muted,
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
+    final metricLabel = _DailyTrendCard._metricLabel(metric);
+    final valueLabel = value == null
+        ? 'Not logged'
+        : metric == InsightTrendMetric.energy
+        ? '${value.round()} out of 100, estimated'
+        : '${value.toStringAsFixed(1)} hours';
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label:
+          '${_dayLabel(day.date)}, ${formatDate(day.date)}, ${day.date.year}. '
+          '$metricLabel: $valueLabel',
+      child: Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(18),
+            child: Text(
+              _valueLabel(value, metric),
+              style: const TextStyle(
+                color: TonyoColors.muted,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: 16,
-                height: value == null
-                    ? 3
-                    : (constraints.maxHeight * ratio).clamp(
-                        value == 0 ? 3.0 : 7.0,
-                        constraints.maxHeight,
-                      ),
-                decoration: BoxDecoration(
-                  color: value == null
-                      ? TonyoColors.border
-                      : color.withValues(alpha: .82),
-                  borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 5),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  width: 16,
+                  height: value == null
+                      ? 3
+                      : (constraints.maxHeight * ratio).clamp(
+                          value == 0 ? 3.0 : 7.0,
+                          constraints.maxHeight,
+                        ),
+                  decoration: BoxDecoration(
+                    color: value == null
+                        ? TonyoColors.border
+                        : color.withValues(alpha: .82),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          _dayLabel(day.date),
-          style: const TextStyle(
-            color: TonyoColors.muted,
-            fontSize: 8.5,
-            fontWeight: FontWeight.w800,
+          const SizedBox(height: 7),
+          Text(
+            _dayLabel(day.date),
+            style: const TextStyle(
+              color: TonyoColors.muted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -772,65 +821,83 @@ class _ConfidencePanel extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 58,
-        height: 58,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .12),
-          shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: .3)),
-        ),
-        child: Text(
-          '$score',
-          style: TextStyle(
-            color: color,
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-          ),
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(1);
+    final coverage = '${(completeness * 100).round()}% coverage';
+    final age = freshness == null
+        ? 'freshness unavailable'
+        : '${(freshness! * 100).round()}% fresh';
+    final scoreBadge = Container(
+      width: 58 * scale,
+      height: 58 * scale,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: .3)),
+      ),
+      child: Text(
+        '$score',
+        style: TextStyle(
+          color: color,
+          fontSize: 22,
+          fontWeight: FontWeight.w900,
         ),
       ),
-      const SizedBox(width: 13),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    );
+    final detail = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '$title confidence',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                Text(
-                  '${(confidence * 100).round()}%',
-                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: LinearProgressIndicator(
-                value: confidence,
-                minHeight: 6,
-                color: color,
-                backgroundColor: TonyoColors.surfaceRaised,
-              ),
-            ),
-            const SizedBox(height: 7),
             Text(
-              '${(completeness * 100).round()}% coverage · ${freshness == null ? 'freshness unavailable' : '${(freshness! * 100).round()}% fresh'}',
-              style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+              '$title confidence',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            Text(
+              '${(confidence * 100).round()}%',
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
             ),
           ],
         ),
-      ),
-    ],
-  );
+        const SizedBox(height: 7),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: LinearProgressIndicator(
+            value: confidence,
+            minHeight: 6,
+            color: color,
+            backgroundColor: TonyoColors.surfaceRaised,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          '$coverage · $age',
+          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+        ),
+      ],
+    );
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label:
+          '$title estimated score: $score out of 100. '
+          '${(confidence * 100).round()}% confidence. $coverage. $age.',
+      child: scale > 1.3
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [scoreBadge, const SizedBox(height: 12), detail],
+            )
+          : Row(
+              children: [
+                scoreBadge,
+                const SizedBox(width: 13),
+                Expanded(child: detail),
+              ],
+            ),
+    );
+  }
 }
 
 class _RankedDriversCard extends StatelessWidget {
@@ -920,13 +987,15 @@ class _DriverGroup extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 7),
-          Text(
-            title,
-            style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              letterSpacing: .6,
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .6,
+              ),
             ),
           ),
         ],

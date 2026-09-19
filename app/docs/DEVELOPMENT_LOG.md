@@ -1,10 +1,67 @@
 # Tonyo Development Log
 
+## September 19, 2026 — Version 0.35 production polish
+
+**Prompt:** “start doing the next step on the project”
+
+**Scope:** Begin the planned production-polish milestone after 0.34.1. Audit
+main screens/forms at 320px and 2× text, expose useful score/chart semantics,
+make interrupted reaction tests restart safely, and harden pending input sync.
+Inspection found routine saves replace whole cloud input collections; change
+this to optimistic, targeted edits so another device's records cannot be
+silently removed. Preserve local pending edits across restarts, surface retry
+and conflict recovery, and verify with bounded local tests. Full production
+sign-off still requires physical devices, provider policy and deployment checks.
+
+**Result:** Improved main-screen and form layouts for narrow screens/large text,
+chart/score semantics, labeled controls, and save progress/error/retry flows.
+Activity, sleep, check-in and reaction retries preserve stable record IDs.
+Reaction timing now starts after the green frame with a monotonic stopwatch;
+background/covered tests discard partial rounds and require restart. Profile
+exposes pending cloud writes, retry, and confirmed cloud-input recovery.
+
+**Sync decisions:** Replaced routine full-collection writes with optimistic
+per-record patches and a durable owner-scoped input baseline. Fresh cloud reads
+retain pending local changes; conflicting edits keep both versions until explicit
+recovery. Merged writes explicitly clear nullable fields, preserve unknown fields,
+and restore timestamps after JSON round-trips. Legacy migration updates metadata
+without replacing inputs. Large writes use idempotent 200-record chunks, with
+partial completion documented. Consented outcomes have a separate upload/delete
+journal bound to their owner and consent receipt. Pending inputs drive local
+scores, forecasts, guidance and insights until sync succeeds.
+
+**Challenges/fixes:** Independent review caught stale fields surviving merge,
+legacy migration deleting concurrent additions, recovery racing an active upload,
+SDK-cached children being treated as authoritative cloud data, and cloud outcome
+reads erasing pending uploads. Tests now seed explicit cloud accounts and assert
+targeted writes; stale fixtures had relied on ordinary saves creating accounts.
+See [production-polish notes](PRODUCTION_POLISH.md) for boundaries and release QA.
+
+**Validation:** All 606 Flutter tests pass; `flutter analyze --no-pub` reports
+no issues. The suite includes 9 input-sync and 10 outcome-sync regression cases,
+16 main-screen/Profile accessibility and recovery cases, 15 input/sleep checks,
+and the reaction lifecycle/save cases. Main screens were also inspected in
+rendered images. Web release and iOS simulator builds pass. An initial iOS
+build-setting error cleared after checking Xcode settings and retrying the build
+separately. Build caveats are recorded in `PRODUCTION_POLISH.md`.
+
+## September 19, 2026 — Version 0.34.1: Local time zones and separate naps
+
+**Prompt:** “i will add some features first, add automatic time zone(for users in different region),differentiate bedtime and nap time (average sleep time goes lower when taking nap) I want to you to find a way to balance the score algorithmn and potentially making it better”
+
+**Plan/decisions:** Detect the device region without location permission; refresh on launch/resume and use local calendar boundaries across DST. Persist new cached instants in UTC while retaining legacy parsing. Add an explicit main-sleep/nap choice and a separate nap signal; retain old records without guessing their type. Select the longest main sleep per wake date so a short later entry cannot replace it. Keep naps out of nightly averages and bedtime consistency. Evaluate a capped, temporary nap contribution separately from unchanged core weights and confidence. Benchmark the existing synthetic cohort for regressions; synthetic directionality does not establish predictive accuracy.
+
+**Result:** Implemented automatic device-region detection on iOS/Android/macOS/web, Profile visibility and historical-window-safe model-preparation defaults. Calendar-day aggregation, Firestore query/replacement bounds, stored UTC instants and foreground invalidation cover travel/DST/day rollover. Added Main sleep / Nap entry/edit/history, separate nap totals, longest-main-sleep selection and HealthKit secondary-session/correction reconciliation. Nap recovery is capped at +3 Energy/+2 Cognitive, delayed, fading and nonstacking; core weights/confidence are unchanged. Both rules versions changed and obsolete residual artifacts/snapshots are rejected. No live cloud data, deployment or training was performed.
+
+**Challenges/fixes:** A later short sleep used to replace a longer same-day main sleep. Imported naps with corrected end times could remain duplicated; grouped bedtime now defines the actual main-sleep span when awake gaps exist. Fixed UTC/local instant versus civil-date tests, calendar bounds over 23/25-hour days, and async responses from the old region. Native time-zone channels are mocked explicitly in widget tests.
+
+**Validation:** Full Flutter regression suite: 552 passed; focused tests also exercise Tokyo and both US DST boundaries. Web release and iOS simulator builds passed; standard Xcode package resolution repaired initially missing generated plugin products without project/signing changes. Narrow 320/390px sleep forms at 2× text passed overflow tests and rendered-image inspection. Nap lifecycle tests verify zero credit immediately after waking, +3 Energy at one hour, zero at six hours, and no repeated refresh of expired zero credit. All 3,000 synthetic cohort score pairs are unchanged; those records contain no nap outcomes and cannot establish a predictive-accuracy improvement. Detailed scoring rationale and quantitative comparison are in `ENGINE_TUNING_LOG.md`; platform limitations are in `TIMEZONES.md`. Real-iPhone/Android runtime verification and prior production/youth-release checks remain pending.
+
 ## Project Overview
 - **App Name:** Tonyo
 - **Purpose:** Private, explainable fatigue and energy coaching for students and athletes — check-ins, reaction benchmarks, scores, forecasts, and recovery guidance (wellness tool, not a diagnostic product).
 - **Target Users:** Adolescent students and student athletes who want to balance focus, training, and recovery.
-- **Current implementation:** Version 0.34 — Privacy and Youth Safety safeguards (as of 2026-09-07). Youth launch remains gated on policy/verified-guardian infrastructure; iPhone/heap and production rules deployment/IAM checks remain pending.
+- **Current implementation:** Version 0.34.1 — Automatic local time and separate naps (as of 2026-09-19). Youth launch remains gated on policy/verified-guardian infrastructure; iPhone/heap and production rules deployment/IAM checks remain pending.
 
 ## Implementation Report
 
@@ -56,7 +113,7 @@ release decisions. No live account data has been deleted or consent changed.
 | 0.32 | Lightweight on-device Energy residual model | Implemented; account not promoted; iPhone/heap and rules release QA pending |
 | 0.33 | Model versions, confidence, driver evidence and update history | Complete; local tests and rendered UI verification |
 | 0.34 | Privacy and youth safety safeguards | Implemented and locally verified; youth launch and production deployment gated |
-| 0.35 | Production polish | Not started |
+| 0.35 | Production polish | Implemented locally; physical-device and production release checks pending |
 
 ### What ships in 0.8
 - Energy, mood, and stress ratings on an intuitive **1–10** scale
@@ -79,7 +136,7 @@ release decisions. No live account data has been deleted or consent changed.
 
 ### Verification
 - Command: `flutter test` (from `app/`)
-- Last verified: 2026-09-07 — **508 Flutter tests passed** with no missed-tap warnings; **24 executable Firestore emulator cases passed**. `flutter analyze` and `git diff --check` report no issues.
+- Last Flutter verification: 2026-09-19 — **606 tests passed**. `flutter analyze` and `git diff --check` report no issues. The separate **24 executable Firestore emulator cases** last passed on 2026-09-07; no production rules/IAM verification is implied.
 
 ## Features Implemented
 1. App shell & navigation (Today, Forecast, Add, Insights, Profile / Coach) - Complete (v0.1, v0.5.1)
@@ -118,6 +175,8 @@ release decisions. No live account data has been deleted or consent changed.
 34. Lightweight personalized Energy model (eight-weight ridge residual, local artifacts, explicit bounded refresh and deterministic fallback) - Implemented; release QA pending (v0.32)
 35. Model transparency (score guide, exact saved drivers, evidence kinds, model versions and dated account metadata) - Complete (v0.33)
 36. Privacy/youth safeguards (explicit receipts, required review, guardian authority gate, raw export, reauthenticated recovery-safe deletion, executable owner rules) - Implemented; youth launch/deployment gates remain (v0.34)
+37. Local time zones and separate naps (automatic region, calendar boundaries, separate main-sleep statistics, bounded nap credit) - Implemented and locally verified (v0.34.1)
+38. Production polish (large text, accessible charts, interrupted reaction tests, resilient saves and conflict-aware input/outcome sync) - Implemented; physical-device/release QA pending (v0.35)
 
 ## Day-to-Day Entries
 

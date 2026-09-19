@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart' as timezone;
+
+import 'timezone_database.dart';
 
 enum NotificationPermissionState { unknown, granted, denied, unavailable }
 
@@ -65,7 +66,7 @@ class LocalNotificationService implements NotificationService {
 
   Future<void> _initialize() async {
     if (_initialized || !supportsScheduling) return;
-    timezone_data.initializeTimeZones();
+    initializeTimezoneDatabase();
     const darwin = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -162,6 +163,9 @@ class LocalNotificationService implements NotificationService {
         id: notification.platformId,
         title: notification.title,
         body: notification.body,
+        // These are one-shot forecast instants, not recurring wall-clock
+        // alarms. UTC preserves the selected instant across DST gaps/repeats.
+        // The controller replaces this plan after the device zone changes.
         scheduledDate: timezone.TZDateTime.from(
           notification.scheduledAt.toUtc(),
           timezone.UTC,

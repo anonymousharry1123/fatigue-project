@@ -22,6 +22,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   double stress = 4;
   final noteController = TextEditingController();
   bool saving = false;
+  String? _pendingCreateId;
+  DateTime? _pendingCreateTimestamp;
 
   CheckInPeriod get period =>
       CheckInLogic.periodFor(widget.initialCheckIn?.timestamp);
@@ -55,6 +57,34 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
           widget.initialCheckIn == null ? 'Daily Check-in' : 'Edit Check-in',
         ),
         backgroundColor: Colors.transparent,
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: double.infinity,
+              minHeight: 52,
+            ),
+            child: FilledButton(
+              onPressed: saving ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: TonyoColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(
+                saving
+                    ? 'Saving…'
+                    : widget.initialCheckIn == null
+                    ? 'Save check-in'
+                    : 'Update check-in',
+              ),
+            ),
+          ),
+        ),
       ),
       body: SafeArea(
         top: false,
@@ -122,7 +152,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                     low: '1 · Drained',
                     middle: '5 · OK',
                     high: '10 · Charged',
-                    onChanged: (value) => setState(() => energy = value),
+                    onChanged: saving
+                        ? null
+                        : (value) => setState(() => energy = value),
                   ),
                   const SizedBox(height: 12),
                   _RatingCard(
@@ -134,7 +166,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                     low: '1 · Low',
                     middle: '5 · Steady',
                     high: '10 · Great',
-                    onChanged: (value) => setState(() => mood = value),
+                    onChanged: saving
+                        ? null
+                        : (value) => setState(() => mood = value),
                   ),
                   const SizedBox(height: 12),
                   _RatingCard(
@@ -146,16 +180,19 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                     low: '1 · Calm',
                     middle: '5 · Moderate',
                     high: '10 · Maxed',
-                    onChanged: (value) => setState(() => stress = value),
+                    onChanged: saving
+                        ? null
+                        : (value) => setState(() => stress = value),
                   ),
                   const SizedBox(height: 12),
                   TonyoCard(
                     child: TextField(
                       controller: noteController,
+                      enabled: !saving,
                       maxLines: 2,
                       decoration: const InputDecoration(
                         border: InputBorder.none,
-                        hintText: 'Optional note',
+                        labelText: 'Optional note',
                         hintStyle: TextStyle(color: TonyoColors.muted),
                       ),
                     ),
@@ -191,29 +228,6 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: saving ? null : _save,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: TonyoColors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    saving
-                        ? 'Saving…'
-                        : widget.initialCheckIn == null
-                        ? 'Save check-in'
-                        : 'Update check-in',
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -221,25 +235,48 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   }
 
   Future<void> _save() async {
+    if (saving) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => saving = true);
     final initial = widget.initialCheckIn;
-    final when = initial?.timestamp ?? DateTime.now();
+    final when =
+        initial?.timestamp ?? (_pendingCreateTimestamp ??= DateTime.now());
+    final id =
+        initial?.id ??
+        (_pendingCreateId ??= 'checkin-${when.microsecondsSinceEpoch}');
     final period = CheckInLogic.periodFor(when);
-    await AppScope.of(context).addCheckIn(
-      id: initial?.id,
-      energy: energy,
-      mood: mood,
-      stress: stress,
-      note: noteController.text.trim(),
-      timestamp: when,
-    );
-    if (mounted) {
+    final controller = AppScope.of(context);
+    try {
+      await controller.addCheckIn(
+        id: id,
+        energy: energy,
+        mood: mood,
+        stress: stress,
+        note: noteController.text.trim(),
+        timestamp: when,
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${period.label} check-in saved on a 1–10 scale.'),
+          content: Text(
+            controller.cloudSyncError == null
+                ? '${period.label} check-in saved on a 1–10 scale.'
+                : 'Check-in saved on this device. Cloud sync is pending.',
+          ),
         ),
       );
       Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save your check-in. Your ratings and note are still here; please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => saving = false);
     }
   }
 }
@@ -307,23 +344,20 @@ class _RatingCard extends StatelessWidget {
   final String low;
   final String middle;
   final String high;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChanged;
 
   @override
   Widget build(BuildContext context) => TonyoCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Icon(icon, color: color, size: 19),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -342,93 +376,76 @@ class _RatingCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: '${value.round()}',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 44,
-                  fontWeight: FontWeight.w900,
+        ExcludeSemantics(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '${value.round()}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const TextSpan(
-                text: ' / 10',
-                style: TextStyle(
-                  color: TonyoColors.muted,
-                  fontWeight: FontWeight.w800,
+                const TextSpan(
+                  text: ' / 10',
+                  style: TextStyle(
+                    color: TonyoColors.muted,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            overlayShape: SliderComponentShape.noOverlay,
-            trackShape: const RoundedRectSliderTrackShape(),
-            thumbShape: const RoundSliderThumbShape(
-              enabledThumbRadius: _thumbRadius,
-            ),
-            showValueIndicator: ShowValueIndicator.never,
-            // Zero out Material 3 padding so label inset matches thumb centers.
-            padding: EdgeInsets.zero,
-          ),
-          child: Slider(
-            value: value,
-            min: CheckInLogic.minRating,
-            max: CheckInLogic.maxRating,
-            divisions: 9,
-            activeColor: color,
-            onChanged: onChanged,
-          ),
-        ),
-        // Only 1 / 5 / 10 — placed at true tick fractions (5 is at 4/9, not 50%).
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: _thumbRadius),
-          child: SizedBox(
-            height: 28,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final trackWidth = constraints.maxWidth;
-                Widget tickLabel(double rating, String text) {
-                  final fraction =
-                      (rating - CheckInLogic.minRating) /
-                      (CheckInLogic.maxRating - CheckInLogic.minRating);
-                  const labelWidth = 76.0;
-                  final centerX = fraction * trackWidth;
-                  return Positioned(
-                    left: centerX - labelWidth / 2,
-                    width: labelWidth,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: Text(
-                        text,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.visible,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    tickLabel(1, low),
-                    tickLabel(5, middle),
-                    tickLabel(10, high),
-                  ],
-                );
-              },
+              ],
             ),
           ),
+        ),
+        MergeSemantics(
+          child: Semantics(
+            label: title,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                overlayShape: SliderComponentShape.noOverlay,
+                trackShape: const RoundedRectSliderTrackShape(),
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: _thumbRadius,
+                ),
+                showValueIndicator: ShowValueIndicator.never,
+                // Keep the control at least 48px high, including on touch screens.
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: Slider(
+                value: value,
+                min: CheckInLogic.minRating,
+                max: CheckInLogic.maxRating,
+                divisions: 9,
+                semanticFormatterCallback: (rating) =>
+                    '${rating.round()} out of 10',
+                activeColor: color,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final entry in [low, middle, high].indexed)
+              Expanded(
+                child: Text(
+                  entry.$2,
+                  textAlign: entry.$1 == 0
+                      ? TextAlign.start
+                      : entry.$1 == 2
+                      ? TextAlign.end
+                      : TextAlign.center,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+          ],
         ),
       ],
     ),
@@ -460,12 +477,12 @@ class _HistoryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
               _Chip('Energy ${checkIn.energy.round()}', TonyoColors.mint),
-              const SizedBox(width: 6),
               _Chip('Mood ${checkIn.mood.round()}', TonyoColors.blue),
-              const SizedBox(width: 6),
               _Chip('Stress ${checkIn.stress.round()}', TonyoColors.amber),
             ],
           ),
@@ -525,42 +542,45 @@ class _TestCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TonyoCard(
     padding: EdgeInsets.zero,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            MetricIcon(icon: icon, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    detail,
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
-                      fontSize: 10,
+    child: Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              MetricIcon(icon: icon, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
-                  ),
-                ],
+                    Text(
+                      detail,
+                      style: const TextStyle(
+                        color: TonyoColors.muted,
+                        fontSize: 10,
+                      ),
+                    ),
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Text(
-              status,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

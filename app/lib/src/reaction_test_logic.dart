@@ -48,5 +48,6 @@ abstract final class ReactionTestLogic {
   }
 
   static bool isComplete(List<int> validResults) =>
-      validResults.length >= roundsRequired;
+      validResults.length == roundsRequired &&
+      validResults.every(isValidReaction);
 }

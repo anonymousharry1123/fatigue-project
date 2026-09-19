@@ -1,6 +1,8 @@
+import 'local_day.dart';
 import 'dart:convert';
 
 import 'cloud_schema.dart';
+import 'cloud_sync.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 
@@ -160,6 +162,10 @@ abstract interface class CloudRepository {
   /// Replaces the user profile, signals, and check-ins with a single logical
   /// snapshot. Implementations must reject a uid other than the signed-in uid.
   Future<void> replaceUser(String uid, CloudUserState state);
+
+  /// Applies only explicitly changed inputs. A changed remote value fails
+  /// closed; unrelated documents and protected account fields are preserved.
+  Future<void> applyInputPatch(String uid, InputSyncPatch patch);
 
   Future<List<SignalReading>> signalsByRange(
     String uid, {
@@ -512,6 +518,7 @@ class MemoryCloudRepository implements CloudRepository {
   final Map<String, Map<String, OutcomeRecord>> _outcomes = {};
   final Map<String, Map<String, RiskAlert>> _riskAlerts = {};
   int replaceUserCallCount = 0;
+  int inputPatchCallCount = 0;
   int scoreUpsertCallCount = 0;
   int forecastReplaceCallCount = 0;
 
@@ -637,6 +644,19 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<void> applyInputPatch(String uid, InputSyncPatch patch) async {
+    _authorize(uid);
+    inputPatchCallCount += 1;
+    final remote = _users[uid];
+    if (remote == null || remote.deletionPending) {
+      throw StateError('The account is unavailable for syncing.');
+    }
+    final actual = InputSyncSnapshot.fromState(remote);
+    patch.checkAgainst(actual);
+    _users[uid] = actual.overlay(patch).toState(remote);
+  }
+
+  @override
   Future<List<SignalReading>> signalsByRange(
     String uid, {
     required DateTime start,
@@ -742,8 +762,8 @@ class MemoryCloudRepository implements CloudRepository {
   }) async {
     _authorize(uid);
     forecastReplaceCallCount += 1;
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    final start = localDay(day);
+    final end = localDay(start, 1);
     if (points.any(
       (point) => point.time.isBefore(start) || !point.time.isBefore(end),
     )) {
@@ -1052,20 +1072,16 @@ class MemoryCloudRepository implements CloudRepository {
   }
 }
 
-bool _sameDay(DateTime left, DateTime right) =>
-    left.year == right.year &&
-    left.month == right.month &&
-    left.day == right.day;
+bool _sameDay(DateTime left, DateTime right) => sameLocalDay(left, right);
 
-String scoreSnapshotId(DateTime day) =>
-    '${day.year.toString().padLeft(4, '0')}-'
-    '${day.month.toString().padLeft(2, '0')}-'
-    '${day.day.toString().padLeft(2, '0')}';
+String scoreSnapshotId(DateTime day) => localDayKey(day);
 
-String forecastPointId(DateTime time) =>
-    '${scoreSnapshotId(time)}-'
-    '${time.hour.toString().padLeft(2, '0')}-'
-    '${time.minute.toString().padLeft(2, '0')}';
+String forecastPointId(DateTime instant) {
+  final time = instant.toUtc().toLocal();
+  return '${scoreSnapshotId(time)}-'
+      '${time.hour.toString().padLeft(2, '0')}-'
+      '${time.minute.toString().padLeft(2, '0')}';
+}
 
 Object? _exportSafe(Object? value) => switch (value) {
   DateTime dateTime => dateTime.toIso8601String(),

@@ -12,8 +12,8 @@ const int notificationPreferencesVersion = 1;
 const int localMigrationVersion = 1;
 
 DateTime cloudDateTime(Object? value, {required String field}) {
-  if (value is DateTime) return value;
-  if (value is String) return DateTime.parse(value);
+  if (value is DateTime) return value.toLocal();
+  if (value is String) return DateTime.parse(value).toLocal();
   throw FormatException('$field must be a DateTime or ISO-8601 string.');
 }
 

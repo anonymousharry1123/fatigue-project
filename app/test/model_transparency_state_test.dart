@@ -78,8 +78,8 @@ void main() {
       expect(state.scoreSourceLabel, contains('on-device adjustment'));
       expect(state.snapshot.confidence, reference.confidence);
       expect(state.snapshot.cognitive, reference.cognitive);
-      expect(state.energyModelVersion, 'energy-rules-v1');
-      expect(state.cognitiveModelVersion, 'cognitive-rules-v1');
+      expect(state.energyModelVersion, FatigueEngine.energyModelVersion);
+      expect(state.cognitiveModelVersion, FatigueEngine.cognitiveModelVersion);
       expect(state.localModel!.improvementPercent, closeTo(30, .001));
     },
   );
@@ -176,7 +176,7 @@ void main() {
       expect(corrected.drivers.last.evidenceSources, [SignalSource.model]);
       expect(
         corrected.withoutPersonalization().energyModelVersion,
-        'energy-rules-v1',
+        FatigueEngine.energyModelVersion,
       );
     },
   );

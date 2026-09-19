@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:app/src/energy_residual_model.dart';
+import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/ml_prep_builder.dart';
 import 'package:app/src/ml_prep_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -222,6 +223,34 @@ void main() {
       );
       expect(() => model.weights[0] = 100, throwsUnsupportedError);
       expect(() => model.featureCoverage['mood'] = 0, throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'local residual artifacts require the current deterministic reference rules',
+    () {
+      final current = fit(benchmarkSnapshot()).model!.toJson();
+      expect(
+        current['referenceRulesVersion'],
+        FatigueEngine.energyModelVersion,
+      );
+      final legacy = Map<String, dynamic>.from(current)
+        ..remove('referenceRulesVersion');
+      final obsolete = <String, dynamic>{
+        ...current,
+        'referenceRulesVersion': 'energy-rules-v1',
+      };
+      for (final artifact in [legacy, obsolete]) {
+        // A valid checksum must not make weights trained against incompatible
+        // reference scores eligible for the current model.
+        artifact['artifactChecksum'] = prepFingerprint(
+          {...artifact}..remove('artifactChecksum'),
+        );
+        expect(
+          () => EnergyResidualModel.fromJson(artifact),
+          throwsFormatException,
+        );
+      }
     },
   );
 

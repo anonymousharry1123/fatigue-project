@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../daily_history_logic.dart';
 import '../models.dart';
+import '../local_day.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'activity_log_screen.dart';
@@ -282,10 +283,11 @@ class _HistoryDayCard extends StatelessWidget {
 
   static String _dayLabel(DateTime date) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final difference = today.difference(date).inDays;
-    if (difference == 0) return 'Today · ${formatDate(date)}';
-    if (difference == 1) return 'Yesterday · ${formatDate(date)}';
+    final today = localDay(now);
+    if (localDay(date) == today) return 'Today · ${formatDate(date)}';
+    if (localDay(date) == localDay(today, -1)) {
+      return 'Yesterday · ${formatDate(date)}';
+    }
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${weekdays[date.weekday - 1]} · ${formatDate(date)}';
   }
@@ -394,7 +396,7 @@ class _HistoryItemRow extends StatelessWidget {
 
 String _title(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => 'Activity log',
-  DailyHistoryItemKind.sleep => 'Sleep log',
+  DailyHistoryItemKind.sleep => item.sleep!.isNap ? 'Nap' : 'Main sleep',
   DailyHistoryItemKind.checkIn => '${item.checkIn!.period.label} check-in',
   DailyHistoryItemKind.signal => item.signal!.type.label,
 };
@@ -402,7 +404,7 @@ String _title(DailyHistoryItem item) => switch (item.kind) {
 String _detail(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => _activityDetail(item.activity!),
   DailyHistoryItemKind.sleep =>
-    '${_duration(item.sleep!.duration)} · quality ${item.sleep!.quality.round()}/5',
+    '${formatHour(item.sleep!.bedtime)}–${formatHour(item.sleep!.wakeTime)} · ${_duration(item.sleep!.duration)} · quality ${item.sleep!.quality.round()}/5',
   DailyHistoryItemKind.checkIn =>
     'Energy ${item.checkIn!.energy.round()} · Mood ${item.checkIn!.mood.round()} · Stress ${item.checkIn!.stress.round()}',
   DailyHistoryItemKind.signal =>
@@ -428,14 +430,18 @@ String _activityDetail(ActivityLogEntry log) {
 
 IconData _icon(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => Icons.directions_run_rounded,
-  DailyHistoryItemKind.sleep => Icons.bedtime_rounded,
+  DailyHistoryItemKind.sleep =>
+    item.sleep!.isNap
+        ? Icons.airline_seat_individual_suite_rounded
+        : Icons.bedtime_rounded,
   DailyHistoryItemKind.checkIn => Icons.sentiment_satisfied_alt_rounded,
   DailyHistoryItemKind.signal => iconForSignal(item.signal!.type),
 };
 
 Color _color(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => TonyoColors.amber,
-  DailyHistoryItemKind.sleep => TonyoColors.blue,
+  DailyHistoryItemKind.sleep =>
+    item.sleep!.isNap ? TonyoColors.violet : TonyoColors.blue,
   DailyHistoryItemKind.checkIn => TonyoColors.mint,
   DailyHistoryItemKind.signal => colorForSignal(item.signal!.type),
 };
