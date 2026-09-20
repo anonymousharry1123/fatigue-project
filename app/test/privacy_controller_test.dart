@@ -134,6 +134,7 @@ void main() {
       expect(h.controller.guardianConsentBlocker, isNotNull);
       expect(h.controller.privacyFeaturesAllowed, false);
       expect(h.health.reads, 0);
+      expect(h.repository.inputPatchCallCount, 0);
       await expectLater(
         h.controller.acceptPrivacy(
           ageBand: PrivacyAgeBand.adult,
@@ -149,8 +150,11 @@ void main() {
       expect(h.repository.privacyReads, 1);
       expect(h.controller.guardianConsentVerified, true);
       expect(h.controller.privacyFeaturesAllowed, true);
-      await h.controller.addSignal(SignalType.hydration, 1);
+      // Foreground recovery now flushes pending preference metadata once
+      // fresh guardian verification allows uploads.
       expect(h.repository.inputPatchCallCount, 1);
+      await h.controller.addSignal(SignalType.hydration, 1);
+      expect(h.repository.inputPatchCallCount, 2);
       expect(h.repository.replaceUserCallCount, 0);
       final saved = (await h.repository.readUser('owner'))!;
       expect(saved.signals, hasLength(2));

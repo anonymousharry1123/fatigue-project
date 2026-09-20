@@ -75,6 +75,7 @@ class AppController extends ChangeNotifier {
   // Device navigation state, deliberately separate from profile/cloud data.
   static const _signedOutKey = 'tonyo_signed_out_v1';
   static const _deletionKey = 'tonyo_privacy_deletion_v1';
+  static const _deviceRecoveryKeyPrefix = 'tonyo_device_recovery_v1_';
   static const _prepWindowKeyPrefix = 'tonyo_ml_prep_window_v1_';
   static const forecastDayCount = 7;
   static const forecastFreshnessWindow = Duration(hours: 12);
@@ -1673,6 +1674,7 @@ class AppController extends ChangeNotifier {
       } on Object {
         privacyOperationError =
             'Account privacy could not be verified. Reconnect and retry.';
+        cloudSyncError = privacyOperationError;
         isReady = true;
         notifyListeners();
         return;
@@ -1771,24 +1773,20 @@ class AppController extends ChangeNotifier {
         !isSignedOut &&
         !isPrivacyBusy;
     if (isCloudAuthenticated && cloudRepository != null) {
-      final uid = cloudUid!;
+      final recoveringConnection =
+          !_cloudPrivacyVerified || cloudSyncError != null;
       try {
-        await _accountAuth.refreshPrivacyClaims();
-        if (!current() || deletionPending) return;
-        final state = await cloudRepository!.readAccountPrivacy(uid);
-        if (!current() || deletionPending) return;
-        _privacyConsent = state.consent;
-        _privacyOwnerUid = uid;
-        _cloudPrivacyVerified = true;
-        privacyOperationError = null;
-        outcomeConsent = state.outcomeConsent;
-        outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
-        _reconcileOutcomeSync();
-        if (state.deletionPending) await _saveDeletionJournal(uid, 'requested');
-        if (!current()) return;
-        if (!outcomeConsent) await _discardPersonalizedModel();
-        if (!current()) return;
-        await _writeLocal();
+        if (!await _refreshCloudPrivacy(current)) return;
+        if (isReady && (_syncBaseline == null || _syncOwnerUid != owner)) {
+          await _hydrateOrMigrateCloud(isCurrent: current);
+          if (!current()) return;
+        }
+        if (recoveringConnection &&
+            _canProcessData &&
+            !hasPendingCloudChanges) {
+          await _pushCloud();
+          if (!current()) return;
+        }
       } on Object {
         if (!current()) return;
         _cloudPrivacyVerified = false;
@@ -1810,10 +1808,21 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final hadPendingInputs = hasPendingCloudChanges;
+    if (hadPendingInputs) {
+      await _pushCloud();
+      if (!current()) return;
+    }
+    if (hasPendingOutcomeChanges) {
+      await refreshOutcomes(notify: false);
+      if (!current()) return;
+    }
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     if (!current()) return;
-    if (derivedViewsNeedRefresh && onboardingComplete) {
+    if ((derivedViewsNeedRefresh ||
+            (hadPendingInputs && !hasPendingCloudChanges)) &&
+        onboardingComplete) {
       if (_localClockChanged) {
         // Recreate local DateTime views from stored instants after travel/DST.
         signals = signals
@@ -1842,6 +1851,47 @@ class AppController extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+  }
+
+  /// A failed offline launch must be recoverable without passing the privacy
+  /// mutation gate first. Server verification still precedes any upload.
+  Future<bool> _refreshCloudPrivacy(bool Function() current) async {
+    final uid = cloudUid;
+    final repository = cloudRepository;
+    if (uid == null || repository == null) return false;
+    await _accountAuth.refreshPrivacyClaims();
+    if (!current() || deletionPending) return false;
+    final state = await repository.readAccountPrivacy(uid);
+    if (!current() || deletionPending) return false;
+    // Do not reassign another account's cached inputs to this session.
+    final owners = [
+      _privacyOwnerUid,
+      _syncOwnerUid,
+      _cloudMetadataUid,
+    ].whereType<String>().toSet();
+    final hasLocalData =
+        onboardingComplete ||
+        accountEmail != null ||
+        signals.isNotEmpty ||
+        checkIns.isNotEmpty ||
+        _outcomes.isNotEmpty;
+    if (owners.any((owner) => owner != uid) ||
+        (owners.isEmpty && hasLocalData)) {
+      throw StateError('Sign in again to restore this account.');
+    }
+    _privacyConsent = state.consent;
+    _privacyOwnerUid = uid;
+    _cloudPrivacyVerified = true;
+    privacyOperationError = null;
+    outcomeConsent = state.outcomeConsent;
+    outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
+    _reconcileOutcomeSync();
+    if (state.deletionPending) await _saveDeletionJournal(uid, 'requested');
+    if (!current()) return false;
+    if (!outcomeConsent) await _discardPersonalizedModel();
+    if (!current()) return false;
+    await _writeLocal();
+    return current();
   }
 
   static bool _napScoreNeedsRefresh(
@@ -3035,6 +3085,100 @@ class AppController extends ChangeNotifier {
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_json());
 
+  bool get canExportDeviceBackup =>
+      !isSignedOut &&
+      !_isSigningOut &&
+      !deletionPending &&
+      !isDeletingAccount &&
+      (cloudUid == null
+          ? !cloudEnabled && _privacyOwnerUid == null
+          : _privacyOwnerUid == cloudUid);
+
+  static String _deviceRecoveryKey(String uid) =>
+      '$_deviceRecoveryKeyPrefix${base64Url.encode(utf8.encode(uid))}';
+
+  /// Offline backup never reads Firebase, requires renewed consent, or changes
+  /// a sync acknowledgement. The journal retains edits and deletion tombstones.
+  Future<String> exportDeviceBackup() async {
+    if (!canExportDeviceBackup) {
+      throw StateError('Device data is unavailable for this account.');
+    }
+    final uid = cloudUid;
+    final revision = _sessionRevision;
+    final preferences = await SharedPreferences.getInstance();
+    if (!canExportDeviceBackup ||
+        uid != cloudUid ||
+        revision != _sessionRevision) {
+      throw StateError('Account changed. Nothing was exported.');
+    }
+    final recovery = uid == null
+        ? null
+        : preferences.getString(_deviceRecoveryKey(uid));
+    final savedRecovery = recovery == null ? null : jsonDecode(recovery);
+    return const JsonEncoder.withIndent('  ').convert({
+      'backupVersion': 1,
+      'backupType': 'tonyoDeviceData',
+      'exportedAt': _now().toUtc().toIso8601String(),
+      'ownerUid': uid,
+      'local': _json(),
+      'sync': {
+        'pendingInputs': hasPendingCloudChanges,
+        'pendingOutcomes': hasPendingOutcomeChanges,
+        'cloudVerifiedForSession': _cloudPrivacyVerified,
+        'cloudSyncInProgress': isCloudSyncing,
+      },
+      if (savedRecovery is Map && savedRecovery['ownerUid'] == uid)
+        'beforeCloudRestore': savedRecovery,
+      'scope': {
+        'source': 'thisDevice',
+        'includesUnsyncedChanges': true,
+        'cloudFetched': false,
+        'excludes': [
+          'Cloud-only records',
+          'Authentication credentials',
+          'Original Apple Health store',
+          'Derived model and preparation caches',
+        ],
+      },
+    });
+  }
+
+  Future<void> _preserveDeviceDataBeforeRestore(String uid) async {
+    if (_privacyOwnerUid != uid ||
+        (signals.isEmpty && checkIns.isEmpty && _outcomes.isEmpty)) {
+      return;
+    }
+    final revision = _sessionRevision;
+    final backup = <String, Object?>{
+      'ownerUid': uid,
+      'savedAt': _now().toUtc().toIso8601String(),
+      'reason': 'Device data before cloud restore; prior sync status unknown',
+      'local': _json(),
+    };
+    final preferences = await SharedPreferences.getInstance();
+    if (revision != _sessionRevision || cloudUid != uid || deletionPending) {
+      throw StateError('Account changed during cloud restore.');
+    }
+    final key = _deviceRecoveryKey(uid);
+    final previous = preferences.getString(key);
+    if (previous != null) {
+      final saved = Map<String, dynamic>.from(jsonDecode(previous) as Map);
+      if (saved['ownerUid'] != uid) {
+        throw StateError(
+          'The device recovery copy belongs to another account.',
+        );
+      }
+      if (sameSyncValue(saved['local'], backup['local'])) return;
+      // A later interrupted restore must preserve both the original backup
+      // and new device edits, rather than silently dropping either snapshot.
+      final earlier = saved.remove('earlierSnapshots') as List? ?? [];
+      backup['earlierSnapshots'] = [...earlier, saved];
+    }
+    if (!await preferences.setString(key, jsonEncode(backup))) {
+      throw StateError('Could not preserve device data. Cloud restore paused.');
+    }
+  }
+
   Future<String> exportAllData() async {
     if (isSignedOut || isPrivacyBusy) {
       throw StateError(
@@ -3064,6 +3208,7 @@ class AppController extends ChangeNotifier {
       for (final key in prefs.getKeys()) {
         if (!key.startsWith('tonyo_energy_model_v1_') &&
             !key.startsWith('tonyo_ml_prep_v1_') &&
+            !key.startsWith(_deviceRecoveryKeyPrefix) &&
             !key.startsWith(_prepWindowKeyPrefix)) {
           continue;
         }
@@ -3102,7 +3247,12 @@ class AppController extends ChangeNotifier {
                   key == 'tonyo_ml_prep_v1_$requestKey' &&
                   value['identity'] == identity;
             }
-            if (ownedModel || key == _prepWindowKey(uid) || ownedPrep) {
+            final ownedRecovery =
+                key == _deviceRecoveryKey(uid) && value['ownerUid'] == uid;
+            if (ownedModel ||
+                key == _prepWindowKey(uid) ||
+                ownedPrep ||
+                ownedRecovery) {
               localCaches[key] = value;
             }
           }
@@ -3192,6 +3342,12 @@ class AppController extends ChangeNotifier {
       await repository.clearScoreSnapshots(session.uid);
       await repository.clearGuidance(session.uid);
       await repository.clearOutcomes(session.uid);
+      ensureCurrent();
+      final preferences = await SharedPreferences.getInstance();
+      ensureCurrent();
+      if (!await preferences.remove(_deviceRecoveryKey(session.uid))) {
+        throw StateError('Could not clear the device recovery copy. Retry.');
+      }
     }
     await _commit(energyInputsChanged: true);
     ensureCurrent();
@@ -3428,6 +3584,7 @@ class AppController extends ChangeNotifier {
       (key) =>
           key == _storageKey ||
           key == _signedOutKey ||
+          key.startsWith(_deviceRecoveryKeyPrefix) ||
           key.startsWith(_prepWindowKeyPrefix) ||
           key.startsWith('tonyo_ml_prep_v1_') ||
           key.startsWith('tonyo_energy_model_v1_'),
@@ -3555,7 +3712,7 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _hydrateOrMigrateCloud() async {
+  Future<void> _hydrateOrMigrateCloud({bool Function()? isCurrent}) async {
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
@@ -3576,11 +3733,22 @@ class AppController extends ChangeNotifier {
       final remote = await repository.readUser(session.uid);
       if (cloudUid != session.uid ||
           _sessionRevision != revision ||
+          (isCurrent != null && !isCurrent()) ||
           _isSigningOut ||
           deletionPending) {
         return;
       }
       final metadataFetchedAt = _now();
+      if (remote == null || pending == null) {
+        await _preserveDeviceDataBeforeRestore(session.uid);
+        if (cloudUid != session.uid ||
+            _sessionRevision != revision ||
+            (isCurrent != null && !isCurrent()) ||
+            _isSigningOut ||
+            deletionPending) {
+          return;
+        }
+      }
       if (remote == null) {
         if (onboardingComplete &&
             accountEmail != null &&
@@ -3623,6 +3791,7 @@ class AppController extends ChangeNotifier {
       }
       if (cloudUid == session.uid &&
           _sessionRevision == revision &&
+          (isCurrent == null || isCurrent()) &&
           !_isSigningOut) {
         _cloudMetadataUid = session.uid;
         _cloudMetadataFetchedAt = metadataFetchedAt;
@@ -3630,11 +3799,15 @@ class AppController extends ChangeNotifier {
         _cloudUserUpdatedAt = remote?.userUpdatedAt;
       }
     } on Object catch (error) {
-      if (cloudUid == session.uid && _sessionRevision == revision) {
+      if (cloudUid == session.uid &&
+          _sessionRevision == revision &&
+          (isCurrent == null || isCurrent())) {
         cloudSyncError = error.toString();
       }
     } finally {
-      if (cloudUid == session.uid && _sessionRevision == revision) {
+      if (cloudUid == session.uid &&
+          _sessionRevision == revision &&
+          (isCurrent == null || isCurrent())) {
         isCloudSyncing = false;
       }
     }
@@ -3713,6 +3886,46 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> retryCloudSync() async {
+    if (isSignedOut || _isSigningOut || deletionPending || isPrivacyBusy) {
+      throw StateError('Finish the current account operation before syncing.');
+    }
+    final uid = cloudUid;
+    final revision = _sessionRevision;
+    final generation = ++_privacyRefreshGeneration;
+    bool current() =>
+        uid == cloudUid &&
+        revision == _sessionRevision &&
+        generation == _privacyRefreshGeneration &&
+        !isSignedOut &&
+        !_isSigningOut &&
+        !isPrivacyBusy;
+    if (isCloudAuthenticated && cloudRepository != null) {
+      isCloudSyncing = true;
+      notifyListeners();
+      try {
+        if (!await _refreshCloudPrivacy(current)) return;
+        if (_syncBaseline == null || _syncOwnerUid != uid) {
+          await _hydrateOrMigrateCloud(isCurrent: current);
+          if (!current()) return;
+          if (cloudSyncError != null) {
+            throw StateError('Cloud account could not be restored. Retry.');
+          }
+        }
+      } on Object {
+        if (current()) {
+          _cloudPrivacyVerified = false;
+          cloudSyncError = privacyOperationError =
+              'Account privacy could not be verified. Reconnect and retry.';
+        }
+        rethrow;
+      } finally {
+        if (uid == cloudUid && revision == _sessionRevision) {
+          isCloudSyncing = false;
+          notifyListeners();
+        }
+      }
+    }
+    if (!current()) return;
     final ensureCurrent = _beginMutation();
     await _pushCloud();
     ensureCurrent();

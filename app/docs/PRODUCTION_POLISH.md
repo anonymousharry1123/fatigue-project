@@ -35,8 +35,10 @@ Transactions use chunks of at most 200 child documents. A large import can be
 partially committed if a later chunk fails. The durable baseline is acknowledged
 only after all chunks succeed, and the next attempt safely repeats completed
 chunks. This is not atomic across the whole import. Ordinary profile fields are
-compared at their top-level field boundaries, so concurrent edits to different
-parts of one profile/preferences object can conservatively conflict.
+compared at individual field boundaries, so concurrent edits to separate profile
+or preferences fields merge without blocking unrelated records. Same-field
+conflicts still require explicit review. Existing snapshot journals remain
+compatible.
 
 Consent receipts, deletion state and model metadata retain their separate APIs.
 Routine saves and legacy migration never replace whole input collections or
@@ -48,8 +50,11 @@ the local edit and the remote version separately. Choosing **Use cloud version**
 requires confirmation and replaces the pending local input edits with the
 current cloud inputs. Recovery waits for an active upload and rejects a new
 input edit arriving during recovery. There is no automatic last-write-wins
-resolution or background retry loop: launch, the next save, and explicit retry
-attempt pending input sync while the session and privacy gate permit it.
+resolution or background retry loop: launch, foreground reconnect, the next save,
+and explicit retry attempt pending input sync while the session and privacy gate
+permit it. Explicit retry can reverify privacy after an offline launch before
+attempting uploads; it does not require an already-verified connection. Newer
+privacy responses and account changes invalidate stale recovery requests.
 While input sync is pending, scores, forecasts, guidance and insights use the
 saved local edits; they do not replace them with old cloud-derived results or
 upload derived data from a mixture of old and pending inputs.
@@ -91,3 +96,33 @@ rules and IAM; and complete store metadata, signing and privacy review. Existing
 guardian verification and launch-policy gates in `PRIVACY_SAFETY.md` remain.
 Recommendation feedback and other derived-data services retain their existing
 sync mechanisms; this journal is not a general queue for every cloud operation.
+
+## Offline device backup
+
+**Save device backup** is available in Profile settings, its pending-sync card,
+and Privacy center, including the connection recovery screen. It never queries
+Firebase, requires a new consent receipt, or clears a pending journal. The JSON
+contains the current profile, signals, check-ins, outcomes, local settings and
+pending input/outcome journals (including deletions). It is a device snapshot,
+not a complete cloud export; the existing full-account export remains separate.
+
+iOS exports through Files, Android uses the system document picker, and macOS
+uses a save sheet. Save confirmation follows successful file completion;
+cancellation and failure do not claim success. Other platforms offer explicit
+copy-to-clipboard with instructions to paste into a file. A backup file can be
+inspected independently; automatic JSON import is not provided in this change.
+
+When cloud restoration would replace owned legacy inputs with no usable sync
+baseline, or restore a missing cloud account, a durable recovery copy is written
+first. Later distinct recovery copies preserve the earlier snapshots. These are
+included as `beforeCloudRestore` in device backups and in owner-scoped account
+exports. Unknown sync status is not treated as permission to upload or resurrect
+ambiguous records. Tracking reset and account/device deletion remove recovery
+copies. Backup and recovery reject mismatched accounts, sign-out and deletion.
+
+The September 20 change passes **640 Flutter tests**, static analysis and
+whitespace checks, including reconnect, account-race, offline-backup,
+independent-field merge and native-save tests. An unsigned iOS simulator build
+also passes. Actual iPhone/Android picker behavior and production Firebase
+connectivity still require device QA; Android compilation is unavailable on the
+development host because its SDK/JDK are not installed.

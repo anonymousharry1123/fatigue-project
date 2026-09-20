@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
+import '../device_backup_service.dart';
 import '../privacy_consent.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'device_backup_flow.dart';
 
 /// Account controls are explicit user actions. Merely opening this route never
 /// exports, changes consent, imports Health data, or starts a deletion.
@@ -15,10 +17,12 @@ class PrivacyCenterScreen extends StatefulWidget {
     super.key,
     required this.controller,
     this.requireReview = false,
+    this.backupService = const DeviceBackupService(),
   });
 
   final AppController controller;
   final bool requireReview;
+  final DeviceBackupService backupService;
 
   @override
   State<PrivacyCenterScreen> createState() => _PrivacyCenterScreenState();
@@ -30,6 +34,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
   bool _acknowledged = false;
   bool _ageLocked = false;
   bool _working = false;
+  bool _savingBackup = false;
+  bool _retryingConnection = false;
+  String? _connectionError;
   String? _error;
   String? _export;
   String? _exportOwner;
@@ -37,7 +44,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
   bool _copied = false;
 
   AppController get _controller => widget.controller;
-  bool get _busy => _working || _controller.isPrivacyBusy;
+  bool get _busy =>
+      _working ||
+      _savingBackup ||
+      _retryingConnection ||
+      _controller.isPrivacyBusy;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -113,6 +124,48 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         'Your existing records stay in place. Review your age '
                         'band, region, and data use before new tracking, Health '
                         'imports, or optional learning can start.',
+                  ),
+                  const SizedBox(height: 16),
+                  TonyoCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _backupControls(),
+                        if (_controller.isCloudAuthenticated) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'If the account could not be verified while offline, '
+                            'retry when connected to check it and sync pending changes.',
+                            style: TextStyle(color: TonyoColors.muted),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            key: const Key('privacy-retry-connection'),
+                            onPressed: _busy || _controller.isCloudSyncing
+                                ? null
+                                : _retryConnection,
+                            icon: const Icon(Icons.sync_rounded),
+                            label: Text(
+                              _retryingConnection
+                                  ? 'Checking connection…'
+                                  : 'Retry connection',
+                            ),
+                          ),
+                          if (_connectionError case final error?) ...[
+                            const SizedBox(height: 8),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                error,
+                                style: const TextStyle(
+                                  color: TonyoColors.amber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -245,6 +298,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (!review) ...[
+                        _backupControls(),
+                        const Divider(height: 28),
+                      ],
                       Text(
                         _controller.isCloudAuthenticated
                             ? 'Generate a fresh export of your private Tonyo account '
@@ -378,6 +435,66 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       );
     },
   );
+
+  Widget _backupControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'Save the data on this device, including unsynced changes, as a JSON '
+        'backup. No internet is needed.',
+        style: TextStyle(color: TonyoColors.muted),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        key: const Key('privacy-save-backup'),
+        onPressed: _savingBackup || !_controller.canExportDeviceBackup
+            ? null
+            : _saveBackup,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+        icon: const Icon(Icons.save_alt_rounded),
+        label: Text(_savingBackup ? 'Saving backup…' : 'Save device backup'),
+      ),
+    ],
+  );
+
+  Future<void> _saveBackup() async {
+    if (_savingBackup || !_controller.canExportDeviceBackup) return;
+    setState(() => _savingBackup = true);
+    try {
+      await saveDeviceBackup(context, _controller, widget.backupService);
+    } finally {
+      if (mounted) setState(() => _savingBackup = false);
+    }
+  }
+
+  Future<void> _retryConnection() async {
+    if (_busy || _controller.isCloudSyncing) return;
+    final revision = _controller.sessionRevision;
+    setState(() {
+      _retryingConnection = true;
+      _connectionError = null;
+    });
+    try {
+      await _controller.retryCloudSync();
+      if (!mounted || revision != _controller.sessionRevision) return;
+      setState(() {
+        _connectionError =
+            _controller.cloudSyncError ??
+            _controller.outcomeError ??
+            (_controller.privacyReviewRequired
+                ? 'Connection checked. Review your privacy choices to continue.'
+                : null);
+      });
+    } on Object {
+      if (mounted && revision == _controller.sessionRevision) {
+        setState(
+          () => _connectionError = 'Could not connect. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _retryingConnection = false);
+    }
+  }
 
   Widget _dataUse() => TonyoCard(
     child: Column(

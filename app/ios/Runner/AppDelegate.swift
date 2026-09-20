@@ -11,6 +11,8 @@ import UserNotifications
   private var healthChannel: FlutterMethodChannel?
   private var screenTimeChannel: FlutterMethodChannel?
   private var timezoneChannel: FlutterMethodChannel?
+  private var backupChannel: FlutterMethodChannel?
+  private let backupExporter = DeviceBackupExporter()
   private var healthObserverQueries: [HKObserverQuery] = []
 
   override func application(
@@ -53,6 +55,23 @@ import UserNotifications
       result(TimeZone.autoupdatingCurrent.identifier)
     }
     self.timezoneChannel = timezoneChannel
+
+    let backupChannel = FlutterMethodChannel(
+      name: "tonyo/device_backup",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    backupChannel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "save" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let self else {
+        result(FlutterError(code: "backup_unavailable", message: "The app is unavailable.", details: nil))
+        return
+      }
+      self.backupExporter.save(call.arguments, result: result)
+    }
+    self.backupChannel = backupChannel
   }
 
   private func handleScreenTimeCall(
@@ -650,5 +669,98 @@ import UserNotifications
         result(payload)
       }
     }
+  }
+}
+
+/// Retains the picker delegate and temporary source until Files confirms that
+/// the export completed. Presenting the sheet alone is not a successful save.
+private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
+  UIAdaptivePresentationControllerDelegate
+{
+  private var pendingResult: FlutterResult?
+  private var temporaryDirectory: URL?
+  private var activePicker: UIDocumentPickerViewController?
+
+  func save(_ arguments: Any?, result: @escaping FlutterResult) {
+    guard pendingResult == nil else {
+      result(FlutterError(code: "backup_busy", message: "A backup is already being saved.", details: nil))
+      return
+    }
+    guard let values = arguments as? [String: Any],
+      let json = values["json"] as? String,
+      let filename = values["filename"] as? String,
+      !filename.isEmpty, filename.hasSuffix(".json"),
+      filename.rangeOfCharacter(from: .controlCharacters) == nil,
+      !filename.contains("/"), !filename.contains("\\")
+    else {
+      result(FlutterError(code: "backup_invalid", message: "The backup file is invalid.", details: nil))
+      return
+    }
+    // Flutter's scene-based lifecycle does not keep AppDelegate.window set.
+    guard var presenter = UIApplication.shared.connectedScenes
+      .compactMap({ $0 as? UIWindowScene })
+      .filter({ $0.activationState == .foregroundActive })
+      .flatMap({ $0.windows })
+      .first(where: { $0.isKeyWindow })?.rootViewController
+    else {
+      result(FlutterError(code: "backup_unavailable", message: "The save dialog is unavailable.", details: nil))
+      return
+    }
+    while let presented = presenter.presentedViewController {
+      presenter = presented
+    }
+    guard !presenter.isBeingDismissed, presenter.view.window != nil else {
+      result(FlutterError(code: "backup_unavailable", message: "The save dialog is unavailable.", details: nil))
+      return
+    }
+
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("tonyo-backup-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let source = directory.appendingPathComponent(filename)
+      try Data(json.utf8).write(to: source, options: [.atomic, .completeFileProtection])
+      let picker = UIDocumentPickerViewController(forExporting: [source], asCopy: true)
+      picker.delegate = self
+      picker.modalPresentationStyle = .formSheet
+      pendingResult = result
+      temporaryDirectory = directory
+      activePicker = picker
+      presenter.present(picker, animated: true)
+      picker.presentationController?.delegate = self
+    } catch {
+      try? FileManager.default.removeItem(at: directory)
+      result(FlutterError(code: "backup_failed", message: "The backup could not be saved. Please try again.", details: nil))
+    }
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard controller === activePicker else { return }
+    guard !urls.isEmpty else {
+      finish(FlutterError(code: "backup_failed", message: "Files did not confirm the backup was saved.", details: nil))
+      return
+    }
+    finish(true)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    guard controller === activePicker else { return }
+    finish(false)
+  }
+
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    guard presentationController.presentedViewController === activePicker else { return }
+    finish(false)
+  }
+
+  private func finish(_ value: Any) {
+    let result = pendingResult
+    pendingResult = nil
+    if let directory = temporaryDirectory {
+      try? FileManager.default.removeItem(at: directory)
+    }
+    temporaryDirectory = nil
+    activePicker = nil
+    result?(value)
   }
 }

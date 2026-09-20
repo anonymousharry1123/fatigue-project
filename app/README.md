@@ -2,6 +2,20 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
+## Cloud sync recovery and device backups
+
+Use **Profile → Save device backup** to save a JSON copy of this phone's data,
+including changes still waiting for cloud sync. This works offline and is also
+available on the privacy connection recovery screen. iOS, Android and macOS
+open the system save dialog; other platforms offer an explicit JSON copy option.
+Saving a backup does not clear pending uploads or replace cloud records.
+
+**Retry sync / Retry connection** now rechecks account privacy after an offline
+launch, and foreground reconnects retry pending uploads. Separate profile and
+preference edits from different devices merge; same-field conflicts still need
+review. Older device records without a sync journal are preserved in the backup
+before cloud restoration. See [sync and backup details](docs/PRODUCTION_POLISH.md).
+
 ## Version 0.35 — Production polish
 
 Main screens and forms support narrow displays and larger text, with named

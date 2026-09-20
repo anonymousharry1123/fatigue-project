@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../app_controller.dart';
+import '../device_backup_service.dart';
 import '../health_service.dart';
 import '../models.dart';
 import '../notification_logic.dart';
@@ -11,12 +12,18 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'account_sign_in_dialog.dart';
 import 'admin/admin_cohort_screen.dart';
+import 'device_backup_flow.dart';
 import 'ml_prep_screen.dart';
 import 'model_transparency_screen.dart';
 import 'privacy_center_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({
+    super.key,
+    this.backupService = const DeviceBackupService(),
+  });
+
+  final DeviceBackupService backupService;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -24,11 +31,16 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSigningOut = false;
+  bool _isSavingDeviceBackup = false;
 
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final profile = controller.profile;
+    final backupAvailable =
+        !_isSigningOut &&
+        !_isSavingDeviceBackup &&
+        controller.canExportDeviceBackup;
     final syncNeedsAttention =
         controller.hasPendingCloudChanges ||
         controller.hasPendingOutcomeChanges ||
@@ -122,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             OutlinedButton.icon(
               key: const Key('profile-sign-out-button'),
-              onPressed: _isSigningOut
+              onPressed: _isSigningOut || _isSavingDeviceBackup
                   ? null
                   : () => _signOut(context, controller),
               icon: _isSigningOut
@@ -136,7 +148,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
           if (controller.isCloudAuthenticated && syncNeedsAttention) ...[
             const SizedBox(height: 14),
-            _CloudSyncRecoveryCard(controller: controller),
+            _CloudSyncRecoveryCard(
+              controller: controller,
+              savingBackup: _isSavingDeviceBackup,
+              onSaveBackup: backupAvailable
+                  ? () => _saveDeviceBackup(controller)
+                  : null,
+            ),
           ],
           const SizedBox(height: 18),
           LayoutBuilder(
@@ -217,6 +235,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
             status: controller.isCloudAuthenticated ? 'On' : 'Local',
           ),
           const SectionHeader('Settings'),
+          if (!controller.isSignedOut)
+            ListTile(
+              key: const Key('device-backup-setting'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 2),
+              leading: const Icon(
+                Icons.save_alt_rounded,
+                color: TonyoColors.muted,
+              ),
+              title: Text(
+                _isSavingDeviceBackup ? 'Saving backup…' : 'Save device backup',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text(
+                'Save the data on this device, including unsynced changes, as JSON. Works offline.',
+                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              ),
+              enabled: backupAvailable,
+              onTap: backupAvailable
+                  ? () => _saveDeviceBackup(controller)
+                  : null,
+            ),
           if (controller.cloudEnabled && !controller.isCloudAuthenticated)
             _SettingTile(
               icon: Icons.cloud_outlined,
@@ -549,8 +588,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (_) => AccountSignInDialog(controller: controller),
       );
 
+  Future<void> _saveDeviceBackup(AppController controller) async {
+    if (_isSavingDeviceBackup ||
+        _isSigningOut ||
+        !controller.canExportDeviceBackup) {
+      return;
+    }
+    setState(() => _isSavingDeviceBackup = true);
+    try {
+      await saveDeviceBackup(context, controller, widget.backupService);
+    } finally {
+      if (mounted) setState(() => _isSavingDeviceBackup = false);
+    }
+  }
+
   Future<void> _signOut(BuildContext context, AppController controller) async {
     if (_isSigningOut ||
+        _isSavingDeviceBackup ||
         controller.isSignedOut ||
         !(controller.onboardingComplete || controller.isCloudAuthenticated)) {
       return;
@@ -1619,9 +1673,15 @@ class _NotificationStatus extends StatelessWidget {
 }
 
 class _CloudSyncRecoveryCard extends StatefulWidget {
-  const _CloudSyncRecoveryCard({required this.controller});
+  const _CloudSyncRecoveryCard({
+    required this.controller,
+    required this.savingBackup,
+    required this.onSaveBackup,
+  });
 
   final AppController controller;
+  final bool savingBackup;
+  final VoidCallback? onSaveBackup;
 
   @override
   State<_CloudSyncRecoveryCard> createState() => _CloudSyncRecoveryCardState();
@@ -1662,7 +1722,8 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
           title: const Text('Use cloud version?'),
           content: const Text(
             'This replaces unsynced profile, activity, sleep, and check-in edits '
-            'on this device with the version saved in your cloud account.',
+            'on this device with the version saved in your cloud account. '
+            'Save a device backup first if you want to keep a copy of these edits.',
           ),
           actions: [
             TextButton(
@@ -1742,6 +1803,22 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             ),
           ],
           const SizedBox(height: 12),
+          const Text(
+            'Save a JSON backup of the data on this device, including unsynced '
+            'changes. No internet is needed.',
+            style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('cloud-sync-save-backup'),
+            onPressed: widget.onSaveBackup,
+            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+            icon: const Icon(Icons.save_alt_rounded, size: 18),
+            label: Text(
+              widget.savingBackup ? 'Saving backup…' : 'Save device backup',
+            ),
+          ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             key: const Key('cloud-sync-retry'),
             onPressed: busy ? null : _retry,

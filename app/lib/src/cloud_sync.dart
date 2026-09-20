@@ -94,7 +94,11 @@ class InputSyncSnapshot {
   InputSyncSnapshot overlay(InputSyncPatch patch, {bool useBefore = false}) {
     final nextRoot = {...root};
     for (final item in patch.root.entries) {
-      nextRoot[item.key] = useBefore ? item.value.before : item.value.after;
+      _setRootPath(
+        nextRoot,
+        item.key,
+        useBefore ? item.value.before : item.value.after,
+      );
     }
     Map<String, Map<String, dynamic>> apply(
       Map<String, Map<String, dynamic>> source,
@@ -179,13 +183,13 @@ class InputDocumentEdit {
 
 class InputSyncPatch {
   InputSyncPatch(InputSyncSnapshot before, InputSyncSnapshot after)
-    : root = {
-        for (final key in {...before.root.keys, ...after.root.keys})
-          if (!sameSyncValue(before.root[key], after.root[key]))
-            key: SyncValueEdit(before.root[key], after.root[key]),
-      },
+    : root = _rootEdits(before.root, after.root),
       signals = _edits(before.signals, after.signals),
       checkIns = _edits(before.checkIns, after.checkIns);
+
+  /// Dotted paths refer to individual known profile/preferences fields. The
+  /// durable journal still stores full snapshots, so older journals retain
+  /// their meaning while unrelated edits from another device can merge.
   final Map<String, SyncValueEdit> root;
   final List<InputDocumentEdit> signals;
   final List<InputDocumentEdit> checkIns;
@@ -199,15 +203,31 @@ class InputSyncPatch {
         InputDocumentEdit(id, before[id], after[id]),
   ];
 
-  void checkAgainst(InputSyncSnapshot actual) {
+  Map<String, dynamic> rootData({bool useBefore = false}) {
+    final data = <String, dynamic>{};
+    for (final item in root.entries) {
+      _setRootPath(
+        data,
+        item.key,
+        useBefore ? item.value.before : item.value.after,
+      );
+    }
+    return data;
+  }
+
+  void checkRootAgainst(InputSyncSnapshot actual) {
     for (final item in root.entries) {
       checkSyncValue(
         'profile',
-        actual.root[item.key],
+        _rootPathValue(actual.root, item.key),
         item.value.before,
         item.value.after,
       );
     }
+  }
+
+  void checkAgainst(InputSyncSnapshot actual) {
+    checkRootAgainst(actual);
     for (final item in signals) {
       checkSyncValue(
         'signal',
@@ -225,6 +245,56 @@ class InputSyncPatch {
       );
     }
   }
+}
+
+Map<String, SyncValueEdit> _rootEdits(
+  Map<String, dynamic> before,
+  Map<String, dynamic> after, [
+  String prefix = '',
+]) {
+  final edits = <String, SyncValueEdit>{};
+  for (final key in {...before.keys, ...after.keys}) {
+    final previous = before[key];
+    final next = after[key];
+    if (sameSyncValue(previous, next)) continue;
+    final path = prefix.isEmpty ? key : '$prefix.$key';
+    if ((previous is Map || previous == null) &&
+        (next is Map || next == null) &&
+        (previous is Map || next is Map)) {
+      final nested = _rootEdits(
+        previous is Map ? _map(previous) : {},
+        next is Map ? _map(next) : {},
+        path,
+      );
+      // Clearing a known map clears only its known leaves. Unknown fields from
+      // newer clients or server writers remain untouched by merged writes.
+      edits.addAll(nested);
+    } else {
+      edits[path] = SyncValueEdit(previous, next);
+    }
+  }
+  return edits;
+}
+
+Object? _rootPathValue(Map<String, dynamic> root, String path) {
+  Object? value = root;
+  for (final key in path.split('.')) {
+    if (value is! Map) return null;
+    value = value[key];
+  }
+  return value;
+}
+
+void _setRootPath(Map<String, dynamic> root, String path, Object? value) {
+  final keys = path.split('.');
+  var parent = root;
+  for (final key in keys.take(keys.length - 1)) {
+    final existing = parent[key];
+    final child = existing is Map ? _map(existing) : <String, dynamic>{};
+    parent[key] = child;
+    parent = child;
+  }
+  parent[keys.last] = value;
 }
 
 class InputSyncConflict implements Exception {

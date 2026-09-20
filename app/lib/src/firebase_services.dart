@@ -458,14 +458,7 @@ class FirestoreCloudRepository implements CloudRepository {
           final actual = InputSyncSnapshot.fromState(
             _stateFromData(account.data()!),
           );
-          for (final item in patch.root.entries) {
-            checkSyncValue(
-              'profile',
-              actual.root[item.key],
-              item.value.before,
-              item.value.after,
-            );
-          }
+          patch.checkRootAgainst(actual);
         }
         final snapshots = [
           for (final item in chunk)
@@ -509,14 +502,8 @@ class FirestoreCloudRepository implements CloudRepository {
         if (last && patch.root.isNotEmpty) {
           transaction.set(user, {
             ...syncMergedData(
-              {
-                for (final item in patch.root.entries)
-                  item.key: item.value.before,
-              },
-              {
-                for (final item in patch.root.entries)
-                  item.key: item.value.after,
-              },
+              patch.rootData(useBefore: true),
+              patch.rootData(),
             ),
             'schemaVersion': cloudSchemaVersion,
             'updatedAt': FieldValue.serverTimestamp(),
