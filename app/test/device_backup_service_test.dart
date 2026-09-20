@@ -46,6 +46,69 @@ void main() {
     expect(await service.save(json: '{}', filename: 'backup.json'), isFalse);
   });
 
+  test(
+    'opening awaits selection and returns the exact UTF-8 contents',
+    () async {
+      const json = '{"note":"未同步 ☀️","pending":[{"id":"local-only"}]}';
+      final opened = Completer<void>();
+      final completed = Completer<String?>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'open');
+        expect(call.arguments, isNull);
+        opened.complete();
+        return completed.future;
+      });
+      var returned = false;
+      final opening = service.open().then((value) {
+        returned = true;
+        return value;
+      });
+      await opened.future;
+      expect(returned, isFalse);
+      completed.complete(json);
+      expect(await opening, json);
+    },
+  );
+
+  test('canceling open returns null without reporting a failure', () async {
+    messenger.setMockMethodCallHandler(channel, (_) async => null);
+    expect(await service.open(), isNull);
+  });
+
+  test('opening distinguishes unreadable files from cancellation', () async {
+    for (final code in [
+      'backup_failed',
+      'backup_too_large',
+      'backup_invalid_encoding',
+      'backup_busy',
+      'backup_interrupted',
+    ]) {
+      messenger.setMockMethodCallHandler(channel, (_) async {
+        throw PlatformException(
+          code: code,
+          message: 'Cannot open this backup.',
+        );
+      });
+      await expectLater(
+        service.open(),
+        throwsA(isA<PlatformException>().having((e) => e.code, 'code', code)),
+      );
+    }
+  });
+
+  test('a build without the open bridge reports unsupported', () async {
+    await expectLater(
+      service.open(),
+      throwsA(
+        isA<PlatformException>().having(
+          (e) => e.code,
+          'code',
+          'backup_unsupported',
+        ),
+      ),
+    );
+  });
+
   test('save failures remain distinguishable from canceling', () async {
     messenger.setMockMethodCallHandler(channel, (_) async {
       throw PlatformException(code: 'backup_failed', message: 'Disk is full.');
@@ -84,7 +147,7 @@ void main() {
     },
   );
 
-  test('supports only hosts with a save implementation', () async {
+  test('supports only hosts with a backup implementation', () async {
     for (final platform in TargetPlatform.values) {
       debugDefaultTargetPlatformOverride = platform;
       expect(
@@ -99,6 +162,16 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     await expectLater(
       service.save(json: '{}', filename: 'backup.json'),
+      throwsA(
+        isA<PlatformException>().having(
+          (e) => e.code,
+          'code',
+          'backup_unsupported',
+        ),
+      ),
+    );
+    await expectLater(
+      service.open(),
       throwsA(
         isA<PlatformException>().having(
           (e) => e.code,

@@ -71,6 +71,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Today’s plan'), 200);
     expect(find.text('Today’s plan'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
@@ -87,8 +88,11 @@ void main() {
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Forecast alerts'), 200);
-    await tester.tap(find.text('Forecast alerts'));
+    await tester.scrollUntilVisible(
+      find.text('Notifications').hitTestable(),
+      200,
+    );
+    await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('notification-master-switch')), findsOneWidget);
@@ -419,6 +423,7 @@ void main() {
     await _scrollMainListTo(tester, find.text('AI Coach'), 250);
     await tester.tap(find.text('AI Coach'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Today’s plan'), 200);
     expect(find.text('Today’s plan'), findsOneWidget);
   });
 
@@ -636,7 +641,7 @@ void main() {
   });
 
   testWidgets(
-    'Versions 0.18–0.31 show plan actions, outcomes, and wellness flags',
+    'Coach shows a reminder timeline, optional feedback, and wellness flags',
     (tester) async {
       final now = DateTime.now();
       final controller =
@@ -703,8 +708,9 @@ void main() {
       expect(find.text('Generated daily plan'), findsOneWidget);
       expect(find.byKey(const Key('coach-daily-plan-summary')), findsOneWidget);
       expect(find.textContaining('Morning-to-evening plan'), findsOneWidget);
-      expect(find.textContaining('Future plans will learn'), findsOneWidget);
+      expect(find.textContaining('optional reminders'), findsOneWidget);
       expect(find.text('RECOVERY FIRST'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Wellness flags'), 180);
       expect(find.text('Wellness flags'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Short-sleep pattern'), 180);
       expect(find.text('Short-sleep pattern'), findsOneWidget);
@@ -722,38 +728,18 @@ void main() {
       expect(find.textContaining('WINDOW'), findsWidgets);
       expect(find.byIcon(Icons.link_rounded), findsWidgets);
       expect(find.byIcon(Icons.balance_rounded), findsWidgets);
-      await tester.scrollUntilVisible(
-        find.byKey(Key('accept-recommendation-$focusId')),
-        180,
-      );
-      await Scrollable.ensureVisible(
-        tester.element(find.byKey(Key('accept-recommendation-$focusId'))),
-        alignment: .5,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(Key('accept-recommendation-$focusId')));
-      await tester.pumpAndSettle();
-      expect(
-        controller.recommendations
-            .singleWhere((item) => item.id == focusId)
-            .status,
-        RecommendationStatus.accepted,
-      );
-      await tester.scrollUntilVisible(
-        find.byKey(Key('complete-recommendation-$focusId')),
-        120,
-      );
-      await Scrollable.ensureVisible(
-        tester.element(find.byKey(Key('complete-recommendation-$focusId'))),
-        alignment: .5,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(Key('complete-recommendation-$focusId')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(Key('accept-recommendation-$focusId')), findsNothing);
+      expect(find.byKey(Key('complete-recommendation-$focusId')), findsNothing);
+      expect(find.byKey(Key('plan-reminder-status-$focusId')), findsOneWidget);
       await tester.scrollUntilVisible(
         find.byKey(Key('helpful-recommendation-$focusId')),
         100,
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('helpful-recommendation-$focusId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('helpful-recommendation-$focusId')));
       await tester.pumpAndSettle();
       expect(
@@ -762,54 +748,31 @@ void main() {
             .helpful,
         isTrue,
       );
-      expect(find.text('Was this advice helpful?'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(Key('record-outcome-$focusId')),
-        100,
-      );
-      await Scrollable.ensureVisible(
-        tester.element(find.byKey(Key('record-outcome-$focusId'))),
-        alignment: .5,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(Key('record-outcome-$focusId')));
-      await tester.pumpAndSettle();
-      expect(find.text('Observed energy'), findsOneWidget);
-      expect(find.byKey(const Key('observed-energy-value')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('save-observed-energy')));
-      await tester.pumpAndSettle();
-      expect(controller.outcomeForRecommendation(focusId)?.value, 6);
-      expect(
-        find.byKey(Key('recommendation-outcome-$focusId')),
-        findsOneWidget,
-      );
+      expect(find.text('Was this advice helpful? (optional)'), findsWidgets);
+      expect(find.byKey(Key('record-outcome-$focusId')), findsNothing);
+      expect(controller.outcomeForRecommendation(focusId), isNull);
       await tester.scrollUntilVisible(
         find.text('Taper stimulation before bed'),
         220,
       );
       expect(find.text('Taper stimulation before bed'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(Key('dismiss-recommendation-$taperId')),
-        160,
-      );
-      await Scrollable.ensureVisible(
-        tester.element(find.byKey(Key('dismiss-recommendation-$taperId'))),
-        alignment: .5,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(Key('dismiss-recommendation-$taperId')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(Key('dismiss-recommendation-$taperId')), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(Key('not-helpful-recommendation-$taperId')),
         100,
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(Key('not-helpful-recommendation-$taperId'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('not-helpful-recommendation-$taperId')));
       await tester.pumpAndSettle();
       expect(
         controller.recommendations
             .singleWhere((item) => item.id == taperId)
             .status,
-        RecommendationStatus.dismissed,
+        RecommendationStatus.suggested,
       );
       expect(
         controller.recommendations

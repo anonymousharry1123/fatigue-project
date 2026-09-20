@@ -2,6 +2,36 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
+## Appearance
+
+Open **Profile → Appearance** to choose **Follow device**, **Light**, or **Dark**
+and one of six themes: Classic, Ocean, Forest, Clay, Plum, and Sunset.
+**Custom** lets you edit the main and secondary accents with color sliders or
+hex values, preview them, and **Apply** or **Cancel**. Shades adjust for
+readability; backgrounds and status colors stay consistent. Your last custom
+pair is retained when you try a preset.
+
+Appearance saves on this device, survives sign-out, and is separate from account
+sync and backups. New or invalid settings default to **Follow device + Classic**.
+Failed saves restore the last saved appearance and offer **Retry**.
+
+For local visual QA, run
+`flutter test --dart-define=THEME_SCREENSHOTS=true test/theme_visual_review_test.dart`.
+It writes light/dark screen renders to the ignored `build/theme-review/` folder.
+
+## Daily Coach reminders
+
+Turn on **AI Coach → Daily plan reminders** to receive a notification at each
+upcoming plan block's scheduled time. Notification taps open Coach. The plan is
+a timeline: accepting, completing and dismissing blocks are no longer required.
+Optional helpfulness feedback remains available for every block.
+
+Reminders update when the plan changes, use the phone's current time zone, and
+continue through the system scheduler after leaving the app. Open Tonyo each
+day to generate that day's plan and reminders. **Profile → Notifications** also
+controls the separate forecast alerts. Existing users must opt in to the new
+plan category; no permission prompt appears automatically.
+
 ## Cloud sync recovery and device backups
 
 Use **Profile → Save device backup** to save a JSON copy of this phone's data,
@@ -10,11 +40,18 @@ available on the privacy connection recovery screen. iOS, Android and macOS
 open the system save dialog; other platforms offer an explicit JSON copy option.
 Saving a backup does not clear pending uploads or replace cloud records.
 
-**Retry sync / Retry connection** now rechecks account privacy after an offline
-launch, and foreground reconnects retry pending uploads. Separate profile and
-preference edits from different devices merge; same-field conflicts still need
-review. Older device records without a sync journal are preserved in the backup
-before cloud restoration. See [sync and backup details](docs/PRODUCTION_POLISH.md).
+**Restore from backup** opens a saved file or pasted JSON and previews new,
+duplicate and differing records. Existing values stay unless replacement is
+selected. You can also select a recovery copy saved before cloud restoration.
+Backups can only be restored in their original account or local-only session.
+
+**Profile → Cloud sync** shows pending records, the last successful upload and
+actionable errors. Coach completions, ratings and alert dismissals survive an
+offline restart. Automatic retries run while the app is open, with increasing
+delays; **Retry sync / Retry connection** also rechecks account privacy after an
+offline launch. **Review conflicts** lets you choose phone or cloud values for
+each conflict while preserving unrelated edits. See
+[sync and backup details](docs/PRODUCTION_POLISH.md).
 
 ## Version 0.35 — Production polish
 

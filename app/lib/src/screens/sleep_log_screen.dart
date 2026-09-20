@@ -75,9 +75,9 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Keep main sleep and naps separate to preserve your nightly average.',
-              style: TextStyle(color: TonyoColors.muted),
+              style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
             const SizedBox(height: 18),
             TonyoCard(
@@ -109,8 +109,8 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                     _kind == SleepKind.nap
                         ? 'Naps add daytime rest without changing your main-sleep average or bedtime consistency.'
                         : 'Your longest planned sleep, including daytime sleep for shift schedules.',
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
+                    style: TextStyle(
+                      color: TonyoPalette.of(context).muted,
                       fontSize: 11,
                     ),
                   ),
@@ -162,15 +162,15 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       const Expanded(
                         child: Text(
                           'Sleep quality',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         '${_quality.round()} / 5',
-                        style: const TextStyle(
-                          color: TonyoColors.blue,
-                          fontWeight: FontWeight.w900,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).primary,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -184,7 +184,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         min: 1,
                         max: 5,
                         divisions: 4,
-                        activeColor: TonyoColors.blue,
+                        activeColor: TonyoPalette.of(context).primary,
                         semanticFormatterCallback: (value) =>
                             '${value.round()} out of 5',
                         onChanged: _saving
@@ -195,9 +195,9 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                   ),
                   Row(
                     children: [
-                      const MetricIcon(
+                      MetricIcon(
                         icon: Icons.schedule_rounded,
-                        color: TonyoColors.violet,
+                        color: TonyoPalette.of(context).secondary,
                         size: 36,
                       ),
                       const SizedBox(width: 10),
@@ -205,7 +205,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         child: Text(
                           'Calculated duration: ${_durationLabel(previewDuration)}',
                           key: const Key('sleep-duration-preview'),
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -249,9 +249,9 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
             TonyoCard(
               child: Row(
                 children: [
-                  const MetricIcon(
+                  MetricIcon(
                     icon: Icons.timeline_rounded,
-                    color: TonyoColors.mint,
+                    color: TonyoPalette.of(context).secondary,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -265,13 +265,13 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                           key: const Key('bedtime-consistency'),
                           style: const TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Average start-time variation across your 7 most recent main sleeps. Naps are excluded.',
                           style: TextStyle(
-                            color: TonyoColors.muted,
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 11,
                           ),
                         ),
@@ -286,9 +286,9 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
               key: const Key('nap-summary'),
               child: Row(
                 children: [
-                  const MetricIcon(
+                  MetricIcon(
                     icon: Icons.airline_seat_individual_suite_rounded,
-                    color: TonyoColors.violet,
+                    color: TonyoPalette.of(context).secondary,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -297,12 +297,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       children: [
                         Text(
                           '${recentNaps.length} ${recentNaps.length == 1 ? 'nap' : 'naps'} · ${_durationLabel(Duration(minutes: napMinutes))} total',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        const Text(
+                        Text(
                           'Tracked separately from main sleep.',
                           style: TextStyle(
-                            color: TonyoColors.muted,
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 11,
                           ),
                         ),
@@ -314,10 +314,10 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
             ),
             SectionHeader('Recent sleep', action: '${logs.length} saved'),
             if (logs.isEmpty)
-              const TonyoCard(
+              TonyoCard(
                 child: Text(
                   'No sleep entries yet. Main sleep and naps will appear here.',
-                  style: TextStyle(color: TonyoColors.muted),
+                  style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
               )
             else
@@ -539,7 +539,7 @@ class _TimeButton extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           formatHour(time),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ],
     ),
@@ -565,7 +565,9 @@ class _SleepHistoryCard extends StatelessWidget {
           icon: log.isNap
               ? Icons.airline_seat_individual_suite_rounded
               : Icons.bedtime_rounded,
-          color: log.isNap ? TonyoColors.violet : TonyoColors.blue,
+          color: log.isNap
+              ? TonyoPalette.of(context).secondary
+              : TonyoPalette.of(context).primary,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -574,11 +576,14 @@ class _SleepHistoryCard extends StatelessWidget {
             children: [
               Text(
                 '${log.isNap ? 'Nap' : 'Main sleep'} · ${_SleepLogScreenState._durationLabel(log.duration)}',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               Text(
                 '${formatDate(log.wakeTime)} · ${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · quality ${log.quality.round()}/5',
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),

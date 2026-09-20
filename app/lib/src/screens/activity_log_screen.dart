@@ -64,9 +64,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Fill any categories you tracked. Blank or 0 values are skipped; only values above 0 are saved as signals. Saved manual exercise and hydration replace Apple Health totals for that day; clearing a category or deleting the manual log restores the imported fallback.',
-              style: TextStyle(color: TonyoColors.muted),
+              style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
             const SizedBox(height: 18),
             TonyoCard(
@@ -82,7 +82,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       label: 'Hydration',
                       suffix: 'liters',
                       icon: Icons.water_drop_rounded,
-                      color: TonyoColors.mint,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -93,7 +93,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       label: 'Study time',
                       suffix: 'hours',
                       icon: Icons.menu_book_rounded,
-                      color: TonyoColors.amber,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -104,7 +104,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       label: 'Exercise load',
                       suffix: 'hours',
                       icon: Icons.fitness_center_rounded,
-                      color: TonyoColors.coral,
+                      color: TonyoPalette.of(context).primary,
                     ),
                     const SizedBox(height: 12),
                     _NumberField(
@@ -115,7 +115,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                       label: 'Screen time',
                       suffix: 'hours',
                       icon: Icons.smartphone_rounded,
-                      color: TonyoColors.violet,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     const SizedBox(height: 18),
                     OverflowBar(
@@ -148,10 +148,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             ),
             const SectionHeader('Last 7 days by category'),
             if (!week.any((series) => series.hasData))
-              const TonyoCard(
+              TonyoCard(
                 child: Text(
                   'No activity yet this week. Save a log to see daily category charts.',
-                  style: TextStyle(color: TonyoColors.muted),
+                  style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
               )
             else
@@ -163,10 +163,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
               ),
             SectionHeader('Recent entries', action: '${logs.length} saved'),
             if (logs.isEmpty)
-              const TonyoCard(
+              TonyoCard(
                 child: Text(
                   'No manual activity logs yet. Your first saved day will appear here.',
-                  style: TextStyle(color: TonyoColors.muted),
+                  style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
               )
             else
@@ -360,11 +360,11 @@ class _NumberField extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Text(
                     '($suffix)',
-                    style: const TextStyle(color: TonyoColors.muted),
+                    style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                 ],
               ),
@@ -405,7 +405,7 @@ class _CategoryWeekCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _color(series.type);
+    final color = _color(series.type, context);
     final unit = ActivityLogLogic.categoryUnit(series.type);
     final peakLabel = series.hasData
         ? 'Most on ${_weekday(series.peakDay)} · ${_format(series.peakValue)} $unit'
@@ -422,14 +422,14 @@ class _CategoryWeekCard extends StatelessWidget {
               Icon(_icon(series.type), color: color, size: 18),
               Text(
                 ActivityLogLogic.categoryTitle(series.type),
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               Text(
                 peakLabel,
                 style: TextStyle(
                   color: color,
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -472,7 +472,7 @@ class _CategoryWeekCard extends StatelessWidget {
                                       style: TextStyle(
                                         color: isPeak
                                             ? color
-                                            : TonyoColors.muted,
+                                            : TonyoPalette.of(context).muted,
                                         fontSize: 8,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -486,16 +486,7 @@ class _CategoryWeekCard extends StatelessWidget {
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(6),
                                 ),
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: isPeak
-                                      ? [color, color.withValues(alpha: .65)]
-                                      : [
-                                          color.withValues(alpha: .35),
-                                          color.withValues(alpha: .18),
-                                        ],
-                                ),
+                                color: color,
                               ),
                             ),
                           ],
@@ -515,8 +506,8 @@ class _CategoryWeekCard extends StatelessWidget {
                     child: Text(
                       _weekday(day),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
                       ),
@@ -538,12 +529,12 @@ class _CategoryWeekCard extends StatelessWidget {
     _ => Icons.insights_rounded,
   };
 
-  static Color _color(SignalType type) => switch (type) {
-    SignalType.hydration => TonyoColors.mint,
-    SignalType.study => TonyoColors.amber,
-    SignalType.exercise => TonyoColors.coral,
-    SignalType.screenTime => TonyoColors.violet,
-    _ => TonyoColors.primary,
+  static Color _color(SignalType type, BuildContext context) => switch (type) {
+    SignalType.hydration => TonyoPalette.of(context).secondary,
+    SignalType.study => TonyoPalette.of(context).secondary,
+    SignalType.exercise => TonyoPalette.of(context).primary,
+    SignalType.screenTime => TonyoPalette.of(context).secondary,
+    _ => TonyoPalette.of(context).primary,
   };
 
   static String _weekday(DateTime day) {
@@ -577,7 +568,7 @@ class _ActivityHistoryCard extends StatelessWidget {
             Expanded(
               child: Text(
                 formatDate(log.timestamp),
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
             IconButton(
@@ -597,18 +588,22 @@ class _ActivityHistoryCard extends StatelessWidget {
           runSpacing: 8,
           children: [
             _metric(
+              context,
               Icons.water_drop_rounded,
               '${_format(log.hydrationLiters)} L',
             ),
             _metric(
+              context,
               Icons.menu_book_rounded,
               '${_format(log.studyHours)} hr study',
             ),
             _metric(
+              context,
               Icons.fitness_center_rounded,
               '${_format(log.exerciseHours)} hr exercise',
             ),
             _metric(
+              context,
               Icons.smartphone_rounded,
               '${_format(log.screenTimeHours)} hr screen',
             ),
@@ -625,15 +620,15 @@ class _ActivityHistoryCard extends StatelessWidget {
         : amount.toStringAsFixed(1);
   }
 
-  Widget _metric(IconData icon, String text) => Row(
+  Widget _metric(BuildContext context, IconData icon, String text) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 15, color: TonyoColors.muted),
+      Icon(icon, size: 15, color: TonyoPalette.of(context).muted),
       const SizedBox(width: 4),
       Flexible(
         child: Text(
           text,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
       ),
     ],

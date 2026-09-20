@@ -9,6 +9,7 @@ import '../privacy_consent.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'device_backup_flow.dart';
+import 'backup_restore_screen.dart';
 
 /// Account controls are explicit user actions. Merely opening this route never
 /// exports, changes consent, imports Health data, or starts a deletion.
@@ -84,7 +85,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                   _PrivacyNotice(
                     key: Key('privacy-deletion-pending'),
                     icon: Icons.pause_circle_outline_rounded,
-                    color: TonyoColors.coral,
+                    color: TonyoPalette.of(context).error,
                     title: 'Deletion needs your attention',
                     text: needsDeletionSignIn
                         ? 'Cloud account deletion could not be confirmed. Sign '
@@ -116,9 +117,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                   const SizedBox(height: 16),
                 ],
                 if (review && !_controller.deletionPending) ...[
-                  const _PrivacyNotice(
+                  _PrivacyNotice(
                     icon: Icons.fact_check_outlined,
-                    color: TonyoColors.amber,
+                    color: TonyoPalette.of(context).warning,
                     title: 'A quick review before you continue',
                     text:
                         'Your existing records stay in place. Review your age '
@@ -133,10 +134,12 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         _backupControls(),
                         if (_controller.isCloudAuthenticated) ...[
                           const SizedBox(height: 12),
-                          const Text(
+                          Text(
                             'If the account could not be verified while offline, '
                             'retry when connected to check it and sync pending changes.',
-                            style: TextStyle(color: TonyoColors.muted),
+                            style: TextStyle(
+                              color: TonyoPalette.of(context).muted,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           OutlinedButton.icon(
@@ -157,8 +160,8 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                               liveRegion: true,
                               child: Text(
                                 error,
-                                style: const TextStyle(
-                                  color: TonyoColors.amber,
+                                style: TextStyle(
+                                  color: TonyoPalette.of(context).warning,
                                 ),
                               ),
                             ),
@@ -188,13 +191,17 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                           'Acknowledged ${_date(consent.acceptedAt)} · '
                           'Policy version ${consent.policyVersion}',
                           key: const Key('privacy-consent-receipt'),
-                          style: const TextStyle(color: TonyoColors.muted),
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
+                          ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'Age and region are saved with your consent record. '
                           'They cannot be changed here to bypass a protection.',
-                          style: TextStyle(color: TonyoColors.muted),
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
+                          ),
                         ),
                       ],
                       if (review &&
@@ -204,7 +211,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         if (_ageLocked && consent == null)
                           Text(
                             'Selected age band: ${_ageBand!.label}',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         PrivacyChoicesForm(
                           ageBand: consent?.ageBand ?? _ageBand,
@@ -255,16 +262,18 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         _PrivacyNotice(
                           key: const Key('privacy-guardian-required'),
                           icon: Icons.family_restroom_rounded,
-                          color: TonyoColors.amber,
+                          color: TonyoPalette.of(context).warning,
                           title: 'Verified guardian setup required',
                           text: blocker,
                         ),
                       ] else if (_controller.guardianConsentVerified) ...[
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           'Guardian authorization verified by the account service.',
                           key: Key('privacy-guardian-verified'),
-                          style: TextStyle(color: TonyoColors.mint),
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).success,
+                          ),
                         ),
                       ],
                       if (consent != null &&
@@ -280,10 +289,12 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                           icon: const Icon(Icons.refresh_rounded),
                           label: const Text('Check account status'),
                         ),
-                        const Text(
+                        Text(
                           'Checks the account service without changing your '
                           'saved choices or opting you into outcome learning.',
-                          style: TextStyle(color: TonyoColors.muted),
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
+                          ),
                         ),
                       ],
                     ],
@@ -310,10 +321,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                                   'device. This does not fetch another account.',
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Includes sensitive wellness information. Nothing is '
                         'copied or shared until you explicitly choose to do so.',
-                        style: TextStyle(color: TonyoColors.muted),
+                        style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                       const SizedBox(height: 14),
                       OutlinedButton.icon(
@@ -367,11 +378,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         'account data and this device’s Tonyo cache.',
                       ),
                       const SizedBox(height: 10),
-                      const Text(
+                      Text(
                         'Neither action deletes the original data in Apple '
                         'Health, files you exported, or copies cached on other '
                         'devices. Manage Apple Health access in iOS Settings.',
-                        style: TextStyle(color: TonyoColors.muted),
+                        style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                       const SizedBox(height: 14),
                       if (!_controller.deletionPending)
@@ -388,7 +399,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                       OutlinedButton.icon(
                         key: const Key('privacy-delete-data'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: TonyoColors.coral,
+                          foregroundColor: TonyoPalette.of(context).error,
                         ),
                         onPressed: _busy || needsDeletionSignIn
                             ? null
@@ -413,7 +424,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                     child: _PrivacyNotice(
                       key: const Key('privacy-operation-error'),
                       icon: Icons.error_outline_rounded,
-                      color: TonyoColors.coral,
+                      color: TonyoPalette.of(context).error,
                       title: 'Action not completed',
                       text: error,
                     ),
@@ -439,10 +450,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
   Widget _backupControls() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text(
+      Text(
         'Save the data on this device, including unsynced changes, as a JSON '
         'backup. No internet is needed.',
-        style: TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
@@ -454,6 +465,20 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         icon: const Icon(Icons.save_alt_rounded),
         label: Text(_savingBackup ? 'Saving backup…' : 'Save device backup'),
       ),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        key: const Key('privacy-restore-backup'),
+        onPressed: _busy || !_controller.canRestoreDeviceBackup
+            ? null
+            : _restoreBackup,
+        icon: const Icon(Icons.restore_rounded),
+        label: const Text('Restore from backup'),
+      ),
+      if (!_controller.canRestoreDeviceBackup && !_controller.deletionPending)
+        Text(
+          'Finish privacy review before restoring records.',
+          style: TextStyle(color: TonyoPalette.of(context).muted),
+        ),
     ],
   );
 
@@ -464,6 +489,23 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       await saveDeviceBackup(context, _controller, widget.backupService);
     } finally {
       if (mounted) setState(() => _savingBackup = false);
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    if (_busy || !_controller.canRestoreDeviceBackup) return;
+    setState(() => _working = true);
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => BackupRestoreScreen(
+            controller: _controller,
+            service: widget.backupService,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
@@ -555,11 +597,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       children: [
         _heading(context, 'Optional outcome learning'),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Link future check-ins, reaction tests, and optional Coach ratings '
           'to private outcome records. Energy personalization uses eligible '
           'records only after a separate model refresh.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         Material(
           color: Colors.transparent,
@@ -583,10 +625,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                 : _setOutcomeConsent,
           ),
         ),
-        const Text(
+        Text(
           'Turning this off does not delete previously saved outcomes. '
           'Reset tracking or delete data below to remove those records.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
       ],
     ),
@@ -827,10 +869,10 @@ class PrivacyChoicesForm extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       if (!locked) ...[
-        const Text(
+        Text(
           'Choose your age band and region. We ask before account details '
           'so age-appropriate protections can apply. No date of birth is needed.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         const SizedBox(height: 16),
         DropdownButtonFormField<PrivacyAgeBand>(
@@ -869,10 +911,10 @@ class PrivacyChoicesForm extends StatelessWidget {
       ],
       if (ageBand != null && ageBand != PrivacyAgeBand.adult) ...[
         const SizedBox(height: 14),
-        const _PrivacyNotice(
+        _PrivacyNotice(
           key: Key('privacy-age-protection'),
           icon: Icons.family_restroom_rounded,
-          color: TonyoColors.amber,
+          color: TonyoPalette.of(context).warning,
           title: 'A guardian step is needed',
           text:
               'This build requires verified guardian authorization before '
@@ -893,10 +935,10 @@ class PrivacyChoicesForm extends StatelessWidget {
                   'are never saved by Tonyo.',
       ),
       const SizedBox(height: 12),
-      const Text(
+      Text(
         'Health access and outcome learning are separate opt-ins. '
         'You can export your data or request deletion in Privacy center.',
-        style: TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 10),
       Material(
@@ -924,27 +966,27 @@ class _PrivacyHero extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(22),
     decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF252141), Color(0xFF122D2B)],
-      ),
-      border: Border.all(color: TonyoColors.border),
-      borderRadius: BorderRadius.circular(22),
+      color: TonyoPalette.of(context).surface,
+      border: Border.all(color: TonyoPalette.of(context).border),
+      borderRadius: BorderRadius.circular(16),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.shield_outlined, color: TonyoColors.mint, size: 32),
+        Icon(
+          Icons.shield_outlined,
+          color: TonyoPalette.of(context).secondary,
+          size: 32,
+        ),
         const SizedBox(height: 14),
         Text(
           'Your data. Your choices.',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Know what Tonyo uses. Decide what comes next.',
-          style: TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
       ],
     ),
@@ -977,7 +1019,7 @@ class _PrivacyNotice extends StatelessWidget {
       children: [
         Icon(icon, color: color),
         const SizedBox(height: 8),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 5),
         Text(text, style: const TextStyle(height: 1.5)),
       ],
@@ -999,15 +1041,15 @@ class _DataUseRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Icon(icon, color: TonyoColors.mint, size: 22),
+      Icon(icon, color: TonyoPalette.of(context).secondary, size: 22),
       const SizedBox(width: 12),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text(text, style: const TextStyle(color: TonyoColors.muted)),
+            Text(text, style: TextStyle(color: TonyoPalette.of(context).muted)),
           ],
         ),
       ),
@@ -1050,11 +1092,11 @@ class _ExportSummary extends StatelessWidget {
         key: const Key('privacy-export-summary'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Export ready',
             style: TextStyle(
-              color: TonyoColors.mint,
-              fontWeight: FontWeight.w800,
+              color: TonyoPalette.of(context).success,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -1070,19 +1112,19 @@ class _ExportSummary extends StatelessWidget {
               Text('${count.key}: ${count.value}'),
           ],
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'Tonyo records only—not a complete Apple Health archive, Firebase '
             'password, or files from another device. Keep the export somewhere '
             'private; this preview is held only while this screen is open.',
-            style: TextStyle(color: TonyoColors.muted),
+            style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
           if (decoded['cloud'] != null) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Cloud collections are read in sequence, not as one atomic '
               'snapshot. Nested subcollections are not included. Local and '
               'cloud counts may overlap or differ while syncing.',
-              style: TextStyle(color: TonyoColors.amber),
+              style: TextStyle(color: TonyoPalette.of(context).warning),
             ),
           ],
         ],
@@ -1166,10 +1208,10 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
                       'settings, and cache on this device.',
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'This cannot be undone. Original Apple Health data, exported '
             'files, and other devices’ cached copies are not erased.',
-            style: TextStyle(color: TonyoColors.coral),
+            style: TextStyle(color: TonyoPalette.of(context).error),
           ),
           const SizedBox(height: 18),
           if (widget.cloud) ...[
@@ -1203,7 +1245,10 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
         ),
         FilledButton(
           key: const Key('privacy-confirm-deletion'),
-          style: FilledButton.styleFrom(backgroundColor: TonyoColors.coral),
+          style: FilledButton.styleFrom(
+            backgroundColor: TonyoPalette.of(context).error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
           onPressed: ready
               ? () {
                   if (widget.reset) {

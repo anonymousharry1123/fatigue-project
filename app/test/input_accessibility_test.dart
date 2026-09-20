@@ -162,39 +162,38 @@ void main() {
   });
 
   testWidgets(
-    'coach outcome dialog retains rating after failed save at large text',
+    'optional Coach feedback retries after failed save at large text',
     (tester) async {
-      final controller = _FailingSaveController()..outcomeConsent = true;
+      final controller = _FailingSaveController();
       addTearDown(controller.dispose);
       await _pump(tester, controller, const CoachScreen(), largeText: true);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('record-outcome-test-plan')),
-        350,
+      final feedback = find.byKey(
+        const Key('helpful-recommendation-test-plan'),
       );
-      await tester.ensureVisible(
-        find.byKey(const Key('record-outcome-test-plan')),
+      await tester.scrollUntilVisible(feedback, 350);
+      await tester.ensureVisible(feedback);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('accept-recommendation-test-plan')),
+        findsNothing,
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('record-outcome-test-plan')));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await tester.tap(find.byKey(const Key('save-observed-energy')));
+      expect(find.byKey(const Key('record-outcome-test-plan')), findsNothing);
+      await tester.tap(feedback);
       await tester.pump();
-      expect(find.text('Saving…'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(feedback).onPressed, isNull);
       controller.pending.completeError(StateError('disk unavailable'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Could not save your energy rating. Please try again.'),
+        find.text('Could not save this change. Please try again.'),
         findsOneWidget,
       );
-      expect(find.text('6/10'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(feedback).onPressed, isNotNull);
       controller.pending = Completer<void>();
-      await tester.tap(find.byKey(const Key('save-observed-energy')));
+      await tester.tap(feedback);
       await tester.pump();
       controller.pending.complete();
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(controller.outcomeAttempts, 2);
+      expect(controller.feedbackAttempts, 2);
       expect(tester.takeException(), isNull);
     },
   );
@@ -281,7 +280,7 @@ class _FailingSaveController extends AppController {
   Completer<void> pending = Completer<void>();
   int activityAttempts = 0;
   int checkInAttempts = 0;
-  int outcomeAttempts = 0;
+  int feedbackAttempts = 0;
   final activityIds = <String?>[];
   final checkInIds = <String?>[];
   final sleepIds = <String?>[];
@@ -315,17 +314,13 @@ class _FailingSaveController extends AppController {
       detail: 'Take a short break.',
       timeLabel: '2:00 PM',
       category: 'Recovery',
-      status: RecommendationStatus.completed,
+      status: RecommendationStatus.suggested,
     ),
   ];
 
   @override
-  Future<void> recordObservedEnergy(
-    double energy, {
-    String? recommendationId,
-    DateTime? observedAt,
-  }) {
-    outcomeAttempts++;
+  Future<void> setRecommendationFeedback(String id, bool helpful) {
+    feedbackAttempts++;
     return pending.future;
   }
 

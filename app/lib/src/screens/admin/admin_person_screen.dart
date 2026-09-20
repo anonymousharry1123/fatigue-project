@@ -14,7 +14,7 @@ class AdminPersonScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final score = person.score;
     return Scaffold(
-      backgroundColor: TonyoColors.background,
+      backgroundColor: TonyoPalette.of(context).background,
       appBar: AppBar(title: Text('Synthetic ${person.id}')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
@@ -32,18 +32,18 @@ class AdminPersonScreen extends StatelessWidget {
                       ),
                       Text(
                         '${person.education} · ${person.ageRange} · ${person.role}',
-                        style: const TextStyle(
-                          color: TonyoColors.muted,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).muted,
                           fontSize: 12,
                         ),
                       ),
                       if (person.feelsBurnedOut)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(top: 6),
                           child: Text(
                             'CSV flag: feels burned out',
                             style: TextStyle(
-                              color: TonyoColors.coral,
+                              color: TonyoPalette.of(context).error,
                               fontSize: 11,
                             ),
                           ),
@@ -53,7 +53,12 @@ class AdminPersonScreen extends StatelessWidget {
                 ),
                 ScoreRing(value: score.energy, label: 'Energy', size: 88),
                 const SizedBox(width: 10),
-                ScoreRing(value: score.cognitive, label: 'Cognitive', size: 88),
+                ScoreRing(
+                  value: score.cognitive,
+                  label: 'Cognitive',
+                  size: 88,
+                  color: TonyoPalette.of(context).secondary,
+                ),
               ],
             ),
           ),
@@ -70,13 +75,13 @@ class AdminPersonScreen extends StatelessWidget {
                         children: [
                           Text(
                             signal.type.label,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           if (signal.note != null && signal.note!.isNotEmpty)
                             Text(
                               signal.note!,
-                              style: const TextStyle(
-                                color: TonyoColors.muted,
+                              style: TextStyle(
+                                color: TonyoPalette.of(context).muted,
                                 fontSize: 10,
                               ),
                             ),
@@ -124,9 +129,9 @@ class _DriverCard extends StatelessWidget {
     child: Column(
       children: [
         if (drivers.isEmpty)
-          const Text(
+          Text(
             'No model inputs are available.',
-            style: TextStyle(color: TonyoColors.muted),
+            style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
         for (final driver in drivers) ...[
           Row(
@@ -141,8 +146,8 @@ class _DriverCard extends StatelessWidget {
                     ),
                     Text(
                       driver.detail,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 11,
                       ),
                     ),
@@ -153,9 +158,9 @@ class _DriverCard extends StatelessWidget {
                 '${driver.contribution >= 0 ? '+' : ''}${driver.contribution.toStringAsFixed(1)}',
                 style: TextStyle(
                   color: driver.contribution >= 0
-                      ? TonyoColors.mint
-                      : TonyoColors.coral,
-                  fontWeight: FontWeight.w800,
+                      ? TonyoPalette.of(context).success
+                      : TonyoPalette.of(context).error,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -164,7 +169,7 @@ class _DriverCard extends StatelessWidget {
         ],
         Text(
           'Confidence ${(confidence * 100).round()}%',
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
       ],
     ),

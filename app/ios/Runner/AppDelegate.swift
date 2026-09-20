@@ -3,6 +3,7 @@ import FamilyControls
 import HealthKit
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 import UserNotifications
 
 @main
@@ -61,7 +62,7 @@ import UserNotifications
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     backupChannel.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "save" else {
+      guard call.method == "save" || call.method == "open" else {
         result(FlutterMethodNotImplemented)
         return
       }
@@ -69,7 +70,11 @@ import UserNotifications
         result(FlutterError(code: "backup_unavailable", message: "The app is unavailable.", details: nil))
         return
       }
-      self.backupExporter.save(call.arguments, result: result)
+      if call.method == "open" {
+        self.backupExporter.open(result: result)
+      } else {
+        self.backupExporter.save(call.arguments, result: result)
+      }
     }
     self.backupChannel = backupChannel
   }
@@ -680,10 +685,32 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
   private var pendingResult: FlutterResult?
   private var temporaryDirectory: URL?
   private var activePicker: UIDocumentPickerViewController?
+  private var openingBackup = false
+  private static let maximumBackupBytes = 20 * 1024 * 1024
+
+  func open(result: @escaping FlutterResult) {
+    guard pendingResult == nil else {
+      result(FlutterError(code: "backup_busy", message: "A backup file dialog is already open.", details: nil))
+      return
+    }
+    guard let presenter = backupPresenter() else {
+      result(FlutterError(code: "backup_unavailable", message: "The open dialog is unavailable.", details: nil))
+      return
+    }
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json], asCopy: true)
+    picker.allowsMultipleSelection = false
+    picker.delegate = self
+    picker.modalPresentationStyle = .formSheet
+    openingBackup = true
+    pendingResult = result
+    activePicker = picker
+    presenter.present(picker, animated: true)
+    picker.presentationController?.delegate = self
+  }
 
   func save(_ arguments: Any?, result: @escaping FlutterResult) {
     guard pendingResult == nil else {
-      result(FlutterError(code: "backup_busy", message: "A backup is already being saved.", details: nil))
+      result(FlutterError(code: "backup_busy", message: "A backup file dialog is already open.", details: nil))
       return
     }
     guard let values = arguments as? [String: Any],
@@ -696,20 +723,7 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
       result(FlutterError(code: "backup_invalid", message: "The backup file is invalid.", details: nil))
       return
     }
-    // Flutter's scene-based lifecycle does not keep AppDelegate.window set.
-    guard var presenter = UIApplication.shared.connectedScenes
-      .compactMap({ $0 as? UIWindowScene })
-      .filter({ $0.activationState == .foregroundActive })
-      .flatMap({ $0.windows })
-      .first(where: { $0.isKeyWindow })?.rootViewController
-    else {
-      result(FlutterError(code: "backup_unavailable", message: "The save dialog is unavailable.", details: nil))
-      return
-    }
-    while let presented = presenter.presentedViewController {
-      presenter = presented
-    }
-    guard !presenter.isBeingDismissed, presenter.view.window != nil else {
+    guard let presenter = backupPresenter() else {
       result(FlutterError(code: "backup_unavailable", message: "The save dialog is unavailable.", details: nil))
       return
     }
@@ -724,6 +738,7 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
       picker.delegate = self
       picker.modalPresentationStyle = .formSheet
       pendingResult = result
+      openingBackup = false
       temporaryDirectory = directory
       activePicker = picker
       presenter.present(picker, animated: true)
@@ -736,24 +751,82 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
 
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
     guard controller === activePicker else { return }
-    guard !urls.isEmpty else {
-      finish(FlutterError(code: "backup_failed", message: "Files did not confirm the backup was saved.", details: nil))
+    guard let url = urls.first else {
+      finish(FlutterError(code: "backup_failed", message: "Files did not provide a backup file.", details: nil))
       return
     }
-    finish(true)
+    if openingBackup {
+      // Ignore dismissal after selection while the coordinated read finishes.
+      activePicker = nil
+      DispatchQueue.global(qos: .userInitiated).async { [self] in
+        let value = Self.readBackup(at: url)
+        DispatchQueue.main.async { [self] in finish(value) }
+      }
+    } else {
+      finish(true)
+    }
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
     guard controller === activePicker else { return }
-    finish(false)
+    finish(openingBackup ? nil : false)
   }
 
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
     guard presentationController.presentedViewController === activePicker else { return }
-    finish(false)
+    finish(openingBackup ? nil : false)
   }
 
-  private func finish(_ value: Any) {
+  private func backupPresenter() -> UIViewController? {
+    // Flutter's scene-based lifecycle does not keep AppDelegate.window set.
+    guard var presenter = UIApplication.shared.connectedScenes
+      .compactMap({ $0 as? UIWindowScene })
+      .filter({ $0.activationState == .foregroundActive })
+      .flatMap({ $0.windows })
+      .first(where: { $0.isKeyWindow })?.rootViewController
+    else { return nil }
+    while let presented = presenter.presentedViewController {
+      presenter = presented
+    }
+    return !presenter.isBeingDismissed && presenter.view.window != nil ? presenter : nil
+  }
+
+  private static func readBackup(at url: URL) -> Any {
+    let accessing = url.startAccessingSecurityScopedResource()
+    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+    var value: Any = FlutterError(code: "backup_failed", message: "The backup could not be opened. Please try again.", details: nil)
+    var coordinationError: NSError?
+    NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readableURL in
+      do {
+        let size = try readableURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        if let size, size > maximumBackupBytes {
+          value = FlutterError(code: "backup_too_large", message: "Choose a backup of 20 MiB or smaller.", details: nil)
+          return
+        }
+        let file = try FileHandle(forReadingFrom: readableURL)
+        defer { try? file.close() }
+        var data = Data()
+        // Bound every read even when a file provider omits or misreports size.
+        while let chunk = try file.read(upToCount: min(64 * 1024, maximumBackupBytes - data.count + 1)), !chunk.isEmpty {
+          guard data.count + chunk.count <= maximumBackupBytes else {
+            value = FlutterError(code: "backup_too_large", message: "Choose a backup of 20 MiB or smaller.", details: nil)
+            return
+          }
+          data.append(chunk)
+        }
+        guard let json = String(data: data, encoding: .utf8) else {
+          value = FlutterError(code: "backup_invalid_encoding", message: "The backup must be a UTF-8 JSON file.", details: nil)
+          return
+        }
+        value = json
+      } catch {
+        // Keep the readable error and avoid exposing private document paths.
+      }
+    }
+    return value
+  }
+
+  private func finish(_ value: Any?) {
     let result = pendingResult
     pendingResult = nil
     if let directory = temporaryDirectory {
@@ -761,6 +834,7 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
     }
     temporaryDirectory = nil
     activePicker = nil
+    openingBackup = false
     result?(value)
   }
 }

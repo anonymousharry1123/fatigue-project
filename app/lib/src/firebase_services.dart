@@ -363,6 +363,8 @@ class FirestoreCloudRepository implements CloudRepository {
           prefs['crashNotificationsEnabled'] as bool? ?? true,
       recoveryNotificationsEnabled:
           prefs['recoveryNotificationsEnabled'] as bool? ?? true,
+      coachPlanNotificationsEnabled:
+          prefs['coachPlanNotificationsEnabled'] as bool? ?? false,
       notificationPrefsVersion: notificationPrefsVersion,
       outcomeConsent:
           consent['outcomeCollection'] == true &&
@@ -405,6 +407,7 @@ class FirestoreCloudRepository implements CloudRepository {
         notificationsEnabled: state.notificationsEnabled,
         crashNotificationsEnabled: state.crashNotificationsEnabled,
         recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
+        coachPlanNotificationsEnabled: state.coachPlanNotificationsEnabled,
         notificationPrefsVersion: state.notificationPrefsVersion,
         outcomeConsent: state.outcomeConsent,
         healthAuthorized: state.healthAuthorized,
@@ -801,6 +804,53 @@ class FirestoreCloudRepository implements CloudRepository {
   }) => _user(uid).collection('recommendations').doc(recommendationId).update({
     'feedback': helpful,
   });
+
+  @override
+  Future<void> applyRecommendationAction(
+    String uid,
+    Recommendation record, {
+    RecommendationStatus? status,
+    bool? helpful,
+  }) async {
+    if (record.id.isEmpty ||
+        record.id.contains('/') ||
+        record.day == null ||
+        (status == null && helpful == null)) {
+      throw ArgumentError('A valid recommendation and action are required.');
+    }
+    final reference = _user(uid).collection('recommendations').doc(record.id);
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(reference);
+      final changes = <String, Object?>{
+        if (status != null) 'status': status.name,
+        'feedback': ?helpful,
+      };
+      if (existing.exists) {
+        transaction.update(reference, changes);
+      } else {
+        transaction.set(reference, {
+          ...recommendationToCloud(record),
+          ...changes,
+        });
+      }
+    });
+  }
+
+  @override
+  Future<void> applyRiskAlertDismissal(String uid, RiskAlert record) async {
+    if (record.id.isEmpty || record.id.contains('/') || record.day == null) {
+      throw ArgumentError('A valid alert is required.');
+    }
+    final reference = _user(uid).collection('riskAlerts').doc(record.id);
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(reference);
+      if (existing.exists) {
+        transaction.update(reference, {'dismissed': true});
+      } else {
+        transaction.set(reference, riskAlertToCloud(record, dismissed: true));
+      }
+    });
+  }
 
   @override
   Future<void> upsertOutcome(String uid, OutcomeRecord outcome) async {

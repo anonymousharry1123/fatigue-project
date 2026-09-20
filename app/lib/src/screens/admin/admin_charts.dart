@@ -20,10 +20,13 @@ class CohortHistogramChart extends StatelessWidget {
     if (bins.isEmpty) {
       return SizedBox(
         height: height,
-        child: const Center(
+        child: Center(
           child: Text(
             'No distribution yet',
-            style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 12,
+            ),
           ),
         ),
       );
@@ -51,7 +54,7 @@ class CohortHistogramChart extends StatelessWidget {
                           widthFactor: 1,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: color.withValues(alpha: .85),
+                              color: color,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(4),
                               ),
@@ -63,8 +66,8 @@ class CohortHistogramChart extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       bin.label.split('–').first,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 8,
                       ),
                     ),
@@ -85,7 +88,7 @@ class CohortScatterChart extends StatelessWidget {
     required this.xLabel,
     required this.yLabel,
     this.badge,
-    this.color = TonyoColors.mint,
+    this.color,
     this.height = 200,
     this.fixedMinX,
     this.fixedMaxX,
@@ -97,7 +100,7 @@ class CohortScatterChart extends StatelessWidget {
   final String xLabel;
   final String yLabel;
   final String? badge;
-  final Color color;
+  final Color? color;
   final double height;
   final double? fixedMinX;
   final double? fixedMaxX;
@@ -106,6 +109,8 @@ class CohortScatterChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = TonyoPalette.of(context);
+    final resolvedColor = color ?? palette.secondary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -114,8 +119,8 @@ class CohortScatterChart extends StatelessWidget {
             Expanded(
               child: Text(
                 '$yLabel vs $xLabel',
-                style: const TextStyle(
-                  color: TonyoColors.muted,
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -125,9 +130,9 @@ class CohortScatterChart extends StatelessWidget {
               Text(
                 badge!,
                 style: TextStyle(
-                  color: color,
+                  color: resolvedColor,
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
           ],
@@ -148,8 +153,8 @@ class CohortScatterChart extends StatelessWidget {
                       yLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
@@ -164,7 +169,11 @@ class CohortScatterChart extends StatelessWidget {
                       child: CustomPaint(
                         painter: _ScatterPainter(
                           points: points,
-                          color: color,
+                          color: resolvedColor,
+                          colors: palette,
+                          textStyle:
+                              Theme.of(context).textTheme.bodySmall ??
+                              const TextStyle(),
                           fixedMinX: fixedMinX,
                           fixedMaxX: fixedMaxX,
                           fixedMinY: fixedMinY,
@@ -176,8 +185,8 @@ class CohortScatterChart extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       xLabel,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
@@ -220,6 +229,8 @@ class _ScatterPainter extends CustomPainter {
   _ScatterPainter({
     required this.points,
     required this.color,
+    required this.colors,
+    required this.textStyle,
     this.fixedMinX,
     this.fixedMaxX,
     this.fixedMinY,
@@ -228,13 +239,15 @@ class _ScatterPainter extends CustomPainter {
 
   final List<CohortScatterPoint> points;
   final Color color;
+  final TonyoPalette colors;
+  final TextStyle textStyle;
   final double? fixedMinX;
   final double? fixedMaxX;
   final double? fixedMinY;
   final double? fixedMaxY;
 
-  static const _tickStyle = TextStyle(
-    color: TonyoColors.muted,
+  TextStyle get _tickStyle => textStyle.copyWith(
+    color: colors.muted,
     fontSize: 9,
     fontWeight: FontWeight.w600,
   );
@@ -243,7 +256,7 @@ class _ScatterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final chart = Rect.fromLTWH(36, 10, size.width - 44, size.height - 26);
     final grid = Paint()
-      ..color = TonyoColors.border
+      ..color = colors.border
       ..strokeWidth = 1;
     for (var i = 0; i <= 3; i++) {
       final y = chart.top + chart.height * i / 3;
@@ -307,7 +320,7 @@ class _ScatterPainter extends CustomPainter {
       );
     }
 
-    final paint = Paint()..color = color.withValues(alpha: .55);
+    final paint = Paint()..color = color;
     for (final point in points) {
       final dx = chart.left + chart.width * (point.x - minX) / (maxX - minX);
       final dy = chart.bottom - chart.height * (point.y - minY) / (maxY - minY);
@@ -321,7 +334,7 @@ class _ScatterPainter extends CustomPainter {
     return value.toStringAsFixed(1);
   }
 
-  static void _drawTick(
+  void _drawTick(
     Canvas canvas,
     String text,
     Offset anchor, {
@@ -333,10 +346,7 @@ class _ScatterPainter extends CustomPainter {
       maxLines: 1,
     )..layout();
     final offset = switch (align) {
-      Alignment.topCenter => Offset(
-        anchor.dx - painter.width / 2,
-        anchor.dy,
-      ),
+      Alignment.topCenter => Offset(anchor.dx - painter.width / 2, anchor.dy),
       Alignment.centerRight => Offset(
         anchor.dx - painter.width,
         anchor.dy - painter.height / 2,
@@ -350,6 +360,8 @@ class _ScatterPainter extends CustomPainter {
   bool shouldRepaint(covariant _ScatterPainter oldDelegate) =>
       oldDelegate.points != points ||
       oldDelegate.color != color ||
+      oldDelegate.colors != colors ||
+      oldDelegate.textStyle != textStyle ||
       oldDelegate.fixedMinX != fixedMinX ||
       oldDelegate.fixedMaxX != fixedMaxX ||
       oldDelegate.fixedMinY != fixedMinY ||
@@ -371,9 +383,9 @@ class CohortGroupBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (groups.isEmpty) {
-      return const Text(
+      return Text(
         'No groups',
-        style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+        style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 12),
       );
     }
     final maxValue = groups
@@ -399,7 +411,7 @@ class CohortGroupBars extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: (valueOf(group) / maxValue).clamp(0, 1),
                     minHeight: 10,
-                    backgroundColor: TonyoColors.border,
+                    backgroundColor: TonyoPalette.of(context).border,
                     color: color,
                   ),
                 ),
@@ -407,8 +419,8 @@ class CohortGroupBars extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${valueOf(group).round()} · n=${group.count}',
-                style: const TextStyle(
-                  color: TonyoColors.muted,
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 10,
                 ),
               ),

@@ -41,8 +41,11 @@ class _ForecastInsightsScreenState extends State<ForecastInsightsScreen> {
               onSelectionChanged: (value) =>
                   setState(() => _section = value.first),
               style: SegmentedButton.styleFrom(
-                backgroundColor: TonyoColors.surface,
-                selectedBackgroundColor: TonyoColors.primary,
+                backgroundColor: TonyoPalette.of(context).surface,
+                selectedBackgroundColor: TonyoPalette.of(context).primary,
+                selectedForegroundColor: Theme.of(
+                  context,
+                ).colorScheme.onPrimary,
               ),
             ),
           ),

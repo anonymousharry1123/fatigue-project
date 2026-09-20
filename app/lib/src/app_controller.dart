@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_log_logic.dart';
@@ -37,6 +38,10 @@ import 'recommendation_feedback_logic.dart';
 import 'screen_time_service.dart';
 import 'sleep_sync_logic.dart';
 import 'today_dashboard_logic.dart';
+
+part 'backup_restore.dart';
+part 'sync_conflict_resolution.dart';
+part 'coach_sync.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -169,6 +174,108 @@ class AppController extends ChangeNotifier {
   String? _syncOwnerUid;
   Future<void>? _pendingCloudPush;
   bool cloudSyncConflict = false;
+  CloudSyncFailureKind? cloudSyncFailureKind;
+  DateTime? _lastCloudSyncAt;
+  String? _lastCloudSyncOwnerUid;
+  DateTime? get lastCloudSyncAt =>
+      cloudUid == _lastCloudSyncOwnerUid ? _lastCloudSyncAt : null;
+  Timer? _cloudRetryTimer;
+  Duration _cloudRetryDelay = const Duration(seconds: 5);
+  bool _appInForeground = false;
+  bool _disposed = false;
+  Future<void>? _pendingSyncCycle;
+  final Map<Object, ({String? uid, int revision})> _cloudSyncActivities = {};
+  String? _coachSyncOwnerUid;
+  final Map<String, _PendingRecommendationAction> _pendingCoachWrites = {};
+  final Map<String, RiskAlert> _pendingAlertWrites = {};
+  Future<void>? _pendingCoachPush;
+  Future<void>? _pendingGuidanceWrite;
+  int _coachSyncGeneration = 0;
+  bool get hasPendingCoachChanges =>
+      cloudUid != null &&
+      cloudUid == _coachSyncOwnerUid &&
+      (_pendingCoachWrites.isNotEmpty || _pendingAlertWrites.isNotEmpty);
+  bool get hasAnyPendingCloudChanges =>
+      hasPendingCloudChanges ||
+      hasPendingOutcomeChanges ||
+      hasPendingCoachChanges;
+  int get pendingCloudRecordCount {
+    var count = 0;
+    if (cloudUid != null &&
+        _syncOwnerUid == cloudUid &&
+        _syncBaseline != null) {
+      final patch = InputSyncPatch(
+        _syncBaseline!,
+        InputSyncSnapshot.fromState(
+          _cloudState(migrationVersion: localMigrationVersion),
+        ),
+      );
+      count +=
+          patch.signals.length +
+          patch.checkIns.length +
+          (patch.root.isEmpty ? 0 : 1);
+    }
+    if (hasPendingOutcomeChanges) count += _pendingOutcomeWrites.length;
+    if (hasPendingCoachChanges) {
+      count += _pendingCoachWrites.length + _pendingAlertWrites.length;
+    }
+    return count;
+  }
+
+  String get cloudSyncStatusMessage {
+    if (isSignedOut || !isCloudAuthenticated) {
+      return 'Sign in to sync this device.';
+    }
+    if (deletionPending || isDeletingAccount) {
+      return 'Cloud sync is paused during account deletion.';
+    }
+    if (isCloudSyncing) return 'Syncing device changes…';
+    if (cloudSyncConflict) {
+      return 'Your edits are saved here. Review the changes from the other device.';
+    }
+    if (cloudSyncError != null) return cloudSyncError!;
+    if (hasAnyPendingCloudChanges) {
+      return '$pendingCloudRecordCount ${pendingCloudRecordCount == 1 ? "record" : "records"} saved on this device · waiting to sync';
+    }
+    if (!_cloudPrivacyVerified) {
+      return 'Reconnect to verify account privacy and resume sync.';
+    }
+    return lastCloudSyncAt == null
+        ? 'No pending device changes.'
+        : 'All device changes are synced.';
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _cloudSyncActivities.clear();
+    isCloudSyncing = false;
+    _appInForeground = false;
+    _sessionRevision++;
+    _cloudRetryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    // Privacy/export operations can temporarily pause retries. Their final
+    // state notification restarts pending work once the device is eligible.
+    scheduleCloudRetry();
+    super.notifyListeners();
+  }
+
+  /// The app owns foreground retry lifetime; headless controllers create no timers.
+  void setAppForeground(bool foreground) {
+    _appInForeground = foreground && !_disposed;
+    if (!_appInForeground) {
+      _cloudRetryTimer?.cancel();
+      _cloudRetryTimer = null;
+      return;
+    }
+    scheduleCloudRetry();
+  }
+
   bool get hasPendingCloudChanges =>
       cloudUid != null &&
       _syncOwnerUid == cloudUid &&
@@ -312,6 +419,7 @@ class AppController extends ChangeNotifier {
   bool notificationsEnabled = false;
   bool crashNotificationsEnabled = true;
   bool recoveryNotificationsEnabled = true;
+  bool coachPlanNotificationsEnabled = false;
   bool outcomeConsent = false;
   bool healthAvailable = false;
   bool healthAuthorized = false;
@@ -445,6 +553,7 @@ class AppController extends ChangeNotifier {
       await task;
     } finally {
       if (identical(_pendingOutcomePush, task)) _pendingOutcomePush = null;
+      scheduleCloudRetry();
     }
   }
 
@@ -486,17 +595,19 @@ class AppController extends ChangeNotifier {
             identical(_pendingOutcomeWrites[entry.key], entry.value)) {
           _pendingOutcomeWrites.remove(entry.key);
         }
+        _markCloudUploadSuccess();
         await _writeLocal();
         if (!current()) return;
       }
       outcomeError = hasPendingOutcomeChanges
           ? 'Outcomes saved on this device · cloud update pending'
           : null;
-    } on Object {
+    } on Object catch (error) {
       // A late response from a signed-out or revoked session cannot change the
       // new account's visible status or acknowledge its retry journal.
       if (!current()) return;
       outcomeError = 'Outcomes saved on this device · cloud update pending';
+      _recordCloudFailure(error);
     }
   }
 
@@ -520,6 +631,8 @@ class AppController extends ChangeNotifier {
   NotificationPlan _notificationPlan = const NotificationPlan(
     state: NotificationPlanState.disabled,
   );
+  bool _notificationScheduleConfirmed = false;
+  bool _notificationPreferencesPersisted = true;
   InsightsSnapshot? _insightsSnapshot;
 
   bool get cloudEnabled => _accountAuth.isConfigured && cloudRepository != null;
@@ -658,6 +771,19 @@ class AppController extends ChangeNotifier {
       InsightsLogic.build(now: _now(), signals: const [], checkIns: const []);
   bool get notificationSchedulingSupported =>
       _notificationService.supportsScheduling;
+
+  DateTime get currentTime => _now();
+  bool get canOpenNotificationTarget =>
+      isReady && onboardingComplete && _canProcessData && !isPrivacyBusy;
+
+  Future<void> initializeNotificationResponses(
+    void Function(String payload) onTap,
+  ) async {
+    if (_notificationService case NotificationResponseSource source) {
+      await source.initializeResponses(onTap);
+    }
+  }
+
   bool get screenTimeReportAvailable =>
       screenTimeAuthorization != ScreenTimeAuthorizationState.unavailable &&
       screenTimeAuthorization !=
@@ -670,14 +796,44 @@ class AppController extends ChangeNotifier {
       )
       .length;
   NotificationPlan get notificationPlan => _notificationPlan;
-  int get scheduledNotificationCount =>
-      notificationPermission == NotificationPermissionState.granted
-      ? _notificationPlan.notifications.length
+  int get scheduledNotificationCount => _notificationsConfirmed
+      ? _notificationPlan.notifications
+            .where((item) => item.scheduledAt.isAfter(_now()))
+            .length
       : 0;
+  bool get _notificationsConfirmed =>
+      _notificationScheduleConfirmed &&
+      _notificationPreferencesPersisted &&
+      _canProcessData &&
+      notificationsEnabled &&
+      notificationPermission == NotificationPermissionState.granted &&
+      !isNotificationSyncing &&
+      notificationError == null;
+  int get scheduledCoachNotificationCount => _notificationsConfirmed
+      ? _notificationPlan.notifications
+            .where(
+              (item) =>
+                  item.kind == GuidanceNotificationKind.coachPlan &&
+                  item.scheduledAt.isAfter(_now()),
+            )
+            .length
+      : 0;
+  GuidanceNotification? notificationForRecommendation(String id) =>
+      !_notificationsConfirmed
+      ? null
+      : _notificationPlan.notifications
+            .where(
+              (item) =>
+                  item.sourceRecommendationId == id &&
+                  item.scheduledAt.isAfter(_now()),
+            )
+            .firstOrNull;
   GuidanceNotification? get nextScheduledNotification =>
       scheduledNotificationCount == 0
       ? null
-      : _notificationPlan.notifications.first;
+      : _notificationPlan.notifications
+            .where((item) => item.scheduledAt.isAfter(_now()))
+            .firstOrNull;
   List<OutcomeRecord> get outcomes => List.unmodifiable(_outcomes);
   int get observedEnergyOutcomeCount => _outcomes
       .where((outcome) => outcome.type == OutcomeType.observedEnergy)
@@ -1138,6 +1294,7 @@ class AppController extends ChangeNotifier {
   int _forecastRefreshGeneration = 0;
   int _guidanceRefreshGeneration = 0;
   int _notificationRefreshGeneration = 0;
+  int _notificationPreferenceGeneration = 0;
   int _insightsRefreshGeneration = 0;
   int _outcomeRefreshGeneration = 0;
 
@@ -1307,8 +1464,15 @@ class AppController extends ChangeNotifier {
             history: feedbackHistory,
           ).map((item) {
             final saved = savedById[item.id];
-            final status = saved?.status ?? _recommendationStatuses[item.id];
-            final helpful = saved?.helpful ?? _recommendationFeedback[item.id];
+            final pending = _pendingCoachWrites[item.id];
+            final status =
+                pending?.status ??
+                saved?.status ??
+                _recommendationStatuses[item.id];
+            final helpful =
+                pending?.helpful ??
+                saved?.helpful ??
+                _recommendationFeedback[item.id];
             if (status != null) _recommendationStatuses[item.id] = status;
             if (helpful != null) _recommendationFeedback[item.id] = helpful;
             return item.copyWith(status: status, helpful: helpful);
@@ -1334,10 +1498,15 @@ class AppController extends ChangeNotifier {
     }
 
     try {
+      if (hasPendingCoachChanges) {
+        await _retryCoachSync();
+        if (!currentRequest()) return;
+      }
       if (session != null &&
           repository != null &&
           cloudSyncError == null &&
-          !hasPendingCloudChanges) {
+          !hasPendingCloudChanges &&
+          !hasPendingCoachChanges) {
         final values = await Future.wait<Object>([
           repository.signalsByRange(
             session.uid,
@@ -1367,7 +1536,7 @@ class AppController extends ChangeNotifier {
           feedbackHistory: values[3] as List<Recommendation>,
           savedAlerts: values[4] as List<RiskAlert>,
         );
-        await Future.wait([
+        final write = Future.wait([
           repository.replaceRecommendationsForDay(
             session.uid,
             day: targetDay,
@@ -1379,6 +1548,14 @@ class AppController extends ChangeNotifier {
             alerts: _riskAlerts,
           ),
         ]);
+        _pendingGuidanceWrite = write;
+        try {
+          await write;
+        } finally {
+          if (identical(_pendingGuidanceWrite, write)) {
+            _pendingGuidanceWrite = null;
+          }
+        }
         if (!currentRequest()) return;
         _guidanceSavedToCloud = true;
         return;
@@ -1395,7 +1572,7 @@ class AppController extends ChangeNotifier {
       guidanceError = 'Cloud guidance unavailable · using cached inputs';
     } finally {
       if (sameRequest()) isGuidanceLoading = false;
-      if (currentRequest() && notificationsEnabled) {
+      if (currentRequest()) {
         await refreshNotifications(notify: false);
       }
       if (sameRequest() && notify) notifyListeners();
@@ -1405,6 +1582,7 @@ class AppController extends ChangeNotifier {
   Future<void> refreshNotifications({bool notify = true}) async {
     if (!_canProcessData) return;
     if (isSignedOut || _isSigningOut) return;
+    if (!_notificationPreferencesPersisted) return;
     final sessionRevision = _sessionRevision;
     final uid = cloudUid;
     final generation = ++_notificationRefreshGeneration;
@@ -1414,6 +1592,7 @@ class AppController extends ChangeNotifier {
         cloudUid == uid;
     bool currentRequest() => sameRequest() && _canProcessData;
     isNotificationSyncing = true;
+    _notificationScheduleConfirmed = false;
     notificationError = null;
     if (notify) notifyListeners();
 
@@ -1424,12 +1603,15 @@ class AppController extends ChangeNotifier {
         points: forecastDataFor(now),
         windows: windowsFor(now),
         riskAlerts: _riskAlerts,
+        recommendations: _recommendations,
         enabled: notificationsEnabled,
         crashEnabled: crashNotificationsEnabled,
         recoveryEnabled: recoveryNotificationsEnabled,
+        coachPlanEnabled: coachPlanNotificationsEnabled,
       );
       if (!notificationsEnabled) {
         notificationPermission = NotificationPermissionState.unknown;
+        await _notificationService.cancelGuidance();
         return;
       }
       if (!_notificationService.supportsScheduling) {
@@ -1450,7 +1632,11 @@ class AppController extends ChangeNotifier {
         return;
       }
       await _notificationService.reconcile(_notificationPlan.notifications);
-      if (!currentRequest()) {
+      // The service serializes replacements and cancellations. A superseded
+      // request must not cancel a newer schedule queued behind it.
+      if (currentRequest()) _notificationScheduleConfirmed = true;
+      if (!_canProcessData) {
+        _notificationScheduleConfirmed = false;
         await _notificationService.cancelGuidance();
       }
     } on Object {
@@ -1671,10 +1857,10 @@ class AppController extends ChangeNotifier {
       _cloudPrivacyVerified = false;
       try {
         await _accountAuth.refreshPrivacyClaims();
-      } on Object {
+      } on Object catch (error) {
         privacyOperationError =
             'Account privacy could not be verified. Reconnect and retry.';
-        cloudSyncError = privacyOperationError;
+        _recordCloudFailure(error);
         isReady = true;
         notifyListeners();
         return;
@@ -1689,6 +1875,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     if (hasPendingCloudChanges) await _pushCloud();
+    if (hasPendingCoachChanges) await _retryCoachSync();
     await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     await _energyModelService.load();
@@ -1755,6 +1942,7 @@ class AppController extends ChangeNotifier {
       isForecastLoading = false;
       isGuidanceLoading = false;
       isInsightsLoading = false;
+      _notificationScheduleConfirmed = false;
       try {
         await _notificationService.cancelGuidance();
       } on Object {
@@ -1787,9 +1975,10 @@ class AppController extends ChangeNotifier {
           await _pushCloud();
           if (!current()) return;
         }
-      } on Object {
+      } on Object catch (error) {
         if (!current()) return;
         _cloudPrivacyVerified = false;
+        _recordCloudFailure(error);
         privacyOperationError =
             'Privacy status could not be verified. Reconnect and reopen Tonyo before new collection.';
       }
@@ -1817,6 +2006,11 @@ class AppController extends ChangeNotifier {
       await refreshOutcomes(notify: false);
       if (!current()) return;
     }
+    if (hasPendingCoachChanges) {
+      await _retryCoachSync();
+      if (!current()) return;
+    }
+    scheduleCloudRetry();
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     if (!current()) return;
@@ -2041,6 +2235,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     if (hasPendingCloudChanges) await _pushCloud();
+    if (hasPendingCoachChanges) await _retryCoachSync();
     if (!outcomeConsent) await _discardPersonalizedModel();
     if (outcomeConsent || hasPendingOutcomeChanges) {
       await refreshOutcomes(notify: false);
@@ -2094,12 +2289,21 @@ class AppController extends ChangeNotifier {
     }
     if (isSignedOut || _isSigningOut) return;
     _isSigningOut = true;
+    _notificationScheduleConfirmed = false;
+    _notificationPlan = NotificationPlan(
+      state: notificationsEnabled
+          ? NotificationPlanState.noFutureWindows
+          : NotificationPlanState.disabled,
+    );
+    _cloudRetryTimer?.cancel();
+    _cloudRetryTimer = null;
     _sessionRevision += 1;
     isForecastLoading = false;
     isGuidanceLoading = false;
     isInsightsLoading = false;
     isOutcomeLoading = false;
     isCloudSyncing = false;
+    _cloudSyncActivities.clear();
     isNotificationSyncing = false;
     isEnergyScoreLoading = false;
     _energyModelService.unload();
@@ -2517,151 +2721,215 @@ class AppController extends ChangeNotifier {
     RecommendationStatus status,
   ) async {
     final ensureCurrent = _beginMutation();
+    final record = _recommendations.where((item) => item.id == id).firstOrNull;
+    if (record == null) {
+      throw StateError(
+        'This recommendation is no longer available. Refresh Coach.',
+      );
+    }
+    _guidanceRefreshGeneration++;
+    isGuidanceLoading = false;
     _recommendationStatuses[id] = status;
     _recommendations = _recommendations
         .map((item) => item.id == id ? item.copyWith(status: status) : item)
         .toList();
-    guidanceError = null;
+    _queueRecommendationAction(record, status: status);
+    guidanceError = hasPendingCoachChanges
+        ? 'Coach changes saved on this device · cloud update pending'
+        : null;
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      try {
-        await repository.setRecommendationStatus(
-          session.uid,
-          id,
-          status: status,
-        );
-      } on Object {
-        guidanceError =
-            'Recommendation updated on this device · cloud update pending';
-        notifyListeners();
-      }
-    }
+    await _retryCoachSync();
+    ensureCurrent();
+    notifyListeners();
   }
 
   Future<void> setRecommendationFeedback(String id, bool helpful) async {
     final ensureCurrent = _beginMutation();
+    final record = _recommendations.where((item) => item.id == id).firstOrNull;
+    if (record == null) {
+      throw StateError(
+        'This recommendation is no longer available. Refresh Coach.',
+      );
+    }
+    _guidanceRefreshGeneration++;
+    isGuidanceLoading = false;
     _recommendationFeedback[id] = helpful;
     _recommendations = _recommendations
         .map((item) => item.id == id ? item.copyWith(helpful: helpful) : item)
         .toList();
-    guidanceError = null;
+    _queueRecommendationAction(record, helpful: helpful);
+    guidanceError = hasPendingCoachChanges
+        ? 'Coach changes saved on this device · cloud update pending'
+        : null;
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      try {
-        await repository.setRecommendationFeedback(
-          session.uid,
-          id,
-          helpful: helpful,
-        );
-      } on Object {
-        guidanceError = 'Feedback saved on this device · cloud update pending';
-        notifyListeners();
-      }
-    }
+    await _retryCoachSync();
+    ensureCurrent();
+    notifyListeners();
   }
 
   Future<void> dismissRiskAlert(String id) async {
     final ensureCurrent = _beginMutation();
+    final record = _riskAlerts.where((item) => item.id == id).firstOrNull;
+    if (record == null) {
+      throw StateError('This alert is no longer available. Refresh Coach.');
+    }
+    _guidanceRefreshGeneration++;
+    isGuidanceLoading = false;
     _dismissedRiskAlertIds.add(id);
     _riskAlerts = _riskAlerts
         .map((item) => item.id == id ? item.copyWith(dismissed: true) : item)
         .toList();
-    guidanceError = null;
+    if (cloudUid != null && cloudRepository != null) {
+      _reconcileCoachSync();
+      _coachSyncOwnerUid = cloudUid;
+      _pendingAlertWrites[id] = record.copyWith(dismissed: true);
+    }
+    guidanceError = hasPendingCoachChanges
+        ? 'Coach changes saved on this device · cloud update pending'
+        : null;
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    final session = _accountAuth.currentSession;
-    final repository = cloudRepository;
-    if (session != null && repository != null) {
-      try {
-        await repository.setRiskAlertDismissed(
-          session.uid,
-          id,
-          dismissed: true,
-        );
-      } on Object {
-        guidanceError = 'Alert dismissed on this device · cloud update pending';
-        notifyListeners();
-      }
-    }
+    await _retryCoachSync();
+    ensureCurrent();
     await refreshNotifications();
+    ensureCurrent();
+    notifyListeners();
   }
 
-  Future<NotificationPermissionState> setNotifications(bool value) async {
+  Future<NotificationPermissionState> setNotifications(bool value) =>
+      _setNotificationPreferences(enabled: value);
+
+  Future<void> setCoachPlanNotifications(bool value) async {
+    await _setNotificationPreferences(
+      coachPlan: value,
+      enabled: value && !notificationsEnabled ? true : null,
+    );
+  }
+
+  Future<void> setCrashNotifications(bool value) async {
+    await _setNotificationPreferences(crash: value);
+  }
+
+  Future<void> setRecoveryNotifications(bool value) async {
+    await _setNotificationPreferences(recovery: value);
+  }
+
+  Future<NotificationPermissionState> _setNotificationPreferences({
+    bool? enabled,
+    bool? coachPlan,
+    bool? crash,
+    bool? recovery,
+  }) async {
     _requirePrivacy();
     final revision = _sessionRevision;
     final uid = cloudUid;
-    bool current() =>
-        revision == _sessionRevision && uid == cloudUid && _canProcessData;
-    if (!value) {
-      notificationsEnabled = false;
-      notificationError = null;
-      notificationPermission = NotificationPermissionState.unknown;
-      _notificationPlan = const NotificationPlan(
-        state: NotificationPlanState.disabled,
-      );
-      try {
-        await _notificationService.cancelGuidance();
-      } on Object {
-        notificationError = 'Could not clear scheduled alerts.';
-      }
-      await _commit();
-      return notificationPermission;
-    }
-
+    final generation = ++_notificationPreferenceGeneration;
+    var ownedRefreshGeneration = ++_notificationRefreshGeneration;
+    bool sameRequest() =>
+        revision == _sessionRevision &&
+        uid == cloudUid &&
+        generation == _notificationPreferenceGeneration;
+    bool current() => sameRequest() && _canProcessData;
+    final previous = (
+      enabled: notificationsEnabled,
+      coach: coachPlanNotificationsEnabled,
+      crash: crashNotificationsEnabled,
+      recovery: recoveryNotificationsEnabled,
+    );
+    _notificationPreferencesPersisted = false;
+    _notificationScheduleConfirmed = false;
+    if (coachPlan != null) coachPlanNotificationsEnabled = coachPlan;
+    if (crash != null) crashNotificationsEnabled = crash;
+    if (recovery != null) recoveryNotificationsEnabled = recovery;
     isNotificationSyncing = true;
     notificationError = null;
     notifyListeners();
     try {
-      final permission = await _notificationService.requestPermission();
-      if (!current()) return notificationPermission;
-      notificationPermission = permission;
-      notificationsEnabled =
-          notificationPermission == NotificationPermissionState.granted;
-      if (!notificationsEnabled) {
-        notificationError = switch (notificationPermission) {
-          NotificationPermissionState.unavailable =>
-            'Scheduled alerts are unavailable on this device.',
-          NotificationPermissionState.denied =>
-            'Notifications are blocked in system settings.',
-          _ => 'Notification permission was not granted.',
-        };
+      if (enabled == true) {
+        try {
+          final permission = await _notificationService.requestPermission();
+          if (!current()) return notificationPermission;
+          notificationPermission = permission;
+          notificationsEnabled =
+              permission == NotificationPermissionState.granted;
+          if (!notificationsEnabled) {
+            notificationError = switch (permission) {
+              NotificationPermissionState.unavailable =>
+                'Scheduled reminders are unavailable on this device.',
+              NotificationPermissionState.denied =>
+                'Notifications are blocked in system settings.',
+              _ => 'Notification permission was not granted.',
+            };
+          }
+        } on Object {
+          if (!current()) return notificationPermission;
+          notificationsEnabled = false;
+          notificationPermission = NotificationPermissionState.unknown;
+          notificationError = 'Could not request notification permission.';
+        }
+      } else if (enabled == false) {
+        notificationsEnabled = false;
+        notificationPermission = NotificationPermissionState.unknown;
       }
-    } on Object {
+      if (!notificationsEnabled) {
+        _notificationPlan = const NotificationPlan(
+          state: NotificationPlanState.disabled,
+        );
+        try {
+          await _notificationService.cancelGuidance();
+        } on Object {
+          if (current()) {
+            notificationError =
+                'Could not clear scheduled reminders. Please retry.';
+          }
+        }
+        if (!current()) return notificationPermission;
+      }
+      // Save the choice before scheduling. A storage failure must not report
+      // new reminders as scheduled or leave an unrecorded schedule behind.
+      await _commit();
       if (!current()) return notificationPermission;
-      notificationsEnabled = false;
-      notificationPermission = NotificationPermissionState.unknown;
-      notificationError = 'Could not request notification permission.';
+      _notificationPreferencesPersisted = true;
+      if (notificationsEnabled) {
+        ownedRefreshGeneration = _notificationRefreshGeneration + 1;
+        await refreshNotifications(notify: false);
+      }
+      return notificationPermission;
+    } on Object {
+      if (current()) {
+        notificationsEnabled = previous.enabled;
+        coachPlanNotificationsEnabled = previous.coach;
+        crashNotificationsEnabled = previous.crash;
+        recoveryNotificationsEnabled = previous.recovery;
+        notificationError = 'Could not save reminder settings. Please retry.';
+        // SharedPreferences updates its cache before the platform write. Repair
+        // that cache too, and pause scheduling until an explicit save succeeds.
+        try {
+          await _writeLocal();
+        } on Object {
+          /* keep the original save error */
+        }
+        if (current()) {
+          try {
+            await _notificationService.cancelGuidance();
+          } on Object {
+            /* keep the original save error */
+          }
+        }
+      }
+      rethrow;
     } finally {
-      isNotificationSyncing = false;
+      if (sameRequest() &&
+          ownedRefreshGeneration == _notificationRefreshGeneration) {
+        isNotificationSyncing = false;
+        notifyListeners();
+      }
     }
-    await _commit();
-    if (notificationsEnabled) await refreshNotifications();
-    return notificationPermission;
-  }
-
-  Future<void> setCrashNotifications(bool value) async {
-    final ensureCurrent = _beginMutation();
-    crashNotificationsEnabled = value;
-    await _commit();
-    ensureCurrent();
-    await refreshNotifications();
-  }
-
-  Future<void> setRecoveryNotifications(bool value) async {
-    final ensureCurrent = _beginMutation();
-    recoveryNotificationsEnabled = value;
-    await _commit();
-    ensureCurrent();
-    await refreshNotifications();
   }
 
   Future<void> setOutcomeConsent(bool value) async {
@@ -3124,6 +3392,7 @@ class AppController extends ChangeNotifier {
       'sync': {
         'pendingInputs': hasPendingCloudChanges,
         'pendingOutcomes': hasPendingOutcomeChanges,
+        'pendingCoach': hasPendingCoachChanges,
         'cloudVerifiedForSession': _cloudPrivacyVerified,
         'cloudSyncInProgress': isCloudSyncing,
       },
@@ -3298,6 +3567,13 @@ class AppController extends ChangeNotifier {
       await _pendingOutcomePush;
       ensureCurrent();
     }
+    while (_pendingCoachPush != null || _pendingGuidanceWrite != null) {
+      await _pendingCoachPush;
+      await _pendingGuidanceWrite;
+      ensureCurrent();
+    }
+    _guidanceRefreshGeneration++;
+    _clearCoachSync();
     await _discardPersonalizedModel();
     ensureCurrent();
     signals = [];
@@ -3360,6 +3636,10 @@ class AppController extends ChangeNotifier {
       throw StateError('Finish the current operation and sign in first.');
     }
     isDeletingAccount = true;
+    _cloudSyncActivities.clear();
+    isCloudSyncing = false;
+    _cloudRetryTimer?.cancel();
+    _cloudRetryTimer = null;
     privacyOperationError = null;
     notifyListeners();
     final uid = cloudUid;
@@ -3485,6 +3765,15 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    _cloudSyncActivities.clear();
+    isCloudSyncing = false;
+    _cloudRetryTimer?.cancel();
+    _cloudRetryTimer = null;
+    _clearCoachSync();
+    _lastCloudSyncAt = null;
+    _lastCloudSyncOwnerUid = null;
+    cloudSyncFailureKind = null;
+    cloudSyncError = null;
     _sessionRevision++;
     _scoreRefreshGeneration++;
     isForecastLoading = false;
@@ -3510,6 +3799,7 @@ class AppController extends ChangeNotifier {
     notificationsEnabled = false;
     crashNotificationsEnabled = true;
     recoveryNotificationsEnabled = true;
+    coachPlanNotificationsEnabled = false;
     isNotificationSyncing = false;
     notificationError = null;
     notificationPermission = NotificationPermissionState.unknown;
@@ -3600,6 +3890,12 @@ class AppController extends ChangeNotifier {
   }
 
   Map<String, Object?> _json() => {
+    if (_coachSyncOwnerUid != null) 'coachSync': _coachSyncJson(),
+    if (_lastCloudSyncOwnerUid != null)
+      'cloudSyncMetadata': {
+        'uid': _lastCloudSyncOwnerUid,
+        'lastUploadedAt': _lastCloudSyncAt?.toUtc().toIso8601String(),
+      },
     if (_syncBaseline != null && _syncOwnerUid != null)
       'inputSync': {
         'version': 1,
@@ -3624,6 +3920,7 @@ class AppController extends ChangeNotifier {
     'notificationsEnabled': notificationsEnabled,
     'crashNotificationsEnabled': crashNotificationsEnabled,
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
+    'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
     'notificationPreferencesVersion': notificationPreferencesVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
@@ -3710,6 +4007,7 @@ class AppController extends ChangeNotifier {
         'Could not save to this device. Keep this screen open and retry.',
       );
     }
+    scheduleCloudRetry();
   }
 
   Future<void> _hydrateOrMigrateCloud({bool Function()? isCurrent}) async {
@@ -3726,7 +4024,7 @@ class AppController extends ChangeNotifier {
           )
         : null;
     _cloudPrivacyVerified = false;
-    isCloudSyncing = true;
+    final syncActivity = _beginCloudSyncActivity();
     cloudSyncError = null;
     notifyListeners();
     try {
@@ -3802,14 +4100,10 @@ class AppController extends ChangeNotifier {
       if (cloudUid == session.uid &&
           _sessionRevision == revision &&
           (isCurrent == null || isCurrent())) {
-        cloudSyncError = error.toString();
+        _recordCloudFailure(error);
       }
     } finally {
-      if (cloudUid == session.uid &&
-          _sessionRevision == revision &&
-          (isCurrent == null || isCurrent())) {
-        isCloudSyncing = false;
-      }
+      _endCloudSyncActivity(syncActivity);
     }
   }
 
@@ -3828,6 +4122,7 @@ class AppController extends ChangeNotifier {
       await task;
     } finally {
       if (identical(_pendingCloudPush, task)) _pendingCloudPush = null;
+      scheduleCloudRetry();
     }
   }
 
@@ -3841,8 +4136,9 @@ class AppController extends ChangeNotifier {
         revision == _sessionRevision &&
         cloudUid == session.uid &&
         _canProcessData;
-    isCloudSyncing = true;
+    final syncActivity = _beginCloudSyncActivity();
     cloudSyncError = null;
+    cloudSyncFailureKind = null;
     cloudSyncConflict = false;
     notifyListeners();
     try {
@@ -3870,18 +4166,13 @@ class AppController extends ChangeNotifier {
       if (!patch.isEmpty) await repository.applyInputPatch(session.uid, patch);
       if (!current()) return;
       _syncBaseline = desired;
+      if (!patch.isEmpty) _markCloudUploadSuccess();
       await _writeLocal();
     } on Object catch (error) {
       if (!current()) return;
-      cloudSyncConflict = error is InputSyncConflict;
-      cloudSyncError = cloudSyncConflict
-          ? 'Another device changed the same data. Your edits are saved here. Review sync in Profile.'
-          : 'Saved on this device. Cloud sync is pending; retry in Profile when connected.';
+      _recordCloudFailure(error);
     } finally {
-      if (revision == _sessionRevision && cloudUid == session.uid) {
-        isCloudSyncing = false;
-        notifyListeners();
-      }
+      _endCloudSyncActivity(syncActivity);
     }
   }
 
@@ -3900,7 +4191,7 @@ class AppController extends ChangeNotifier {
         !_isSigningOut &&
         !isPrivacyBusy;
     if (isCloudAuthenticated && cloudRepository != null) {
-      isCloudSyncing = true;
+      final syncActivity = _beginCloudSyncActivity();
       notifyListeners();
       try {
         if (!await _refreshCloudPrivacy(current)) return;
@@ -3911,23 +4202,23 @@ class AppController extends ChangeNotifier {
             throw StateError('Cloud account could not be restored. Retry.');
           }
         }
-      } on Object {
+      } on Object catch (error) {
         if (current()) {
           _cloudPrivacyVerified = false;
-          cloudSyncError = privacyOperationError =
+          _recordCloudFailure(error);
+          privacyOperationError =
               'Account privacy could not be verified. Reconnect and retry.';
         }
         rethrow;
       } finally {
-        if (uid == cloudUid && revision == _sessionRevision) {
-          isCloudSyncing = false;
-          notifyListeners();
-        }
+        _endCloudSyncActivity(syncActivity);
       }
     }
     if (!current()) return;
     final ensureCurrent = _beginMutation();
     await _pushCloud();
+    ensureCurrent();
+    await _retryCoachSync();
     ensureCurrent();
     if (outcomeConsent || hasPendingOutcomeChanges) {
       await refreshOutcomes(notify: false);
@@ -4023,6 +4314,7 @@ class AppController extends ChangeNotifier {
     notificationsEnabled: notificationsEnabled,
     crashNotificationsEnabled: crashNotificationsEnabled,
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
+    coachPlanNotificationsEnabled: coachPlanNotificationsEnabled,
     notificationPrefsVersion: notificationPreferencesVersion,
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
@@ -4038,6 +4330,12 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    _notificationPreferenceGeneration++;
+    _notificationRefreshGeneration++;
+    _notificationScheduleConfirmed = false;
+    _notificationPreferencesPersisted = true;
+    isNotificationSyncing = false;
+    _reconcileCoachSync();
     _privacyConsent = state.privacyConsent;
     _privacyOwnerUid = cloudUid;
     outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
@@ -4092,6 +4390,23 @@ class AppController extends ChangeNotifier {
         state.notificationsEnabled;
     crashNotificationsEnabled = state.crashNotificationsEnabled;
     recoveryNotificationsEnabled = state.recoveryNotificationsEnabled;
+    coachPlanNotificationsEnabled = state.coachPlanNotificationsEnabled;
+    if (!notificationsEnabled || !onboardingComplete) {
+      // Account restoration can return to setup without regenerating guidance.
+      // Queue cancellation now so a former device plan cannot remain active.
+      final revision = _sessionRevision;
+      final generation = _notificationRefreshGeneration;
+      unawaited(
+        _notificationService.cancelGuidance().catchError((Object error) {
+          if (revision == _sessionRevision &&
+              generation == _notificationRefreshGeneration) {
+            notificationError =
+                'Could not clear scheduled reminders. Please retry.';
+            notifyListeners();
+          }
+        }),
+      );
+    }
     notificationPermission = NotificationPermissionState.unknown;
     notificationError = null;
     _notificationPlan = const NotificationPlan(
@@ -4118,6 +4433,11 @@ class AppController extends ChangeNotifier {
   }
 
   void _restoreLocal(Map<String, dynamic> json) {
+    _notificationPreferenceGeneration++;
+    _notificationRefreshGeneration++;
+    _notificationScheduleConfirmed = false;
+    _notificationPreferencesPersisted = true;
+    isNotificationSyncing = false;
     final sync = json['inputSync'];
     if (sync is Map && sync['version'] == 1 && sync['uid'] is String) {
       try {
@@ -4181,6 +4501,8 @@ class AppController extends ChangeNotifier {
         json['crashNotificationsEnabled'] as bool? ?? true;
     recoveryNotificationsEnabled =
         json['recoveryNotificationsEnabled'] as bool? ?? true;
+    coachPlanNotificationsEnabled =
+        json['coachPlanNotificationsEnabled'] as bool? ?? false;
     notificationPermission = NotificationPermissionState.unknown;
     notificationError = null;
     _notificationPlan = const NotificationPlan(
@@ -4315,6 +4637,16 @@ class AppController extends ChangeNotifier {
     _dismissedRiskAlertIds.addAll(
       ((json['dismissedRiskAlertIds'] as List?) ?? const []).cast<String>(),
     );
+    _restoreCoachSync(json['coachSync']);
+    final syncMetadata = json['cloudSyncMetadata'];
+    _lastCloudSyncAt = null;
+    _lastCloudSyncOwnerUid = null;
+    if (syncMetadata is Map && syncMetadata['uid'] is String) {
+      _lastCloudSyncOwnerUid = syncMetadata['uid'] as String;
+      _lastCloudSyncAt = DateTime.tryParse(
+        syncMetadata['lastUploadedAt'] as String? ?? '',
+      )?.toLocal();
+    }
   }
 
   static String _clock(DateTime value) {

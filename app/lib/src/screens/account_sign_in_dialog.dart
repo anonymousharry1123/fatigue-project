@@ -64,9 +64,12 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
-                  style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -112,7 +115,7 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                     child: Text(
                       _error!,
                       key: const Key('profile-sign-in-error'),
-                      style: const TextStyle(color: TonyoColors.coral),
+                      style: TextStyle(color: TonyoPalette.of(context).error),
                     ),
                   ),
                 ],

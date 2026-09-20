@@ -29,6 +29,8 @@ class CoachScreen extends StatelessWidget {
         _GuidanceSummary(controller: controller),
         const SizedBox(height: 10),
         _DailyPlanOverview(controller: controller),
+        const SizedBox(height: 10),
+        _DailyPlanReminders(controller: controller),
         if (controller.guidanceError case final error?) ...[
           const SizedBox(height: 10),
           _GuidanceNotice(message: error),
@@ -54,13 +56,13 @@ class CoachScreen extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 14),
-        const Text(
+        Text(
           'Guidance is based on your recent Tonyo entries and is for general '
           'wellness only. It does not diagnose a medical condition. If symptoms '
           'are severe, unusual, or persistent, talk with a qualified clinician.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: TonyoColors.muted,
+            color: TonyoPalette.of(context).muted,
             fontSize: 10,
             height: 1.45,
           ),
@@ -104,9 +106,12 @@ class _CoachHeader extends StatelessWidget {
           children: [
             Text('AI Coach', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 5),
-            const Text(
+            Text(
               'A prioritized morning-to-evening plan from your recent patterns',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -135,13 +140,13 @@ class _GuidanceSummary extends StatelessWidget {
         ? 'Private guidance saved to your account'
         : 'Calculated privately on this device';
     return TonyoCard(
-      color: const Color(0xFF171524),
+      color: TonyoPalette.of(context).surface,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const MetricIcon(
-            icon: Icons.auto_awesome_rounded,
-            color: TonyoColors.primary,
+          MetricIcon(
+            icon: Icons.chat_bubble_outline_rounded,
+            color: TonyoPalette.of(context).primary,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -150,14 +155,14 @@ class _GuidanceSummary extends StatelessWidget {
               children: [
                 const Text(
                   'Generated daily plan',
-                  style: TextStyle(fontWeight: FontWeight.w900),
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$recommendationCount plan blocks \u00b7 $alertCount active '
                   '${alertCount == 1 ? 'flag' : 'flags'}',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 11,
                   ),
                 ),
@@ -169,16 +174,16 @@ class _GuidanceSummary extends StatelessWidget {
                           ? Icons.lock_rounded
                           : Icons.phone_iphone_rounded,
                       size: 13,
-                      color: TonyoColors.mint,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         source,
-                        style: const TextStyle(
-                          color: TonyoColors.mint,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).secondary,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -208,21 +213,21 @@ class _DailyPlanOverview extends StatelessWidget {
         : '${plan.first.timeLabel}–${plan.last.timeLabel}';
     return TonyoCard(
       key: const Key('coach-daily-plan-summary'),
-      color: TonyoColors.violet.withValues(alpha: .07),
+      color: TonyoPalette.of(context).secondary.withValues(alpha: .07),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.view_timeline_rounded,
-                color: TonyoColors.violet,
+                color: TonyoPalette.of(context).secondary,
               ),
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
                   'Morning-to-evening plan · $range',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -246,14 +251,134 @@ class _DailyPlanOverview extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             controller.profile.coachPriority.detail,
-            style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 5),
           Text(
             feedbackCount == 0
-                ? 'Complete or dismiss blocks and share what helped. Future plans will learn from those responses.'
-                : 'Past responses now adjust each block’s feedback rank and importance; the timeline stays chronological.',
-            style: const TextStyle(color: TonyoColors.mint, fontSize: 10),
+                ? 'Follow the timeline with optional reminders, and share what helped to shape future plans.'
+                : 'Your feedback helps prioritize future advice. Today’s blocks stay in time order.',
+            style: TextStyle(
+              color: TonyoPalette.of(context).secondary,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyPlanReminders extends StatefulWidget {
+  const _DailyPlanReminders({required this.controller});
+  final AppController controller;
+
+  @override
+  State<_DailyPlanReminders> createState() => _DailyPlanRemindersState();
+}
+
+class _DailyPlanRemindersState extends State<_DailyPlanReminders> {
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _change(bool enabled) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.setCoachPlanNotifications(enabled);
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not update reminders. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final busy = _saving || controller.isNotificationSyncing;
+    final supported = controller.notificationSchedulingSupported;
+    final enabled = controller.coachPlanNotificationsEnabled;
+    final count = controller.scheduledCoachNotificationCount;
+    final error = _error ?? controller.notificationError;
+    final status = !supported
+        ? 'Scheduled reminders are unavailable on this device.'
+        : busy
+        ? 'Updating today’s reminders…'
+        : error ??
+              (!enabled
+                  ? 'Daily plan reminders are off.'
+                  : !controller.notificationsEnabled
+                  ? 'Notifications are off. Enable them to receive your plan reminders.'
+                  : count == 0
+                  ? 'No upcoming plan reminders are scheduled.'
+                  : '$count ${count == 1 ? 'reminder' : 'reminders'} scheduled for today.');
+    return TonyoCard(
+      key: const Key('coach-plan-reminders'),
+      color: TonyoPalette.of(context).primary.withValues(alpha: .07),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile(
+              key: const Key('coach-plan-reminder-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Daily plan reminders',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                'A notification when each upcoming plan block starts.',
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
+              ),
+              value: enabled,
+              onChanged: supported && !busy ? _change : null,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              status,
+              key: const Key('coach-plan-reminder-summary'),
+              style: TextStyle(
+                color: error != null
+                    ? TonyoPalette.of(context).warning
+                    : TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          if (enabled && !controller.notificationsEnabled && supported) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('coach-enable-notifications'),
+              onPressed: busy ? null : () => _change(true),
+              icon: const Icon(Icons.notifications_outlined, size: 18),
+              label: const Text('Enable notifications'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            'Open Tonyo each day to refresh your plan and schedule today’s reminders. Notification permission is requested when you turn reminders on. Manage forecast alerts in Profile → Notifications.',
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 10,
+            ),
           ),
         ],
       ),
@@ -270,18 +395,27 @@ class _GuidanceNotice extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: TonyoColors.amber.withValues(alpha: .1),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: TonyoColors.amber.withValues(alpha: .3)),
+      color: TonyoPalette.of(context).warning.withValues(alpha: .1),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: TonyoPalette.of(context).warning.withValues(alpha: .3),
+      ),
     ),
     child: Row(
       children: [
-        const Icon(Icons.cloud_off_rounded, color: TonyoColors.amber, size: 18),
+        Icon(
+          Icons.cloud_off_rounded,
+          color: TonyoPalette.of(context).warning,
+          size: 18,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(color: TonyoColors.amber, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).warning,
+              fontSize: 11,
+            ),
           ),
         ),
       ],
@@ -293,10 +427,13 @@ class _NoRiskAlertsCard extends StatelessWidget {
   const _NoRiskAlertsCard();
 
   @override
-  Widget build(BuildContext context) => const TonyoCard(
+  Widget build(BuildContext context) => TonyoCard(
     child: Row(
       children: [
-        MetricIcon(icon: Icons.shield_rounded, color: TonyoColors.mint),
+        MetricIcon(
+          icon: Icons.shield_rounded,
+          color: TonyoPalette.of(context).secondary,
+        ),
         SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -304,13 +441,16 @@ class _NoRiskAlertsCard extends StatelessWidget {
             children: [
               Text(
                 'No sustained pattern flagged',
-                style: TextStyle(fontWeight: FontWeight.w900),
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 3),
               Text(
                 'Tonyo checks the last seven days for recurring sleep, training, '
                 'energy, and stress patterns.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -328,7 +468,7 @@ class _RiskAlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _severityColor(alert.severity);
+    final color = _severityColor(alert.severity, context);
     return TonyoCard(
       key: ValueKey('risk-alert-${alert.id}'),
       color: color.withValues(alpha: .07),
@@ -353,14 +493,14 @@ class _RiskAlertCard extends StatelessWidget {
                       style: TextStyle(
                         color: color,
                         fontSize: 9,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: .5,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       alert.title,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -370,7 +510,10 @@ class _RiskAlertCard extends StatelessWidget {
           const SizedBox(height: 9),
           Text(
             alert.detail,
-            style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 10),
           Column(
@@ -399,10 +542,13 @@ class _NoRecommendationsCard extends StatelessWidget {
   const _NoRecommendationsCard();
 
   @override
-  Widget build(BuildContext context) => const TonyoCard(
+  Widget build(BuildContext context) => TonyoCard(
     child: Row(
       children: [
-        MetricIcon(icon: Icons.insights_rounded, color: TonyoColors.violet),
+        MetricIcon(
+          icon: Icons.insights_rounded,
+          color: TonyoPalette.of(context).secondary,
+        ),
         SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -410,13 +556,16 @@ class _NoRecommendationsCard extends StatelessWidget {
             children: [
               Text(
                 'Add recent entries to build your plan',
-                style: TextStyle(fontWeight: FontWeight.w900),
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 3),
               Text(
                 'Recommendations appear only when they can be linked to your '
                 'forecast and supporting data.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -443,7 +592,7 @@ class _RecommendationCard extends StatelessWidget {
           children: [
             MetricIcon(
               icon: _recommendationIcon(item.category),
-              color: _recommendationColor(item.category),
+              color: _recommendationColor(item.category, context),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -457,10 +606,10 @@ class _RecommendationCard extends StatelessWidget {
                     children: [
                       Text(
                         item.timeLabel,
-                        style: const TextStyle(
-                          color: TonyoColors.violet,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).secondary,
                           fontSize: 10,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       if (item.priority == RecommendationPriority.important)
@@ -470,7 +619,7 @@ class _RecommendationCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     item.title,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -480,7 +629,7 @@ class _RecommendationCard extends StatelessWidget {
         const SizedBox(height: 9),
         Text(
           item.detail,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -502,23 +651,23 @@ class _RecommendationCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: TonyoColors.violet.withValues(alpha: .07),
+              color: TonyoPalette.of(context).secondary.withValues(alpha: .07),
               borderRadius: BorderRadius.circular(11),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.balance_rounded,
                   size: 14,
-                  color: TonyoColors.violet,
+                  color: TonyoPalette.of(context).secondary,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     reason,
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
+                    style: TextStyle(
+                      color: TonyoPalette.of(context).muted,
                       fontSize: 10,
                     ),
                   ),
@@ -538,7 +687,6 @@ class _RecommendationCard extends StatelessWidget {
 
 class _RecommendationActions extends StatefulWidget {
   const _RecommendationActions({required this.controller, required this.item});
-
   final AppController controller;
   final Recommendation item;
 
@@ -549,11 +697,17 @@ class _RecommendationActions extends StatefulWidget {
 class _RecommendationActionsState extends State<_RecommendationActions> {
   bool _saving = false;
 
-  Future<void> _save(Future<void> Function() action) async {
+  Future<void> _save(bool helpful) async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await _saveCoachAction(context, action);
+      await _saveCoachAction(
+        context,
+        () => widget.controller.setRecommendationFeedback(
+          widget.item.id,
+          helpful,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -561,300 +715,117 @@ class _RecommendationActionsState extends State<_RecommendationActions> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
     final item = widget.item;
-    final statusLabel = switch (item.status) {
-      RecommendationStatus.suggested => 'SUGGESTED',
-      RecommendationStatus.accepted => 'ACCEPTED',
-      RecommendationStatus.completed => 'COMPLETED',
-      RecommendationStatus.dismissed => 'DISMISSED',
-    };
-    final canRate =
-        item.status == RecommendationStatus.completed ||
-        item.status == RecommendationStatus.dismissed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _PlanReminderStatus(controller: widget.controller, item: item),
+        const SizedBox(height: 12),
+        Text(
+          'Was this advice helpful? (optional)',
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
+        ),
+        const SizedBox(height: 6),
         Wrap(
-          spacing: 6,
+          spacing: 8,
           runSpacing: 6,
           children: [
-            _SmallTag(label: statusLabel),
-            if (item.feedbackSampleCount > 0)
-              _SmallTag(
-                label: item.feedbackRank == 1
-                    ? 'TOP FEEDBACK MATCH'
-                    : '#${item.feedbackRank} FEEDBACK MATCH',
+            OutlinedButton.icon(
+              key: ValueKey('helpful-recommendation-${item.id}'),
+              onPressed: _saving ? null : () => _save(true),
+              icon: Icon(
+                item.helpful == true
+                    ? Icons.thumb_up_alt_rounded
+                    : Icons.thumb_up_alt_outlined,
+                size: 17,
               ),
-            if (item.feedbackSampleCount > 0)
-              _SmallTag(
-                label:
-                    '${(item.feedbackScore * 100).round()}% · ${item.feedbackSampleCount} ${item.feedbackSampleCount == 1 ? 'RESPONSE' : 'RESPONSES'}',
+              label: Text(item.helpful == true ? 'Helpful · saved' : 'Helpful'),
+            ),
+            OutlinedButton.icon(
+              key: ValueKey('not-helpful-recommendation-${item.id}'),
+              onPressed: _saving ? null : () => _save(false),
+              icon: Icon(
+                item.helpful == false
+                    ? Icons.thumb_down_alt_rounded
+                    : Icons.thumb_down_alt_outlined,
+                size: 17,
               ),
+              label: Text(
+                item.helpful == false ? 'Not helpful · saved' : 'Not helpful',
+              ),
+            ),
           ],
         ),
-        if (item.status == RecommendationStatus.suggested) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              FilledButton.icon(
-                key: ValueKey('accept-recommendation-${item.id}'),
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () => controller.setRecommendationStatus(
-                          item.id,
-                          RecommendationStatus.accepted,
-                        ),
-                      ),
-                icon: const Icon(Icons.check_rounded, size: 16),
-                label: const Text('Accept'),
-              ),
-              TextButton.icon(
-                key: ValueKey('dismiss-recommendation-${item.id}'),
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () => controller.setRecommendationStatus(
-                          item.id,
-                          RecommendationStatus.dismissed,
-                        ),
-                      ),
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Dismiss'),
-              ),
-            ],
-          ),
-        ] else if (item.status == RecommendationStatus.accepted) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              FilledButton.icon(
-                key: ValueKey('complete-recommendation-${item.id}'),
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () => controller.setRecommendationStatus(
-                          item.id,
-                          RecommendationStatus.completed,
-                        ),
-                      ),
-                icon: const Icon(Icons.done_all_rounded, size: 16),
-                label: const Text('Complete'),
-              ),
-              TextButton.icon(
-                key: ValueKey('dismiss-recommendation-${item.id}'),
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () => controller.setRecommendationStatus(
-                          item.id,
-                          RecommendationStatus.dismissed,
-                        ),
-                      ),
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Dismiss'),
-              ),
-            ],
-          ),
-        ],
-        if (canRate) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 5,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text(
-                'Was this advice helpful?',
-                style: TextStyle(
-                  color: TonyoColors.muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              IconButton.filledTonal(
-                key: ValueKey('helpful-recommendation-${item.id}'),
-                tooltip: 'Helpful',
-                isSelected: item.helpful == true,
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () =>
-                            controller.setRecommendationFeedback(item.id, true),
-                      ),
-                icon: const Icon(Icons.thumb_up_alt_outlined, size: 17),
-                selectedIcon: const Icon(Icons.thumb_up_alt_rounded, size: 17),
-              ),
-              IconButton.filledTonal(
-                key: ValueKey('not-helpful-recommendation-${item.id}'),
-                tooltip: 'Not helpful',
-                isSelected: item.helpful == false,
-                onPressed: _saving
-                    ? null
-                    : () => _save(
-                        () => controller.setRecommendationFeedback(
-                          item.id,
-                          false,
-                        ),
-                      ),
-                icon: const Icon(Icons.thumb_down_alt_outlined, size: 17),
-                selectedIcon: const Icon(
-                  Icons.thumb_down_alt_rounded,
-                  size: 17,
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (item.status == RecommendationStatus.completed) ...[
-          const SizedBox(height: 9),
-          if (!controller.outcomeConsent)
-            const Text(
-              'Outcome learning is off. No training record will be created.',
-              key: Key('coach-outcome-consent-off'),
-              style: TextStyle(color: TonyoColors.muted, fontSize: 10),
-            )
-          else if (controller.outcomeForRecommendation(item.id)
-              case final outcome?)
-            Container(
-              key: ValueKey('recommendation-outcome-${item.id}'),
-              width: double.infinity,
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: TonyoColors.mint.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Text(
-                'Observed energy ${outcome.value.round()}/10 saved privately',
-                style: const TextStyle(
-                  color: TonyoColors.mint,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            )
-          else
-            OutlinedButton.icon(
-              key: ValueKey('record-outcome-${item.id}'),
-              onPressed: _saving
-                  ? null
-                  : () => _save(
-                      () => _recordObservedEnergy(context, controller, item),
-                    ),
-              icon: const Icon(Icons.bolt_rounded, size: 16),
-              label: const Text('Log observed energy'),
-            ),
-        ],
       ],
     );
   }
+}
 
-  static Future<void> _recordObservedEnergy(
-    BuildContext context,
-    AppController controller,
-    Recommendation item,
-  ) async {
-    var energy = 6.0;
-    var saving = false;
-    String? errorMessage;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => PopScope(
-          canPop: !saving,
-          child: AlertDialog(
-            scrollable: true,
-            title: const Text('Observed energy'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Optional: how energized did you feel after this completed block?',
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${energy.round()}/10',
-                  key: const Key('observed-energy-value'),
-                  style: const TextStyle(
-                    color: TonyoColors.mint,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Semantics(
-                  label: 'Observed energy',
-                  child: Slider(
-                    key: const Key('observed-energy-slider'),
-                    value: energy,
-                    min: 1,
-                    max: 10,
-                    divisions: 9,
-                    label: energy.round().toString(),
-                    semanticFormatterCallback: (value) =>
-                        '${value.round()} out of 10',
-                    onChanged: saving
-                        ? null
-                        : (value) => setState(() => energy = value),
-                  ),
-                ),
-                const Text(
-                  'Saved only because outcome learning is on. This release does not train a personalized model.',
-                  style: TextStyle(color: TonyoColors.muted, fontSize: 10),
-                ),
-                if (errorMessage != null) ...[
-                  const SizedBox(height: 12),
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      errorMessage!,
-                      style: const TextStyle(color: TonyoColors.coral),
-                    ),
-                  ),
-                ],
-              ],
+class _PlanReminderStatus extends StatelessWidget {
+  const _PlanReminderStatus({required this.controller, required this.item});
+  final AppController controller;
+  final Recommendation item;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduled = controller.notificationForRecommendation(item.id);
+    final past =
+        item.scheduledAt != null &&
+        !item.scheduledAt!.isAfter(controller.currentTime);
+    final String text;
+    final bool active;
+    if (past) {
+      text = 'Time passed';
+      active = false;
+    } else if (!controller.notificationSchedulingSupported) {
+      text = 'Reminders unavailable on this device';
+      active = false;
+    } else if (!controller.coachPlanNotificationsEnabled ||
+        !controller.notificationsEnabled) {
+      text = 'Reminders off';
+      active = false;
+    } else if (controller.isNotificationSyncing) {
+      text = 'Updating reminder…';
+      active = false;
+    } else if (controller.notificationError != null) {
+      text = 'Reminder not scheduled · check reminder settings';
+      active = false;
+    } else if (scheduled != null &&
+        scheduled.scheduledAt.isAfter(controller.currentTime)) {
+      text = 'Reminder scheduled · ${formatHour(scheduled.scheduledAt)}';
+      active = true;
+    } else {
+      text = 'No reminder scheduled';
+      active = false;
+    }
+    return Row(
+      key: ValueKey('plan-reminder-status-${item.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          past
+              ? Icons.history_rounded
+              : active
+              ? Icons.notifications_active_outlined
+              : Icons.notifications_off_outlined,
+          color: active
+              ? TonyoPalette.of(context).success
+              : TonyoPalette.of(context).muted,
+          size: 18,
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: active
+                  ? TonyoPalette.of(context).success
+                  : TonyoPalette.of(context).muted,
+              fontSize: 11,
             ),
-            actions: [
-              TextButton(
-                onPressed: saving ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Skip'),
-              ),
-              FilledButton(
-                key: const Key('save-observed-energy'),
-                onPressed: saving
-                    ? null
-                    : () async {
-                        setState(() {
-                          saving = true;
-                          errorMessage = null;
-                        });
-                        try {
-                          await controller.recordObservedEnergy(
-                            energy,
-                            recommendationId: item.id,
-                          );
-                          if (dialogContext.mounted) {
-                            Navigator.pop(dialogContext);
-                          }
-                        } catch (_) {
-                          if (!dialogContext.mounted) return;
-                          setState(() {
-                            saving = false;
-                            errorMessage =
-                                'Could not save your energy rating. Please try again.';
-                          });
-                        }
-                      },
-                child: Text(saving ? 'Saving…' : 'Save outcome'),
-              ),
-            ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -867,12 +838,12 @@ class _EvidenceSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (evidence.isEmpty) {
-      return const Text(
+      return Text(
         'Linked to recent private data',
         style: TextStyle(
-          color: TonyoColors.mint,
+          color: TonyoPalette.of(context).secondary,
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       );
     }
@@ -884,18 +855,22 @@ class _EvidenceSummary extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 1),
-          child: Icon(Icons.link_rounded, color: TonyoColors.mint, size: 13),
+          child: Icon(
+            Icons.link_rounded,
+            color: TonyoPalette.of(context).secondary,
+            size: 13,
+          ),
         ),
         const SizedBox(width: 5),
         Expanded(
           child: Text(
             labels.join(' \u00b7 '),
-            style: const TextStyle(
-              color: TonyoColors.mint,
+            style: TextStyle(
+              color: TonyoPalette.of(context).secondary,
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -929,16 +904,16 @@ class _SmallTag extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
-      color: TonyoColors.surfaceRaised,
+      color: TonyoPalette.of(context).surfaceRaised,
       borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: TonyoColors.border),
+      border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: Text(
       label,
-      style: const TextStyle(
-        color: TonyoColors.muted,
+      style: TextStyle(
+        color: TonyoPalette.of(context).muted,
         fontSize: 8,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w700,
         letterSpacing: .35,
       ),
     ),
@@ -956,15 +931,16 @@ IconData _recommendationIcon(String category) => switch (category) {
   _ => Icons.spa_rounded,
 };
 
-Color _recommendationColor(String category) => switch (category) {
-  'Deep work' => TonyoColors.amber,
-  'Morning' => TonyoColors.amber,
-  'Hydration' => TonyoColors.blue,
-  'Training' => TonyoColors.coral,
-  'Nap' => TonyoColors.violet,
-  'Taper' || 'Evening' => TonyoColors.violet,
-  _ => TonyoColors.mint,
-};
+Color _recommendationColor(String category, BuildContext context) =>
+    switch (category) {
+      'Deep work' => TonyoPalette.of(context).secondary,
+      'Morning' => TonyoPalette.of(context).secondary,
+      'Hydration' => TonyoPalette.of(context).primary,
+      'Training' => TonyoPalette.of(context).primary,
+      'Nap' => TonyoPalette.of(context).secondary,
+      'Taper' || 'Evening' => TonyoPalette.of(context).secondary,
+      _ => TonyoPalette.of(context).secondary,
+    };
 
 IconData _riskIcon(RiskAlertCategory category) => switch (category) {
   RiskAlertCategory.sleepDebt => Icons.bedtime_rounded,
@@ -978,11 +954,12 @@ String _riskLabel(RiskAlertCategory category) => switch (category) {
   RiskAlertCategory.fatigueStress => 'Energy and stress pattern',
 };
 
-Color _severityColor(AlertSeverity severity) => switch (severity) {
-  AlertSeverity.info => TonyoColors.blue,
-  AlertSeverity.caution => TonyoColors.amber,
-  AlertSeverity.high => TonyoColors.coral,
-};
+Color _severityColor(AlertSeverity severity, BuildContext context) =>
+    switch (severity) {
+      AlertSeverity.info => TonyoPalette.of(context).primary,
+      AlertSeverity.caution => TonyoPalette.of(context).warning,
+      AlertSeverity.high => TonyoPalette.of(context).error,
+    };
 
 String _windowLabel(ForecastWindowType type) => switch (type) {
   ForecastWindowType.peak => 'Peak',

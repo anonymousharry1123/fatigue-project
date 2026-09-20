@@ -70,7 +70,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
             child: FilledButton(
               onPressed: saving ? null : _save,
               style: FilledButton.styleFrom(
-                backgroundColor: TonyoColors.primary,
+                backgroundColor: TonyoPalette.of(context).primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -103,7 +103,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   const SizedBox(height: 7),
                   Text(
                     'Rate energy, mood, and stress on a 1–10 scale. This is logged as a ${period.label.toLowerCase()} check-in based on the time of day.',
-                    style: const TextStyle(color: TonyoColors.muted),
+                    style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                   const SizedBox(height: 18),
                   _PeriodBanner(period: period),
@@ -112,8 +112,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                     key: const Key('checkin-outcome-status'),
                     color:
                         (controller.outcomeConsent
-                                ? TonyoColors.mint
-                                : TonyoColors.violet)
+                                ? TonyoPalette.of(context).success
+                                : TonyoPalette.of(context).secondary)
                             .withValues(alpha: .07),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,8 +123,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                               ? Icons.fact_check_rounded
                               : Icons.lock_outline_rounded,
                           color: controller.outcomeConsent
-                              ? TonyoColors.mint
-                              : TonyoColors.violet,
+                              ? TonyoPalette.of(context).success
+                              : TonyoPalette.of(context).secondary,
                           size: 18,
                         ),
                         const SizedBox(width: 9),
@@ -133,8 +133,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                             controller.outcomeConsent
                                 ? 'Outcome learning is on. This energy rating will also be linked as a private observed-energy outcome.'
                                 : 'Outcome learning is off. This check-in still supports today’s wellness estimates, but no training record is created.',
-                            style: const TextStyle(
-                              color: TonyoColors.muted,
+                            style: TextStyle(
+                              color: TonyoPalette.of(context).muted,
                               fontSize: 10,
                             ),
                           ),
@@ -145,7 +145,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   const SizedBox(height: 18),
                   _RatingCard(
                     icon: Icons.bolt_rounded,
-                    color: TonyoColors.mint,
+                    color: TonyoPalette.of(context).secondary,
                     title: 'Energy',
                     value: energy,
                     badge: CheckInLogic.energyBadge(energy),
@@ -159,7 +159,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   const SizedBox(height: 12),
                   _RatingCard(
                     icon: Icons.sentiment_satisfied_alt_rounded,
-                    color: TonyoColors.blue,
+                    color: TonyoPalette.of(context).primary,
                     title: 'Mood',
                     value: mood,
                     badge: CheckInLogic.moodBadge(mood),
@@ -173,7 +173,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   const SizedBox(height: 12),
                   _RatingCard(
                     icon: Icons.psychology_alt_rounded,
-                    color: TonyoColors.amber,
+                    color: TonyoPalette.of(context).secondary,
                     title: 'Stress',
                     value: stress,
                     badge: CheckInLogic.stressBadge(stress),
@@ -190,17 +190,19 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                       controller: noteController,
                       enabled: !saving,
                       maxLines: 2,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         border: InputBorder.none,
                         labelText: 'Optional note',
-                        hintStyle: TextStyle(color: TonyoColors.muted),
+                        hintStyle: TextStyle(
+                          color: TonyoPalette.of(context).muted,
+                        ),
                       ),
                     ),
                   ),
                   const SectionHeader('Cognitive tests · 30 sec'),
                   _TestCard(
                     icon: Icons.timer_outlined,
-                    color: TonyoColors.primary,
+                    color: TonyoPalette.of(context).primary,
                     title: 'Reaction time',
                     detail: 'Tap when it flashes',
                     status: 'Try now',
@@ -212,10 +214,10 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                   ),
                   const SectionHeader('Check-in history'),
                   if (history.isEmpty)
-                    const TonyoCard(
+                    TonyoCard(
                       child: Text(
                         'No check-ins saved yet. Your ratings will appear here.',
-                        style: TextStyle(color: TonyoColors.muted),
+                        style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                     )
                   else
@@ -288,7 +290,9 @@ class _PeriodBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMorning = period == CheckInPeriod.morning;
-    final color = isMorning ? TonyoColors.amber : TonyoColors.violet;
+    final color = isMorning
+        ? TonyoPalette.of(context).secondary
+        : TonyoPalette.of(context).secondary;
     final icon = isMorning
         ? Icons.wb_sunny_outlined
         : Icons.nights_stay_outlined;
@@ -303,15 +307,15 @@ class _PeriodBanner extends StatelessWidget {
               children: [
                 Text(
                   '${period.label} check-in',
-                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   isMorning
                       ? 'Before 2:00 PM is logged as morning.'
                       : 'From 2:00 PM onward is logged as evening.',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 11,
                   ),
                 ),
@@ -357,19 +361,19 @@ class _RatingCard extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Icon(icon, color: color, size: 19),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: .15),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 badge,
                 style: TextStyle(
                   color: color,
                   fontSize: 10,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -385,14 +389,14 @@ class _RatingCard extends StatelessWidget {
                   style: TextStyle(
                     color: color,
                     fontSize: 44,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const TextSpan(
+                TextSpan(
                   text: ' / 10',
                   style: TextStyle(
-                    color: TonyoColors.muted,
-                    fontWeight: FontWeight.w800,
+                    color: TonyoPalette.of(context).muted,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -441,7 +445,7 @@ class _RatingCard extends StatelessWidget {
                   style: TextStyle(
                     color: color,
                     fontSize: 9,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -470,10 +474,10 @@ class _HistoryCard extends StatelessWidget {
         children: [
           Text(
             timeLabel,
-            style: const TextStyle(
-              color: TonyoColors.muted,
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -481,16 +485,28 @@ class _HistoryCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Chip('Energy ${checkIn.energy.round()}', TonyoColors.mint),
-              _Chip('Mood ${checkIn.mood.round()}', TonyoColors.blue),
-              _Chip('Stress ${checkIn.stress.round()}', TonyoColors.amber),
+              _Chip(
+                'Energy ${checkIn.energy.round()}',
+                TonyoPalette.of(context).secondary,
+              ),
+              _Chip(
+                'Mood ${checkIn.mood.round()}',
+                TonyoPalette.of(context).primary,
+              ),
+              _Chip(
+                'Stress ${checkIn.stress.round()}',
+                TonyoPalette.of(context).secondary,
+              ),
             ],
           ),
           if (checkIn.note.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               checkIn.note,
-              style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
             ),
           ],
         ],
@@ -518,7 +534,7 @@ class _Chip extends StatelessWidget {
     ),
     child: Text(
       label,
-      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
     ),
   );
 }
@@ -546,7 +562,7 @@ class _TestCard extends StatelessWidget {
       button: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -559,12 +575,12 @@ class _TestCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       detail,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 10,
                       ),
                     ),
@@ -573,7 +589,7 @@ class _TestCard extends StatelessWidget {
                       style: TextStyle(
                         color: color,
                         fontSize: 10,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],

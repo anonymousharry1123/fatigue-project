@@ -232,6 +232,17 @@ abstract interface class CloudRepository {
     required bool helpful,
   });
 
+  /// Apply only the user's explicit action. Seed the full grounded record if
+  /// this plan was generated offline and has never reached the cloud.
+  Future<void> applyRecommendationAction(
+    String uid,
+    Recommendation record, {
+    RecommendationStatus? status,
+    bool? helpful,
+  });
+
+  Future<void> applyRiskAlertDismissal(String uid, RiskAlert record);
+
   Future<void> upsertOutcome(String uid, OutcomeRecord outcome);
 
   Future<List<OutcomeRecord>> outcomesByRange(
@@ -881,6 +892,35 @@ class MemoryCloudRepository implements CloudRepository {
   }
 
   @override
+  Future<void> applyRecommendationAction(
+    String uid,
+    Recommendation record, {
+    RecommendationStatus? status,
+    bool? helpful,
+  }) async {
+    _authorize(uid);
+    if (record.id.isEmpty ||
+        record.id.contains('/') ||
+        record.day == null ||
+        (status == null && helpful == null)) {
+      throw ArgumentError('A valid recommendation and action are required.');
+    }
+    final stored = _recommendations.putIfAbsent(uid, () => {});
+    final current = stored[record.id] ?? record;
+    stored[record.id] = current.copyWith(status: status, helpful: helpful);
+  }
+
+  @override
+  Future<void> applyRiskAlertDismissal(String uid, RiskAlert record) async {
+    _authorize(uid);
+    if (record.id.isEmpty || record.id.contains('/') || record.day == null) {
+      throw ArgumentError('A valid alert is required.');
+    }
+    final stored = _riskAlerts.putIfAbsent(uid, () => {});
+    stored[record.id] = (stored[record.id] ?? record).copyWith(dismissed: true);
+  }
+
+  @override
   Future<void> upsertOutcome(String uid, OutcomeRecord outcome) async {
     _requireOutcomeConsent(uid);
     _outcomes.putIfAbsent(uid, () => {})[outcome.id] = outcomeFromCloud(
@@ -989,6 +1029,8 @@ class MemoryCloudRepository implements CloudRepository {
               notificationsEnabled: state.notificationsEnabled,
               crashNotificationsEnabled: state.crashNotificationsEnabled,
               recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
+              coachPlanNotificationsEnabled:
+                  state.coachPlanNotificationsEnabled,
               notificationPrefsVersion: state.notificationPrefsVersion,
               outcomeConsent: state.outcomeConsent,
               healthAuthorized: state.healthAuthorized,

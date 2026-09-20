@@ -18,7 +18,7 @@ class TodayScreen extends StatelessWidget {
     final controller = AppScope.of(context);
     final score = controller.score;
     final status = TodayDashboardLogic.statusFor(score.energy);
-    final statusColor = _statusColor(status);
+    final statusColor = _statusColor(status, context);
 
     return SafeArea(
       bottom: false,
@@ -37,7 +37,7 @@ class TodayScreen extends StatelessWidget {
                 TonyoCard(
                   key: const Key('energy-score-card'),
                   padding: const EdgeInsets.all(18),
-                  color: const Color(0xFF121622),
+                  color: TonyoPalette.of(context).surface,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -54,7 +54,7 @@ class TodayScreen extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               color: statusColor.withValues(alpha: .14),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: statusColor.withValues(alpha: .28),
                               ),
@@ -78,7 +78,7 @@ class TodayScreen extends StatelessWidget {
                                     style: TextStyle(
                                       color: statusColor,
                                       fontSize: 10,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w700,
                                       letterSpacing: .7,
                                     ),
                                   ),
@@ -92,8 +92,8 @@ class TodayScreen extends StatelessWidget {
                               Icon(
                                 controller.scoreLoadedFromSnapshot
                                     ? Icons.cloud_done_rounded
-                                    : Icons.auto_awesome_rounded,
-                                color: TonyoColors.muted,
+                                    : Icons.chat_bubble_outline_rounded,
+                                color: TonyoPalette.of(context).muted,
                                 size: 16,
                               ),
                               const SizedBox(width: 6),
@@ -102,8 +102,8 @@ class TodayScreen extends StatelessWidget {
                                   controller.scoreLoadedFromSnapshot
                                       ? 'Saved snapshot'
                                       : 'Live estimate',
-                                  style: const TextStyle(
-                                    color: TonyoColors.muted,
+                                  style: TextStyle(
+                                    color: TonyoPalette.of(context).muted,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -121,15 +121,18 @@ class TodayScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         status.detail,
-                        style: const TextStyle(
-                          color: TonyoColors.muted,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).muted,
                           fontSize: 12,
                           height: 1.4,
                         ),
                       ),
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Divider(color: TonyoColors.border, height: 1),
+                        child: Divider(
+                          color: TonyoPalette.of(context).border,
+                          height: 1,
+                        ),
                       ),
                       LayoutBuilder(
                         builder: (context, constraints) {
@@ -145,7 +148,7 @@ class TodayScreen extends StatelessWidget {
                               score.confidence,
                               score.freshness,
                             ),
-                            color: TonyoColors.violet,
+                            color: TonyoPalette.of(context).primary,
                           );
                           final cognitive = _ScoreTile(
                             key: const Key('cognitive-score-card'),
@@ -157,7 +160,7 @@ class TodayScreen extends StatelessWidget {
                               score.cognitiveConfidence,
                               score.cognitiveFreshness,
                             ),
-                            color: TonyoColors.blue,
+                            color: TonyoPalette.of(context).secondary,
                             comparison: _cognitiveComparison(score),
                           );
                           if (stackScores) {
@@ -165,9 +168,11 @@ class TodayScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 energy,
-                                const Padding(
+                                Padding(
                                   padding: EdgeInsets.symmetric(vertical: 18),
-                                  child: Divider(color: TonyoColors.border),
+                                  child: Divider(
+                                    color: TonyoPalette.of(context).border,
+                                  ),
                                 ),
                                 cognitive,
                               ],
@@ -183,7 +188,7 @@ class TodayScreen extends StatelessWidget {
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                 ),
-                                color: TonyoColors.border,
+                                color: TonyoPalette.of(context).border,
                               ),
                               Expanded(child: cognitive),
                             ],
@@ -203,7 +208,7 @@ class TodayScreen extends StatelessWidget {
                     ),
                   ),
                   style: TextButton.styleFrom(
-                    foregroundColor: TonyoColors.text,
+                    foregroundColor: TonyoPalette.of(context).text,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 14,
@@ -221,10 +226,10 @@ class TodayScreen extends StatelessWidget {
                 ),
                 if (controller.isScoreLoading) ...[
                   const SizedBox(height: 10),
-                  const LinearProgressIndicator(
+                  LinearProgressIndicator(
                     minHeight: 2,
-                    color: TonyoColors.primary,
-                    backgroundColor: TonyoColors.surfaceRaised,
+                    color: TonyoPalette.of(context).primary,
+                    backgroundColor: TonyoPalette.of(context).surfaceRaised,
                   ),
                 ],
                 if (controller.scoreError case final error?) ...[
@@ -272,26 +277,26 @@ class TodayScreen extends StatelessWidget {
                   title: 'Energy factors',
                   subtitle: 'Today’s score factors',
                   drivers: score.drivers,
-                  color: TonyoColors.violet,
+                  color: TonyoPalette.of(context).secondary,
                 ),
                 const SizedBox(height: 10),
                 _DriverCard(
                   title: 'Cognitive factors',
                   subtitle: 'WHAT SHAPED THIS ESTIMATE',
                   drivers: score.cognitiveDrivers,
-                  color: TonyoColors.blue,
+                  color: TonyoPalette.of(context).primary,
                 ),
                 const SizedBox(height: 12),
                 TonyoCard(
                   key: const Key('energy-score-explanation'),
-                  color: const Color(0xFF111722),
+                  color: TonyoPalette.of(context).surface,
                   padding: const EdgeInsets.all(14),
-                  child: const Row(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         Icons.info_outline_rounded,
-                        color: TonyoColors.blue,
+                        color: TonyoPalette.of(context).primary,
                         size: 19,
                       ),
                       SizedBox(width: 10),
@@ -299,7 +304,7 @@ class TodayScreen extends StatelessWidget {
                         child: Text(
                           'This wellness estimate combines recent sleep, activity, reaction, mood, and stress inputs. It supports daily planning and is not a medical assessment.',
                           style: TextStyle(
-                            color: TonyoColors.muted,
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 10,
                             height: 1.4,
                           ),
@@ -316,11 +321,12 @@ class TodayScreen extends StatelessWidget {
     );
   }
 
-  static Color _statusColor(TodayFatigueStatus status) => switch (status) {
-    TodayFatigueStatus.fresh => TonyoColors.mint,
-    TodayFatigueStatus.moderate => TonyoColors.amber,
-    TodayFatigueStatus.fatigued => TonyoColors.coral,
-  };
+  static Color _statusColor(TodayFatigueStatus status, BuildContext context) =>
+      switch (status) {
+        TodayFatigueStatus.fresh => TonyoPalette.of(context).success,
+        TodayFatigueStatus.moderate => TonyoPalette.of(context).warning,
+        TodayFatigueStatus.fatigued => TonyoPalette.of(context).error,
+      };
 
   static String _cognitiveComparison(ScoreSnapshot score) {
     final change = score.cognitiveChange;
@@ -349,7 +355,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = Text(
       _dateLabel(),
-      style: const TextStyle(color: TonyoColors.muted, fontSize: 12),
+      style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 12),
     );
     final greeting = Text(
       '${_greeting()}, $name',
@@ -364,12 +370,14 @@ class _Header extends StatelessWidget {
       icon: ExcludeSemantics(
         child: CircleAvatar(
           radius: 22,
-          backgroundColor: TonyoColors.primary.withValues(alpha: .22),
+          backgroundColor: TonyoPalette.of(
+            context,
+          ).primary.withValues(alpha: .22),
           child: Text(
             name.trim().isEmpty
                 ? 'T'
                 : name.trim().characters.first.toUpperCase(),
-            style: const TextStyle(fontWeight: FontWeight.w900),
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
       ),
@@ -464,25 +472,25 @@ class _ScoreTile extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: 8,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
           letterSpacing: .55,
         ),
       ),
       const SizedBox(height: 8),
-      ScoreRing(value: value, label: label, size: 76),
+      ScoreRing(value: value, label: label, size: 76, color: color),
       const SizedBox(height: 8),
       Text(
         completeness,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: TonyoColors.muted, fontSize: 8.5),
+        style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 8.5),
       ),
       if (comparison != null) ...[
         const SizedBox(height: 4),
         Text(
           comparison!,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: TonyoColors.mint,
+          style: TextStyle(
+            color: TonyoPalette.of(context).secondary,
             fontSize: 8.5,
             fontWeight: FontWeight.w700,
           ),
@@ -499,7 +507,7 @@ class _SignalSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _color(summary.type);
+    final color = _color(summary.type, context);
     return TonyoCard(
       key: Key('today-signal-${summary.type.name}'),
       padding: const EdgeInsets.all(13),
@@ -513,8 +521,8 @@ class _SignalSummaryCard extends StatelessWidget {
               children: [
                 Text(
                   summary.type.label,
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                   ),
@@ -523,15 +531,17 @@ class _SignalSummaryCard extends StatelessWidget {
                 Text(
                   summary.displayValue,
                   style: TextStyle(
-                    color: summary.isAvailable ? TonyoColors.text : color,
+                    color: summary.isAvailable
+                        ? TonyoPalette.of(context).text
+                        : color,
                     fontSize: 15,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 Text(
                   summary.isAvailable ? 'Logged today' : 'Not logged',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 8.5,
                   ),
                 ),
@@ -554,15 +564,15 @@ class _SignalSummaryCard extends StatelessWidget {
     _ => Icons.insights_rounded,
   };
 
-  static Color _color(SignalType type) => switch (type) {
-    SignalType.sleep => TonyoColors.blue,
-    SignalType.hydration => TonyoColors.mint,
-    SignalType.exercise => TonyoColors.coral,
-    SignalType.steps => TonyoColors.coral,
-    SignalType.study => TonyoColors.amber,
-    SignalType.screenTime => TonyoColors.violet,
-    SignalType.reactionTime => TonyoColors.primary,
-    _ => TonyoColors.muted,
+  static Color _color(SignalType type, BuildContext context) => switch (type) {
+    SignalType.sleep => TonyoPalette.of(context).primary,
+    SignalType.hydration => TonyoPalette.of(context).secondary,
+    SignalType.exercise => TonyoPalette.of(context).primary,
+    SignalType.steps => TonyoPalette.of(context).primary,
+    SignalType.study => TonyoPalette.of(context).secondary,
+    SignalType.screenTime => TonyoPalette.of(context).secondary,
+    SignalType.reactionTime => TonyoPalette.of(context).primary,
+    _ => TonyoPalette.of(context).muted,
   };
 }
 
@@ -597,13 +607,13 @@ class _DriverCard extends StatelessWidget {
                     style: TextStyle(
                       color: color,
                       fontSize: 8.5,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: .5,
                     ),
                   ),
                   Text(
                     title,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -612,15 +622,18 @@ class _DriverCard extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         if (drivers.isEmpty)
-          const Text(
+          Text(
             'Log today’s signals to personalize this estimate.',
-            style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           )
         else ...[
           if (drivers.any((driver) => driver.isPositive)) ...[
-            const _TodayDriverLabel(
+            _TodayDriverLabel(
               label: 'SUPPORTING',
-              color: TonyoColors.mint,
+              color: TonyoPalette.of(context).success,
             ),
             ...drivers
                 .where((driver) => driver.isPositive)
@@ -628,9 +641,9 @@ class _DriverCard extends StatelessWidget {
                 .map(_DriverRow.new),
           ],
           if (drivers.any((driver) => driver.isNegative)) ...[
-            const _TodayDriverLabel(
+            _TodayDriverLabel(
               label: 'REDUCING',
-              color: TonyoColors.coral,
+              color: TonyoPalette.of(context).error,
             ),
             ...drivers
                 .where((driver) => driver.isNegative)
@@ -638,7 +651,10 @@ class _DriverCard extends StatelessWidget {
                 .map(_DriverRow.new),
           ],
           if (drivers.every((driver) => driver.isNeutral)) ...[
-            const _TodayDriverLabel(label: 'NEUTRAL', color: TonyoColors.muted),
+            _TodayDriverLabel(
+              label: 'NEUTRAL',
+              color: TonyoPalette.of(context).muted,
+            ),
             ...drivers.take(2).map(_DriverRow.new),
           ],
         ],
@@ -661,7 +677,7 @@ class _TodayDriverLabel extends StatelessWidget {
       style: TextStyle(
         color: color,
         fontSize: 8,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w700,
         letterSpacing: .6,
       ),
     ),
@@ -676,10 +692,10 @@ class _DriverRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = driver.isPositive
-        ? TonyoColors.mint
+        ? TonyoPalette.of(context).success
         : driver.isNegative
-        ? TonyoColors.coral
-        : TonyoColors.muted;
+        ? TonyoPalette.of(context).error
+        : TonyoPalette.of(context).muted;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -698,12 +714,15 @@ class _DriverRow extends StatelessWidget {
                   driver.label,
                   style: const TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
                   driver.detail,
-                  style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
+                    fontSize: 9,
+                  ),
                 ),
               ],
             ),
@@ -713,7 +732,7 @@ class _DriverRow extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 10,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -730,12 +749,16 @@ class _OfflineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      const Icon(Icons.cloud_off_rounded, color: TonyoColors.amber, size: 15),
+      Icon(
+        Icons.cloud_off_rounded,
+        color: TonyoPalette.of(context).warning,
+        size: 15,
+      ),
       const SizedBox(width: 7),
       Expanded(
         child: Text(
           message,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
       ),
     ],

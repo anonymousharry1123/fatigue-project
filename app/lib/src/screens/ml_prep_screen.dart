@@ -208,14 +208,14 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
             children: [
               const Text(
                 'Version 0.32 prep · read-only',
-                style: TextStyle(fontWeight: FontWeight.w800),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Inspect exactly 30 days from your signed-in account. Preparing '
                 'a snapshot does not train a model, change confidence, enable consent, '
                 'or upload training rows.',
-                style: TextStyle(color: TonyoColors.muted),
+                style: TextStyle(color: TonyoPalette.of(context).muted),
               ),
               if (blocker != null) ...[
                 const SizedBox(height: 16),
@@ -241,7 +241,6 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                   helperText: widget.controller.deviceTimezoneIdentifier == null
                       ? 'Device region unavailable. Enter an IANA region or UTC.'
                       : 'Defaults to your device region. Change for historical data.',
-                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() {
                   _run = null;
@@ -262,11 +261,14 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                 label: const Text('Refresh from Firebase'),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Prepare reuses the saved snapshot when valid. Refresh '
                 'explicitly checks Firebase again. No automatic refresh or '
                 'background queries.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 12,
+                ),
               ),
               if (_busy) ...[
                 const SizedBox(height: 16),
@@ -286,7 +288,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                     Text(
                       widget.controller.personalizedModelStatus,
                       key: const Key('personalized-energy-model-status'),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -296,27 +298,36 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                       'this screen never starts training.',
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'The newest 20% of labeled days (at least 3 days) stay '
                       'out of training. The model is accepted only if its '
                       'holdout error improves by at least 5%. Corrections are '
                       'limited to ±10 score points and shrink for missing or '
                       'stale inputs.',
-                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Refresh is explicit, at most once per 24 hours, and '
                       'requires a new eligible outcome. Weights and training '
                       'rows stay on-device; an accepted change sends only one '
                       'small metadata update to Firebase, not your full account.',
-                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Deterministic scoring remains the fallback. Cognitive '
                       'is not personalized, and this does not boost confidence.',
-                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -369,7 +380,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
   );
 
   Widget _notice(String text) => TonyoCard(
-    child: Text(text, style: const TextStyle(color: TonyoColors.muted)),
+    child: Text(text, style: TextStyle(color: TonyoPalette.of(context).muted)),
   );
 
   Map<String, dynamic> _map(Object? value) =>
@@ -404,7 +415,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
               run.cacheHit
                   ? 'Saved snapshot reused'
                   : 'Account snapshot fetched',
-              style: const TextStyle(fontWeight: FontWeight.w800),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text('Fetched at ${run.snapshot.fetchedAt.toIso8601String()}'),
@@ -416,11 +427,14 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
             for (final entry in run.returnedDocuments.entries)
               Text('${_label(entry.key)} documents returned: ${entry.value}'),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Caps: 1,500 signals, 100 check-ins, 100 outcomes. Request '
               'counts are not billed reads; rule, index and minimum-query '
               'charges may also apply. Remote edits require explicit refresh.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -494,7 +508,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
         children: [
           Text(
             '$title: ${status['ready'] == true ? 'snapshot data-ready' : 'not ready'}',
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           for (final reason in reasons) Text('• ${_label(reason.toString())}'),

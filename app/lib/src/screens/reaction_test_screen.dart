@@ -140,6 +140,17 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
+    final colors = TonyoPalette.of(context);
+    // Measurement cues are semantic and must not change with custom accents.
+    final panelColor = switch (phase) {
+      _ReactionPhase.ready => colors.success,
+      _ReactionPhase.waiting => colors.warning,
+      _ReactionPhase.saveFailed => colors.error,
+      _ => colors.surfaceRaised,
+    };
+    final panelForeground = panelColor.computeLuminance() > .179
+        ? Colors.black
+        : Colors.white;
     // Keep the pre-test baseline even when there was not enough history to
     // compute one. Saving this result must not compare it against itself.
     final baseline = _resultId != null
@@ -188,18 +199,10 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
             onTap: phase == _ReactionPhase.saving ? null : _tap,
             child: ExcludeSemantics(
               child: Material(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(16),
                 clipBehavior: Clip.antiAlias,
                 child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: phase == _ReactionPhase.ready
-                          ? [const Color(0xFF1ABF8F), TonyoColors.mint]
-                          : phase == _ReactionPhase.waiting
-                          ? [const Color(0xFF352F4C), const Color(0xFF1B1A29)]
-                          : [TonyoColors.primary, const Color(0xFF5140C9)],
-                    ),
-                  ),
+                  decoration: BoxDecoration(color: panelColor),
                   child: InkWell(
                     onTap: phase == _ReactionPhase.saving ? null : _tap,
                     child: ConstrainedBox(
@@ -210,11 +213,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                           vertical: 24,
                         ),
                         child: DefaultTextStyle.merge(
-                          style: TextStyle(
-                            color: phase == _ReactionPhase.ready
-                                ? const Color(0xFF10251F)
-                                : Colors.white,
-                          ),
+                          style: TextStyle(color: panelForeground),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -224,16 +223,18 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w600,
                                   letterSpacing: .8,
                                 ),
                               ),
                               const SizedBox(height: 22),
                               if (phase == _ReactionPhase.saving)
-                                const SizedBox(
+                                SizedBox(
                                   height: 100,
                                   child: Center(
-                                    child: CircularProgressIndicator(),
+                                    child: CircularProgressIndicator(
+                                      color: panelForeground,
+                                    ),
                                   ),
                                 )
                               else if (phase == _ReactionPhase.result ||
@@ -246,14 +247,14 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                       latest == 0 ? '—' : '$latest',
                                       style: const TextStyle(
                                         fontSize: 36,
-                                        fontWeight: FontWeight.w900,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     const Text(
                                       'ms',
                                       style: TextStyle(
                                         fontSize: 14,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],
@@ -265,7 +266,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: Colors.white.withValues(
+                                      color: panelForeground.withValues(
                                         alpha: .45,
                                       ),
                                       width: 3,
@@ -274,9 +275,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                   child: Icon(
                                     _phaseIcon,
                                     size: 54,
-                                    color: phase == _ReactionPhase.ready
-                                        ? const Color(0xFF10251F)
-                                        : Colors.white,
+                                    color: panelForeground,
                                   ),
                                 ),
                               const SizedBox(height: 20),
@@ -284,7 +283,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                 _footer,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -303,7 +302,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
               final cards = [
                 _StatCard(
                   icon: Icons.timer_outlined,
-                  color: TonyoColors.violet,
+                  color: TonyoPalette.of(context).secondary,
                   title: 'Reaction time',
                   value: results.isEmpty && savedAverage == null
                       ? '—'
@@ -314,7 +313,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                 ),
                 _StatCard(
                   icon: Icons.warning_amber_rounded,
-                  color: TonyoColors.amber,
+                  color: TonyoPalette.of(context).warning,
                   title: 'Invalid attempts',
                   value: '${earlyTaps + invalidAttempts}',
                   detail: earlyTaps == 0 && invalidAttempts == 0
@@ -344,9 +343,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
             TonyoCard(
               child: Row(
                 children: [
-                  const MetricIcon(
+                  MetricIcon(
                     icon: Icons.insights_rounded,
-                    color: TonyoColors.mint,
+                    color: TonyoPalette.of(context).secondary,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -355,14 +354,14 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                       children: [
                         const Text(
                           'Personal baseline',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           '${baseline.round()} ms',
-                          style: const TextStyle(
-                            color: TonyoColors.mint,
-                            fontWeight: FontWeight.w900,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).secondary,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
@@ -372,8 +371,8 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                   savedAverage!,
                                   baseline,
                                 ),
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 12,
                           ),
                         ),
@@ -385,10 +384,13 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
             ),
           ] else ...[
             const SizedBox(height: 12),
-            const TonyoCard(
+            TonyoCard(
               child: Text(
                 'Complete a few valid tests to build your personal reaction baseline.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
@@ -416,13 +418,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                               height: height,
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: entry.key >= 5
-                                      ? [TonyoColors.amber, TonyoColors.coral]
-                                      : [TonyoColors.blue, TonyoColors.primary],
-                                ),
+                                color: entry.key == chartValues.length - 1
+                                    ? colors.secondary
+                                    : colors.primary,
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(6),
                                 ),
@@ -443,8 +441,8 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                             ? 'Result saved as a signal and private cognitive outcome. Early or invalid taps do not count.'
                             : 'Result saved as a signal. Outcome learning is off, so no training record was created.'
                       : 'Three valid rounds make one daily benchmark. Early taps reset the current round.',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 12,
                   ),
                 ),
@@ -679,10 +677,10 @@ class _StatCard extends StatelessWidget {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
-                  color: TonyoColors.muted,
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -691,7 +689,7 @@ class _StatCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
         ),
         Text(
           detail,

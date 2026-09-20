@@ -161,8 +161,9 @@ void main() {
     await open(tester);
 
     expect(find.byKey(signOutKey), findsNothing);
-    await tester.scrollUntilVisible(find.text('Cloud account'), 200);
-    await tester.tap(find.text('Cloud account'));
+    final cloudAccount = find.text('Cloud account').hitTestable();
+    await tester.scrollUntilVisible(cloudAccount, 200);
+    await tester.tap(cloudAccount);
     await tester.pumpAndSettle();
     expect(find.byType(AccountSignInDialog), findsOneWidget);
   });
@@ -211,8 +212,9 @@ void main() {
 
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Cloud account'), 200);
-    await tester.tap(find.text('Cloud account'));
+    final cloudAccount = find.text('Cloud account').hitTestable();
+    await tester.scrollUntilVisible(cloudAccount, 200);
+    await tester.tap(cloudAccount);
     await tester.pumpAndSettle();
     expect(find.byType(AccountSignInDialog), findsOneWidget);
   });

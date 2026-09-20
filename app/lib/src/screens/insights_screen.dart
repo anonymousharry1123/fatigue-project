@@ -40,9 +40,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       'Insights',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                    const Text(
+                    Text(
                       'Your daily patterns and model-estimated trends',
-                      style: TextStyle(color: TonyoColors.muted, fontSize: 12),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -82,15 +85,15 @@ class _InsightsScreenState extends State<InsightsScreen> {
           _AssociationsCard(associations: insights.associations),
           const SectionHeader('Today’s model'),
           TonyoCard(
-            color: const Color(0xFF151923),
+            color: TonyoPalette.of(context).surface,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     MetricIcon(
                       icon: Icons.analytics_rounded,
-                      color: TonyoColors.mint,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     SizedBox(width: 11),
                     Expanded(
@@ -99,12 +102,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         children: [
                           Text(
                             'Daily Score Models',
-                            style: TextStyle(fontWeight: FontWeight.w900),
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(
                             'Ranked drivers · evidence-aware confidence',
                             style: TextStyle(
-                              color: TonyoColors.muted,
+                              color: TonyoPalette.of(context).muted,
                               fontSize: 10,
                             ),
                           ),
@@ -120,11 +123,14 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   confidence: score.confidence,
                   completeness: score.completeness,
                   freshness: score.freshness,
-                  color: TonyoColors.mint,
+                  color: TonyoPalette.of(context).primary,
                 ),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),
-                  child: Divider(color: TonyoColors.border, height: 1),
+                  child: Divider(
+                    color: TonyoPalette.of(context).border,
+                    height: 1,
+                  ),
                 ),
                 _ConfidencePanel(
                   title: 'Cognitive',
@@ -132,7 +138,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   confidence: score.cognitiveConfidence,
                   completeness: score.cognitiveCompleteness,
                   freshness: score.cognitiveFreshness,
-                  color: TonyoColors.blue,
+                  color: TonyoPalette.of(context).secondary,
                 ),
               ],
             ),
@@ -159,29 +165,29 @@ class _InsightsScreenState extends State<InsightsScreen> {
           ),
           const SizedBox(height: 14),
           TonyoCard(
-            color: const Color(0xFF111722),
+            color: TonyoPalette.of(context).surface,
             padding: const EdgeInsets.all(14),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final summary = Row(
                   children: [
-                    const MetricIcon(
+                    MetricIcon(
                       icon: Icons.psychology_rounded,
-                      color: TonyoColors.blue,
+                      color: TonyoPalette.of(context).secondary,
                     ),
                     const SizedBox(width: 11),
                     Expanded(
                       child: Text(
                         '${score.cognitiveInputCount}/6 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 );
-                const detail = Text(
+                final detail = Text(
                   'Confidence combines input coverage with the age, source, and quality of supporting records. Contributions are associations used by this wellness model—not medical findings or proof of cause.',
                   style: TextStyle(
-                    color: TonyoColors.muted,
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 10,
                     height: 1.4,
                   ),
@@ -197,7 +203,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   children: [
                     Expanded(flex: 2, child: summary),
                     const SizedBox(width: 16),
-                    const Expanded(flex: 3, child: detail),
+                    Expanded(flex: 3, child: detail),
                   ],
                 );
               },
@@ -217,7 +223,7 @@ class _InsightsSourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TonyoCard(
-    color: const Color(0xFF151923),
+    color: TonyoPalette.of(context).surface,
     padding: const EdgeInsets.all(13),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +232,7 @@ class _InsightsSourceCard extends StatelessWidget {
           icon: controller.insightsLoadedFromCloud
               ? Icons.lock_rounded
               : Icons.phone_iphone_rounded,
-          color: TonyoColors.mint,
+          color: TonyoPalette.of(context).secondary,
           size: 38,
         ),
         const SizedBox(width: 11),
@@ -238,13 +244,16 @@ class _InsightsSourceCard extends StatelessWidget {
                 controller.insightsLoadedFromCloud
                     ? 'Your private Firestore range'
                     : 'Your on-device entries',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 3),
               Text(
                 '${insights.sourceSignalCount} signals · '
                 '${insights.sourceCheckInCount} check-ins · no cohort comparisons',
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -263,18 +272,27 @@ class _InsightsNotice extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: TonyoColors.amber.withValues(alpha: .1),
+      color: TonyoPalette.of(context).warning.withValues(alpha: .1),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: TonyoColors.amber.withValues(alpha: .3)),
+      border: Border.all(
+        color: TonyoPalette.of(context).warning.withValues(alpha: .3),
+      ),
     ),
     child: Row(
       children: [
-        const Icon(Icons.cloud_off_rounded, color: TonyoColors.amber, size: 18),
+        Icon(
+          Icons.cloud_off_rounded,
+          color: TonyoPalette.of(context).warning,
+          size: 18,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(color: TonyoColors.amber, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).warning,
+              fontSize: 11,
+            ),
           ),
         ),
       ],
@@ -286,10 +304,13 @@ class _EmptyInsightsCard extends StatelessWidget {
   const _EmptyInsightsCard();
 
   @override
-  Widget build(BuildContext context) => const TonyoCard(
+  Widget build(BuildContext context) => TonyoCard(
     child: Row(
       children: [
-        MetricIcon(icon: Icons.insights_rounded, color: TonyoColors.violet),
+        MetricIcon(
+          icon: Icons.insights_rounded,
+          color: TonyoPalette.of(context).secondary,
+        ),
         SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -297,12 +318,15 @@ class _EmptyInsightsCard extends StatelessWidget {
             children: [
               Text(
                 'Not enough recent entries yet',
-                style: TextStyle(fontWeight: FontWeight.w900),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 3),
               Text(
                 'Log sleep, training, or study to build your private seven-day trends.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -331,7 +355,7 @@ class _WeeklyOverview extends StatelessWidget {
           suffix: ' hr',
         ),
         icon: Icons.bedtime_rounded,
-        color: TonyoColors.blue,
+        color: TonyoPalette.of(context).primary,
       ),
       _OverviewValue(
         label: 'Training',
@@ -342,7 +366,7 @@ class _WeeklyOverview extends StatelessWidget {
           suffix: ' hr',
         ),
         icon: Icons.fitness_center_rounded,
-        color: TonyoColors.coral,
+        color: TonyoPalette.of(context).primary,
       ),
       _OverviewValue(
         label: 'Study',
@@ -353,7 +377,7 @@ class _WeeklyOverview extends StatelessWidget {
           suffix: ' hr',
         ),
         icon: Icons.menu_book_rounded,
-        color: TonyoColors.violet,
+        color: TonyoPalette.of(context).secondary,
       ),
       _OverviewValue(
         label: 'Avg energy',
@@ -364,7 +388,7 @@ class _WeeklyOverview extends StatelessWidget {
           suffix: ' pts',
         ),
         icon: Icons.bolt_rounded,
-        color: TonyoColors.mint,
+        color: TonyoPalette.of(context).primary,
       ),
     ];
     return Column(
@@ -395,7 +419,7 @@ class _WeeklyOverview extends StatelessWidget {
         const SizedBox(height: 9),
         Text(
           '${current.trackedDayCount}/7 days include model-input data. Comparisons use the prior seven days.',
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
       ],
     );
@@ -450,17 +474,20 @@ class _OverviewCard extends StatelessWidget {
           style: TextStyle(
             color: value.color,
             fontSize: 18,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
         Text(
           value.label,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 10),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10),
         ),
         const SizedBox(height: 5),
         Text(
           value.comparison,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 8.5),
+          style: TextStyle(
+            color: TonyoPalette.of(context).muted,
+            fontSize: 8.5,
+          ),
         ),
       ],
     ),
@@ -548,12 +575,12 @@ class _DailyTrendCard extends StatelessWidget {
                 children: [
                   chart,
                   if (minimumWidth > constraints.maxWidth)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 10),
                       child: Text(
                         'Swipe to view more days.',
                         style: TextStyle(
-                          color: TonyoColors.muted,
+                          color: TonyoPalette.of(context).muted,
                           fontSize: 10,
                         ),
                       ),
@@ -565,8 +592,8 @@ class _DailyTrendCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             _trendCaption(metric),
-            style: const TextStyle(
-              color: TonyoColors.muted,
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
               fontSize: 10,
               height: 1.35,
             ),
@@ -610,7 +637,7 @@ class _TrendBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final value = day.valueFor(metric);
     final ratio = value == null ? 0.0 : (value / scaleMaximum).clamp(0.0, 1.0);
-    final color = _color(metric);
+    final color = _color(metric, TonyoPalette.of(context));
     final metricLabel = _DailyTrendCard._metricLabel(metric);
     final valueLabel = value == null
         ? 'Not logged'
@@ -629,8 +656,8 @@ class _TrendBar extends StatelessWidget {
             height: MediaQuery.textScalerOf(context).scale(18),
             child: Text(
               _valueLabel(value, metric),
-              style: const TextStyle(
-                color: TonyoColors.muted,
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
                 fontSize: 8,
                 fontWeight: FontWeight.w700,
               ),
@@ -651,8 +678,8 @@ class _TrendBar extends StatelessWidget {
                         ),
                   decoration: BoxDecoration(
                     color: value == null
-                        ? TonyoColors.border
-                        : color.withValues(alpha: .82),
+                        ? TonyoPalette.of(context).border
+                        : color,
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -662,10 +689,10 @@ class _TrendBar extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             _dayLabel(day.date),
-            style: const TextStyle(
-              color: TonyoColors.muted,
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
               fontSize: 8.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -690,12 +717,13 @@ class _TrendBar extends StatelessWidget {
     'Sun',
   ][value.weekday - 1];
 
-  static Color _color(InsightTrendMetric metric) => switch (metric) {
-    InsightTrendMetric.energy => TonyoColors.mint,
-    InsightTrendMetric.sleep => TonyoColors.blue,
-    InsightTrendMetric.training => TonyoColors.coral,
-    InsightTrendMetric.study => TonyoColors.violet,
-  };
+  static Color _color(InsightTrendMetric metric, TonyoPalette colors) =>
+      switch (metric) {
+        InsightTrendMetric.energy => colors.primary,
+        InsightTrendMetric.sleep => colors.secondary,
+        InsightTrendMetric.training => colors.primary,
+        InsightTrendMetric.study => colors.secondary,
+      };
 }
 
 class _AssociationsCard extends StatelessWidget {
@@ -706,20 +734,24 @@ class _AssociationsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TonyoCard(
     key: const Key('insights-associations'),
-    color: const Color(0xFF111722),
+    color: TonyoPalette.of(context).surface,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline_rounded, color: TonyoColors.blue, size: 19),
+            Icon(
+              Icons.info_outline_rounded,
+              color: TonyoPalette.of(context).primary,
+              size: 19,
+            ),
             SizedBox(width: 9),
             Expanded(
               child: Text(
                 'These comparisons describe your entries and Tonyo’s current model. They do not establish that one behavior caused an outcome.',
                 style: TextStyle(
-                  color: TonyoColors.muted,
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 10.5,
                   height: 1.4,
                 ),
@@ -729,9 +761,12 @@ class _AssociationsCard extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         if (associations.isEmpty)
-          const Text(
+          Text(
             'At least three matched days with varied sleep, training, or study entries are needed for an association summary.',
-            style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           )
         else
           ...associations.indexed.map(
@@ -755,9 +790,9 @@ class _AssociationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (association.direction) {
-      InsightAssociationDirection.positive => TonyoColors.mint,
-      InsightAssociationDirection.negative => TonyoColors.coral,
-      InsightAssociationDirection.neutral => TonyoColors.muted,
+      InsightAssociationDirection.positive => TonyoPalette.of(context).success,
+      InsightAssociationDirection.negative => TonyoPalette.of(context).error,
+      InsightAssociationDirection.neutral => TonyoPalette.of(context).muted,
     };
     final icon = switch (association.direction) {
       InsightAssociationDirection.positive => Icons.trending_up_rounded,
@@ -784,13 +819,13 @@ class _AssociationRow extends StatelessWidget {
             children: [
               Text(
                 association.title,
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 3),
               Text(
                 association.detail,
-                style: const TextStyle(
-                  color: TonyoColors.muted,
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 10,
                   height: 1.35,
                 ),
@@ -841,7 +876,7 @@ class _ConfidencePanel extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: 22,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -853,11 +888,11 @@ class _ConfidencePanel extends StatelessWidget {
           children: [
             Text(
               '$title confidence',
-              style: const TextStyle(fontWeight: FontWeight.w900),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             Text(
               '${(confidence * 100).round()}%',
-              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -868,13 +903,13 @@ class _ConfidencePanel extends StatelessWidget {
             value: confidence,
             minHeight: 6,
             color: color,
-            backgroundColor: TonyoColors.surfaceRaised,
+            backgroundColor: TonyoPalette.of(context).surfaceRaised,
           ),
         ),
         const SizedBox(height: 7),
         Text(
           '$coverage · $age',
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 9),
         ),
       ],
     );
@@ -920,7 +955,7 @@ class _RankedDriversCard extends StatelessWidget {
       return TonyoCard(
         child: Text(
           emptyMessage,
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
       );
     }
@@ -932,32 +967,32 @@ class _RankedDriversCard extends StatelessWidget {
             _DriverGroup(
               title: 'SUPPORTING TODAY',
               icon: Icons.trending_up_rounded,
-              color: TonyoColors.mint,
+              color: TonyoPalette.of(context).success,
               drivers: positive,
             ),
           if (positive.isNotEmpty && negative.isNotEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
-              child: Divider(color: TonyoColors.border, height: 1),
+              child: Divider(color: TonyoPalette.of(context).border, height: 1),
             ),
           if (negative.isNotEmpty)
             _DriverGroup(
               title: 'REDUCING TODAY',
               icon: Icons.trending_down_rounded,
-              color: TonyoColors.coral,
+              color: TonyoPalette.of(context).error,
               drivers: negative,
             ),
           if (neutral.isNotEmpty &&
               (positive.isNotEmpty || negative.isNotEmpty))
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
-              child: Divider(color: TonyoColors.border, height: 1),
+              child: Divider(color: TonyoPalette.of(context).border, height: 1),
             ),
           if (neutral.isNotEmpty)
             _DriverGroup(
               title: 'NEUTRAL',
               icon: Icons.horizontal_rule_rounded,
-              color: TonyoColors.muted,
+              color: TonyoPalette.of(context).muted,
               drivers: neutral,
             ),
         ],
@@ -993,7 +1028,7 @@ class _DriverGroup extends StatelessWidget {
               style: TextStyle(
                 color: color,
                 fontSize: 9,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
                 letterSpacing: .6,
               ),
             ),
@@ -1042,7 +1077,7 @@ class _RankedDriverRow extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 10,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -1058,7 +1093,7 @@ class _RankedDriverRow extends StatelessWidget {
                       driver.label,
                       style: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -1067,7 +1102,7 @@ class _RankedDriverRow extends StatelessWidget {
                     style: TextStyle(
                       color: color,
                       fontSize: 11,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -1075,14 +1110,17 @@ class _RankedDriverRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 driver.detail,
-                style: const TextStyle(color: TonyoColors.text, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).text,
+                  fontSize: 10,
+                ),
               ),
               if (driver.explanation.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
                   driver.explanation,
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 9.5,
                     height: 1.35,
                   ),
@@ -1134,14 +1172,14 @@ class _EvidenceChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
-      color: TonyoColors.surfaceRaised,
+      color: TonyoPalette.of(context).surfaceRaised,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: TonyoColors.border),
+      border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: Text(
       label,
-      style: const TextStyle(
-        color: TonyoColors.muted,
+      style: TextStyle(
+        color: TonyoPalette.of(context).muted,
         fontSize: 8,
         fontWeight: FontWeight.w700,
       ),

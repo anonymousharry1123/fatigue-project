@@ -20,9 +20,9 @@ class TonyoCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: color ?? TonyoColors.surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: TonyoColors.border),
+      color: color ?? TonyoPalette.of(context).surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: child,
   );
@@ -90,10 +90,12 @@ class ScoreRing extends StatelessWidget {
     required this.value,
     required this.label,
     this.size = 116,
+    this.color,
   });
   final int value;
   final String label;
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +114,11 @@ class ScoreRing extends StatelessWidget {
               children: [
                 CustomPaint(
                   size: Size.square(extent),
-                  painter: _RingPainter(value / 100),
+                  painter: _RingPainter(
+                    value / 100,
+                    color: color ?? TonyoPalette.of(context).primary,
+                    trackColor: TonyoPalette.of(context).border,
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -125,7 +131,7 @@ class ScoreRing extends StatelessWidget {
                           '$value',
                           style: TextStyle(
                             fontSize: size * .28,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             height: 1,
                           ),
                         ),
@@ -134,8 +140,8 @@ class ScoreRing extends StatelessWidget {
                           label.toUpperCase(),
                           style: TextStyle(
                             fontSize: size * .075,
-                            color: TonyoColors.muted,
-                            fontWeight: FontWeight.w800,
+                            color: TonyoPalette.of(context).muted,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: .5,
                           ),
                         ),
@@ -153,8 +159,14 @@ class ScoreRing extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  const _RingPainter(this.progress);
+  const _RingPainter(
+    this.progress, {
+    required this.color,
+    required this.trackColor,
+  });
   final double progress;
+  final Color color;
+  final Color trackColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -164,7 +176,7 @@ class _RingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
-    paint.color = TonyoColors.border;
+    paint.color = trackColor;
     canvas.drawArc(
       rect.deflate(stroke),
       -math.pi / 2,
@@ -172,11 +184,7 @@ class _RingPainter extends CustomPainter {
       false,
       paint,
     );
-    paint.shader = const SweepGradient(
-      colors: [TonyoColors.blue, TonyoColors.mint, TonyoColors.primary],
-      stops: [0, .55, 1],
-      transform: GradientRotation(-math.pi / 2),
-    ).createShader(rect);
+    paint.color = color;
     canvas.drawArc(
       rect.deflate(stroke),
       -math.pi / 2,
@@ -188,7 +196,9 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+      oldDelegate.progress != progress ||
+      oldDelegate.color != color ||
+      oldDelegate.trackColor != trackColor;
 }
 
 class ForecastChart extends StatelessWidget {
@@ -206,13 +216,27 @@ class ForecastChart extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     height: height,
     width: double.infinity,
-    child: CustomPaint(painter: ForecastPainter(points, compact: compact)),
+    child: CustomPaint(
+      painter: ForecastPainter(
+        points,
+        colors: TonyoPalette.of(context),
+        textStyle: Theme.of(context).textTheme.bodySmall ?? const TextStyle(),
+        compact: compact,
+      ),
+    ),
   );
 }
 
 class ForecastPainter extends CustomPainter {
-  ForecastPainter(this.points, {this.compact = false});
+  ForecastPainter(
+    this.points, {
+    required this.colors,
+    this.textStyle = const TextStyle(),
+    this.compact = false,
+  });
   final List<ForecastPoint> points;
+  final TonyoPalette colors;
+  final TextStyle textStyle;
   final bool compact;
 
   @override
@@ -225,7 +249,7 @@ class ForecastPainter extends CustomPainter {
       size.height - (compact ? 12 : 30),
     );
     final gridPaint = Paint()
-      ..color = TonyoColors.border
+      ..color = colors.border
       ..strokeWidth = 1;
     for (var i = 0; i < 4; i++) {
       final y = chart.top + chart.height * i / 3;
@@ -237,13 +261,20 @@ class ForecastPainter extends CustomPainter {
     );
     Offset offset(int index) => offsetFor(index, points[index].energy);
     final uncertaintyBand = Path();
+    final upperBoundary = Path();
+    final lowerBoundary = Path();
     for (var index = 0; index < points.length; index++) {
       final point = points[index];
       final upper = offsetFor(index, point.energy + point.uncertainty);
+      final lower = offsetFor(index, point.energy - point.uncertainty);
       if (index == 0) {
         uncertaintyBand.moveTo(upper.dx, upper.dy);
+        upperBoundary.moveTo(upper.dx, upper.dy);
+        lowerBoundary.moveTo(lower.dx, lower.dy);
       } else {
         uncertaintyBand.lineTo(upper.dx, upper.dy);
+        upperBoundary.lineTo(upper.dx, upper.dy);
+        lowerBoundary.lineTo(lower.dx, lower.dy);
       }
     }
     for (var index = points.length - 1; index >= 0; index--) {
@@ -254,8 +285,23 @@ class ForecastPainter extends CustomPainter {
     uncertaintyBand.close();
     canvas.drawPath(
       uncertaintyBand,
-      Paint()..color = TonyoColors.violet.withValues(alpha: .1),
+      Paint()..color = colors.secondary.withValues(alpha: .12),
     );
+    // Texture keeps uncertainty distinct even when both custom accents match.
+    final boundaryPaint = Paint()
+      ..color = colors.secondary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final boundary in [upperBoundary, lowerBoundary]) {
+      for (final metric in boundary.computeMetrics()) {
+        for (var distance = 0.0; distance < metric.length; distance += 9) {
+          canvas.drawPath(
+            metric.extractPath(distance, math.min(distance + 5, metric.length)),
+            boundaryPaint,
+          );
+        }
+      }
+    }
     final path = Path()..moveTo(offset(0).dx, offset(0).dy);
     for (var i = 1; i < points.length; i++) {
       final previous = offset(i - 1);
@@ -275,12 +321,7 @@ class ForecastPainter extends CustomPainter {
       ..close();
     canvas.drawPath(
       area,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0x665FE0C4), Color(0x005FE0C4)],
-        ).createShader(chart),
+      Paint()..color = colors.primary.withValues(alpha: .06),
     );
     canvas.drawPath(
       path,
@@ -288,14 +329,7 @@ class ForecastPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round
-        ..shader = const LinearGradient(
-          colors: [
-            TonyoColors.blue,
-            TonyoColors.mint,
-            TonyoColors.amber,
-            TonyoColors.coral,
-          ],
-        ).createShader(chart),
+        ..color = colors.primary,
     );
     if (!compact) {
       final textPainter = TextPainter(textDirection: TextDirection.ltr);
@@ -303,7 +337,7 @@ class ForecastPainter extends CustomPainter {
         final hour = points[i].time.hour;
         textPainter.text = TextSpan(
           text: '${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'P' : 'A'}',
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+          style: textStyle.copyWith(color: colors.muted, fontSize: 9),
         );
         textPainter.layout();
         textPainter.paint(
@@ -316,7 +350,10 @@ class ForecastPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(ForecastPainter oldDelegate) =>
-      oldDelegate.points != points || oldDelegate.compact != compact;
+      oldDelegate.points != points ||
+      oldDelegate.compact != compact ||
+      oldDelegate.colors != colors ||
+      oldDelegate.textStyle != textStyle;
 }
 
 IconData iconForSignal(SignalType type) => switch (type) {
@@ -339,21 +376,21 @@ IconData iconForSignal(SignalType type) => switch (type) {
   SignalType.sleepUnspecified => Icons.nights_stay_rounded,
 };
 
-Color colorForSignal(SignalType type) => switch (type) {
-  SignalType.sleep || SignalType.bedtime => TonyoColors.blue,
-  SignalType.nap => TonyoColors.violet,
-  SignalType.hydration || SignalType.hrv => TonyoColors.mint,
-  SignalType.study => TonyoColors.amber,
+Color colorForSignal(SignalType type, TonyoPalette colors) => switch (type) {
+  SignalType.sleep || SignalType.bedtime => colors.primary,
+  SignalType.nap => colors.secondary,
+  SignalType.hydration || SignalType.hrv => colors.secondary,
+  SignalType.study => colors.primary,
   SignalType.exercise ||
   SignalType.steps ||
-  SignalType.restingHeartRate => TonyoColors.coral,
-  SignalType.screenTime || SignalType.reactionTime => TonyoColors.violet,
-  SignalType.caffeine => TonyoColors.amber,
-  SignalType.sleepAwake => TonyoColors.amber,
+  SignalType.restingHeartRate => colors.secondary,
+  SignalType.screenTime || SignalType.reactionTime => colors.secondary,
+  SignalType.caffeine => colors.primary,
+  SignalType.sleepAwake => colors.secondary,
   SignalType.sleepCore ||
   SignalType.sleepDeep ||
   SignalType.sleepRem ||
-  SignalType.sleepUnspecified => TonyoColors.primary,
+  SignalType.sleepUnspecified => colors.primary,
 };
 
 String formatHour(DateTime value) {

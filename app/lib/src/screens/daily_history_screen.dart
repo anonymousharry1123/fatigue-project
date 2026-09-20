@@ -33,9 +33,9 @@ class DailyHistoryScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Review saved signals by date and fill the gaps in your daily model.',
-                    style: TextStyle(color: TonyoColors.muted),
+                    style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                   const SizedBox(height: 18),
                   _HistorySummary(history: history),
@@ -121,9 +121,9 @@ class _EmptyHistory extends StatelessWidget {
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const MetricIcon(
+        MetricIcon(
           icon: Icons.calendar_month_rounded,
-          color: TonyoColors.primary,
+          color: TonyoPalette.of(context).primary,
           size: 64,
         ),
         const SizedBox(height: 18),
@@ -132,10 +132,10 @@ class _EmptyHistory extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Save an activity, sleep, check-in, or reaction entry to start your daily history.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
       ],
     ),
@@ -153,9 +153,9 @@ class _HistorySummary extends StatelessWidget {
     return TonyoCard(
       child: Row(
         children: [
-          const MetricIcon(
+          MetricIcon(
             icon: Icons.fact_check_outlined,
-            color: TonyoColors.mint,
+            color: TonyoPalette.of(context).success,
             size: 48,
           ),
           const SizedBox(width: 13),
@@ -167,14 +167,14 @@ class _HistorySummary extends StatelessWidget {
                   '${history.length} days recorded',
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '$completeDays complete · Activity, Sleep, Check-in, and Reaction',
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 11,
                   ),
                 ),
@@ -202,10 +202,10 @@ class _HistoryDayCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = day.isComplete
-        ? TonyoColors.mint
+        ? TonyoPalette.of(context).success
         : day.completionCount >= 2
-        ? TonyoColors.amber
-        : TonyoColors.coral;
+        ? TonyoPalette.of(context).warning
+        : TonyoPalette.of(context).error;
     return TonyoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +217,7 @@ class _HistoryDayCard extends StatelessWidget {
                   _dayLabel(day.date),
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -226,7 +226,7 @@ class _HistoryDayCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: .14),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   day.isComplete
@@ -235,7 +235,7 @@ class _HistoryDayCard extends StatelessWidget {
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 10,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -248,7 +248,7 @@ class _HistoryDayCard extends StatelessWidget {
               value: day.completionProgress,
               minHeight: 5,
               color: statusColor,
-              backgroundColor: TonyoColors.border,
+              backgroundColor: TonyoPalette.of(context).border,
             ),
           ),
           const SizedBox(height: 11),
@@ -264,9 +264,9 @@ class _HistoryDayCard extends StatelessWidget {
                 )
                 .toList(),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: TonyoColors.border),
+            child: Divider(height: 1, color: TonyoPalette.of(context).border),
           ),
           ...day.items.map(
             (item) => _HistoryItemRow(
@@ -304,11 +304,13 @@ class _CompletionChip extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
     decoration: BoxDecoration(
       color: completed
-          ? TonyoColors.mint.withValues(alpha: .12)
-          : TonyoColors.surfaceRaised,
-      borderRadius: BorderRadius.circular(14),
+          ? TonyoPalette.of(context).success.withValues(alpha: .12)
+          : TonyoPalette.of(context).surfaceRaised,
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: completed ? TonyoColors.mint : TonyoColors.border,
+        color: completed
+            ? TonyoPalette.of(context).success
+            : TonyoPalette.of(context).border,
       ),
     ),
     child: Row(
@@ -317,15 +319,19 @@ class _CompletionChip extends StatelessWidget {
         Icon(
           completed ? Icons.check_rounded : Icons.remove_rounded,
           size: 12,
-          color: completed ? TonyoColors.mint : TonyoColors.muted,
+          color: completed
+              ? TonyoPalette.of(context).success
+              : TonyoPalette.of(context).muted,
         ),
         const SizedBox(width: 3),
         Text(
           category.label,
           style: TextStyle(
-            color: completed ? TonyoColors.mint : TonyoColors.muted,
+            color: completed
+                ? TonyoPalette.of(context).success
+                : TonyoPalette.of(context).muted,
             fontSize: 9,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -347,7 +353,7 @@ class _HistoryItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _color(item);
+    final color = _color(item, context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -360,14 +366,14 @@ class _HistoryItemRow extends StatelessWidget {
               children: [
                 Text(
                   _title(item),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   _detail(item),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: TonyoColors.muted,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
                     fontSize: 10,
                   ),
                 ),
@@ -438,13 +444,19 @@ IconData _icon(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.signal => iconForSignal(item.signal!.type),
 };
 
-Color _color(DailyHistoryItem item) => switch (item.kind) {
-  DailyHistoryItemKind.activity => TonyoColors.amber,
-  DailyHistoryItemKind.sleep =>
-    item.sleep!.isNap ? TonyoColors.violet : TonyoColors.blue,
-  DailyHistoryItemKind.checkIn => TonyoColors.mint,
-  DailyHistoryItemKind.signal => colorForSignal(item.signal!.type),
-};
+Color _color(DailyHistoryItem item, BuildContext context) =>
+    switch (item.kind) {
+      DailyHistoryItemKind.activity => TonyoPalette.of(context).secondary,
+      DailyHistoryItemKind.sleep =>
+        item.sleep!.isNap
+            ? TonyoPalette.of(context).secondary
+            : TonyoPalette.of(context).primary,
+      DailyHistoryItemKind.checkIn => TonyoPalette.of(context).secondary,
+      DailyHistoryItemKind.signal => colorForSignal(
+        item.signal!.type,
+        TonyoPalette.of(context),
+      ),
+    };
 
 String _duration(Duration duration) =>
     '${duration.inHours}h ${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}m';

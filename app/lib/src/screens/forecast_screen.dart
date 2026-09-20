@@ -58,9 +58,12 @@ class _ForecastScreenState extends State<ForecastScreen> {
             ],
           ),
           const SizedBox(height: 5),
-          const Text(
+          Text(
             'Hourly wellness estimates from your recent recovery and workload.',
-            style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 14),
           SegmentedButton<int>(
@@ -77,15 +80,16 @@ class _ForecastScreenState extends State<ForecastScreen> {
             onSelectionChanged: (value) => setState(() => _range = value.first),
             style: SegmentedButton.styleFrom(
               minimumSize: const Size(48, 48),
-              backgroundColor: TonyoColors.surface,
-              selectedBackgroundColor: TonyoColors.primary,
+              backgroundColor: TonyoPalette.of(context).surface,
+              selectedBackgroundColor: TonyoPalette.of(context).primary,
+              selectedForegroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
           ),
           if (controller.forecastError case final error?) ...[
             const SizedBox(height: 14),
             _StatusBanner(
               icon: Icons.cloud_off_rounded,
-              color: TonyoColors.amber,
+              color: TonyoPalette.of(context).warning,
               title: 'Using on-device forecast',
               detail: error,
             ),
@@ -109,10 +113,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
                   controller.refreshForecasts(forceRecalculate: true),
             ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             'Energy forecasts are wellness estimates, not medical advice. Uncertainty expands when inputs are missing, older, or farther into the future.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 10,
+            ),
           ),
         ],
       ),
@@ -160,9 +167,9 @@ class _DailyForecast extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (stale) ...[
-          const _StatusBanner(
+          _StatusBanner(
             icon: Icons.history_rounded,
-            color: TonyoColors.amber,
+            color: TonyoPalette.of(context).warning,
             title: 'Forecast may be out of date',
             detail: 'Refresh to include the latest logged signals.',
           ),
@@ -171,7 +178,7 @@ class _DailyForecast extends StatelessWidget {
         if (summary.isLowConfidence) ...[
           _StatusBanner(
             icon: Icons.visibility_outlined,
-            color: TonyoColors.violet,
+            color: TonyoPalette.of(context).secondary,
             title: 'Limited confidence',
             detail:
                 'Typical uncertainty is ±${summary.averageUncertainty.round()} points. More recent sleep, workload, hydration, and check-in data can narrow the range.',
@@ -191,8 +198,8 @@ class _DailyForecast extends StatelessWidget {
                       children: [
                         Text(
                           _dayHeading(day),
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
@@ -211,15 +218,17 @@ class _DailyForecast extends StatelessWidget {
                       vertical: 7,
                     ),
                     decoration: BoxDecoration(
-                      color: TonyoColors.mint.withValues(alpha: .13),
+                      color: TonyoPalette.of(
+                        context,
+                      ).primary.withValues(alpha: .13),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '${summary.peakEnergy.round()}',
-                      style: const TextStyle(
-                        color: TonyoColors.mint,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).primary,
                         fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -248,21 +257,21 @@ class _DailyForecast extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              const Divider(color: TonyoColors.border, height: 1),
+              Divider(color: TonyoPalette.of(context).border, height: 1),
               const SizedBox(height: 11),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.lock_outline_rounded,
-                    color: TonyoColors.muted,
+                    color: TonyoPalette.of(context).muted,
                     size: 15,
                   ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
                       '$sourceLabel · ${_updatedLabel(summary.updatedAt)}',
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 10,
                       ),
                     ),
@@ -280,28 +289,28 @@ class _DailyForecast extends StatelessWidget {
           ),
         ),
         const SectionHeader('What shapes this curve'),
-        const TonyoCard(
+        TonyoCard(
           child: Column(
             children: [
               _ModelInputRow(
                 icon: Icons.bedtime_outlined,
                 title: 'Sleep timing & recovery',
                 detail: 'Recent duration, bedtime, and wake rhythm',
-                color: TonyoColors.blue,
+                color: TonyoPalette.of(context).primary,
               ),
-              Divider(height: 24, color: TonyoColors.border),
+              Divider(height: 24, color: TonyoPalette.of(context).border),
               _ModelInputRow(
                 icon: Icons.wb_sunny_outlined,
                 title: 'Circadian rhythm',
                 detail: 'Morning rise, afternoon dip, and evening decline',
-                color: TonyoColors.amber,
+                color: TonyoPalette.of(context).secondary,
               ),
-              Divider(height: 24, color: TonyoColors.border),
+              Divider(height: 24, color: TonyoPalette.of(context).border),
               _ModelInputRow(
                 icon: Icons.menu_book_outlined,
                 title: 'Workload & check-ins',
                 detail: 'Study, exercise, hydration, mood, and stress',
-                color: TonyoColors.violet,
+                color: TonyoPalette.of(context).secondary,
               ),
             ],
           ),
@@ -322,17 +331,17 @@ class _ForecastWindowCard extends StatelessWidget {
       ForecastWindowType.peak => (
         title: 'Peak focus',
         icon: Icons.center_focus_strong_rounded,
-        color: TonyoColors.mint,
+        color: TonyoPalette.of(context).primary,
       ),
       ForecastWindowType.crash => (
         title: 'Predicted crash',
         icon: Icons.trending_down_rounded,
-        color: TonyoColors.coral,
+        color: TonyoPalette.of(context).error,
       ),
       ForecastWindowType.recovery => (
         title: 'Recovery window',
         icon: Icons.battery_charging_full_rounded,
-        color: TonyoColors.blue,
+        color: TonyoPalette.of(context).secondary,
       ),
     };
     return TonyoCard(
@@ -352,7 +361,7 @@ class _ForecastWindowCard extends StatelessWidget {
                       style.title,
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -361,7 +370,7 @@ class _ForecastWindowCard extends StatelessWidget {
                       style: TextStyle(
                         color: style.color,
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -381,7 +390,7 @@ class _ForecastWindowCard extends StatelessWidget {
                   style: TextStyle(
                     color: style.color,
                     fontSize: 17,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -390,35 +399,41 @@ class _ForecastWindowCard extends StatelessWidget {
           const SizedBox(height: 11),
           Text(
             window.reason,
-            style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 10,
+            ),
           ),
           const SizedBox(height: 12),
-          const Divider(color: TonyoColors.border, height: 1),
+          Divider(color: TonyoPalette.of(context).border, height: 1),
           const SizedBox(height: 10),
           if (window.evidence.isEmpty)
-            const Row(
+            Row(
               children: [
                 Icon(
                   Icons.link_off_rounded,
-                  color: TonyoColors.muted,
+                  color: TonyoPalette.of(context).muted,
                   size: 16,
                 ),
                 SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     'No linked signal or check-in documents available.',
-                    style: TextStyle(color: TonyoColors.muted, fontSize: 9),
+                    style: TextStyle(
+                      color: TonyoPalette.of(context).muted,
+                      fontSize: 9,
+                    ),
                   ),
                 ),
               ],
             )
           else ...[
-            const Text(
+            Text(
               'LINKED EVIDENCE',
               style: TextStyle(
-                color: TonyoColors.muted,
+                color: TonyoPalette.of(context).muted,
                 fontSize: 9,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 letterSpacing: .8,
               ),
             ),
@@ -426,7 +441,7 @@ class _ForecastWindowCard extends StatelessWidget {
             for (final evidence in window.evidence) ...[
               _ForecastEvidenceRow(evidence: evidence, accent: style.color),
               if (evidence != window.evidence.last)
-                const Divider(height: 18, color: TonyoColors.border),
+                Divider(height: 18, color: TonyoPalette.of(context).border),
             ],
           ],
         ],
@@ -468,17 +483,23 @@ class _ForecastEvidenceRow extends StatelessWidget {
                 evidence.label,
                 style: const TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 1),
               Text(
                 evidence.detail,
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 9,
+                ),
               ),
               Text(
                 '$source · ${formatDate(evidence.timestamp)} at ${formatHour(evidence.timestamp)}',
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 8),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 8,
+                ),
               ),
               const SizedBox(height: 4),
               _evidenceTag(kindLabel),
@@ -502,7 +523,7 @@ class _ForecastEvidenceRow extends StatelessWidget {
         style: TextStyle(
           color: accent,
           fontSize: 7,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       ),
     ),
@@ -538,7 +559,7 @@ class _WeekForecast extends StatelessWidget {
         if (summaries.length < AppController.forecastDayCount) ...[
           _StatusBanner(
             icon: Icons.calendar_view_week_rounded,
-            color: TonyoColors.amber,
+            color: TonyoPalette.of(context).warning,
             title: 'Partial weekly forecast',
             detail:
                 '${summaries.length} of ${AppController.forecastDayCount} days are available. Refresh to fill the missing days.',
@@ -549,12 +570,12 @@ class _WeekForecast extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 '7-DAY OUTLOOK',
                 style: TextStyle(
-                  color: TonyoColors.muted,
+                  color: TonyoPalette.of(context).muted,
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: 1.1,
                 ),
               ),
@@ -568,7 +589,10 @@ class _WeekForecast extends StatelessWidget {
                 lowConfidenceDays == 0
                     ? 'All daily forecasts have usable confidence.'
                     : '$lowConfidenceDays ${lowConfidenceDays == 1 ? 'day has' : 'days have'} wider uncertainty.',
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                ),
               ),
               const SizedBox(height: 18),
               _WeekChart(summaries: summaries),
@@ -599,11 +623,11 @@ class _DaySummaryCard extends StatelessWidget {
       children: [
         Text(
           _shortDay(summary.day),
-          style: const TextStyle(fontWeight: FontWeight.w900),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         Text(
           formatDate(summary.day),
-          style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 9),
         ),
       ],
     );
@@ -612,7 +636,7 @@ class _DaySummaryCard extends StatelessWidget {
       children: [
         Text(
           'Peak ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
         Text(
@@ -620,8 +644,8 @@ class _DaySummaryCard extends StatelessWidget {
           '±${summary.averageUncertainty.round()}',
           style: TextStyle(
             color: summary.isLowConfidence
-                ? TonyoColors.amber
-                : TonyoColors.muted,
+                ? TonyoPalette.of(context).warning
+                : TonyoPalette.of(context).muted,
             fontSize: 9,
           ),
         ),
@@ -633,10 +657,10 @@ class _DaySummaryCard extends StatelessWidget {
       excludeSemantics: true,
       child: Text(
         '${summary.averageEnergy.round()}',
-        style: const TextStyle(
-          color: TonyoColors.mint,
+        style: TextStyle(
+          color: TonyoPalette.of(context).primary,
           fontSize: 21,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -711,8 +735,8 @@ class _WeekChart extends StatelessWidget {
                       children: [
                         Text(
                           '${summary.averageEnergy.round()}',
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                           ),
@@ -722,21 +746,17 @@ class _WeekChart extends StatelessWidget {
                           height: summary.averageEnergy.clamp(12, 100) * 1.25,
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: summary.isLowConfidence
-                                  ? [TonyoColors.primary, TonyoColors.amber]
-                                  : [TonyoColors.primary, TonyoColors.mint],
-                            ),
+                            color: summary.isLowConfidence
+                                ? TonyoPalette.of(context).warning
+                                : TonyoPalette.of(context).primary,
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
                         const SizedBox(height: 7),
                         Text(
                           _shortDay(summary.day).substring(0, 1),
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -754,11 +774,14 @@ class _WeekChart extends StatelessWidget {
         children: [
           chart,
           if (minimumWidth > constraints.maxWidth)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 10),
               child: Text(
                 'Swipe to view more days.',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                ),
               ),
             ),
         ],
@@ -782,14 +805,14 @@ class _ForecastEmptyState extends StatelessWidget {
           if (loading)
             const CircularProgressIndicator()
           else
-            const MetricIcon(
+            MetricIcon(
               icon: Icons.query_stats_rounded,
-              color: TonyoColors.violet,
+              color: TonyoPalette.of(context).secondary,
             ),
           const SizedBox(height: 14),
           Text(
             loading ? 'Building your forecast…' : 'No forecast available',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
           Text(
@@ -797,7 +820,10 @@ class _ForecastEmptyState extends StatelessWidget {
                 ? 'Combining your recent signals and check-ins.'
                 : 'Tonyo could not find hourly points for this range.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+            ),
           ),
           if (!loading) ...[
             const SizedBox(height: 14),
@@ -845,12 +871,15 @@ class _StatusBanner extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                style: TextStyle(color: color, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
               Text(
                 detail,
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -870,19 +899,22 @@ class _MetricPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
     decoration: BoxDecoration(
-      color: TonyoColors.background,
-      border: Border.all(color: TonyoColors.border),
+      color: TonyoPalette.of(context).background,
+      border: Border.all(color: TonyoPalette.of(context).border),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: TonyoColors.muted, size: 13),
+        Icon(icon, color: TonyoPalette.of(context).muted, size: 13),
         const SizedBox(width: 5),
         Flexible(
           child: Text(
             label,
-            style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 9,
+            ),
           ),
         ),
       ],
@@ -912,10 +944,13 @@ class _ModelInputRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
             Text(
               detail,
-              style: const TextStyle(color: TonyoColors.muted, fontSize: 9),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 9,
+              ),
             ),
           ],
         ),

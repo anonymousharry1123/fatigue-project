@@ -120,8 +120,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
                         color: index == _page
-                            ? TonyoColors.primary
-                            : TonyoColors.border,
+                            ? TonyoPalette.of(context).primary
+                            : TonyoPalette.of(context).border,
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
@@ -142,7 +142,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      backgroundColor: TonyoColors.primary,
+                      backgroundColor: TonyoPalette.of(context).primary,
                     ),
                     child: _isSubmitting
                         ? const Row(
@@ -190,7 +190,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       : AppScope.of(context).canResumeLocalProfile
                       ? 'Local mode. No password verification or Firebase sign-in.'
                       : 'Local mode. No Firebase account is created.',
-                  style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -224,7 +227,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ? 'Sign in to restore your private Tonyo cloud data.'
                     : 'Your account securely syncs your Tonyo data through Firebase.'
               : 'Firebase values are not configured, so this build uses local demo storage.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         if (AppScope.of(context).cloudEnabled) ...[
           const SizedBox(height: 10),
@@ -361,9 +364,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const MetricIcon(
+              MetricIcon(
                 icon: Icons.password_rounded,
-                color: TonyoColors.mint,
+                color: TonyoPalette.of(context).secondary,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -371,7 +374,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   AppScope.of(context).cloudEnabled
                       ? 'Firebase Authentication handles your password. Tonyo never writes passwords to Firestore or its local cache.'
                       : 'Your password is validated for this demo flow but is never saved.',
-                  style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -399,9 +405,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Your choices come first. Account details come later.',
-        style: TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       if (AppScope.of(context).cloudEnabled) ...[
         const SizedBox(height: 12),
@@ -418,7 +424,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (_ageLocked && _ageBand != null) ...[
         Text(
           'Selected age band: ${_ageBand!.label}',
-          style: const TextStyle(fontWeight: FontWeight.w800),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
       ],
@@ -452,17 +458,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           width: 74,
           height: 74,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [TonyoColors.primary, TonyoColors.blue],
-            ),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: const [
-              BoxShadow(color: Color(0x557567FF), blurRadius: 35),
-            ],
+            color: TonyoPalette.of(context).primary,
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.graphic_eq_rounded,
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onPrimary,
             size: 42,
           ),
         ),
@@ -474,10 +475,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Make more informed choices about focus and recovery with estimates shaped by your daily signals.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: TonyoColors.muted, height: 1.45),
+        style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.45),
       ),
       if (AppScope.of(context).cloudEnabled &&
           !AppScope.of(context).canResumeLocalProfile) ...[
@@ -490,11 +491,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ],
       if (AppScope.of(context).canResumeLocalProfile) ...[
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'You are signed out. Continue your saved local profile on this device. Local mode does not verify a password or sign you into Firebase.',
           key: Key('onboarding-local-resume-notice'),
           textAlign: TextAlign.center,
-          style: TextStyle(color: TonyoColors.muted, height: 1.45),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.45),
         ),
       ],
       const SizedBox(height: 28),
@@ -502,7 +503,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Wrap(
+            Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
@@ -513,9 +514,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Text(
                   'Illustrative demo',
                   style: TextStyle(
-                    color: TonyoColors.mint,
+                    color: TonyoPalette.of(context).secondary,
                     fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -537,12 +538,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       const SizedBox(height: 24),
-      const Text(
+      Text(
         'LEARNS FROM YOUR SIGNALS',
         style: TextStyle(
-          color: TonyoColors.muted,
+          color: TonyoPalette.of(context).muted,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
           letterSpacing: .8,
         ),
       ),
@@ -577,9 +578,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       const SizedBox(height: 20),
       Text('Make it yours', style: Theme.of(context).textTheme.headlineLarge),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'These details shape recommendations. You can change them later.',
-        style: TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 28),
       TextField(
@@ -590,7 +591,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       const SizedBox(height: 14),
       Text(
         'Age band: ${AppScope.of(context).privacyConsent?.ageBand.label ?? _ageBand?.label ?? 'Review required'}',
-        style: const TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
@@ -628,10 +629,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         onChanged: (value) => setState(() => _coachPriority = value!),
       ),
       const SizedBox(height: 20),
-      const TonyoCard(
+      TonyoCard(
         child: Row(
           children: [
-            MetricIcon(icon: Icons.shield_outlined, color: TonyoColors.mint),
+            MetricIcon(
+              icon: Icons.shield_outlined,
+              color: TonyoPalette.of(context).secondary,
+            ),
             SizedBox(width: 14),
             Expanded(
               child: Text(
@@ -660,9 +664,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Tonyo uses your routine to build an initial circadian forecast.',
-        style: TextStyle(color: TonyoColors.muted),
+        style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 32),
       TonyoCard(
@@ -677,7 +681,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               max: 11,
               onChanged: (value) => setState(() => _wake = value),
             ),
-            const Divider(height: 30, color: TonyoColors.border),
+            Divider(height: 30, color: TonyoPalette.of(context).border),
             _SliderSetting(
               icon: Icons.bedtime_outlined,
               title: 'Bedtime',
@@ -691,13 +695,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       const SizedBox(height: 18),
-      const TonyoCard(
+      TonyoCard(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             MetricIcon(
-              icon: Icons.auto_awesome_rounded,
-              color: TonyoColors.primary,
+              icon: Icons.chat_bubble_rounded,
+              color: TonyoPalette.of(context).primary,
             ),
             SizedBox(width: 14),
             Expanded(
@@ -706,12 +710,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   Text(
                     'Start with a useful demo',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 5),
                   Text(
                     'Fixture signals make every dashboard immediately explorable. Replace them with your entries whenever you’re ready.',
-                    style: TextStyle(color: TonyoColors.muted),
+                    style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                 ],
               ),
@@ -936,14 +940,14 @@ class _SignalPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     decoration: BoxDecoration(
-      color: TonyoColors.surface,
+      color: TonyoPalette.of(context).surface,
       borderRadius: BorderRadius.circular(13),
-      border: Border.all(color: TonyoColors.border),
+      border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: TonyoColors.primary),
+        Icon(icon, size: 16, color: TonyoPalette.of(context).primary),
         const SizedBox(width: 7),
         Text(
           label,
@@ -976,7 +980,7 @@ class _SliderSetting extends StatelessWidget {
     children: [
       Row(
         children: [
-          Icon(icon, color: TonyoColors.blue),
+          Icon(icon, color: TonyoPalette.of(context).primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -986,9 +990,9 @@ class _SliderSetting extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(
-              color: TonyoColors.mint,
-              fontWeight: FontWeight.w800,
+            style: TextStyle(
+              color: TonyoPalette.of(context).secondary,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

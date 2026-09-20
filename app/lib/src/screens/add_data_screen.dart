@@ -27,14 +27,14 @@ class AddDataScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 5),
-          const Text(
+          Text(
             'Log how you feel and run your daily reaction benchmark.',
-            style: TextStyle(color: TonyoColors.muted),
+            style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
           const SectionHeader('Review'),
           _LaunchCard(
             icon: Icons.calendar_month_rounded,
-            color: TonyoColors.primary,
+            color: TonyoPalette.of(context).primary,
             title: 'Daily history',
             detail: 'Signals, check-ins, and daily completion',
             badge: '${controller.dailyHistory.length} days',
@@ -43,7 +43,7 @@ class AddDataScreen extends StatelessWidget {
           const SectionHeader('Manual logs'),
           _LaunchCard(
             icon: Icons.tune_rounded,
-            color: TonyoColors.amber,
+            color: TonyoPalette.of(context).secondary,
             title: 'Activity log',
             detail: 'Hydration, study, exercise, and screen time',
             badge: '${controller.activityLogs.length} saved',
@@ -52,7 +52,7 @@ class AddDataScreen extends StatelessWidget {
           const SizedBox(height: 10),
           _LaunchCard(
             icon: Icons.bedtime_rounded,
-            color: TonyoColors.blue,
+            color: TonyoPalette.of(context).primary,
             title: 'Sleep log',
             detail: 'Main sleep, naps, quality, and bedtime consistency',
             badge: '${controller.sleepLogs.length} saved',
@@ -61,7 +61,7 @@ class AddDataScreen extends StatelessWidget {
           const SectionHeader('Daily inputs'),
           _LaunchCard(
             icon: Icons.sentiment_satisfied_alt_rounded,
-            color: TonyoColors.amber,
+            color: TonyoPalette.of(context).secondary,
             title: 'Daily check-in',
             detail: 'Energy, mood, and stress · 1–10',
             badge: '${controller.checkIns.length} saved',
@@ -70,7 +70,7 @@ class AddDataScreen extends StatelessWidget {
           const SizedBox(height: 10),
           _LaunchCard(
             icon: Icons.bolt_rounded,
-            color: TonyoColors.primary,
+            color: TonyoPalette.of(context).primary,
             title: 'Reaction test',
             detail: 'Three valid rounds vs your baseline',
             badge: controller.reactionBaseline == null
@@ -80,8 +80,8 @@ class AddDataScreen extends StatelessWidget {
           ),
           const SectionHeader('Plan preview'),
           _LaunchCard(
-            icon: Icons.auto_awesome_rounded,
-            color: TonyoColors.mint,
+            icon: Icons.chat_bubble_outline_rounded,
+            color: TonyoPalette.of(context).secondary,
             title: 'AI Coach',
             detail: 'Your daily plan from recent entries',
             badge: 'Open plan',
@@ -92,9 +92,9 @@ class AddDataScreen extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const MetricIcon(
+                MetricIcon(
                   icon: Icons.storage_rounded,
-                  color: TonyoColors.blue,
+                  color: TonyoPalette.of(context).primary,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -103,7 +103,7 @@ class AddDataScreen extends StatelessWidget {
                     children: [
                       const Text(
                         'Your saved inputs',
-                        style: TextStyle(fontWeight: FontWeight.w900),
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -112,8 +112,8 @@ class AddDataScreen extends StatelessWidget {
                             : controller.isCloudAuthenticated
                             ? 'synced to your account and cached offline'
                             : 'saved on this device'}.',
-                        style: const TextStyle(
-                          color: TonyoColors.muted,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).muted,
                           fontSize: 11,
                         ),
                       ),
@@ -154,7 +154,7 @@ class _LaunchCard extends StatelessWidget {
       button: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -169,14 +169,14 @@ class _LaunchCard extends StatelessWidget {
                       title,
                       style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       detail,
-                      style: const TextStyle(
-                        color: TonyoColors.muted,
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
                         fontSize: 11,
                       ),
                     ),
@@ -188,14 +188,14 @@ class _LaunchCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: .13),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
                         badge,
                         style: TextStyle(
                           color: color,
                           fontSize: 9,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -203,7 +203,10 @@ class _LaunchCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right_rounded, color: TonyoColors.muted),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: TonyoPalette.of(context).muted,
+              ),
             ],
           ),
         ),

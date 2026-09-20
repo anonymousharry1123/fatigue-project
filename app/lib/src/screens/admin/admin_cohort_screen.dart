@@ -222,7 +222,9 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
 
   Future<void> _clearCloud() async {
     if (!widget.controller.isCloudAuthenticated) {
-      setState(() => _error = 'Sign in with Firebase first to clear cloud data.');
+      setState(
+        () => _error = 'Sign in with Firebase first to clear cloud data.',
+      );
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -276,7 +278,9 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
       'note': 'Export includes the first 50 people for clipboard size.',
     });
     await Clipboard.setData(ClipboardData(text: payload));
-    setState(() => _status = 'Copied scored JSON sample (50 people) to clipboard');
+    setState(
+      () => _status = 'Copied scored JSON sample (50 people) to clipboard',
+    );
   }
 
   List<SyntheticPerson> get _filtered {
@@ -296,7 +300,7 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
   Widget build(BuildContext context) {
     final summary = _summary;
     return Scaffold(
-      backgroundColor: TonyoColors.background,
+      backgroundColor: TonyoPalette.of(context).background,
       appBar: AppBar(
         title: const Text('Cohort Lab'),
         bottom: TabBar(
@@ -364,8 +368,8 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _status!,
-                  style: const TextStyle(
-                    color: TonyoColors.mint,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).success,
                     fontSize: 11,
                   ),
                 ),
@@ -378,8 +382,8 @@ class _AdminCohortScreenState extends State<AdminCohortScreen>
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _error!,
-                  style: const TextStyle(
-                    color: TonyoColors.coral,
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).error,
                     fontSize: 11,
                   ),
                 ),
@@ -443,10 +447,10 @@ class _OverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (summary == null || summary!.n == 0) {
-      return const Center(
+      return Center(
         child: Text(
           'Load the synthetic CSV to see score distributions.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
           textAlign: TextAlign.center,
         ),
       );
@@ -467,8 +471,8 @@ class _OverviewTab extends StatelessWidget {
               ' (med ${b.medianCognitive.toStringAsFixed(0)}) → '
               '${s.meanCognitive.toStringAsFixed(0)}'
               ' (med ${s.medianCognitive.toStringAsFixed(0)})',
-              style: const TextStyle(
-                color: TonyoColors.muted,
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -478,19 +482,19 @@ class _OverviewTab extends StatelessWidget {
         ],
         Row(
           children: [
-            _StatCard('N', '${s.n}', TonyoColors.primary),
+            _StatCard('N', '${s.n}', TonyoPalette.of(context).primary),
             const SizedBox(width: 8),
             _StatCard(
               'Energy',
               s.meanEnergy.toStringAsFixed(0),
-              TonyoColors.mint,
+              TonyoPalette.of(context).primary,
               subtitle: 'median ${s.medianEnergy.toStringAsFixed(0)}',
             ),
             const SizedBox(width: 8),
             _StatCard(
               'Cognitive',
               s.meanCognitive.toStringAsFixed(0),
-              TonyoColors.blue,
+              TonyoPalette.of(context).secondary,
               subtitle: 'median ${s.medianCognitive.toStringAsFixed(0)}',
             ),
           ],
@@ -499,14 +503,14 @@ class _OverviewTab extends StatelessWidget {
         TonyoCard(
           child: CohortHistogramChart(
             bins: s.energyHistogram,
-            color: TonyoColors.mint,
+            color: TonyoPalette.of(context).primary,
           ),
         ),
         const SectionHeader('Cognitive distribution'),
         TonyoCard(
           child: CohortHistogramChart(
             bins: s.cognitiveHistogram,
-            color: TonyoColors.blue,
+            color: TonyoPalette.of(context).secondary,
           ),
         ),
         const SectionHeader('By education'),
@@ -514,7 +518,7 @@ class _OverviewTab extends StatelessWidget {
           child: CohortGroupBars(
             groups: s.byEducation,
             valueOf: (g) => g.meanEnergy,
-            color: TonyoColors.violet,
+            color: TonyoPalette.of(context).primary,
           ),
         ),
         const SectionHeader('By gender'),
@@ -522,7 +526,7 @@ class _OverviewTab extends StatelessWidget {
           child: CohortGroupBars(
             groups: s.byGender,
             valueOf: (g) => g.meanCognitive,
-            color: TonyoColors.amber,
+            color: TonyoPalette.of(context).secondary,
           ),
         ),
       ],
@@ -539,10 +543,10 @@ class _RelationsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (summary == null || summary!.n == 0) {
-      return const Center(
+      return Center(
         child: Text(
           'Load the cohort to explore signal vs score relationships.',
-          style: TextStyle(color: TonyoColors.muted),
+          style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
       );
     }
@@ -552,21 +556,27 @@ class _RelationsTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
         if (b != null && b.n > 0)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
               'Before = frozen baseline · After = live Recompute. '
               'Axes share the same scale for each pair.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
             ),
           )
         else
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
               'Tip: Freeze baseline, edit FatigueEngine, hot restart, '
               'Recompute — then compare Before/After here.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
             ),
           ),
         _RelationCompareCard(
@@ -574,7 +584,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.sleepVsEnergy,
           xLabel: 'Sleep (hr)',
           yLabel: 'Energy',
-          color: TonyoColors.mint,
+          color: TonyoPalette.of(context).primary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -582,7 +592,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.sleepVsCognitive,
           xLabel: 'Sleep (hr)',
           yLabel: 'Cognitive',
-          color: TonyoColors.blue,
+          color: TonyoPalette.of(context).secondary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -590,7 +600,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.screenVsEnergy,
           xLabel: 'Screen+social (hr)',
           yLabel: 'Energy',
-          color: TonyoColors.coral,
+          color: TonyoPalette.of(context).primary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -598,7 +608,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.screenVsCognitive,
           xLabel: 'Screen+social (hr)',
           yLabel: 'Cognitive',
-          color: TonyoColors.violet,
+          color: TonyoPalette.of(context).secondary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -606,7 +616,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.studyVsCognitive,
           xLabel: 'Study (hr)',
           yLabel: 'Cognitive',
-          color: TonyoColors.blue,
+          color: TonyoPalette.of(context).secondary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -614,7 +624,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.exerciseVsEnergy,
           xLabel: 'Exercise daily (hr)',
           yLabel: 'Energy',
-          color: TonyoColors.coral,
+          color: TonyoPalette.of(context).primary,
         ),
         const SizedBox(height: 12),
         _RelationCompareCard(
@@ -622,7 +632,7 @@ class _RelationsTab extends StatelessWidget {
           frozen: b?.caffeineVsEnergy,
           xLabel: 'Caffeine (drinks)',
           yLabel: 'Energy',
-          color: TonyoColors.amber,
+          color: TonyoPalette.of(context).primary,
         ),
       ],
     );
@@ -665,7 +675,7 @@ class _RelationCompareCard extends StatelessWidget {
         xLabel: xLabel,
         yLabel: yLabel,
         badge: 'Before',
-        color: TonyoColors.muted,
+        color: TonyoPalette.of(context).muted,
         height: 170,
         fixedMinX: domain.minX,
         fixedMaxX: domain.maxX,
@@ -691,11 +701,7 @@ class _RelationCompareCard extends StatelessWidget {
         builder: (context, constraints) {
           if (constraints.maxWidth < 720) {
             return Column(
-              children: [
-                charts[0],
-                const SizedBox(height: 12),
-                charts[1],
-              ],
+              children: [charts[0], const SizedBox(height: 12), charts[1]],
             );
           }
           return Row(
@@ -713,10 +719,7 @@ class _RelationCompareCard extends StatelessWidget {
 }
 
 class _PeopleTab extends StatefulWidget {
-  const _PeopleTab({
-    required this.people,
-    required this.onQuery,
-  });
+  const _PeopleTab({required this.people, required this.onQuery});
 
   final List<SyntheticPerson> people;
   final ValueChanged<String> onQuery;
@@ -769,16 +772,14 @@ class _PeopleTabState extends State<_PeopleTab> {
         'screen ${person.foldedScreenHours.toStringAsFixed(1)}h',
       _PeopleSort.caffeineHigh =>
         'caffeine ${person.caffeineDrinks.toStringAsFixed(0)}',
-      _PeopleSort.studyHigh =>
-        'study ${person.studyHours.toStringAsFixed(1)}h',
+      _PeopleSort.studyHigh => 'study ${person.studyHours.toStringAsFixed(1)}h',
       _PeopleSort.stressHigh =>
         'stress ${person.stressLevel.toStringAsFixed(0)}/10',
-      _PeopleSort.cognitiveLow || _PeopleSort.cognitiveHigh =>
-        'C ${person.score.cognitive}',
+      _PeopleSort.cognitiveLow ||
+      _PeopleSort.cognitiveHigh => 'C ${person.score.cognitive}',
       _PeopleSort.energyLow ||
       _PeopleSort.energyHigh ||
-      _PeopleSort.idAsc =>
-        'E ${person.score.energy}',
+      _PeopleSort.idAsc => 'E ${person.score.energy}',
     };
     return '$base · $focus';
   }
@@ -803,9 +804,12 @@ class _PeopleTabState extends State<_PeopleTab> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'Sort',
-                style: TextStyle(color: TonyoColors.muted, fontSize: 11),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -838,22 +842,25 @@ class _PeopleTabState extends State<_PeopleTab> {
             ],
           ),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Open the first 3 rows as outlier spot-checks for this sort.',
-              style: TextStyle(color: TonyoColors.muted, fontSize: 10),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 10,
+              ),
             ),
           ),
         ),
         Expanded(
           child: people.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'No people loaded',
-                    style: TextStyle(color: TonyoColors.muted),
+                    style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                 )
               : ListView.separated(
@@ -881,13 +888,13 @@ class _PeopleTabState extends State<_PeopleTab> {
                                     Text(
                                       'Synthetic ${person.id}',
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     Text(
                                       _metricLine(person),
-                                      style: const TextStyle(
-                                        color: TonyoColors.muted,
+                                      style: TextStyle(
+                                        color: TonyoPalette.of(context).muted,
                                         fontSize: 11,
                                       ),
                                     ),
@@ -896,17 +903,17 @@ class _PeopleTabState extends State<_PeopleTab> {
                               ),
                               Text(
                                 'E ${person.score.energy}',
-                                style: const TextStyle(
-                                  color: TonyoColors.mint,
-                                  fontWeight: FontWeight.w800,
+                                style: TextStyle(
+                                  color: TonyoPalette.of(context).primary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 'C ${person.score.cognitive}',
-                                style: const TextStyle(
-                                  color: TonyoColors.blue,
-                                  fontWeight: FontWeight.w800,
+                                style: TextStyle(
+                                  color: TonyoPalette.of(context).secondary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -923,12 +930,7 @@ class _PeopleTabState extends State<_PeopleTab> {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard(
-    this.label,
-    this.value,
-    this.color, {
-    this.subtitle,
-  });
+  const _StatCard(this.label, this.value, this.color, {this.subtitle});
 
   final String label;
   final String value;
@@ -944,20 +946,26 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(color: TonyoColors.muted, fontSize: 11),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
             ),
             Text(
               value,
               style: TextStyle(
                 color: color,
                 fontSize: 26,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
             if (subtitle != null)
               Text(
                 subtitle!,
-                style: const TextStyle(color: TonyoColors.muted, fontSize: 10),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                ),
               ),
           ],
         ),

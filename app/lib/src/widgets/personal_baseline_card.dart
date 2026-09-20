@@ -17,15 +17,15 @@ class PersonalBaselineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TonyoCard(
     key: const Key('personal-baseline-card'),
-    color: const Color(0xFF151923),
+    color: TonyoPalette.of(context).surface,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const MetricIcon(
+            MetricIcon(
               icon: Icons.person_search_rounded,
-              color: TonyoColors.violet,
+              color: TonyoPalette.of(context).secondary,
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -34,12 +34,12 @@ class PersonalBaselineCard extends StatelessWidget {
                 children: [
                   const Text(
                     'Your personal baselines',
-                    style: TextStyle(fontWeight: FontWeight.w900),
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Text(
                     '${baselines.readyCount}/4 ready · ${baselines.windowDays}-day private history',
-                    style: const TextStyle(
-                      color: TonyoColors.muted,
+                    style: TextStyle(
+                      color: TonyoPalette.of(context).muted,
                       fontSize: 10,
                     ),
                   ),
@@ -48,9 +48,9 @@ class PersonalBaselineCard extends StatelessWidget {
             ),
             Text(
               '${(baselines.overallReadiness * 100).round()}%',
-              style: const TextStyle(
-                color: TonyoColors.violet,
-                fontWeight: FontWeight.w900,
+              style: TextStyle(
+                color: TonyoPalette.of(context).secondary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -59,17 +59,17 @@ class PersonalBaselineCard extends StatelessWidget {
         for (var index = 0; index < baselines.metrics.length; index++) ...[
           _BaselineRow(metric: baselines.metrics[index]),
           if (index < baselines.metrics.length - 1)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Divider(color: TonyoColors.border, height: 1),
+              child: Divider(color: TonyoPalette.of(context).border, height: 1),
             ),
         ],
         if (!compact) ...[
           const SizedBox(height: 13),
-          const Text(
+          Text(
             'Tonyo compares these signals only with your own history. Confidence stays reduced while a baseline is still building.',
             style: TextStyle(
-              color: TonyoColors.muted,
+              color: TonyoPalette.of(context).muted,
               fontSize: 10,
               height: 1.4,
             ),
@@ -98,19 +98,22 @@ class _BaselineRow extends StatelessWidget {
         Expanded(
           child: Text(
             metric.type.label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ),
         Text(
           '$displayValue ${metric.type.unit}',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: (metric.isReady ? TonyoColors.mint : TonyoColors.amber)
-                .withValues(alpha: .12),
+            color:
+                (metric.isReady
+                        ? TonyoPalette.of(context).success
+                        : TonyoPalette.of(context).warning)
+                    .withValues(alpha: .12),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -118,9 +121,11 @@ class _BaselineRow extends StatelessWidget {
                 ? '${metric.sampleCount} days'
                 : '${metric.sampleCount}/${metric.minimumSamples}',
             style: TextStyle(
-              color: metric.isReady ? TonyoColors.mint : TonyoColors.amber,
+              color: metric.isReady
+                  ? TonyoPalette.of(context).success
+                  : TonyoPalette.of(context).warning,
               fontSize: 9,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),

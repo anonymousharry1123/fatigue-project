@@ -61,6 +61,8 @@ void main() {
     bool enabled = true,
     bool crashEnabled = true,
     bool recoveryEnabled = true,
+    List<Recommendation> recommendations = const [],
+    bool coachPlanEnabled = false,
   }) => NotificationLogic.build(
     now: now,
     points: forecast ?? points(),
@@ -83,6 +85,8 @@ void main() {
     enabled: enabled,
     crashEnabled: crashEnabled,
     recoveryEnabled: recoveryEnabled,
+    recommendations: recommendations,
+    coachPlanEnabled: coachPlanEnabled,
   );
 
   group('Version 0.20 notification planning', () {
@@ -145,6 +149,274 @@ void main() {
         GuidanceNotificationKind.recovery,
       );
     });
+  });
+
+  Recommendation step(
+    String id, {
+    RecommendationStatus status = RecommendationStatus.suggested,
+    DateTime? at,
+    DateTime? planDay,
+    DateTime? generated,
+    bool timestamped = true,
+    bool grounded = true,
+    double confidence = .8,
+  }) => Recommendation(
+    id: id,
+    title: 'Protect a focus block',
+    detail:
+        'Private notes and sensitive evidence do not belong on a lock screen.',
+    timeLabel: '1 PM',
+    category: 'Focus',
+    status: status,
+    scheduledAt: at ?? now.add(const Duration(hours: 1)),
+    day: planDay ?? day,
+    generatedAt: timestamped ? generated ?? now : null,
+    durationMinutes: 35,
+    planConfidence: confidence,
+    signalEvidenceIds: grounded ? ['private-signal-id'] : [''],
+  );
+
+  group('daily Coach reminder planning', () {
+    test('uses each actual plan time and ignores legacy action status', () {
+      final recommendations = [
+        for (final status in RecommendationStatus.values)
+          step(
+            status.name,
+            status: status,
+            at: now.add(Duration(hours: status.index + 1)),
+          ),
+      ];
+      final plan = build(
+        recommendations: recommendations,
+        coachPlanEnabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+      );
+      expect(plan.notifications.length, RecommendationStatus.values.length);
+      for (final item in plan.notifications) {
+        final source = recommendations.singleWhere(
+          (record) => record.id == item.sourceRecommendationId,
+        );
+        expect(item.scheduledAt, source.scheduledAt);
+        expect(item.kind, GuidanceNotificationKind.coachPlan);
+        expect(item.title, source.title);
+        expect(item.body, contains('35 min'));
+        expect(item.body, contains('Open Coach'));
+        expect(item.body, isNot(contains('Private')));
+        expect(item.body, isNot(contains('private-signal-id')));
+        expect(item.sourceRiskAlertIds, isEmpty);
+      }
+    });
+
+    test(
+      'Coach preference and master preference remain independently required',
+      () {
+        final recommendations = [step('focus')];
+        expect(
+          build(
+            recommendations: recommendations,
+            coachPlanEnabled: false,
+            crashEnabled: false,
+            recoveryEnabled: false,
+          ).notifications,
+          isEmpty,
+        );
+        expect(
+          build(
+            recommendations: recommendations,
+            coachPlanEnabled: true,
+            enabled: false,
+          ).state,
+          NotificationPlanState.disabled,
+        );
+        final both = build(
+          recommendations: recommendations,
+          coachPlanEnabled: true,
+        );
+        expect(
+          both.notifications.map((item) => item.kind).toSet(),
+          GuidanceNotificationKind.values.toSet(),
+        );
+      },
+    );
+
+    test(
+      'gentle grounded Coach plan is allowed with low, stale or absent forecast',
+      () {
+        for (final forecast in [
+          points(uncertainty: 18),
+          points(updatedAt: now.subtract(const Duration(hours: 13))),
+          <ForecastPoint>[],
+        ]) {
+          final plan = build(
+            forecast: forecast,
+            recommendations: [step('gentle', confidence: .3)],
+            coachPlanEnabled: true,
+          );
+          expect(plan.state, NotificationPlanState.ready);
+          expect(plan.notifications, hasLength(1));
+          expect(
+            plan.notifications.single.kind,
+            GuidanceNotificationKind.coachPlan,
+          );
+          expect(
+            plan.notifications.single.body,
+            contains('gentle and flexible'),
+          );
+        }
+      },
+    );
+
+    test(
+      'today plan includes its post-midnight bedtime but excludes other plan days',
+      () {
+        final bedtime = day.add(const Duration(days: 1, minutes: 30));
+        final plan = build(
+          crashEnabled: false,
+          recoveryEnabled: false,
+          coachPlanEnabled: true,
+          recommendations: [
+            step('bedtime', at: bedtime),
+            step(
+              'tomorrow-plan',
+              at: bedtime,
+              planDay: day.add(const Duration(days: 1)),
+            ),
+            step(
+              'yesterday-plan',
+              planDay: day.subtract(const Duration(days: 1)),
+            ),
+            step('too-far', at: day.add(const Duration(days: 2))),
+          ],
+        );
+        expect(plan.notifications, hasLength(1));
+        expect(plan.notifications.single.sourceRecommendationId, 'bedtime');
+        expect(plan.notifications.single.scheduledAt, bedtime);
+      },
+    );
+
+    test(
+      'rejects past, insufficient lead, ungrounded and stale recommendations',
+      () {
+        final plan = build(
+          crashEnabled: false,
+          recoveryEnabled: false,
+          coachPlanEnabled: true,
+          recommendations: [
+            step('past', at: now.subtract(const Duration(minutes: 1))),
+            step('soon', at: now.add(NotificationLogic.minimumLeadTime)),
+            step('ungrounded', grounded: false),
+            step('stale', generated: now.subtract(const Duration(hours: 13))),
+            step(
+              'future-generated',
+              generated: now.add(const Duration(minutes: 6)),
+            ),
+            step('no-generation-time', timestamped: false),
+            step('valid', at: now.add(const Duration(minutes: 2))),
+          ],
+        );
+        expect(plan.notifications.map((item) => item.sourceRecommendationId), [
+          'valid',
+        ]);
+      },
+    );
+
+    test(
+      'bounds reminders, deduplicates and resolves deterministic ID collisions',
+      () {
+        final recommendations = [
+          step('Aa'),
+          step('BB'), // Same polynomial hash before collision probing.
+          for (var index = 0; index < 20; index++)
+            step(
+              'extra-$index',
+              at: now.add(Duration(hours: 2, minutes: index)),
+            ),
+          step(
+            'Aa',
+            at: now.add(const Duration(hours: 5)),
+            generated: now.subtract(const Duration(minutes: 1)),
+          ),
+        ];
+        final first = build(
+          recommendations: recommendations,
+          coachPlanEnabled: true,
+        );
+        final reversed = build(
+          recommendations: recommendations.reversed.toList(),
+          coachPlanEnabled: true,
+        );
+        expect(
+          first.notifications.where(
+            (item) => item.kind == GuidanceNotificationKind.coachPlan,
+          ),
+          hasLength(NotificationLogic.maximumCoachReminders),
+        );
+        expect(
+          first.notifications.map((item) => item.platformId).toSet().length,
+          first.notifications.length,
+        );
+        expect(
+          {for (final item in first.notifications) item.id: item.platformId},
+          {for (final item in reversed.notifications) item.id: item.platformId},
+        );
+        expect(
+          first.notifications.every(
+            (item) => item.platformId >= 0 && item.platformId <= 0x7fffffff,
+          ),
+          true,
+        );
+        expect(
+          first.notifications
+              .singleWhere((item) => item.sourceRecommendationId == 'Aa')
+              .scheduledAt,
+          now.add(const Duration(hours: 1)),
+        );
+        expect(
+          first.notifications
+              .where((item) => item.kind == GuidanceNotificationKind.coachPlan)
+              .every((item) => item.platformId >= 0x40000000),
+          true,
+        );
+        expect(
+          first.notifications
+              .where((item) => item.kind != GuidanceNotificationKind.coachPlan)
+              .every((item) => item.platformId < 0x40000000),
+          true,
+        );
+      },
+    );
+
+    test(
+      'time changes retain stable identity and payload safely encodes the source ID',
+      () {
+        const id = 'focus: afternoon / café';
+        final first = build(
+          recommendations: [step(id)],
+          coachPlanEnabled: true,
+          crashEnabled: false,
+          recoveryEnabled: false,
+        ).notifications.single;
+        final later = build(
+          recommendations: [step(id, at: now.add(const Duration(hours: 2)))],
+          coachPlanEnabled: true,
+          crashEnabled: false,
+          recoveryEnabled: false,
+        ).notifications.single;
+        expect(first.platformId, later.platformId);
+        expect(first.id, later.id);
+        expect(
+          first.payload,
+          'tonyo-guidance:coach:${Uri.encodeComponent(id)}',
+        );
+        expect(
+          Uri.decodeComponent(
+            first.payload.substring('tonyo-guidance:coach:'.length),
+          ),
+          id,
+        );
+      },
+    );
   });
 
   group('Version 0.20 notification consent', () {

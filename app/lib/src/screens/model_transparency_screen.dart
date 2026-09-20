@@ -52,8 +52,8 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
       final state = widget.controller.modelTransparency;
       final explanation = state.explanation(_head);
       final color = _head == ScoreHead.energy
-          ? TonyoColors.violet
-          : TonyoColors.blue;
+          ? TonyoPalette.of(context).secondary
+          : TonyoPalette.of(context).primary;
       return Scaffold(
         appBar: AppBar(title: const Text('Score guide')),
         body: SafeArea(
@@ -69,10 +69,13 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                     : Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'See what shaped this estimate, what is missing, and which '
                 'model is actually being used.',
-                style: TextStyle(color: TonyoColors.muted, height: 1.5),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 20),
               Wrap(
@@ -83,18 +86,24 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                     ChoiceChip(
                       key: Key('transparency-head-${head.name}'),
                       label: Text(head.label),
-                      labelStyle: const TextStyle(color: TonyoColors.text),
+                      labelStyle: TextStyle(
+                        color: TonyoPalette.of(context).text,
+                      ),
                       avatar: Icon(
                         head == ScoreHead.energy
                             ? Icons.bolt_rounded
                             : Icons.psychology_outlined,
                         size: 20,
-                        color: _head == head ? color : TonyoColors.muted,
+                        color: _head == head
+                            ? color
+                            : TonyoPalette.of(context).muted,
                       ),
                       selected: _head == head,
                       selectedColor: color.withValues(alpha: .2),
                       side: BorderSide(
-                        color: _head == head ? color : TonyoColors.border,
+                        color: _head == head
+                            ? color
+                            : TonyoPalette.of(context).border,
                       ),
                       onSelected: (_) => setState(() => _head = head),
                       padding: const EdgeInsets.symmetric(
@@ -135,11 +144,14 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
               _EvidenceQuality(explanation: explanation, color: color),
               const SizedBox(height: 24),
               const SectionHeader('What shaped this score'),
-              const Text(
+              Text(
                 'Largest point adjustments first. Tap a factor for its saved '
                 'explanation and source. These are model contributions, '
                 'not proof that an activity caused a change.',
-                style: TextStyle(color: TonyoColors.muted, height: 1.5),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 12),
               if (explanation.drivers.isEmpty)
@@ -168,7 +180,10 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                 '${explanation.expectedEvidenceCount} factor categories have '
                 'saved evidence. This inventory is separate from the score’s '
                 'historical input counter.',
-                style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 12),
               TonyoCard(
@@ -183,7 +198,10 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                       index++
                     ) ...[
                       if (index != 0)
-                        const Divider(height: 1, color: TonyoColors.border),
+                        Divider(
+                          height: 1,
+                          color: TonyoPalette.of(context).border,
+                        ),
                       _EvidenceRow(input: explanation.inputs[index]),
                     ],
                     if (explanation.inputs.isEmpty)
@@ -212,8 +230,8 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                         padding: EdgeInsets.only(top: index == 0 ? 0 : 14),
                         child: Text(
                           explanation.caveats[index],
-                          style: const TextStyle(
-                            color: TonyoColors.muted,
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
                             height: 1.5,
                           ),
                         ),
@@ -222,11 +240,14 @@ class _ModelTransparencyScreenState extends State<ModelTransparencyScreen> {
                 ),
               ),
               const SizedBox(height: 18),
-              const Text(
+              Text(
                 'This page only explains information already on this device. '
                 'Opening it does not fetch records, train a model, or change '
                 'your settings.',
-                style: TextStyle(color: TonyoColors.muted, height: 1.5),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  height: 1.5,
+                ),
               ),
             ],
           ),
@@ -269,7 +290,7 @@ class _ScoreOverview extends StatelessWidget {
             key: const Key('transparency-score-value'),
             style: TextStyle(
               fontSize: 56,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               height: 1.1,
               color: color,
             ),
@@ -280,7 +301,7 @@ class _ScoreOverview extends StatelessWidget {
           explanation.value == null
               ? 'Not recorded in this saved snapshot'
               : 'out of 100 · higher means more estimated capacity',
-          style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
         const SizedBox(height: 16),
         _Detail(
@@ -294,20 +315,20 @@ class _ScoreOverview extends StatelessWidget {
           head == ScoreHead.energy
               ? state.energyModelVersion
               : state.cognitiveModelVersion,
-          style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
         const SizedBox(height: 16),
         Text(state.scoreSourceLabel),
         const SizedBox(height: 4),
         Text(
           'Score calculated: ${_timestamp(context, explanation.calculatedAt)}',
-          style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
         const SizedBox(height: 14),
-        const Text(
+        Text(
           'A wellness estimate for daily planning, not a diagnosis or '
           'a measure of your worth.',
-          style: TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
       ],
     ),
@@ -342,7 +363,7 @@ class _EvidenceQuality extends StatelessWidget {
               LinearProgressIndicator(
                 value: explanation.confidencePercent / 100,
                 color: color,
-                backgroundColor: TonyoColors.border,
+                backgroundColor: TonyoPalette.of(context).border,
                 minHeight: 5,
                 borderRadius: BorderRadius.circular(5),
                 semanticsLabel: 'Evidence quality',
@@ -353,7 +374,7 @@ class _EvidenceQuality extends StatelessWidget {
                 'It is not the probability that this score is correct.',
                 style: TextStyle(height: 1.5),
               ),
-              const Divider(height: 32, color: TonyoColors.border),
+              Divider(height: 32, color: TonyoPalette.of(context).border),
               _Detail(
                 label: 'Score inputs',
                 value:
@@ -369,11 +390,14 @@ class _EvidenceQuality extends StatelessWidget {
                           'freshness at the saved calculation',
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'More records alone may not raise confidence. Coverage across useful '
                 'inputs, their freshness, and personal-baseline readiness matter. '
                 'Refreshing the personalized model does not increase confidence.',
-                style: TextStyle(color: TonyoColors.muted, height: 1.5),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  height: 1.5,
+                ),
               ),
             ],
           ),
@@ -395,10 +419,10 @@ class _DriverTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final driver = explained.driver;
     return Material(
-      color: TonyoColors.surface,
+      color: TonyoPalette.of(context).surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: TonyoColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: TonyoPalette.of(context).border),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(
@@ -422,7 +446,7 @@ class _DriverTile extends StatelessWidget {
                 _Badge(label: explained.contributionLabel, color: color),
                 _Badge(
                   label: explained.kind.label,
-                  color: _evidenceColor(explained.kind),
+                  color: _evidenceColor(explained.kind, context),
                 ),
               ],
             ),
@@ -436,9 +460,12 @@ class _DriverTile extends StatelessWidget {
               driver.explanation.isEmpty
                   ? 'No additional explanation was saved for this factor.'
                   : driver.explanation,
-              style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                height: 1.5,
+              ),
             ),
-            const Divider(height: 28, color: TonyoColors.border),
+            Divider(height: 28, color: TonyoPalette.of(context).border),
             _Detail(label: 'Source', value: explained.sourceLabel),
             const SizedBox(height: 12),
             _Detail(label: 'Freshness', value: explained.freshnessLabel),
@@ -466,19 +493,25 @@ class _EvidenceRow extends StatelessWidget {
       children: [
         Text(input.label, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        _Badge(label: input.kind.label, color: _evidenceColor(input.kind)),
+        _Badge(
+          label: input.kind.label,
+          color: _evidenceColor(input.kind, context),
+        ),
         const SizedBox(height: 8),
         Text(input.detail, style: const TextStyle(height: 1.5)),
         const SizedBox(height: 4),
         Text(
           input.sourceLabel,
-          style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
         if (input.evidenceAt != null) ...[
           const SizedBox(height: 4),
           Text(
             _timestamp(context, input.evidenceAt),
-            style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              height: 1.5,
+            ),
           ),
         ],
       ],
@@ -509,9 +542,9 @@ class _ModelDetails extends StatelessWidget {
               ? state.modelStatusDetail
               : 'Cognitive uses the rule-based score model. The personalized '
                     'Energy model does not change this score.',
-          style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+          style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
-        const Divider(height: 32, color: TonyoColors.border),
+        Divider(height: 32, color: TonyoPalette.of(context).border),
         _Detail(
           label: 'Score model version',
           value: head == ScoreHead.energy
@@ -531,7 +564,7 @@ class _ModelDetails extends StatelessWidget {
           value: _timestamp(context, state.accountUpdatedAt),
         ),
         if (head == ScoreHead.energy) ...[
-          const Divider(height: 32, color: TonyoColors.border),
+          Divider(height: 32, color: TonyoPalette.of(context).border),
           if (state.localModel case final model?)
             _ModelSummary(
               key: const Key('transparency-local-model'),
@@ -548,7 +581,7 @@ class _ModelDetails extends StatelessWidget {
                   'No usable personalized model. The deterministic estimate '
                   'remains available.',
             ),
-          const Divider(height: 32, color: TonyoColors.border),
+          Divider(height: 32, color: TonyoPalette.of(context).border),
           if (state.cloudModel case final summary?)
             _ModelSummary(
               key: const Key('transparency-cloud-model'),
@@ -568,7 +601,7 @@ class _ModelDetails extends StatelessWidget {
             ),
         ],
         if (state.notices.isNotEmpty) ...[
-          const Divider(height: 32, color: TonyoColors.border),
+          Divider(height: 32, color: TonyoPalette.of(context).border),
           Text(
             'About this saved view',
             style: Theme.of(context).textTheme.titleMedium,
@@ -577,7 +610,10 @@ class _ModelDetails extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               notice,
-              style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                height: 1.5,
+              ),
             ),
           ],
         ],
@@ -605,7 +641,7 @@ class _ModelSummary extends StatelessWidget {
       const SizedBox(height: 8),
       Text(
         description,
-        style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+        style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
       ),
       const SizedBox(height: 16),
       _Detail(
@@ -659,7 +695,7 @@ class _Detail extends StatelessWidget {
     children: [
       Text(
         label,
-        style: const TextStyle(color: TonyoColors.muted, height: 1.5),
+        style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
       ),
       const SizedBox(height: 3),
       Text(value, style: const TextStyle(height: 1.5)),
@@ -677,7 +713,7 @@ class _Notice extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: TonyoColors.blue, size: 20),
+        Icon(icon, color: TonyoPalette.of(context).primary, size: 20),
         const SizedBox(width: 12),
         Expanded(child: Text(text, style: const TextStyle(height: 1.5))),
       ],
@@ -704,13 +740,13 @@ class _Badge extends StatelessWidget {
   );
 }
 
-Color _evidenceColor(EvidenceKind kind) => switch (kind) {
-  EvidenceKind.measured => TonyoColors.mint,
-  EvidenceKind.selfReported => TonyoColors.blue,
-  EvidenceKind.estimated => TonyoColors.violet,
-  EvidenceKind.missing => TonyoColors.muted,
-  EvidenceKind.demo => TonyoColors.amber,
-  EvidenceKind.unknown => TonyoColors.amber,
+Color _evidenceColor(EvidenceKind kind, BuildContext context) => switch (kind) {
+  EvidenceKind.measured => TonyoPalette.of(context).secondary,
+  EvidenceKind.selfReported => TonyoPalette.of(context).primary,
+  EvidenceKind.estimated => TonyoPalette.of(context).secondary,
+  EvidenceKind.missing => TonyoPalette.of(context).muted,
+  EvidenceKind.demo => TonyoPalette.of(context).warning,
+  EvidenceKind.unknown => TonyoPalette.of(context).warning,
 };
 
 String _timestamp(BuildContext context, DateTime? value) {
