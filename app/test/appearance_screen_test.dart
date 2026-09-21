@@ -191,7 +191,7 @@ void main() {
       for (final cancelButton in [true, false]) {
         await _openCustom(tester);
         final hex = find.byKey(const Key('appearance-main-hex'));
-        expect(tester.widget<TextFormField>(hex).controller!.text, '#2563EB');
+        expect(tester.widget<TextFormField>(hex).controller!.text, '#315EFB');
         await tester.enterText(hex, '#FFFFFF');
         await tester.pumpAndSettle();
         expect(controller.preferences, const ThemePreferences());
@@ -287,7 +287,7 @@ void main() {
           .widget<TextFormField>(find.byKey(const Key('appearance-main-hex')))
           .controller!
           .text,
-      '#FF63EB',
+      '#FF5EFB',
     );
     expect(tester.takeException(), isNull);
   });

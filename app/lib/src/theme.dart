@@ -37,35 +37,35 @@ class TonyoThemePreset {
 }
 
 const defaultTonyoColors = TonyoColorPair(
-  main: Color(0xFF2563EB),
-  secondary: Color(0xFF64748B),
+  main: Color(0xFF315EFB),
+  secondary: Color(0xFF0C8F7D),
 );
 const tonyoThemePresets = [
   TonyoThemePreset('classic', 'Classic', defaultTonyoColors),
   TonyoThemePreset(
     'ocean',
     'Ocean',
-    TonyoColorPair(main: Color(0xFF0369A1), secondary: Color(0xFF0D9488)),
+    TonyoColorPair(main: Color(0xFF007DB8), secondary: Color(0xFF6546DF)),
   ),
   TonyoThemePreset(
     'forest',
     'Forest',
-    TonyoColorPair(main: Color(0xFF3F6B4F), secondary: Color(0xFFA07845)),
+    TonyoColorPair(main: Color(0xFF0A8552), secondary: Color(0xFFBE8115)),
   ),
   TonyoThemePreset(
     'clay',
     'Clay',
-    TonyoColorPair(main: Color(0xFFB65D43), secondary: Color(0xFF64748B)),
+    TonyoColorPair(main: Color(0xFFC34F2D), secondary: Color(0xFF087F8C)),
   ),
   TonyoThemePreset(
     'plum',
     'Plum',
-    TonyoColorPair(main: Color(0xFF7C5A91), secondary: Color(0xFFB76E79)),
+    TonyoColorPair(main: Color(0xFF8538C7), secondary: Color(0xFFD13C73)),
   ),
   TonyoThemePreset(
     'sunset',
     'Sunset',
-    TonyoColorPair(main: Color(0xFFD97706), secondary: Color(0xFFC44C7A)),
+    TonyoColorPair(main: Color(0xFFDC6B0C), secondary: Color(0xFFBB2859)),
   ),
 ];
 
@@ -75,14 +75,21 @@ double tonyoContrastRatio(Color first, Color second) {
   return ((a > b ? a : b) + .05) / ((a > b ? b : a) + .05);
 }
 
-/// Adjust source colors only as far as needed for labels on neutral and tinted fills.
+/// Adjust lightness only as far as needed for readable labels, retaining the
+/// source hue and saturation instead of washing darker accents toward grey.
 Color _readableAccent(
   Color source,
   Brightness brightness,
   List<Color> surfaces,
 ) {
   final opaque = source.withValues(alpha: 1);
-  final target = brightness == Brightness.light ? Colors.black : Colors.white;
+  final sourceHsl = HSLColor.fromColor(opaque);
+  final targetLightness = brightness == Brightness.light ? 0.0 : 1.0;
+  Color adjusted(double amount) => sourceHsl
+      .withLightness(
+        sourceHsl.lightness + (targetLightness - sourceHsl.lightness) * amount,
+      )
+      .toColor();
   bool readable(Color candidate) => surfaces.every(
     (surface) =>
         tonyoContrastRatio(candidate, surface) >= 4.5 &&
@@ -97,13 +104,13 @@ Color _readableAccent(
   var high = 1.0;
   for (var i = 0; i < 24; i++) {
     final middle = (low + high) / 2;
-    if (readable(Color.lerp(opaque, target, middle)!)) {
+    if (readable(adjusted(middle))) {
       high = middle;
     } else {
       low = middle;
     }
   }
-  return Color.lerp(opaque, target, high)!;
+  return adjusted(high);
 }
 
 Color _onAccent(Color color) =>
@@ -130,20 +137,20 @@ class TonyoPalette extends ThemeExtension<TonyoPalette> {
 
   factory TonyoPalette.resolve(Brightness brightness, TonyoColorPair colors) {
     final dark = brightness == Brightness.dark;
-    final background = Color(dark ? 0xFF121416 : 0xFFF7F7F5);
-    final surface = Color(dark ? 0xFF1C1F23 : 0xFFFFFFFF);
-    final raised = Color(dark ? 0xFF262A30 : 0xFFF0F1F2);
+    final background = Color(dark ? 0xFF000000 : 0xFFEDF3FB);
+    final surface = Color(dark ? 0xFF090E15 : 0xFFFFFFFF);
+    final raised = Color(dark ? 0xFF131C27 : 0xFFE1EAF6);
     final surfaces = [background, surface, raised];
     Color accent(Color seed) => _readableAccent(seed, brightness, surfaces);
     return TonyoPalette(
       background: background,
       surface: surface,
       surfaceRaised: raised,
-      border: Color(dark ? 0xFF3D424A : 0xFFD9DDE1),
+      border: Color(dark ? 0xFF344156 : 0xFFBCCCE0),
       primary: accent(colors.main),
       secondary: accent(colors.secondary),
-      text: Color(dark ? 0xFFF2F3F5 : 0xFF202328),
-      muted: Color(dark ? 0xFFB4BAC3 : 0xFF5B626C),
+      text: Color(dark ? 0xFFF8FAFC : 0xFF102033),
+      muted: Color(dark ? 0xFFBBC6D7 : 0xFF465B74),
       success: accent(const Color(0xFF237A4B)),
       warning: accent(const Color(0xFF936000)),
       error: accent(const Color(0xFFBA3542)),
@@ -216,7 +223,7 @@ ThemeData buildTonyoTheme({
   final palette = TonyoPalette.resolve(brightness, colors);
   final dark = brightness == Brightness.dark;
   Color tint(Color color) =>
-      Color.alphaBlend(color.withValues(alpha: .12), palette.surface);
+      Color.alphaBlend(color.withValues(alpha: .18), palette.surface);
   final scheme = ColorScheme(
     brightness: brightness,
     primary: palette.primary,
@@ -247,8 +254,8 @@ ThemeData buildTonyoTheme({
     onErrorContainer: palette.error,
     outline: palette.muted,
     outlineVariant: palette.border,
-    inverseSurface: dark ? const Color(0xFFF2F3F5) : const Color(0xFF202328),
-    onInverseSurface: dark ? const Color(0xFF202328) : const Color(0xFFF2F3F5),
+    inverseSurface: dark ? const Color(0xFFF8FAFC) : const Color(0xFF102033),
+    onInverseSurface: dark ? const Color(0xFF102033) : const Color(0xFFF8FAFC),
     inversePrimary: TonyoPalette.resolve(
       dark ? Brightness.light : Brightness.dark,
       colors,

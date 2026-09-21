@@ -11,6 +11,12 @@ hex values, preview them, and **Apply** or **Cancel**. Shades adjust for
 readability; backgrounds and status colors stay consistent. Your last custom
 pair is retained when you try a preset.
 
+Dark mode uses a black background with near-black cards, brighter accents, and
+clearer borders. Light mode uses cool, pale backgrounds and white cards. The
+Classic palette pairs royal blue with teal; the other presets use richer,
+distinct accent pairs. Readability adjustments preserve each accent's hue and
+saturation.
+
 **Profile → Appearance → Font** offers **System default**, **Inter**,
 **Source Sans 3**, and **Lato**. Each option previews its own typeface, applies
 across the app immediately, and keeps the existing text sizes and device text
