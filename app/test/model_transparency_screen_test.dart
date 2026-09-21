@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'navigation_test_support.dart';
 import 'privacy_test_support.dart';
 
 final _now = DateTime.utc(2026, 9, 7, 17);
@@ -427,6 +428,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('model-transparency-setting')),
       250,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.ensureVisible(
       find.byKey(const Key('model-transparency-setting')),

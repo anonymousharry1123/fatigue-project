@@ -17,14 +17,14 @@ class TonyoCard extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: color ?? TonyoPalette.of(context).surface,
+  Widget build(BuildContext context) => Material(
+    color: color ?? TonyoPalette.of(context).surface,
+    clipBehavior: Clip.antiAlias,
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: TonyoPalette.of(context).border),
+      side: BorderSide(color: TonyoPalette.of(context).border),
     ),
-    child: child,
+    child: Padding(padding: padding, child: child),
   );
 }
 

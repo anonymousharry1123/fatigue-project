@@ -2,7 +2,15 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
+App icon: [Tonyo master PNG](assets/branding/tonyo-app-icon.png) ·
+[design brief and generation prompts](assets/branding/tonyo-icon-design.md).
+
 ## Appearance
+
+Swipe left or right to move between **Today**, **Forecast**, **Add**, **Coach**,
+and **Profile**, or select a destination in the bottom navigation. Each visited
+tab keeps its scroll position and selections. Buttons show hover and press
+feedback; press animations respect the device's reduced-motion setting.
 
 Open **Profile → Appearance** to choose **Follow device**, **Light**, or **Dark**
 and one of six themes: Classic, Ocean, Forest, Clay, Plum, and Sunset.

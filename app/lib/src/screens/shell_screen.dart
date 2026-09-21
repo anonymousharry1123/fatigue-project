@@ -25,11 +25,20 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _index = widget.coachOpenRequest == null ? 0 : 3;
+    _pageController = PageController(initialPage: _index);
     if (widget.coachOpenRequest != null) _openCoachFromNotification();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -46,6 +55,7 @@ class _ShellScreenState extends State<ShellScreen> {
     final request = widget.coachOpenRequest;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.coachOpenRequest != request) return;
+      if (_pageController.hasClients) _pageController.jumpToPage(3);
       // A notification may arrive while a detail page or a dialog is open.
       // Return to the existing shell instead of stacking another private page.
       widget.notificationNavigation?.revealShell(
@@ -62,11 +72,32 @@ class _ShellScreenState extends State<ShellScreen> {
     const ProfileScreen(),
   ];
 
-  void _selectTab(int index) => setState(() => _index = index);
+  void _selectTab(int index) {
+    if (_index != index) setState(() => _index = index);
+    // Direct navigation should reach its destination without sweeping through
+    // unrelated tabs. Touch and trackpad swipes follow the drag between pages.
+    _pageController.jumpToPage(index);
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: IndexedStack(index: _index, children: screens),
+    body: PageView(
+      key: const Key('main-tab-pages'),
+      controller: _pageController,
+      onPageChanged: (index) {
+        if (_index != index) setState(() => _index = index);
+      },
+      children: [
+        for (final (index, screen) in screens.indexed)
+          _PersistentTab(
+            key: ValueKey('main-tab-$index'),
+            child: TickerMode(
+              enabled: index == _index,
+              child: ExcludeFocus(excluding: index != _index, child: screen),
+            ),
+          ),
+      ],
+    ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: _index,
       onDestinationSelected: _selectTab,
@@ -108,6 +139,29 @@ class _ShellScreenState extends State<ShellScreen> {
       ],
     ),
   );
+}
+
+/// Keep each visited tab's filters, scroll position, and local state while the
+/// pager removes its offscreen render objects from the viewport.
+class _PersistentTab extends StatefulWidget {
+  const _PersistentTab({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PersistentTab> createState() => _PersistentTabState();
+}
+
+class _PersistentTabState extends State<_PersistentTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }
 
 /// Tracks the root navigator so notification routing can respect PopScope and

@@ -11,6 +11,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'navigation_test_support.dart';
 import 'privacy_test_support.dart';
 import 'font_test_support.dart';
 
@@ -57,7 +58,7 @@ Future<void> _tapChoice(WidgetTester tester, Key key) async {
   await tester.scrollUntilVisible(
     finder,
     200,
-    scrollable: find.byType(Scrollable).first,
+    scrollable: activeVerticalScrollable(),
   );
   await tester.ensureVisible(finder);
   await tester.tap(finder);
@@ -132,7 +133,7 @@ void main() {
             mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
           );
           tester
-              .state<ScrollableState>(find.byType(Scrollable).first)
+              .state<ScrollableState>(activeVerticalScrollable())
               .position
               .jumpTo(0);
           await tester.pumpAndSettle();

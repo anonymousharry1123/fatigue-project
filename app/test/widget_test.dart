@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'navigation_test_support.dart';
 import 'privacy_test_support.dart';
 
 void main() {
@@ -71,7 +72,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Today’s plan'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Today’s plan'),
+      200,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Today’s plan'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
@@ -91,6 +96,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Notifications').hitTestable(),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
@@ -123,6 +129,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('outcome-learning-setting')).hitTestable(),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('outcome-learning-setting')));
     await tester.pumpAndSettle();
@@ -238,6 +245,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('health-source-card')),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('health-source-card')));
     await tester.pumpAndSettle();
@@ -253,7 +261,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('health-connect-button')),
       200,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('health-connect-button')));
     await tester.pumpAndSettle();
@@ -276,6 +284,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('screen-time-source-card')),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('screen-time-source-card')));
     await tester.pumpAndSettle();
@@ -288,7 +297,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('screen-time-report-button')),
       200,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('screen-time-report-button')));
     await tester.pumpAndSettle();
@@ -360,13 +369,14 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('health-source-card')),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('health-source-card')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('health-sync-button')),
       200,
-      scrollable: find.byType(Scrollable).last,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('health-sync-button')));
     await tester.pumpAndSettle();
@@ -399,14 +409,14 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Stress'),
       200,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: activeVerticalScrollable(),
     );
     expect(find.text('Mood'), findsOneWidget);
     expect(find.text('Stress'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Check-in history'),
       200,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: activeVerticalScrollable(),
     );
     expect(find.text('Check-in history'), findsOneWidget);
     await tester.pageBack();
@@ -423,7 +433,11 @@ void main() {
     await _scrollMainListTo(tester, find.text('AI Coach'), 250);
     await tester.tap(find.text('AI Coach'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Today’s plan'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Today’s plan'),
+      200,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Today’s plan'), findsOneWidget);
   });
 
@@ -483,12 +497,17 @@ void main() {
     expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
     expect(find.textContaining('6/6 cognitive inputs'), findsOneWidget);
     expect(find.textContaining('First Cognitive Score'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Today’s score factors'), 250);
+    await tester.scrollUntilVisible(
+      find.text('Today’s score factors'),
+      250,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Today’s score factors'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('energy-score-explanation')),
       250,
+      scrollable: activeVerticalScrollable(),
     );
     expect(find.textContaining('This wellness estimate'), findsOneWidget);
     expect(find.text('WHAT SHAPED THIS ESTIMATE'), findsOneWidget);
@@ -574,6 +593,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.textContaining('Calculated on this device'),
       250,
+      scrollable: activeVerticalScrollable(),
     );
     expect(find.textContaining('Calculated on this device'), findsOneWidget);
     expect(find.textContaining('fixture data'), findsNothing);
@@ -620,11 +640,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Key windows'), 250);
+    await tester.scrollUntilVisible(
+      find.text('Key windows'),
+      250,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Key windows'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('forecast-window-peak')),
       250,
+      scrollable: activeVerticalScrollable(),
     );
     expect(find.text('Peak focus'), findsOneWidget);
     expect(find.text('LINKED EVIDENCE'), findsWidgets);
@@ -632,9 +657,17 @@ void main() {
       find.byKey(const Key('forecast-evidence-signal-sleep-live')),
       findsWidgets,
     );
-    await tester.scrollUntilVisible(find.text('Predicted crash'), 250);
+    await tester.scrollUntilVisible(
+      find.text('Predicted crash'),
+      250,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Predicted crash'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Recovery window'), 250);
+    await tester.scrollUntilVisible(
+      find.text('Recovery window'),
+      250,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('Recovery window'), findsOneWidget);
     expect(find.textContaining('Linked signal'), findsWidgets);
     expect(find.textContaining('Linked check-in'), findsWidgets);
@@ -710,20 +743,33 @@ void main() {
       expect(find.textContaining('Morning-to-evening plan'), findsOneWidget);
       expect(find.textContaining('optional reminders'), findsOneWidget);
       expect(find.text('RECOVERY FIRST'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Wellness flags'), 180);
+      await tester.scrollUntilVisible(
+        find.text('Wellness flags'),
+        180,
+        scrollable: activeVerticalScrollable(),
+      );
       expect(find.text('Wellness flags'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Short-sleep pattern'), 180);
+      await tester.scrollUntilVisible(
+        find.text('Short-sleep pattern'),
+        180,
+        scrollable: activeVerticalScrollable(),
+      );
       expect(find.text('Short-sleep pattern'), findsOneWidget);
       expect(find.textContaining('fixture'), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(Key('dismiss-risk-$alertId')),
         180,
+        scrollable: activeVerticalScrollable(),
       );
       await tester.tap(find.byKey(Key('dismiss-risk-$alertId')));
       await tester.pumpAndSettle();
       expect(find.byKey(Key('risk-alert-$alertId')), findsNothing);
 
-      await tester.scrollUntilVisible(find.textContaining('Protect a '), 220);
+      await tester.scrollUntilVisible(
+        find.textContaining('Protect a '),
+        220,
+        scrollable: activeVerticalScrollable(),
+      );
       expect(find.textContaining('focus block'), findsOneWidget);
       expect(find.textContaining('WINDOW'), findsWidgets);
       expect(find.byIcon(Icons.link_rounded), findsWidgets);
@@ -734,6 +780,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.byKey(Key('helpful-recommendation-$focusId')),
         100,
+        scrollable: activeVerticalScrollable(),
       );
       await Scrollable.ensureVisible(
         tester.element(find.byKey(Key('helpful-recommendation-$focusId'))),
@@ -754,12 +801,14 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Taper stimulation before bed'),
         220,
+        scrollable: activeVerticalScrollable(),
       );
       expect(find.text('Taper stimulation before bed'), findsOneWidget);
       expect(find.byKey(Key('dismiss-recommendation-$taperId')), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(Key('not-helpful-recommendation-$taperId')),
         100,
+        scrollable: activeVerticalScrollable(),
       );
       await Scrollable.ensureVisible(
         tester.element(find.byKey(Key('not-helpful-recommendation-$taperId'))),
@@ -783,6 +832,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.textContaining('general wellness only'),
         220,
+        scrollable: activeVerticalScrollable(),
       );
       expect(find.textContaining('does not diagnose'), findsOneWidget);
     },
@@ -905,7 +955,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sleep log saved.'), findsOneWidget);
     expect(controller.sleepLogs, hasLength(1));
-    await tester.scrollUntilVisible(find.textContaining('quality 3/5'), 250);
+    await tester.scrollUntilVisible(
+      find.textContaining('quality 3/5'),
+      250,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.textContaining('quality 3/5'), findsOneWidget);
   });
 
@@ -1063,18 +1117,7 @@ Future<void> _scrollMainListTo(
   Finder target,
   double delta,
 ) async {
-  // Responsive tab controls and charts can add horizontal Scrollables. Keep
-  // navigation gestures on the visible page's vertical ListView.
-  final mainScrollable = find
-      .descendant(
-        of: find.byType(ListView).first,
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              widget.axisDirection == AxisDirection.down,
-        ),
-      )
-      .first;
+  final mainScrollable = activeVerticalScrollable();
   await tester.scrollUntilVisible(target, delta, scrollable: mainScrollable);
   await Scrollable.ensureVisible(tester.element(target.first), alignment: .5);
   await tester.pumpAndSettle();

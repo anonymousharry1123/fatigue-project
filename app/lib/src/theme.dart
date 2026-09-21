@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'typography.dart';
+import 'widgets/button_feedback.dart';
 
 /// Material 3 on Android stretches scroll content at the edge; disable that.
 class TonyoScrollBehavior extends MaterialScrollBehavior {
@@ -265,12 +266,34 @@ ThemeData buildTonyoTheme({
   final rounded = RoundedRectangleBorder(
     borderRadius: BorderRadius.circular(12),
   );
+  final buttonFeedback = ButtonStyle(
+    backgroundBuilder: buildTonyoButtonFeedback,
+    animationDuration: const Duration(milliseconds: 160),
+    splashFactory: InkRipple.splashFactory,
+    enableFeedback: true,
+  );
+  final raisedButtonFeedback = buttonFeedback.copyWith(
+    elevation: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled) ||
+          states.contains(WidgetState.pressed)) {
+        return 0;
+      }
+      if (states.contains(WidgetState.hovered)) return 3;
+      if (states.contains(WidgetState.focused)) return 1;
+      return 0;
+    }),
+  );
   return ThemeData(
     brightness: brightness,
     colorScheme: scheme,
     useMaterial3: true,
     fontFamily: font.family,
     scaffoldBackgroundColor: palette.background,
+    splashFactory: InkRipple.splashFactory,
+    splashColor: palette.primary.withValues(alpha: .22),
+    highlightColor: palette.primary.withValues(alpha: .10),
+    hoverColor: palette.primary.withValues(alpha: .10),
+    focusColor: palette.primary.withValues(alpha: .16),
     extensions: [palette],
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
@@ -326,20 +349,27 @@ ThemeData buildTonyoTheme({
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 48),
         shape: rounded,
-      ),
+      ).merge(raisedButtonFeedback),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        shape: rounded,
+      ).merge(raisedButtonFeedback),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(48, 48),
         shape: rounded,
-      ),
+      ).merge(buttonFeedback),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         minimumSize: const Size(48, 48),
         shape: rounded,
-      ),
+      ).merge(buttonFeedback),
     ),
+    iconButtonTheme: IconButtonThemeData(style: buttonFeedback),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: palette.surfaceRaised,
       contentTextStyle: TextStyle(color: palette.text, fontFamily: font.family),
@@ -360,6 +390,19 @@ ThemeData buildTonyoTheme({
       backgroundColor: palette.surface,
       surfaceTintColor: Colors.transparent,
       indicatorColor: scheme.primaryContainer,
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return Colors.transparent;
+        if (states.contains(WidgetState.pressed)) {
+          return palette.primary.withValues(alpha: .20);
+        }
+        if (states.contains(WidgetState.focused)) {
+          return palette.primary.withValues(alpha: .18);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return palette.primary.withValues(alpha: .12);
+        }
+        return Colors.transparent;
+      }),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           color: states.contains(WidgetState.selected)

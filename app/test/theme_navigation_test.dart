@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'navigation_test_support.dart';
 import 'privacy_test_support.dart';
 
 void main() {
@@ -31,6 +32,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('appearance-setting')),
       200,
+      scrollable: activeVerticalScrollable(),
     );
     await tester.tap(find.byKey(const Key('appearance-setting')));
     await tester.pumpAndSettle();
