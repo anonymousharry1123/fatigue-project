@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import '../theme_controller.dart';
+import '../typography.dart';
 
 class AppearanceScreen extends StatelessWidget {
   const AppearanceScreen({super.key});
@@ -57,6 +58,19 @@ class AppearanceScreen extends StatelessWidget {
               _SaveError(controller: controller),
             ],
             const SizedBox(height: 24),
+            Card(
+              child: ListTile(
+                key: const Key('appearance-font-picker'),
+                leading: const Icon(Icons.text_fields_rounded),
+                title: const Text('Font'),
+                subtitle: Text(preferences.font.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(builder: (_) => const _FontScreen()),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             Text('Theme', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             for (final preset in tonyoThemePresets) ...[
@@ -98,25 +112,174 @@ class AppearanceScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Future<void> _saveSelection(
-    BuildContext context,
-    ThemeController controller,
-    Future<bool> save,
-  ) async {
-    if (await save || !context.mounted || controller.error == null) return;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(controller.error!),
-          action: SnackBarAction(
-            label: 'Retry',
-            onPressed: () =>
-                _saveSelection(context, controller, controller.retry()),
+Future<void> _saveSelection(
+  BuildContext context,
+  ThemeController controller,
+  Future<bool> save,
+) async {
+  if (await save || !context.mounted || controller.error == null) return;
+  ScaffoldMessenger.of(context)
+    ..clearSnackBars()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(controller.error!),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () =>
+              _saveSelection(context, controller, controller.retry()),
+        ),
+      ),
+    );
+}
+
+class _FontScreen extends StatelessWidget {
+  const _FontScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ThemeScope.of(context);
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Font')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(
+              'Clear, professional fonts for your daily insights.',
+              style: theme.textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 20),
+            Text('Preview', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Card(
+              key: const Key('appearance-font-preview'),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Your day', style: theme.textTheme.headlineMedium),
+                    const SizedBox(height: 8),
+                    const Text('A clear view of your energy and recovery.'),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 24,
+                      runSpacing: 12,
+                      children: [
+                        Text(
+                          'Energy 82 / 100',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Text('Sleep 7.5 h', style: theme.textTheme.titleMedium),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            for (final font in TonyoFont.values) ...[
+              _FontChoice(
+                font: font,
+                selected: controller.preferences.font == font,
+                onTap: () => _saveSelection(
+                  context,
+                  controller,
+                  controller.setFont(font),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (controller.error != null) ...[
+              const SizedBox(height: 6),
+              _SaveError(controller: controller),
+            ],
+            if (controller.isSaving)
+              Semantics(
+                liveRegion: true,
+                child: const Text('Saving appearance…'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FontChoice extends StatelessWidget {
+  const _FontChoice({
+    required this.font,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TonyoFont font;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Build each sample from its own family so System default resets to the
+    // platform font even while a bundled font is selected for the app.
+    final sample = buildTonyoTheme(
+      brightness: theme.brightness,
+      colors: ThemeScope.of(context).preferences.colors,
+      font: font,
+    ).textTheme;
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        inMutuallyExclusiveGroup: true,
+        child: InkWell(
+          key: ValueKey('appearance-font-${font.name}'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(font.label, style: sample.titleMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        font.description,
+                        style: sample.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: selected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -328,6 +491,7 @@ class _CustomThemeScreenState extends State<_CustomThemeScreen> {
                 data: buildTonyoTheme(
                   brightness: Theme.of(context).brightness,
                   colors: _draft,
+                  font: widget.controller.preferences.font,
                 ),
                 child: const _ThemePreview(),
               ),

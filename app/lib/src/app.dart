@@ -141,10 +141,12 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
               scrollBehavior: const TonyoScrollBehavior(),
               theme: buildTonyoTheme(
                 colors: themeController.preferences.colors,
+                font: themeController.preferences.font,
               ),
               darkTheme: buildTonyoTheme(
                 brightness: Brightness.dark,
                 colors: themeController.preferences.colors,
+                font: themeController.preferences.font,
               ),
               themeMode: themeController.preferences.mode,
               builder: (context, child) =>

@@ -5,6 +5,7 @@ import 'package:app/src/screens/activity_log_screen.dart';
 import 'package:app/src/screens/appearance_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/theme_controller.dart';
+import 'package:app/src/typography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,6 +79,9 @@ void main() {
 
     for (final mode in [ThemeMode.dark, ThemeMode.light]) {
       await appearance.setMode(mode);
+      await appearance.setFont(
+        mode == ThemeMode.dark ? TonyoFont.inter : TonyoFont.sourceSans3,
+      );
       await appearance.setCustomColors(
         const TonyoColorPair(main: Colors.white, secondary: Colors.white),
       );
@@ -88,6 +92,13 @@ void main() {
         '2.5',
       );
       expect(tester.widget<TextFormField>(fields.at(1)).controller!.text, '3');
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText).first)
+            .style
+            .fontFamily,
+        appearance.preferences.font.family,
+      );
       expect(
         Theme.of(tester.element(find.byType(ActivityLogScreen))).brightness,
         mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
@@ -115,6 +126,7 @@ void main() {
       );
       await appearance.setMode(ThemeMode.dark);
       await appearance.setCustomColors(pair);
+      await appearance.setFont(TonyoFont.lato);
       final expected = appearance.preferences;
 
       await app.signOut();

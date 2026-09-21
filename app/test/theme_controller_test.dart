@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:app/src/theme.dart';
 import 'package:app/src/theme_controller.dart';
+import 'package:app/src/typography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,6 +42,52 @@ class _MemoryStore implements ThemePreferencesStore {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('legacy and unknown fonts preserve the saved mode and colors', () {
+    const saved = ThemePreferences(
+      mode: ThemeMode.dark,
+      presetId: 'custom',
+      customColors: TonyoColorPair(
+        main: Color(0xff123456),
+        secondary: Color(0xff987654),
+      ),
+    );
+    final legacy = jsonDecode(saved.encode()) as Map<String, dynamic>
+      ..remove('font');
+    expect(ThemePreferences.decode(jsonEncode(legacy)), saved);
+    for (final invalid in <Object?>['unknown', '', null, 12, <String>[]]) {
+      expect(
+        ThemePreferences.decode(jsonEncode({...legacy, 'font': invalid})),
+        saved,
+        reason: 'An unsupported font must not discard valid appearance choices',
+      );
+    }
+  });
+
+  test(
+    'every font persists across restart without changing other choices',
+    () async {
+      final store = _MemoryStore();
+      final controller = ThemeController(store: store);
+      addTearDown(controller.dispose);
+      await controller.setMode(ThemeMode.dark);
+      await controller.setPreset('forest');
+      for (final font in [...TonyoFont.values.skip(1), TonyoFont.system]) {
+        expect(await controller.setFont(font), isTrue);
+        expect(controller.preferences.font, font);
+        expect(controller.preferences.mode, ThemeMode.dark);
+        expect(controller.preferences.presetId, 'forest');
+        final encoded = jsonDecode(store.value!) as Map<String, dynamic>;
+        expect(encoded['version'], 1);
+        expect(encoded['font'], font.name);
+        final restarted = ThemeController(store: store);
+        addTearDown(restarted.dispose);
+        await restarted.load();
+        expect(restarted.preferences, controller.preferences);
+        expect(restarted.preferences.font, font);
+      }
+    },
+  );
 
   test('missing and malformed preferences fall back entirely', () async {
     const expected = ThemePreferences();
@@ -114,13 +161,20 @@ void main() {
       final first = controller.setMode(ThemeMode.dark);
       final second = controller.setPreset('ocean');
       final third = controller.setPreset('plum');
+      final fourth = controller.setFont(TonyoFont.inter);
       await Future<void>.delayed(Duration.zero);
       expect(controller.preferences.mode, ThemeMode.dark);
       expect(controller.preferences.presetId, 'plum');
+      expect(controller.preferences.font, TonyoFont.inter);
       expect(controller.isSaving, isTrue);
       expect(store.writes.length, 1);
       blocked.complete();
-      expect(await Future.wait([first, second, third]), [true, true, true]);
+      expect(await Future.wait([first, second, third, fourth]), [
+        true,
+        true,
+        true,
+        true,
+      ]);
       expect(store.maximumConcurrentWrites, 1);
       expect(ThemePreferences.decode(store.value), controller.preferences);
       expect(controller.isSaving, isFalse);
@@ -134,20 +188,22 @@ void main() {
       final controller = ThemeController(store: store);
       addTearDown(controller.dispose);
       await controller.setPreset('forest');
+      await controller.setFont(TonyoFont.inter);
       final saved = controller.preferences;
       final blocked = Completer<void>();
       store.blockedWrite = blocked;
       store.failWrite = true;
       final first = controller.setMode(ThemeMode.dark);
       final second = controller.setPreset('sunset');
+      final third = controller.setFont(TonyoFont.lato);
       final desired = controller.preferences;
       blocked.complete();
-      expect(await Future.wait([first, second]), [false, false]);
+      expect(await Future.wait([first, second, third]), [false, false, false]);
       expect(controller.preferences, saved);
       expect(ThemePreferences.decode(store.value), saved);
       expect(controller.error, contains('Could not save'));
       expect(controller.isSaving, isFalse);
-      expect(store.writes.length, 2);
+      expect(store.writes.length, 3);
       store.failWrite = false;
       expect(await controller.retry(), isTrue);
       expect(controller.preferences, desired);

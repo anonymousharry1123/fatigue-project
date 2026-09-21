@@ -11,9 +11,16 @@ hex values, preview them, and **Apply** or **Cancel**. Shades adjust for
 readability; backgrounds and status colors stay consistent. Your last custom
 pair is retained when you try a preset.
 
+**Profile → Appearance → Font** offers **System default**, **Inter**,
+**Source Sans 3**, and **Lato**. Each option previews its own typeface, applies
+across the app immediately, and keeps the existing text sizes and device text
+scaling. The added fonts are bundled for offline use.
+
 Appearance saves on this device, survives sign-out, and is separate from account
 sync and backups. New or invalid settings default to **Follow device + Classic**.
-Failed saves restore the last saved appearance and offer **Retry**.
+Failed saves restore the last saved appearance and offer **Retry**. Existing
+appearance settings retain their colors and mode and use **System default**
+until a font is selected.
 
 For local visual QA, run
 `flutter test --dart-define=THEME_SCREENSHOTS=true test/theme_visual_review_test.dart`.

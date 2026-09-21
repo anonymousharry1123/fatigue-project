@@ -1,8 +1,13 @@
+import 'dart:ui' show Tristate;
+
 import 'package:app/src/screens/appearance_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/theme_controller.dart';
+import 'package:app/src/typography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'font_test_support.dart';
 
 class _Store implements ThemePreferencesStore {
   String? value;
@@ -21,10 +26,14 @@ Widget _app(ThemeController controller, {double textScale = 1}) => ThemeScope(
   child: ListenableBuilder(
     listenable: controller,
     builder: (context, _) => MaterialApp(
-      theme: buildTonyoTheme(colors: controller.preferences.colors),
+      theme: buildTonyoTheme(
+        colors: controller.preferences.colors,
+        font: controller.preferences.font,
+      ),
       darkTheme: buildTonyoTheme(
         brightness: Brightness.dark,
         colors: controller.preferences.colors,
+        font: controller.preferences.font,
       ),
       themeMode: controller.preferences.mode,
       builder: (context, child) => MediaQuery(
@@ -60,7 +69,59 @@ Future<void> _openCustom(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openFonts(WidgetTester tester) async {
+  const key = Key('appearance-font-picker');
+  await _show(tester, key);
+  await tester.tap(find.byKey(key));
+  await tester.pumpAndSettle();
+  expect(find.text('Font'), findsOneWidget);
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadAppearanceFonts);
+
+  testWidgets('failed font choice rolls back and visible Retry saves it', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final store = _Store();
+    final controller = ThemeController(store: store);
+    addTearDown(controller.dispose);
+    await controller.setFont(TonyoFont.inter);
+    await tester.pumpWidget(_app(controller));
+    await _openFonts(tester);
+    store.fail = true;
+    const choice = Key('appearance-font-lato');
+    await _show(tester, choice);
+    await tester.tap(find.byKey(choice));
+    await tester.pumpAndSettle();
+    expect(controller.preferences.font, TonyoFont.inter);
+    expect(ThemePreferences.decode(store.value).font, TonyoFont.inter);
+    expect(
+      tester.getSemantics(find.byKey(choice)).flagsCollection.isSelected,
+      Tristate.isFalse,
+    );
+    final retry = find.descendant(
+      of: find.byType(SnackBar),
+      matching: find.text('Retry'),
+    );
+    expect(retry.hitTestable(), findsOneWidget);
+    store.fail = false;
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(controller.preferences.font, TonyoFont.lato);
+    expect(ThemePreferences.decode(store.value).font, TonyoFont.lato);
+    expect(controller.error, isNull);
+    expect(
+      tester.getSemantics(find.byKey(choice)).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+    expect(find.text('Font'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
   testWidgets('a failed lower preset shows a visible Retry without scrolling', (
     tester,
   ) async {
@@ -232,6 +293,39 @@ void main() {
   });
 
   for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('font picker fits 320px at 200% text in ${mode.name}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = ThemeController(
+        store: _Store(),
+        initialPreferences: ThemePreferences(mode: mode),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(_app(controller, textScale: 2));
+      await _openFonts(tester);
+      for (final font in [...TonyoFont.values.skip(1), TonyoFont.system]) {
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .jumpTo(0);
+        await tester.pumpAndSettle();
+        final key = Key('appearance-font-${font.name}');
+        await _show(tester, key);
+        await tester.tap(find.byKey(key));
+        await tester.pumpAndSettle();
+        expect(controller.preferences.font, font);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Appearance'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'Appearance and custom editor fit 320px at 200% text in ${mode.name}',
       (tester) async {

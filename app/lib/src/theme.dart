@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'typography.dart';
+
 /// Material 3 on Android stretches scroll content at the edge; disable that.
 class TonyoScrollBehavior extends MaterialScrollBehavior {
   const TonyoScrollBehavior();
@@ -209,6 +211,7 @@ class TonyoPalette extends ThemeExtension<TonyoPalette> {
 ThemeData buildTonyoTheme({
   Brightness brightness = Brightness.light,
   TonyoColorPair colors = defaultTonyoColors,
+  TonyoFont font = TonyoFont.system,
 }) {
   final palette = TonyoPalette.resolve(brightness, colors);
   final dark = brightness == Brightness.dark;
@@ -259,6 +262,7 @@ ThemeData buildTonyoTheme({
     brightness: brightness,
     colorScheme: scheme,
     useMaterial3: true,
+    fontFamily: font.family,
     scaffoldBackgroundColor: palette.background,
     extensions: [palette],
     textTheme: const TextTheme(
@@ -331,7 +335,7 @@ ThemeData buildTonyoTheme({
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: palette.surfaceRaised,
-      contentTextStyle: TextStyle(color: palette.text),
+      contentTextStyle: TextStyle(color: palette.text, fontFamily: font.family),
       actionTextColor: palette.primary,
       behavior: SnackBarBehavior.floating,
     ),
@@ -358,6 +362,7 @@ ThemeData buildTonyoTheme({
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
+          fontFamily: font.family,
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: states.contains(WidgetState.selected)

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'theme.dart';
+import 'typography.dart';
 
 const themePreferencesKey = 'tonyo_theme_v1';
 
@@ -48,11 +49,13 @@ class ThemePreferences {
     this.mode = ThemeMode.system,
     this.presetId = 'classic',
     this.customColors = defaultTonyoColors,
+    this.font = TonyoFont.system,
   });
 
   final ThemeMode mode;
   final String presetId;
   final TonyoColorPair customColors;
+  final TonyoFont font;
 
   TonyoColorPair get colors => presetId == 'custom'
       ? customColors
@@ -62,23 +65,27 @@ class ThemePreferences {
     ThemeMode? mode,
     String? presetId,
     TonyoColorPair? customColors,
+    TonyoFont? font,
   }) => ThemePreferences(
     mode: mode ?? this.mode,
     presetId: presetId ?? this.presetId,
     customColors: customColors ?? this.customColors,
+    font: font ?? this.font,
   );
 
   String encode() => jsonEncode({
     'version': 1,
     'mode': mode.name,
     'presetId': presetId,
+    'font': font.name,
     'customColors': {
       'main': customColors.main.toARGB32(),
       'secondary': customColors.secondary.toARGB32(),
     },
   });
 
-  /// Reject the entire envelope if any field is invalid or from a newer schema.
+  /// Preserve legacy appearance; a missing or unknown font uses the device font.
+  /// Invalid required fields or a newer schema still reject the envelope.
   static ThemePreferences decode(String? source) {
     if (source == null) return const ThemePreferences();
     try {
@@ -100,6 +107,10 @@ class ThemePreferences {
       return ThemePreferences(
         mode: mode.single,
         presetId: presetId,
+        font: TonyoFont.values.firstWhere(
+          (font) => font.name == value['font'],
+          orElse: () => TonyoFont.system,
+        ),
         customColors: TonyoColorPair(
           main: Color(custom['main'] as int),
           secondary: Color(custom['secondary'] as int),
@@ -121,10 +132,11 @@ class ThemePreferences {
       other is ThemePreferences &&
       mode == other.mode &&
       presetId == other.presetId &&
+      font == other.font &&
       customColors == other.customColors;
 
   @override
-  int get hashCode => Object.hash(mode, presetId, customColors);
+  int get hashCode => Object.hash(mode, presetId, customColors, font);
 }
 
 class ThemeController extends ChangeNotifier {
@@ -172,6 +184,9 @@ class ThemeController extends ChangeNotifier {
 
   Future<bool> setMode(ThemeMode mode) =>
       _save(_preferences.copyWith(mode: mode));
+
+  Future<bool> setFont(TonyoFont font) =>
+      _save(_preferences.copyWith(font: font));
 
   Future<bool> setPreset(String presetId) {
     if (!ThemePreferences._validPreset(presetId)) {

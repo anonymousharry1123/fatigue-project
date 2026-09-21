@@ -288,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             key: const Key('appearance-setting'),
             icon: Icons.palette_outlined,
             title: 'Appearance',
-            subtitle: 'Light, dark, and theme colors',
+            subtitle: 'Light, dark, colors, and fonts',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const AppearanceScreen()),
             ),

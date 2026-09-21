@@ -3,6 +3,7 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/screens/shell_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/theme_controller.dart';
+import 'package:app/src/typography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,6 +66,7 @@ void main() {
       ..value = const ThemePreferences(
         mode: ThemeMode.dark,
         presetId: 'forest',
+        font: TonyoFont.sourceSans3,
       ).encode();
     final appearance = ThemeController(store: store);
     await appearance.load();
@@ -78,6 +80,7 @@ void main() {
     );
     final context = tester.element(find.byType(Scaffold).first);
     expect(Theme.of(context).brightness, Brightness.dark);
+    expect(Theme.of(context).textTheme.bodyMedium!.fontFamily, 'SourceSans3');
     expect(
       TonyoPalette.of(context).primary,
       TonyoPalette.resolve(
