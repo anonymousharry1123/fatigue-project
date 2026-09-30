@@ -2,8 +2,9 @@
 #curriculum https://quest.codingmind.com/view/B209904E4B074FB19F3936BB92
 A new Flutter project.
 
-App icon: [Tonyo master PNG](assets/branding/tonyo-app-icon.png) ·
-[design brief and generation prompts](assets/branding/tonyo-icon-design.md).
+App icon: [Tonyo wave icon](assets/branding/tonyo-app-icon.png) ·
+[source, platform exports, and preparation prompt](assets/branding/tonyo-icon-design.md).
+Installed in the Android, iOS, macOS, Windows, and web launcher assets.
 
 ## Appearance
 
