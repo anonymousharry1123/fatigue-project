@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'activity_sync_logic.dart';
+import 'evidence_provenance.dart';
 import 'models.dart';
 import 'personal_baseline_logic.dart';
 import 'screen_time_logic.dart';
@@ -539,13 +540,7 @@ abstract final class FatigueEngine {
       evidenceSources: List.unmodifiable(
         sorted.map((reading) => reading.source).toSet(),
       ),
-      containsDemoEvidence: sorted.any(
-        (reading) => _hasDemoMarker([
-          reading.id,
-          reading.groupId ?? '',
-          reading.note ?? '',
-        ]),
-      ),
+      containsDemoEvidence: sorted.any(EvidenceProvenance.signalIsDemo),
     );
   }
 
@@ -568,16 +563,11 @@ abstract final class FatigueEngine {
     evidenceAt: checkIn.timestamp,
     source: SignalSource.manual,
     evidenceSources: const [SignalSource.manual],
-    containsDemoEvidence: _hasDemoMarker([checkIn.id, checkIn.note]),
+    containsDemoEvidence: EvidenceProvenance.hasDemoMarker([
+      checkIn.id,
+      checkIn.note,
+    ]),
   );
-
-  static final _demoMarker = RegExp(
-    r'(^|[^a-z])(seed(?:ed)?|synthetic|fake|demo|fixture|cohort)([^a-z]|$)',
-    caseSensitive: false,
-  );
-
-  static bool _hasDemoMarker(Iterable<String> values) =>
-      values.any(_demoMarker.hasMatch);
 
   static double _signalFreshness(
     List<SignalReading> readings, {

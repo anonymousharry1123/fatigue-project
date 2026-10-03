@@ -1,4 +1,7 @@
 import 'package:app/src/app_controller.dart';
+import 'package:app/src/cloud_repository.dart';
+import 'package:app/src/cloud_schema.dart';
+import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,4 +128,64 @@ void main() {
       expect(app.scheduledNotificationCount, 0);
     },
   );
+
+  test('reload rejects cloud curve after same-ID observation edit', () async {
+    const uid = 'synthetic-cache-owner';
+    final repository = MemoryCloudRepository(signedInUid: uid, now: () => now);
+    CloudUserState state(double mood) => CloudUserState(
+      profile: const UserProfile(),
+      accountEmail: 'cache@example.test',
+      onboardingComplete: true,
+      notificationsEnabled: false,
+      outcomeConsent: false,
+      healthAuthorized: false,
+      signals: const [],
+      checkIns: [check(mood)],
+      privacyConsent: testAdultPrivacyConsent,
+      migrationVersion: localMigrationVersion,
+    );
+    AppController create() {
+      final app = AppController(
+        accountAuth: MemoryAccountAuth(
+          session: const AccountSession(uid: uid, email: 'cache@example.test'),
+        ),
+        cloudRepository: repository,
+        clock: () => now,
+      );
+      addTearDown(app.dispose);
+      return app;
+    }
+
+    repository.seed(uid, state(3));
+    final first = create();
+    await first.load();
+    final oldEnergy = first
+        .forecastFor(now)
+        .map((point) => point.energy)
+        .toList();
+    expect(oldEnergy, isNotEmpty);
+
+    // Another device's raw edit can be committed before its derived writes.
+    // The ID and timestamp remain stable, so identity alone is insufficient.
+    repository.seed(uid, state(9));
+    final restarted = create();
+    await restarted.load();
+    final expected = FatigueEngine.forecast(
+      restarted.score,
+      now,
+      signals: restarted.signals,
+      checkIns: restarted.checkIns,
+      profile: restarted.profile,
+      generatedAt: now,
+    );
+    expect(
+      expected.map((point) => point.energy),
+      isNot(orderedEquals(oldEnergy)),
+    );
+    expect(
+      restarted.forecastFor(now).map((point) => point.energy),
+      orderedEquals(expected.map((point) => point.energy)),
+    );
+    expect(restarted.forecastLoadedFromCloud, isFalse);
+  });
 }

@@ -58,6 +58,21 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 pnpm test:running
   with a data write: parent checks use `getAfter`, not pre-batch state.
 - Synthetic cohort paths require a server-issued operator claim; ordinary or
   guardian-approved accounts cannot use them as a public sharing channel.
+- Phase 1 exercise zero values survive transactional save, merged edit, a new
+  authenticated client's server read, and export. A missing document and an
+  explicitly deleted manual override stay distinct from zero; the imported
+  observation remains intact after the override is deleted.
+- Phase 1 deterministic score merge writes explicitly clear obsolete
+  personalization fields with nulls. Unavailable-score merges clear prior
+  Cognitive values, availability, baseline and change fields on a server reload.
+- These Phase 1 payloads retain privacy, guardian, cross-account and optional
+  outcome-consent restrictions, including owner export/deletion after revocation.
+
+The Phase 1 cases mirror the current `cloud_schema.dart` wire format; the Dart
+serialization suite verifies the app-to-wire conversion. Explicit server reads
+from new rules-testing clients verify emulator persistence rather than a local
+SDK cache. This is not an app process restart, native background test or physical
+device acceptance check.
 
 ## Release limitations
 
@@ -87,3 +102,13 @@ and [server-issued custom claims](https://firebase.google.com/docs/auth/admin/cu
 Verified locally on 2026-09-07: **24 executable cases passed** using Node
 24.19.0, Firestore emulator 1.22.0 and a temporary Temurin Java 21.0.12.1 runtime.
 This is separate from Flutter's fast source-shape regression tests.
+
+Verified again on 2026-10-03: **28 executable cases passed; 0 failures, skips,
+cancellations or TODO cases**, including the four Phase 1 persistence/privacy
+regressions above. Used existing Node 24.19.0, cached pnpm 11.19.0, Firestore
+emulator 1.22.0, and a checksum-verified portable Temurin Java 21.0.12.1 runtime
+under ignored `.runtime/java21/`. Existing pinned dependencies were reused; no
+system-wide installation or persistent shell change was needed. The initial
+sandboxed run could not bind loopback sockets (`EPERM`); the approved local
+emulator retry passed. See [the progress record](../../docs/BIOLOGY_UPGRADE_PROGRESS.md)
+for exact runtime paths and executed command.

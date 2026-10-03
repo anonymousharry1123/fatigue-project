@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../evidence_provenance.dart';
 import '../models.dart';
 import '../privacy_consent.dart';
 import '../sleep_observation_logic.dart';
@@ -32,7 +33,8 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
       now: widget.now,
       ageBand: widget.ageBand,
     );
-    final confirmed = _confirmedEvidence == sleep.evidenceKey;
+    final confirmed =
+        !sleep.containsDemoEvidence && _confirmedEvidence == sleep.evidenceKey;
     final latest = sleep.latestMain;
     final comparison = sleep.compare(allSleepConfirmed: confirmed);
     return TonyoCard(
@@ -42,15 +44,31 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Recorded sleep',
+            sleep.containsDemoEvidence
+                ? sleep.containsRecordedEvidence
+                      ? 'Recorded and demo sleep'
+                      : 'Demo sleep'
+                : 'Recorded sleep',
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          if (sleep.containsDemoEvidence) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'These summaries include demo/synthetic examples, not imported or measured sleep. '
+              'Totals, recent patterns and timing variation do not establish your personal sleep history.',
+              key: Key('sleep-demo-provenance'),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             latest == null
                 ? 'No completed main sleep recorded.'
                 : 'Latest main sleep: ${_hours(latest.value)} h · '
-                      '${_stamp(latest.timestamp)} · ${latest.source == SignalSource.healthKit ? 'Apple Health estimate' : 'Manual entry'}',
+                      '${_stamp(latest.timestamp)} · ${EvidenceProvenance.signalIsDemo(latest)
+                          ? 'Demo / synthetic example'
+                          : latest.source == SignalSource.healthKit
+                          ? 'Apple Health estimate'
+                          : 'Manual entry'}',
           ),
           if (latest?.source == SignalSource.manual)
             const Text(
@@ -62,7 +80,7 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
             '${_stamp(sleep.windowEnd)} (local time)',
           ),
           Text(
-            'Estimated recorded sleep: ${_hours(sleep.totalHours)} h, '
+            '${sleep.containsDemoEvidence ? 'Displayed sleep total' : 'Estimated recorded sleep'}: ${_hours(sleep.totalHours)} h, '
             'including ${_hours(sleep.napHours)} h in ${sleep.napCount} naps.',
           ),
           const Text(
@@ -76,8 +94,10 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
           ),
           if (sleep.usualMainHours case final usual?)
             Text(
-              'Usual in these records: ${_hours(usual)} h of main sleep. '
-              'A personal pattern is not an age recommendation.',
+              sleep.containsDemoEvidence
+                  ? 'Average in displayed records: ${_hours(usual)} h of main sleep.'
+                  : 'Usual in these records: ${_hours(usual)} h of main sleep. '
+                        'A personal pattern is not an age recommendation.',
             ),
           Text(
             'Clock-time variation (${sleep.bedtimeObservationCount} paired bedtimes, ${sleep.mainObservationCount} wakes): '
@@ -119,7 +139,9 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
                 'and these records; it is not device-verified coverage.',
               ),
               value: confirmed,
-              onChanged: latest == null && sleep.napCount == 0
+              onChanged:
+                  sleep.containsDemoEvidence ||
+                      latest == null && sleep.napCount == 0
                   ? null
                   : (value) => setState(
                       () => _confirmedEvidence = value == true
@@ -129,7 +151,9 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
             ),
             Text(switch (comparison) {
               SleepRangeComparison.unavailable =>
-                sleep.boundaryUncertain
+                sleep.containsDemoEvidence
+                    ? 'Comparison unavailable: demo/synthetic examples cannot confirm your sleep coverage.'
+                    : sleep.boundaryUncertain
                     ? 'Comparison unavailable: sleep timing at the window boundary is incomplete.'
                     : 'Comparison unavailable until complete sleep coverage is confirmed.',
               SleepRangeComparison.below =>

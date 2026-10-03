@@ -6,8 +6,8 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   Timestamp, collection, collectionGroup, deleteDoc, deleteField, doc,
-  documentId, getDoc, getDocs, query, serverTimestamp, setDoc, setLogLevel,
-  updateDoc, where, writeBatch,
+  documentId, getDoc, getDocFromServer, getDocs, getDocsFromServer, query,
+  runTransaction, serverTimestamp, setDoc, setLogLevel, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 
 // Never fall back to a real Firebase project. A running loopback emulator is
@@ -62,6 +62,33 @@ const child = (db, name = 'signals', id = 'row') => doc(db, `users/owner/${name}
 const marker = () => ({ privacyDeletion: { version: 1, requestedAt: serverTimestamp() } });
 const consentChange = enabled => ({ consentFlags: flags(enabled),
   outcomeConsentUpdatedAt: serverTimestamp() });
+// Synthetic documents use the current cloud_schema.dart wire format. The Dart
+// serializer tests separately verify that app objects produce these fields;
+// these cases exercise actual emulator merge, transaction and server-read
+// behavior under the repository rules, not a simulated repository.
+const phase1Signal = (changes = {}) => ({
+  type: 'exercise', value: 0, unit: 'hr',
+  timestamp: Timestamp.fromDate(new Date('2026-10-03T12:00:00Z')),
+  source: 'manual', quality: 1, note: null, groupId: 'activity-test',
+  syncedAt: null,
+  recordedAt: Timestamp.fromDate(new Date('2026-10-03T12:01:00Z')),
+  schemaVersion: 15, ...changes,
+});
+const phase1Score = (changes = {}) => ({
+  energy: 72, cognitive: 63,
+  energyModelVersion: 'energy-rules-v3-phase1',
+  cognitiveModelVersion: 'cognitive-rules-v3-phase1',
+  deterministicEnergy: null, personalizedModelVersion: null,
+  hasEnergyScore: true, hasCognitiveScore: true,
+  confidence: 0.8, cognitiveConfidence: 0.8,
+  freshness: 1, cognitiveFreshness: 1, baselineConfidence: 0,
+  personalBaselines: null, inputCount: 2, cognitiveInputCount: 2,
+  isEstimate: true, drivers: [], cognitiveDrivers: [],
+  previousCognitive: null, cognitiveDelta: null,
+  day: Timestamp.fromDate(new Date('2026-10-03T00:00:00Z')),
+  calculatedAt: Timestamp.fromDate(new Date('2026-10-03T12:02:00Z')),
+  schemaVersion: 15, ...changes,
+});
 const seed = async (userData = profile(), includeChildren = false) => {
   await environment.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
@@ -265,6 +292,127 @@ test('accepted owner batches reuse the same parent guard within rule access limi
   }
   await assertSucceeds(batch.commit());
   assert.equal((await getDocs(collection(db, 'users/owner/signals'))).size, 100);
+});
+
+test('Phase 1 manual zero persists on the server; missing and cleared overrides stay distinct', async () => {
+  await seed(profile({ schemaVersion: 15 }));
+  const db = signedIn();
+  const imported = phase1Signal({ value: 1.5, source: 'healthKit',
+    groupId: null, recordedAt: null });
+  await assertSucceeds(setDoc(child(db, 'signals', 'imported-exercise'), imported));
+  const manual = child(db, 'signals', 'manual-exercise');
+  // This is the same parent-read/merged child-write operation used by the
+  // input patch adapter. Zero must remain data, not become a delete operation.
+  await assertSucceeds(runTransaction(db, async transaction => {
+    await transaction.get(root(db));
+    await transaction.get(manual);
+    transaction.set(manual, phase1Signal({ value: 0.5 }), { merge: true });
+  }));
+  await assertSucceeds(runTransaction(db, async transaction => {
+    await transaction.get(root(db));
+    await transaction.get(manual);
+    transaction.set(manual, phase1Signal(), { merge: true });
+  }));
+
+  // A new authenticated client and explicit server reads avoid proving only a
+  // write client's local cache. This is cloud reload, not a device restart test.
+  const reloaded = signedIn();
+  const zero = await assertSucceeds(getDocFromServer(child(reloaded, 'signals', 'manual-exercise')));
+  assert.equal(zero.exists(), true);
+  assert.equal(zero.data().value, 0);
+  assert.equal(zero.data().source, 'manual');
+  assert.equal(zero.data().groupId, 'activity-test');
+  assert.equal(zero.data().schemaVersion, 15);
+  const missing = await assertSucceeds(getDocFromServer(child(reloaded, 'signals', 'missing-exercise')));
+  assert.equal(missing.exists(), false);
+  const exported = await assertSucceeds(getDocsFromServer(collection(reloaded, 'users/owner/signals')));
+  assert.equal(exported.size, 2);
+  assert.equal(exported.docs.find(value => value.id === 'manual-exercise').data().value, 0);
+  assert.equal(exported.docs.find(value => value.id === 'imported-exercise').data().value, 1.5);
+
+  await assertSucceeds(deleteDoc(child(reloaded, 'signals', 'manual-exercise')));
+  const afterClear = signedIn();
+  assert.equal((await getDocFromServer(child(afterClear, 'signals', 'manual-exercise'))).exists(), false);
+  assert.deepEqual((await getDocFromServer(child(afterClear, 'signals', 'imported-exercise'))).data(), imported);
+});
+
+test('Phase 1 deterministic merge clears obsolete personalization on a server reload', async () => {
+  await seed(profile({ schemaVersion: 15 }));
+  const db = signedIn();
+  const score = child(db, 'scoreSnapshots', '2026-10-03');
+  await assertSucceeds(setDoc(score, phase1Score({ energy: 58,
+    energyModelVersion: 'energy-rules-v2', deterministicEnergy: 50,
+    personalizedModelVersion: 'obsolete-personalized-model',
+    drivers: [{ label: 'Personalized Energy adjustment', contribution: 8,
+      detail: 'Synthetic legacy fixture', explanation: '', freshness: 1,
+      source: null, evidenceAt: null }],
+  })));
+  // upsertScoreSnapshot uses set(..., merge: true). Omitting these nulls would
+  // retain the old fallback and model ID even after replacing energy/drivers.
+  await assertSucceeds(setDoc(score, phase1Score(), { merge: true }));
+  const reloaded = await assertSucceeds(getDocFromServer(child(signedIn(), 'scoreSnapshots', '2026-10-03')));
+  assert.equal(reloaded.data().energy, 72);
+  assert.equal(reloaded.data().energyModelVersion, 'energy-rules-v3-phase1');
+  assert.equal(Object.hasOwn(reloaded.data(), 'deterministicEnergy'), true);
+  assert.equal(Object.hasOwn(reloaded.data(), 'personalizedModelVersion'), true);
+  assert.equal(reloaded.data().deterministicEnergy, null);
+  assert.equal(reloaded.data().personalizedModelVersion, null);
+  assert.deepEqual(reloaded.data().drivers, []);
+});
+
+test('Phase 1 unavailable score merge clears stale cognitive values and availability', async () => {
+  await seed(profile({ schemaVersion: 15 }));
+  const db = signedIn();
+  const score = child(db, 'scoreSnapshots', '2026-10-03');
+  await assertSucceeds(setDoc(score, phase1Score({
+    personalBaselines: { obsoleteFixture: true }, previousCognitive: 61, cognitiveDelta: 2,
+  })));
+  await assertSucceeds(setDoc(score, phase1Score({ energy: 0, cognitive: null,
+    hasEnergyScore: false, hasCognitiveScore: false,
+    confidence: 0, cognitiveConfidence: 0, freshness: 0, cognitiveFreshness: 0,
+    inputCount: 0, cognitiveInputCount: 0,
+  }), { merge: true }));
+  const reloaded = (await assertSucceeds(getDocFromServer(child(signedIn(), 'scoreSnapshots', '2026-10-03')))).data();
+  assert.equal(reloaded.hasEnergyScore, false);
+  assert.equal(reloaded.hasCognitiveScore, false);
+  assert.equal(reloaded.cognitive, null);
+  assert.equal(reloaded.personalBaselines, null);
+  assert.equal(reloaded.previousCognitive, null);
+  assert.equal(reloaded.cognitiveDelta, null);
+  assert.equal(reloaded.inputCount, 0);
+  assert.equal(reloaded.cognitiveInputCount, 0);
+});
+
+test('Phase 1 zero and null payloads retain privacy, guardian and outcome consent gates', async () => {
+  const db = signedIn();
+  for (const userData of [
+    { schemaVersion: 15, consentFlags: flags(false) },
+    profile({ schemaVersion: 15, privacyConsent: privacy({ ageBand: '16to17' }) }),
+  ]) {
+    await seed(userData);
+    await assertFails(setDoc(child(db, 'signals'), phase1Signal()));
+    await assertFails(setDoc(child(db, 'scoreSnapshots'), phase1Score()));
+  }
+  await seed(profile({ schemaVersion: 15,
+    privacyConsent: privacy({ ageBand: '16to17' }) }));
+  const approved = signedIn('owner', guardianClaims);
+  await assertSucceeds(setDoc(child(approved, 'signals'), phase1Signal()));
+  await assertSucceeds(setDoc(child(approved, 'scoreSnapshots'), phase1Score()));
+  await assertFails(setDoc(child(signedIn('other', guardianClaims), 'signals'), phase1Signal()));
+  await assertFails(setDoc(child(signedIn('other', guardianClaims), 'scoreSnapshots'), phase1Score()));
+  const outcome = { type: 'observedEnergy', value: 4, unit: 'rating_1_10',
+    observedAt: Timestamp.now(), recordedAt: Timestamp.now(), source: 'checkIn',
+    sourceId: 'synthetic-checkin', recommendationId: null, consentVersion: 1, schemaVersion: 15 };
+  await assertFails(setDoc(child(approved, 'outcomes'), outcome));
+  await assertSucceeds(updateDoc(root(approved), consentChange(true)));
+  await assertSucceeds(setDoc(child(approved, 'outcomes'), outcome));
+  await assertSucceeds(updateDoc(root(approved), consentChange(false)));
+  await assertFails(updateDoc(child(approved, 'outcomes'), { value: 5 }));
+  // Revocation and loss of guardian claims retain owner export/deletion access.
+  for (const name of ['signals', 'scoreSnapshots', 'outcomes']) {
+    await assertSucceeds(getDocsFromServer(collection(db, `users/owner/${name}`)));
+    await assertSucceeds(deleteDoc(child(db, name)));
+  }
 });
 
 test('a token without guardian approval disables youth writes but permits safety revocation', async () => {

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'evidence_provenance.dart';
 import 'local_day.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
@@ -33,6 +34,8 @@ class SleepObservations {
     required this.bedtimeVariationMinutes,
     required this.wakeVariationMinutes,
     required this.bedtimeObservationCount,
+    required this.containsDemoEvidence,
+    required this.containsRecordedEvidence,
   });
 
   /// Twenty-four elapsed hours, not a calendar date (which may be 23/25 hours).
@@ -49,6 +52,8 @@ class SleepObservations {
   final double? bedtimeVariationMinutes;
   final double? wakeVariationMinutes;
   final int bedtimeObservationCount;
+  final bool containsDemoEvidence;
+  final bool containsRecordedEvidence;
 
   int get mainObservationCount =>
       days.where((day) => day.mainHours != null).length;
@@ -61,7 +66,10 @@ class SleepObservations {
   /// A record alone never proves completeness. Confirmation is for this exact
   /// window and evidence set only; it is not sensor validation or recovery.
   SleepRangeComparison compare({required bool allSleepConfirmed}) {
-    if (!supportsTeenGuidance || !allSleepConfirmed || boundaryUncertain) {
+    if (!supportsTeenGuidance ||
+        !allSleepConfirmed ||
+        boundaryUncertain ||
+        containsDemoEvidence) {
       return SleepRangeComparison.unavailable;
     }
     if (totalHours < 8) return SleepRangeComparison.below;
@@ -150,6 +158,7 @@ class SleepObservations {
         .where((row) => !row.timestamp.isBefore(localDay(today, -6)))
         .toList();
     final bedtimeClocks = <DateTime>[];
+    final timingReadings = <SignalReading>[];
     for (final main in recentMains) {
       final bed = rows
           .where(
@@ -164,7 +173,10 @@ class SleepObservations {
           .firstOrNull;
       // An aggregated sleep total cannot reconstruct bedtime when awake gaps
       // or the original interval are unknown. Only paired timing is observed.
-      if (bed != null) bedtimeClocks.add(bed.timestamp);
+      if (bed != null) {
+        bedtimeClocks.add(bed.timestamp);
+        timingReadings.add(bed);
+      }
     }
     final days = List.generate(7, (index) {
       final day = localDay(today, index - 6);
@@ -183,6 +195,25 @@ class SleepObservations {
         dailyNaps.length,
       );
     });
+    final contributing = <SignalReading>[
+      ?mains.firstOrNull,
+      ...recentMains,
+      ...naps.where((row) => !row.timestamp.isBefore(localDay(today, -6))),
+      ...timingReadings,
+    ];
+    // Stage records can influence source reconciliation even though the card
+    // displays a main-sleep total rather than the individual stages.
+    final groups = contributing
+        .map((row) => row.groupId)
+        .whereType<String>()
+        .toSet();
+    contributing.addAll(
+      rows.where(
+        (row) =>
+            groups.contains(row.groupId) &&
+            SleepSyncLogic.stageTypes.contains(row.type),
+      ),
+    );
     final relevant =
         rows
             .where(
@@ -194,7 +225,7 @@ class SleepObservations {
             )
             .map(
               (row) =>
-                  '${row.id}:${row.value}:${row.timestamp.toUtc()}:${row.source.name}:${row.groupId}',
+                  '${row.id}:${row.value}:${row.timestamp.toUtc()}:${row.source.name}:${row.groupId}:${EvidenceProvenance.signalIsDemo(row)}',
             )
             .toList()
           ..sort();
@@ -217,6 +248,10 @@ class SleepObservations {
         recentMains.map((row) => row.timestamp),
       ),
       bedtimeObservationCount: bedtimeClocks.length,
+      containsDemoEvidence: contributing.any(EvidenceProvenance.signalIsDemo),
+      containsRecordedEvidence: contributing.any(
+        (row) => !EvidenceProvenance.signalIsDemo(row),
+      ),
     );
   }
 

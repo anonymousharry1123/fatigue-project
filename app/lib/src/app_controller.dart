@@ -1138,9 +1138,9 @@ class AppController extends ChangeNotifier {
     final at = _now();
     final signalIds = signals.map((item) => item.id).toSet();
     final checkInIds = checkIns.map((item) => item.id).toSet();
-    return score.canEstimateEnergy &&
-        points.isNotEmpty &&
-        points.every(
+    if (!score.canEstimateEnergy ||
+        points.isEmpty ||
+        !points.every(
           (point) =>
               point.rulesVersion == FatigueEngine.energyModelVersion &&
               point.signalEvidenceIds.every(signalIds.contains) &&
@@ -1149,7 +1149,61 @@ class AppController extends ChangeNotifier {
               !point.updatedAt!.isAfter(at) &&
               sameLocalDay(point.updatedAt!, at) &&
               at.difference(point.updatedAt!) <= forecastFreshnessWindow,
-        );
+        )) {
+      return false;
+    }
+    final generatedAt = points.first.updatedAt!;
+    if (points.any((point) => point.updatedAt != generatedAt) ||
+        signals.any(
+          (item) =>
+              item.source != SignalSource.model &&
+              item.timestamp.isAfter(generatedAt) &&
+              !item.timestamp.isAfter(at),
+        ) ||
+        checkIns.any(
+          (item) =>
+              item.timestamp.isAfter(generatedAt) &&
+              !item.timestamp.isAfter(at),
+        )) {
+      return false;
+    }
+    // A raw edit can reach another device before the replacement curve does.
+    // IDs alone cannot validate changed values, schedules, or learned weights.
+    // Replay at the saved generation time so unchanged data can still reuse
+    // its curve without relabeling the original freshness or provenance.
+    final reference = FatigueEngine.score(
+      signals: signals,
+      checkIns: checkIns,
+      now: generatedAt,
+      personalBaselines: PersonalBaselineLogic.build(
+        signals: signals,
+        asOf: localDay(generatedAt),
+      ),
+    );
+    final expected = FatigueEngine.forecast(
+      _personalizeEnergy(reference, signals, checkIns, generatedAt),
+      points.first.time,
+      signals: signals,
+      checkIns: checkIns,
+      profile: profile,
+      generatedAt: generatedAt,
+    );
+    if (expected.length != points.length) return false;
+    final ordered = [...points]..sort((a, b) => a.time.compareTo(b.time));
+    bool sameIds(List<String> left, List<String> right) =>
+        left.length == right.length && left.toSet().containsAll(right);
+    for (var index = 0; index < ordered.length; index++) {
+      final saved = ordered[index];
+      final current = expected[index];
+      if (!saved.time.isAtSameMomentAs(current.time) ||
+          !((saved.energy - current.energy).abs() <= .000001) ||
+          !((saved.uncertainty - current.uncertainty).abs() <= .000001) ||
+          !sameIds(saved.signalEvidenceIds, current.signalEvidenceIds) ||
+          !sameIds(saved.checkInEvidenceIds, current.checkInEvidenceIds)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<ForecastPoint> forecastFor(DateTime day) {

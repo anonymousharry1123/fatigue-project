@@ -40,13 +40,13 @@ The existing remaining score weights, neutral internal constants, simple clock-s
 
 Commands were run from the verified Flutter app directory with the installed SDK `/Users/harrygao/Downloads/flutter/bin/flutter` (the plain command was not on this shell's PATH). SDK cache writes required the execution tool's approved sandbox escalation. No dependency versions were intentionally changed.
 
-Final verification (2026-10-03):
+Initial implementation verification (2026-10-03; superseded by the follow-up below):
 
 | Command actually executed from `app/` | Result |
 | --- | --- |
 | `/Users/harrygao/Downloads/flutter/bin/flutter analyze --no-pub` | No issues found. |
 | `/Users/harrygao/Downloads/flutter/bin/flutter test` | 903 tests passed. No unresolved Flutter test failures. |
-| `TZ=America/Los_Angeles /Users/harrygao/Downloads/flutter/bin/flutter test --no-pub test/sleep_observation_logic_test.dart test/engine_local_day_test.dart test/local_calendar_test.dart test/daily_plan_logic_test.dart` | 28 passed; explicit spring/fall DST and schedule/calendar cases. |
+| `TZ=America/Los_Angeles /Users/harrygao/Downloads/flutter/bin/flutter test --no-pub test/sleep_observation_logic_test.dart test/engine_local_day_test.dart test/local_calendar_test.dart test/daily_plan_logic_test.dart` | 28 passed in a separate execution of a subset already included in the 903-test full suite; not 28 additional unique tests. Includes spring/fall DST and schedule/calendar cases. |
 | Changed-files-only `/Users/harrygao/Downloads/flutter/bin/cache/dart-sdk/bin/dart format …` | Changed Dart files formatted; unrelated Dart files untouched. |
 | `git diff --check` from the repository | Passed. |
 
@@ -54,11 +54,118 @@ The first full `flutter test` run had 871 passes and 20 failures, including old 
 
 Focused suites cover empty/stale evidence, retired reward invariance, immature heart-baseline abstention, source reconciliation, teen/unsupported ages, incomplete sleep coverage, naps/overlaps/midnight/DST, circular clock variation, explicit-zero edit/sync/export/restore, deterministic merge reload, incompatible residual artifacts and preserved attempt ledger, historical basis disclosure, schedule edits, evidence-loss cancellation, privacy/guardian/owner gates and narrow-screen enlarged-text behavior. Synthetic fixtures serve software regressions only.
 
-The executable Firestore emulator suite was not run: `command -v node`, `command -v pnpm` found no runtime, and `java -version` failed because no Java runtime is installed. The repository requires Node ≥22, Java ≥21 and pnpm 11.19.0 ([local harness](../tool/security_rules/README.md)). No production substitute was used. Dart serialization and source-shape security regressions are separate from emulator enforcement tests.
+The initial implementation run did not execute the Firestore suite: Node and pnpm were absent from that shell's PATH, and the system Java launcher found no runtime. That lookup did not establish that Node/pnpm were uninstalled. The follow-up below resolves these environment blockers and records actual emulator enforcement tests separately from Dart serialization/source-shape tests.
 
 ## Deferred work and next task
 
 - Phase 2 constrained conversational Coach, Phase 3 future-outcome model/validation, Phase 4 replacement attention protocol, and Phase 5 participant experiments are not implemented.
 - A new school timetable/fixed-commitment model, clinician approval, biological coefficient estimation, forecast calibration, immediate server token revocation and production guardian workflow remain outside this change.
 - Physical-device review remains necessary for Health imports, schedule edits across travel/DST, notification delivery/cancellation and voice-over behavior; automated tests do not demonstrate those.
-- **Next specific task:** run the unchanged local Firestore emulator harness with its required runtimes and review a device-only Phase 1 acceptance checklist before any release. Do not start a later phase or deploy as part of this task.
+- **Remaining acceptance:** complete the device checks marked Not run or Blocked in [PHASE1_DEVICE_ACCEPTANCE.md](PHASE1_DEVICE_ACCEPTANCE.md), particularly physical notification delivery/cancellation, background/resume, cold restart and isolated signed-in cloud flows. The local Firestore harness has now passed. Do not start a later phase or deploy as part of this task.
+
+## Phase 1 verification follow-up — 2026-10-03
+
+**Status: Phase 1 still has outstanding device acceptance checks.** Passing software tests does not establish biological, clinical, or fatigue-prediction accuracy. No Phases 2–5 work, model training, production access, deployment, account changes, commit, push, dependency upgrade, or security-rule relaxation was performed.
+
+### Repository and environment
+
+The Git root was verified as `fatigue-project/` and Flutter root as `fatigue-project/app/` using `git rev-parse --show-toplevel` and `pubspec.yaml`. Git status was clean before this follow-up's edits. No applicable `AGENTS.md` was found in the workspace or ancestor chain. The current biology plan, this progress record, `docs/PLAN.md`, security README, package scripts, lockfile, rules, and implementation/tests were reviewed. The same-session development-log requirement in `docs/PLAN.md` is satisfied below in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md).
+
+The initial tooling diagnosis was incomplete:
+
+- **Node:** installed and executable, but absent from the shell PATH. Reused `/Users/harrygao/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node`, version **24.19.0**, satisfying Node ≥22.
+- **pnpm:** the current cached launcher reports **11.25.0**, so it was not used for tests. The existing previous-runtime bundle `/Users/harrygao/.cache/codex-runtimes/codex-primary-runtime.previous/dependencies/node/node_modules/pnpm/artifacts/exe/dist/pnpm.mjs` reports the repository-pinned **11.19.0** and was reused with the Node executable above.
+- **Java:** `/usr/bin/java` is only a launcher; both `java -version` and `/usr/libexec/java_home -V` reported no runtime. Searches of standard Java, Homebrew, application, download, runtime-cache and temporary locations found no usable Java binary. Downloaded an official portable **Temurin 21.0.12.1+1 JRE**, checked its SHA-256 against the [Adoptium API](https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=aarch64&image_type=jre&os=mac&vendor=eclipse), and extracted it under ignored `tool/security_rules/.runtime/java21/`. No system-wide installation, privilege elevation such as sudo, or persistent shell changes occurred. The official download was [this Temurin release](https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.12.1%2B1).
+- **Dependencies:** existing modules match the three direct pins (`@firebase/rules-unit-testing` 5.0.2, `firebase` 12.18.0, `firebase-tools` 15.29.0); the existing lockfile/module installation was reused. No dependency installation or lockfile change was necessary.
+- **Execution restrictions:** the first metadata download failed DNS resolution inside the sandbox; its approved retry succeeded. The first emulator run failed to bind loopback sockets with `EPERM` (the CLI misleadingly summarized this as “port taken”); the approved retry using the same configuration succeeded. No existing listener on port 8080 was found. Flutter SDK-cache writes and simulator service access likewise needed approved execution-tool sandbox retries. These were not missing-tool failures.
+
+### Actual local Firestore enforcement
+
+Before execution, reviewed `run.mjs`, `firebase.json`, and the test initializer: the project is fixed to **`demo-tonyo-privacy`**, Firestore binds **127.0.0.1:8080**, emulator UI is disabled, and the configuration points to the actual `app/firestore.rules`. `initializeTestEnvironment` also reads that same current rules file directly. The test refuses absent or non-loopback emulator hosts. The runner constructs an allowlisted environment without cloud credentials/project overrides and uses an isolated CLI configuration directory. That isolated CLI configuration has no stored authentication state. All authentication/guardian/operator contexts and documents are synthetic rules-testing fixtures; no live Firebase login or production project was used. The emulator shut down successfully after tests.
+
+Exact successful command, executed from `app/tool/security_rules/`:
+
+```sh
+env PATH="/Users/harrygao/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH" JAVA_HOME="$PWD/.runtime/java21/jdk-21.0.12.1+1-jre/Contents/Home" /Users/harrygao/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node /Users/harrygao/.cache/codex-runtimes/codex-primary-runtime.previous/dependencies/node/node_modules/pnpm/artifacts/exe/dist/pnpm.mjs test
+```
+
+This invokes the existing `test` script (`node run.mjs`), which invokes the existing local `emulators:exec` harness and serial Node test command. It downloaded Firestore emulator **1.22.0** to the ignored runtime cache. **28 passed, 0 failed, 0 skipped, 0 canceled, 0 TODO; exit 0.** These are separate executable Firestore tests, not Flutter repository mocks. The 24 existing enforcement cases passed unchanged, covering ownership, cross-account/query isolation, privacy and guardian checks, optional outcome-learning consent, metadata restrictions, export and deletion, batch revocation/deletion races, and synthetic operator boundaries.
+
+Added four focused [emulator cases](../tool/security_rules/firestore.rules.test.mjs):
+
+1. Exercise zero through transactional save, merged edit, a fresh authenticated client's server read and export; absent document remains absent; explicit manual-override deletion preserves the imported document.
+2. Merge from an old personalized score to a current deterministic score writes explicit nulls for obsolete personalization fields, confirmed by a server reload.
+3. Unavailable-score merge clears old Cognitive availability/value, baseline, previous value and delta fields.
+4. Those Phase 1 zero/null payloads still obey privacy, guardian, ownership and dual outcome-consent gates, while revocation leaves owner export/deletion available.
+
+Dart serializer tests establish app-to-wire conversion; emulator tests establish enforcement and server persistence of that wire format. A fresh SDK client/server read is not an app-process or physical-device restart.
+
+### Confirmed regressions and fixes
+
+| Reproduced problem | Fix and regression evidence |
+| --- | --- |
+| With only old observations, Today correctly withheld a score but did not display the latest retained observation's age. The new widget test failed because the dated notice was absent. | [Today](../lib/src/screens/today_screen.dart) now shows its local date/time and elapsed age with “not a current measurement,” while excluding future/model-only observations. [Two widget cases](../test/today_stale_observation_test.dart) cover stale and empty states. |
+| Another device can commit an edit to a raw observation before replacing derived documents. If the ID/timestamp are unchanged, the old cloud curve passed the prior ID/version/freshness checks although Today recomputed the new score. The regression produced a first curve point of 57.4 instead of 70.1. | [Controller](../lib/src/app_controller.dart) now checks that the curve reproduces from retained inputs, the current schedule and compatible model at its original generation time. Changed values, evidence, bands or model correction invalidate it. [Cache regression](../test/phase1_cache_test.dart) fails before the fix; existing unchanged-cloud-reload coverage still passes. |
+| On the isolated simulator, ordinary demo onboarding populated sleep fixtures tagged with a Health source enum. The new sleep card incorrectly described the fixture as an “Apple Health estimate” despite no Health authorization/import. Two new widget cases reproduced the defect. | [Shared provenance](../lib/src/evidence_provenance.dart) reuses the existing score marker rules unchanged. [Sleep logic](../lib/src/sleep_observation_logic.dart) tracks contributing synthetic evidence; the [card](../lib/src/widgets/sleep_observation_card.dart) labels demo/mixed summaries and disables personal coverage confirmation/range comparison for synthetic-containing displays. Six tests cover actual onboarding fixtures, mixed data, ID/group/note markers and ignored demo duplicates. No fixture, consent or score coefficients changed. |
+
+No raw observations, consent receipts or training-attempt ledgers are deleted by these fixes. There is **no additional schema or model-version migration**: existing Phase 1 schema 15 / deterministic v3 / preparation v2 compatibility remains. Previously accepted stale derived curves can now regenerate from retained data. Replay uses existing deterministic/compatible inference only; it neither trains a model nor changes coefficients.
+
+### Flutter verification and count accounting
+
+All commands below ran from the verified `app/` directory with the existing installed SDK.
+
+| Actual command | Result |
+| --- | --- |
+| `/Users/harrygao/Downloads/flutter/bin/flutter analyze --no-pub` | **No issues found**, exit 0. |
+| `/Users/harrygao/Downloads/flutter/bin/flutter test` | **916 passed**, 0 failures or skips reported, exit 0, after all three fixes. Thirteen new Flutter tests beyond the earlier 903. The intermediate follow-up run passed 910 before the native-discovered provenance correction. |
+| `/Users/harrygao/Downloads/flutter/bin/flutter test --no-pub test/phase1_cache_test.dart test/app_controller_test.dart test/phase1_restart_acceptance_test.dart test/today_stale_observation_test.dart` | **43 passed**, 0 failures; this focused execution overlaps the 916-test suite. |
+| `TZ=America/Los_Angeles /Users/harrygao/Downloads/flutter/bin/flutter test --no-pub test/sleep_observation_logic_test.dart test/engine_local_day_test.dart test/local_calendar_test.dart test/daily_plan_logic_test.dart` | **32 passed** after the final fix, 0 failures or skips, exit 0. The earlier follow-up execution passed 28 before four provenance cases were added to `sleep_observation_logic_test.dart`. |
+| `/Users/harrygao/Downloads/flutter/bin/flutter test --no-pub test/sleep_observation_card_test.dart test/sleep_observation_logic_test.dart test/score_explanation_test.dart test/fatigue_engine_test.dart` | **65 passed**, 0 failures; final copy-only widget rerun `flutter test --no-pub test/sleep_observation_card_test.dart` passed **3**. Both overlap the final suite. |
+| Changed-files-only Dart formatting (exact arguments below) | **11 files, 0 changed** in the final formatting pass. |
+| `git diff --check` from the repository | Passed. |
+
+The previous 903-test completion and 28-test timezone run were also checked against their retained local logs. The “28 daylight-saving-time tests” wording means **28 tests across four sleep/calendar/scheduling files, including DST cases**, run explicitly under `TZ=America/Los_Angeles`; not 28 distinct additional tests or 28 tests all exclusively about DST. They were already included in 903, and remain included in 916. The same four-file timezone command now runs 32 tests because four sleep-provenance cases were added. Do not add the 43/65/3-test focused runs or timezone subset to the full-suite total. Firestore's 28 executable cases are a different suite.
+
+Final formatting command (file list derived only from changed/tracked and new Dart files):
+
+```sh
+/Users/harrygao/Downloads/flutter/bin/cache/dart-sdk/bin/dart format \
+  lib/src/app_controller.dart lib/src/evidence_provenance.dart \
+  lib/src/fatigue_engine.dart lib/src/screens/today_screen.dart \
+  lib/src/sleep_observation_logic.dart lib/src/widgets/sleep_observation_card.dart \
+  test/phase1_cache_test.dart test/phase1_restart_acceptance_test.dart \
+  test/sleep_observation_card_test.dart test/sleep_observation_logic_test.dart \
+  test/today_stale_observation_test.dart
+```
+
+The first post-provenance `flutter analyze --no-pub` reported one `use_null_aware_elements` style issue and therefore the chained full test had not started. Applied the suggested null-aware list syntax, formatted that changed file, then reran analysis and all 916 tests successfully. No diagnostic was suppressed. Initial failing regression counts and intermediate focused executions are diagnostic evidence, not additional unique passing tests.
+
+### Acceptance evidence and limits
+
+| Acceptance condition | Available evidence |
+| --- | --- |
+| Empty/stale observations | Existing engine/forecast/availability tests; new Today date/age widget checks and stale-data controller recreation case. Old raw records remain retained; forecasts/reminders abstain. |
+| Explicit zero and clearing an override | Existing activity edit/sync/export/restore tests, [new controller recreation tests](../test/phase1_restart_acceptance_test.dart), and actual emulator zero/clear/server-reload case. Zero retains manual priority; deletion permits imported fallback in controller tests. |
+| Schedule edit persistence/protected sleep | New controller recreation case checks persisted overnight clocks, nonoverlapping blocks and reminder times within waking bounds; existing calendar/DST and Profile tests. |
+| Incompatible model/cache | Existing model-service, residual-kernel, preparation and Phase 1 cache tests pass in the full suite. Incompatible fitted weights are rejected while valid attempt time/outcome-key ledger and raw records survive. No training was requested. |
+| Deterministic save removes old personalization | Existing cloud serializer regressions plus actual emulator merged-document server reload. |
+| Historical calculation basis/version | Existing Insights/score-explanation/transparency widget and logic tests pass; current deterministic recomputation remains explicitly disclosed. |
+| Removed exposure rewards | Existing engine/forecast/kernel/preparation invariance and incompatibility tests pass. Stronger cache validation also rejects curves inconsistent with current inputs/model. |
+| Disable/sign-out/loss of eligibility cancels reminders | Existing controller/privacy/notification suites plus new disable→controller recreation→resume and stale→recreation cases pass. Mock scheduler cancellation is not native delivery/cancellation proof. |
+
+Native build, simulator/manual results, prerequisites, exact remaining steps and expected results are recorded separately in [PHASE1_DEVICE_ACCEPTANCE.md](PHASE1_DEVICE_ACCEPTANCE.md). No substantive existing Flutter app-integration harness was found (`integration_test` is absent; `font_integration_test.dart` is a widget test and native RunnerTests are empty templates), so **app integration tests are Not run**. Physical-device acceptance is **Not run**, despite connected devices: their normal installation and real Health data were not touched. Safe signed-in device/cloud flows are **Blocked** because the app has no emulator-routing configuration; do not substitute production.
+
+### Native coverage
+
+A new local-only iPhone 17 / iOS 26.5 simulator installation passed build, boot, install and launch with no Firebase defines. Normal adult data-use onboarding was completed through the UI; Health/Screen Time and Outcome learning stayed off. Actual terminate/relaunch checks retained explicit exercise `0` with other categories absent, and retained an edited 09:00/22:00 schedule. Only this disposable simulator's synthetic native preferences were read to confirm persistence. Coach showed four blocks summarized within that waking window; full native non-overlap remains Not run because scroll/drag automation failed. The initial build preceded the cloud-cache/provenance follow-up fixes. A final no-config rebuild then passed (Xcode 21.4 seconds), was installed into the same disposable container, and visibly showed “Demo sleep,” the synthetic-evidence warning, “Demo / synthetic example” and “Displayed sleep total.” Profile still showed 09:00/22:00 and Add still showed one saved log. Final native preferences again confirmed exercise zero, absent blank categories, saved 09:00/22:00 clocks, retained adult receipt and Health disabled. Only the new test simulator was shut down successfully at 14:58:06 PDT; its synthetic container was preserved. Exact commands and test-container checks are in the device checklist.
+
+The normal onboarding action seeds demo records, so an empty native install was not manufactured by bypassing consent or editing storage. Empty/stale unit/widget checks are not promoted to native acceptance. No physical-device installation, normal-device Health import, actual notification delivery, cloud sign-in or app/emulator integration was performed.
+
+### Changed files in this follow-up
+
+- Application: `lib/src/app_controller.dart`, `lib/src/screens/today_screen.dart`, `lib/src/evidence_provenance.dart` (new), `lib/src/fatigue_engine.dart`, `lib/src/sleep_observation_logic.dart`, `lib/src/widgets/sleep_observation_card.dart`.
+- Flutter regressions: `test/phase1_cache_test.dart`, `test/phase1_restart_acceptance_test.dart` (new), `test/today_stale_observation_test.dart` (new), `test/sleep_observation_card_test.dart`, `test/sleep_observation_logic_test.dart`.
+- Real emulator suite: `tool/security_rules/firestore.rules.test.mjs`, `tool/security_rules/README.md`.
+- Evidence and next steps: `docs/BIOLOGY_UPGRADE_PROGRESS.md`, `docs/DEVELOPMENT_LOG.md`, `docs/PHASE1_DEVICE_ACCEPTANCE.md` (new).
+
+Dependency manifests/lockfiles, Firebase configuration, `firestore.rules`, real user data, and the normal installed app were not changed. The new test simulator and ignored portable/runtime caches remain isolated test artifacts; the simulator's data is retained for the documented remaining checks.

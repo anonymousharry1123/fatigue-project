@@ -1,3 +1,4 @@
+import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/privacy_consent.dart';
 import 'package:app/src/sleep_observation_logic.dart';
@@ -24,6 +25,56 @@ void main() {
     List<SignalReading> rows, {
     PrivacyAgeBand? age = PrivacyAgeBand.age16to17,
   }) => SleepObservations.build(signals: rows, now: now, ageBand: age);
+
+  for (final field in ['id', 'group', 'note']) {
+    test(
+      'sleep and score provenance both recognize $field fixture markers',
+      () {
+        final row = SignalReading(
+          id: field == 'id' ? 'demo-main' : 'main',
+          type: SignalType.sleep,
+          value: 8,
+          timestamp: DateTime(2026, 10, 3, 7),
+          source: SignalSource.healthKit,
+          groupId: field == 'group' ? 'FIXTURE-night' : null,
+          note: field == 'note' ? 'Synthetic example' : null,
+        );
+        final result = summary([row]);
+        expect(result.containsDemoEvidence, isTrue);
+        expect(result.containsRecordedEvidence, isFalse);
+        expect(
+          result.compare(allSleepConfirmed: true),
+          SleepRangeComparison.unavailable,
+        );
+        final score = FatigueEngine.score(
+          signals: [row.copyWith(type: SignalType.study, value: 1)],
+          checkIns: const [],
+          now: now,
+        );
+        expect(score.drivers.single.containsDemoEvidence, isTrue);
+        expect(score.cognitiveDrivers.single.containsDemoEvidence, isTrue);
+      },
+    );
+  }
+
+  test('a reconciled-out demo duplicate does not relabel real sleep', () {
+    final result = summary([
+      sleep('main', 8, DateTime(2026, 10, 3, 7)),
+      sleep(
+        'demo-duplicate',
+        6,
+        DateTime(2026, 10, 3, 7),
+        source: SignalSource.healthKit,
+      ),
+    ]);
+    expect(result.latestMain!.id, 'main');
+    expect(result.containsDemoEvidence, isFalse);
+    expect(result.containsRecordedEvidence, isTrue);
+    expect(
+      result.compare(allSleepConfirmed: true),
+      SleepRangeComparison.within,
+    );
+  });
 
   test('only supported teen bands receive the 8–10 hour comparison', () {
     final rows = [sleep('main', 8, DateTime(2026, 10, 3, 7))];

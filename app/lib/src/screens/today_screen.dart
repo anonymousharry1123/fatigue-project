@@ -19,6 +19,13 @@ class TodayScreen extends StatelessWidget {
     final controller = AppScope.of(context);
     final score = controller.score;
     final available = score.canEstimateEnergy || score.canEstimateCognitive;
+    final olderObservation = available
+        ? null
+        : _olderObservationNotice(
+            controller.signals,
+            controller.checkIns,
+            controller.currentTime,
+          );
     final statusColor = TonyoPalette.of(context).primary;
 
     return SafeArea(
@@ -130,6 +137,18 @@ class TodayScreen extends StatelessWidget {
                           height: 1.4,
                         ),
                       ),
+                      if (olderObservation != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          olderObservation,
+                          key: const Key('latest-observation-age'),
+                          style: TextStyle(
+                            color: TonyoPalette.of(context).muted,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                       Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
                         child: Divider(
@@ -342,6 +361,38 @@ class TodayScreen extends StatelessWidget {
     }
     if (change == 0) return 'No change from yesterday';
     return '${change > 0 ? '↑' : '↓'} ${change.abs()} points from yesterday';
+  }
+
+  static String? _olderObservationNotice(
+    List<SignalReading> signals,
+    List<DailyCheckIn> checkIns,
+    DateTime now,
+  ) {
+    final times = <DateTime>[
+      for (final signal in signals)
+        if (signal.source != SignalSource.model &&
+            signal.value.isFinite &&
+            signal.quality > 0 &&
+            !signal.timestamp.isAfter(now))
+          signal.timestamp,
+      for (final checkIn in checkIns)
+        if (!checkIn.timestamp.isAfter(now)) checkIn.timestamp,
+    ]..sort((a, b) => b.compareTo(a));
+    if (times.isEmpty) return null;
+    final latest = times.first.toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    if (!latest.isBefore(today)) return null;
+    final elapsed = now.difference(latest);
+    final age = elapsed.inDays > 0
+        ? '${elapsed.inDays} ${elapsed.inDays == 1 ? 'day' : 'days'}'
+        : elapsed.inHours > 0
+        ? '${elapsed.inHours} ${elapsed.inHours == 1 ? 'hour' : 'hours'}'
+        : '${elapsed.inMinutes} ${elapsed.inMinutes == 1 ? 'minute' : 'minutes'}';
+    String pad(int value) => value.toString().padLeft(2, '0');
+    final date = '${latest.year}-${pad(latest.month)}-${pad(latest.day)}';
+    final time = '${pad(latest.hour)}:${pad(latest.minute)}';
+    return 'Latest retained observation: $date $time · $age ago. '
+        'This is not a current measurement.';
   }
 
   static String _confidenceLine(
