@@ -216,7 +216,7 @@ void main() {
     expect(find.text('energy-v2'), findsOneWidget);
     expect(find.textContaining(', 2026'), findsWidgets);
     await show(tester, find.byKey(const Key('transparency-confidence')));
-    expect(find.text('68% confidence'), findsOneWidget);
+    expect(find.text('68% data quality'), findsOneWidget);
     expect(find.textContaining('not the probability'), findsOneWidget);
     await tester.drag(
       find.byKey(const Key('model-transparency-scroll')),
@@ -227,7 +227,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('64'), findsOneWidget);
     await show(tester, find.byKey(const Key('transparency-confidence')));
-    expect(find.text('44% confidence'), findsOneWidget);
+    expect(find.text('44% data quality'), findsOneWidget);
     await show(tester, find.byKey(const Key('transparency-driver-0')));
     expect(
       find.descendant(
@@ -284,7 +284,7 @@ void main() {
       initialHead: ScoreHead.cognitive,
     );
     expect(find.text('—'), findsOneWidget);
-    expect(find.text('Not recorded in this saved snapshot'), findsOneWidget);
+    expect(find.text('Not enough information to estimate'), findsOneWidget);
     expect(find.text('20% confidence'), findsNothing);
     expect(
       find.textContaining('Score calculated: Not recorded'),
@@ -304,6 +304,8 @@ void main() {
   ) async {
     final owner = controller(empty: true);
     await open(tester, owner);
+    expect(find.text('72'), findsNothing);
+    expect(find.text('Not enough information to estimate'), findsOneWidget);
     await show(tester, find.byKey(const Key('transparency-no-drivers')));
     expect(find.textContaining('No factor details were saved'), findsOneWidget);
     await show(tester, find.byKey(const Key('transparency-model-details')));

@@ -1,5 +1,7 @@
 # FatigueEngine Tuning Log
 
+> **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
+
 Fill one row per tuning attempt. Pair with `[ENGINE_TUNING.md](./ENGINE_TUNING.md)`.
 
 Timeline left → right: **observe** → **predict** → **edit** → **measure**.

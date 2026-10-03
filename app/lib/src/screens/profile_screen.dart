@@ -7,6 +7,7 @@ import '../health_service.dart';
 import '../models.dart';
 import '../notification_logic.dart';
 import '../screen_time_service.dart';
+import '../schedule_logic.dart';
 import '../sleep_sync_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -217,8 +218,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   (constraints.maxWidth - (columns - 1) * 8) / columns;
               final stats = [
                 _ProfileStat(
-                  '${controller.score.energy}',
-                  'Est. energy',
+                  controller.score.canEstimateEnergy
+                      ? '${controller.score.energy}'
+                      : '—',
+                  'Experimental energy',
                   TonyoPalette.of(context).secondary,
                 ),
                 _ProfileStat(
@@ -228,7 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 _ProfileStat(
                   '${(controller.score.confidence * 100).round()}%',
-                  'Confidence',
+                  'Data coverage',
                   TonyoPalette.of(context).secondary,
                 ),
               ];
@@ -284,6 +287,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             status: controller.isCloudAuthenticated ? 'On' : 'Local',
           ),
           const SectionHeader('Settings'),
+          _SettingTile(
+            key: const Key('sleep-schedule-setting'),
+            icon: Icons.bedtime_outlined,
+            title: 'Wake and bed schedule',
+            subtitle:
+                '${_scheduleClock(profile.wakeHour)} wake · ${_scheduleClock(profile.bedHour)} bed',
+            onTap: () => _editSchedule(context, controller),
+          ),
           _SettingTile(
             key: const Key('appearance-setting'),
             icon: Icons.palette_outlined,
@@ -395,7 +406,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             key: const Key('model-transparency-setting'),
             icon: Icons.insights_rounded,
             title: 'How your scores work',
-            subtitle: 'Evidence, confidence & the model on this device',
+            subtitle: 'Evidence, data quality & the model on this device',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => ModelTransparencyScreen(controller: controller),
@@ -593,6 +604,119 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: TonyoPalette.of(context).surface,
         builder: (_) => const _NotificationSheet(),
       );
+
+  static String _scheduleClock(double hour) {
+    if (!hour.isFinite || hour < 0 || hour >= 24) return 'Not set';
+    final minutes = (hour * 60).round() % (24 * 60);
+    return '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+  }
+
+  static double? _parseScheduleClock(String text) {
+    final parts = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(text.trim());
+    if (parts == null) return null;
+    final hours = int.parse(parts.group(1)!);
+    final minutes = int.parse(parts.group(2)!);
+    if (hours > 23 || minutes > 59) return null;
+    return hours + minutes / 60;
+  }
+
+  static Future<void> _editSchedule(
+    BuildContext context,
+    AppController controller,
+  ) async {
+    final previous = controller.profile;
+    var wakeText = _scheduleClock(previous.wakeHour);
+    var bedText = _scheduleClock(previous.bedHour);
+    String? error;
+    final updated = await showDialog<UserProfile>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Wake and bed schedule'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Use local 24-hour times. Suggested blocks stay within your waking window. This is your chosen sleep opportunity, not a sleep recommendation or measured sleep.',
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('schedule-wake-field'),
+                  initialValue: wakeText,
+                  onChanged: (value) => wakeText = value,
+                  keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(
+                    labelText: 'Wake time (HH:mm)',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('schedule-bed-field'),
+                  initialValue: bedText,
+                  onChanged: (value) => bedText = value,
+                  keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(
+                    labelText: 'Bed time (HH:mm)',
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(error!, key: const Key('schedule-validation-error')),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('schedule-save'),
+              onPressed: () {
+                final wakeHour = _parseScheduleClock(wakeText);
+                final bedHour = _parseScheduleClock(bedText);
+                if (wakeHour == null || bedHour == null) {
+                  setState(
+                    () => error = 'Enter valid times from 00:00 to 23:59.',
+                  );
+                  return;
+                }
+                final proposed = previous.copyWith(
+                  wakeHour: wakeHour,
+                  bedHour: bedHour,
+                );
+                final problem = ScheduleLogic.validationError(
+                  previous,
+                  proposed,
+                );
+                if (problem != null) {
+                  setState(() => error = problem);
+                  return;
+                }
+                Navigator.pop(dialogContext, proposed);
+              },
+              child: const Text('Save schedule'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (updated == null) return;
+    try {
+      await controller.updateProfile(updated);
+    } on Object {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save the schedule. Please try again.'),
+          ),
+        );
+      }
+    }
+  }
 
   static Future<void> _editProfile(
     BuildContext context,
@@ -978,7 +1102,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Choose daily plan reminders and forecast alerts. Open Tonyo each day to refresh the plan and its reminders. Outdated plans are skipped. Forecast alerts require fresh, higher-confidence windows.',
+              'Choose optional daily plan reminders. Open Tonyo each day to refresh them. Experimental forecasts are uncalibrated, so precise lower-energy and recovery alerts are disabled.',
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -1059,42 +1183,28 @@ class _NotificationSheetState extends State<_NotificationSheet> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Lower-energy heads-up'),
               subtitle: Text(
-                'A gentle reminder about 15 minutes before an eligible window.',
+                'Unavailable: forecast timing has not been prospectively validated.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
                 ),
               ),
-              value: controller.crashNotificationsEnabled,
-              onChanged:
-                  controller.notificationsEnabled &&
-                      !controller.isNotificationSyncing
-                  ? (value) => _update(
-                      context,
-                      () => controller.setCrashNotifications(value),
-                    )
-                  : null,
+              value: false,
+              onChanged: null,
             ),
             SwitchListTile(
               key: const Key('notification-recovery-switch'),
               contentPadding: EdgeInsets.zero,
               title: const Text('Recovery-window reminder'),
               subtitle: Text(
-                'A check-in prompt when the forecast starts to recover.',
+                'Unavailable: forecast timing has not been prospectively validated.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
                 ),
               ),
-              value: controller.recoveryNotificationsEnabled,
-              onChanged:
-                  controller.notificationsEnabled &&
-                      !controller.isNotificationSyncing
-                  ? (value) => _update(
-                      context,
-                      () => controller.setRecoveryNotifications(value),
-                    )
-                  : null,
+              value: false,
+              onChanged: null,
             ),
             const SizedBox(height: 8),
             if (_error != null) ...[
@@ -1912,7 +2022,9 @@ class _NotificationStatus extends StatelessWidget {
     NotificationPlanState.staleForecast =>
       'The forecast is stale, so alerts are suppressed.',
     NotificationPlanState.lowConfidence =>
-      'Forecast confidence is low, so alerts are suppressed.',
+      'Data coverage is limited, so forecast alerts are suppressed.',
+    NotificationPlanState.uncalibratedForecast =>
+      'Forecast timing is uncalibrated. Only eligible schedule reminders can be sent.',
     NotificationPlanState.noFutureWindows =>
       'No eligible upcoming reminders are available today.',
   };

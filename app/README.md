@@ -135,7 +135,7 @@ environment-safe run command.
 Launch from this `app/` directory with Firebase enabled:
 
 ```sh
-flutter run --dart-define-from-file=config/firebase_options.json
+flutter run --release --dart-define-from-file=config/firebase_options.json
 ```
 
 Open **Profile → Model preparation** while signed in, choose the final date of
@@ -351,3 +351,31 @@ export, tracking reset, and account deletion continue to cover the collection.
 
 # DESCRIPTION
 Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sleep, behavior, and exercise data to forecast each user's energy and cognitive state, then delivers personalized recovery and performance recommendations. The app ingests heart-rate variability, resting heart rate, sleep architecture, hydration, screen time, study sessions, training load, and reaction-time tests, and runs a multimodal ML model that produces an Energy Score, a Cognitive Score, and an Energy Forecast curve showing peak and trough windows hour by hour. A reaction-time daily benchmark and stress-and-mood check feed into the model, enabling early-warning alerts for overreaching, sleep debt, or burnout risk. An AI Coach generates daily plans — when to nap, when to study deep work, when to train hard, when to taper — and grounds each suggestion in the user's recent data trends. Insights dashboards explain how sleep, training, and study choices each shifted yesterday's energy and cognitive output. By unifying biology, behavior, and AI into a single fatigue lens, Tonyo helps adolescent students and athletes train smarter, sleep better, and avoid burnout.
+
+## Default launch with Firebase
+
+Select **Tonyo (Firebase)** in VS Code Run and Debug, then press **F5**.
+This is the first launch profile and the default for Run/Debug links in `lib/`.
+Launch configurations support opening `Ai App/`, `fatigue-project/`, or `app/`
+as the workspace. The profile uses the selected Flutter device and passes the
+existing ignored `config/firebase_options.json` to Flutter before compilation.
+Flutter flags use [`toolArgs`](https://dartcode.org/docs/launch-configuration/).
+The explicit Edge local-only profile remains available from `fatigue-project/`.
+
+For a terminal launch from `app/`:
+
+```sh
+./run.sh
+# Choose a device or pass any other flutter run options:
+./run.sh -d chrome --web-port=7357
+```
+
+The launcher resolves its own directory, so it also works when invoked by path
+from another folder. Flutter must be on `PATH`. It stops with setup instructions
+if the private configuration file is missing; it never creates or overwrites it.
+A direct `flutter run` still needs `--dart-define-from-file=config/firebase_options.json`
+to enable Firebase. Runtime values remain outside tracked source files.
+
+## Biology Phase 1
+
+Sleep observations and supported teen guidance are separate from experimental scores. Removed exposure rewards, conservative optional plans, explicit missing/zero values, versioned caches and model compatibility are documented in [BIOLOGY_UPGRADE_PROGRESS.md](docs/BIOLOGY_UPGRADE_PROGRESS.md). Forecast bands are uncalibrated and precise forecast alerts are disabled.

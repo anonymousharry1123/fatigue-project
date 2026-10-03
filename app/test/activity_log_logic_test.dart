@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ActivityLogLogic', () {
-    test('treats blank values as zero', () {
+    test('explicit zero is logged while blank remains missing', () {
+      // Chart arithmetic is not a storage or editing default.
       expect(ActivityLogLogic.valueOrZero(null), 0);
+      expect(ActivityLogLogic.hasAnyLoggedValue(), isFalse);
       expect(ActivityLogLogic.valueOrZero(2.5), 2.5);
       expect(
         ActivityLogLogic.hasAnyLoggedValue(
@@ -14,7 +16,7 @@ void main() {
           exerciseHours: 0,
           screenTimeHours: 0,
         ),
-        isFalse,
+        isTrue,
       );
       expect(
         ActivityLogLogic.hasAnyLoggedValue(
@@ -26,6 +28,48 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'zero-only series has an observation and missing days remain distinct',
+      () {
+        final now = DateTime(2026, 11, 2, 12);
+        final log = ActivityLogEntry(
+          id: 'activity-zero',
+          timestamp: now,
+          hydrationLiters: null,
+          studyHours: 0,
+          exerciseHours: null,
+          screenTimeHours: null,
+        );
+        expect(ActivityLogLogic.observationFor(log, SignalType.study), 0);
+        expect(
+          ActivityLogLogic.observationFor(log, SignalType.hydration),
+          isNull,
+        );
+        final series = ActivityLogLogic.weekByCategory([log], now: now);
+        final study = series.singleWhere((s) => s.type == SignalType.study);
+        expect(study.hasData, isTrue);
+        expect(study.observed.where((present) => present), hasLength(1));
+        expect(study.isObserved(6), isTrue);
+        expect(study.isObserved(5), isFalse);
+        expect(study.values[6], 0);
+        expect(study.peakDay, DateTime(2026, 11, 2));
+        expect(
+          series.singleWhere((s) => s.type == SignalType.hydration).hasData,
+          isFalse,
+        );
+        expect(study.days.map((day) => '${day.month}/${day.day}'), [
+          '10/27',
+          '10/28',
+          '10/29',
+          '10/30',
+          '10/31',
+          '11/1',
+          '11/2',
+        ]);
+        expect(study.days.every((day) => day.hour == 0), isTrue);
+      },
+    );
 
     test('builds last-week category series and finds peak days', () {
       final now = DateTime(2026, 7, 23, 12);

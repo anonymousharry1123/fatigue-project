@@ -213,7 +213,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
               const SizedBox(height: 8),
               Text(
                 'Inspect exactly 30 days from your signed-in account. Preparing '
-                'a snapshot does not train a model, change confidence, enable consent, '
+                'a snapshot does not train a model, change data quality, enable consent, '
                 'or upload training rows.',
                 style: TextStyle(color: TonyoPalette.of(context).muted),
               ),
@@ -323,7 +323,7 @@ class _MlPrepScreenState extends State<MlPrepScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Deterministic scoring remains the fallback. Cognitive '
-                      'is not personalized, and this does not boost confidence.',
+                      'is not personalized, and this does not boost data quality.',
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 12,

@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tonyo (Firebase)",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/lib/main.dart",
+      "cwd": "${workspaceFolder}",
+      "templateFor": "lib",
+      "toolArgs": [
+        "--dart-define-from-file=config/firebase_options.json"
+      ]
+    }
+  ]
+}

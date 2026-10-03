@@ -343,7 +343,7 @@ void main() {
   );
 
   test(
-    'Versions 0.11–0.12 query cloud inputs and update one daily snapshot',
+    'current experimental rules query inputs and save comparable versioned snapshots',
     () async {
       final now = DateTime.now();
       final recordedAt = now;
@@ -416,7 +416,12 @@ void main() {
           confidence: .8,
           drivers: const [],
           cognitiveConfidence: .7,
-          cognitiveDrivers: const [],
+          cognitiveDrivers: const [
+            ScoreDriver('Reaction time', -3, 'Recorded test'),
+          ],
+          cognitiveInputCount: 1,
+          energyModelVersion: FatigueEngine.energyModelVersion,
+          cognitiveModelVersion: FatigueEngine.cognitiveModelVersion,
           day: previousDay,
         ),
       );
@@ -429,8 +434,8 @@ void main() {
       await controller.load();
 
       final persisted = await repository.scoreSnapshotForDay('score-uid', now);
-      expect(controller.score.inputCount, 7);
-      expect(controller.score.cognitiveInputCount, 6);
+      expect(controller.score.inputCount, 4);
+      expect(controller.score.cognitiveInputCount, 5);
       expect(controller.score.previousCognitive, 62);
       expect(
         controller.score.cognitiveDrivers
@@ -443,16 +448,16 @@ void main() {
       expect(persisted, isNotNull);
       expect(persisted?.energy, controller.score.energy);
       expect(persisted?.cognitive, controller.score.cognitive);
-      expect(persisted?.cognitiveDrivers, hasLength(6));
+      expect(persisted?.cognitiveDrivers, hasLength(5));
       expect(persisted?.previousCognitive, 62);
-      expect(persisted?.drivers, hasLength(7));
+      expect(persisted?.drivers, hasLength(6));
     },
   );
 
   test(
-    'Version 0.13 loads today snapshot and day-scoped signal summaries',
+    'stale saved readiness cannot override contextual-only current inputs',
     () async {
-      final now = DateTime.now();
+      final now = DateTime(2026, 9, 19, 15, 30);
       final day = DateTime(now.year, now.month, now.day);
       final auth = MemoryAccountAuth(
         session: const AccountSession(
@@ -525,13 +530,15 @@ void main() {
         initialPrivacyConsent: testAdultPrivacyConsent,
         accountAuth: auth,
         cloudRepository: repository,
+        clock: () => now,
       );
 
       await controller.load();
 
-      expect(controller.score.energy, 91);
-      expect(controller.score.cognitive, 87);
-      expect(controller.scoreLoadedFromSnapshot, isTrue);
+      expect(controller.score.canEstimateEnergy, isFalse);
+      expect(controller.score.canEstimateCognitive, isFalse);
+      expect(controller.score.energy, isNot(91));
+      expect(controller.scoreLoadedFromSnapshot, isFalse);
       final hydration = controller.todaySignalSummaries.singleWhere(
         (item) => item.type == SignalType.hydration,
       );
@@ -604,9 +611,9 @@ void main() {
       await controller.load();
 
       expect(controller.scoreLoadedFromSnapshot, isFalse);
-      expect(controller.score.energy, 66);
-      expect(controller.score.cognitive, 69);
-      expect(controller.score.drivers.single.label, 'Sleep');
+      expect(controller.score.canEstimateEnergy, isFalse);
+      expect(controller.score.canEstimateCognitive, isFalse);
+      expect(controller.score.drivers, isEmpty);
       expect(
         controller.score.energyModelVersion,
         FatigueEngine.energyModelVersion,
@@ -650,9 +657,9 @@ void main() {
           migrationVersion: localMigrationVersion,
           signals: [
             SignalReading(
-              id: 'sleep',
-              type: SignalType.sleep,
-              value: 8,
+              id: 'study',
+              type: SignalType.study,
+              value: 2,
               timestamp: now,
             ),
           ],
@@ -832,7 +839,7 @@ void main() {
   );
 
   test(
-    'Versions 0.18–0.31 persist plans, feedback, outcomes, and alert dismissal',
+    'Phase 1 preserves optional plan feedback, outcomes, and factual observation dismissal',
     () async {
       final now = DateTime.now();
       final day = DateTime(now.year, now.month, now.day);
@@ -955,7 +962,7 @@ void main() {
         'guidance-uid',
         day,
       );
-      expect(first.recommendations, hasLength(8));
+      expect(first.recommendations, hasLength(4));
       expect(first.recommendations.every((item) => item.isGrounded), isTrue);
       expect(
         first.recommendations.every(
@@ -966,27 +973,37 @@ void main() {
         ),
         isTrue,
       );
-      expect(persistedRecommendations, hasLength(8));
+      expect(persistedRecommendations, hasLength(4));
       final focus = first.recommendations.singleWhere(
         (item) => item.planPhase == CoachPlanPhase.deepWork,
       );
-      final training = first.recommendations.singleWhere(
-        (item) => item.planPhase == CoachPlanPhase.training,
+      expect(
+        first.recommendations.map((item) => item.planPhase),
+        isNot(contains(CoachPlanPhase.training)),
+      );
+      expect(
+        first.recommendations.map((item) => item.planPhase),
+        isNot(contains(CoachPlanPhase.nap)),
       );
       expect(focus.feedbackSampleCount, 2);
       expect(focus.feedbackScore, .75);
       expect(focus.feedbackRank, 1);
       expect(focus.priority, RecommendationPriority.important);
-      expect(training.feedbackSampleCount, 2);
-      expect(training.feedbackScore, .25);
-      expect(training.priority, RecommendationPriority.routine);
+      final historical = await repository.recommendationsForDay(
+        'guidance-uid',
+        day.subtract(const Duration(days: 1)),
+      );
+      expect(
+        historical
+            .singleWhere((item) => item.id == 'history-training-1')
+            .helpful,
+        isFalse,
+      );
       expect(
         (await repository.readUser('guidance-uid'))!.profile.coachPriority,
         CoachPriority.training,
       );
       expect(persistedAlerts.map((item) => item.category).toSet(), {
-        RiskAlertCategory.sleepDebt,
-        RiskAlertCategory.trainingLoad,
         RiskAlertCategory.fatigueStress,
       });
       expect(first.guidanceSavedToCloud, isTrue);
@@ -1290,52 +1307,47 @@ void main() {
     },
   );
 
-  test(
-    'activity logs display omitted fields as zero without saving signals',
-    () async {
-      final controller = AppController(
-        initialPrivacyConsent: testAdultPrivacyConsent,
-      );
-      await controller.load();
-      await controller.saveActivityLog(
-        hydrationLiters: 2.2,
-        timestamp: DateTime(2026, 7, 23, 12),
-      );
+  test('activity logs preserve missing fields through local restore', () async {
+    final controller = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
+    await controller.load();
+    await controller.saveActivityLog(
+      hydrationLiters: 2.2,
+      timestamp: DateTime(2026, 7, 23, 12),
+    );
 
-      expect(controller.activityLogs, hasLength(1));
-      expect(controller.activityLogs.single.hydrationLiters, 2.2);
-      expect(controller.activityLogs.single.studyHours, 0);
-      expect(controller.activityLogs.single.exerciseHours, 0);
-      expect(controller.activityLogs.single.screenTimeHours, 0);
-      expect(
-        controller.signals.where(
-          (signal) => signal.groupId == controller.activityLogs.single.id,
-        ),
-        hasLength(1),
-      );
-      expect(
-        controller.signals
-            .singleWhere((signal) => signal.type == SignalType.hydration)
-            .note,
-        ActivitySyncLogic.manualCorrectionNote,
-      );
-      expect(
-        controller.signals.where(
-          (signal) => signal.type == SignalType.exercise,
-        ),
-        isEmpty,
-      );
+    expect(controller.activityLogs, hasLength(1));
+    expect(controller.activityLogs.single.hydrationLiters, 2.2);
+    expect(controller.activityLogs.single.studyHours, isNull);
+    expect(controller.activityLogs.single.exerciseHours, isNull);
+    expect(controller.activityLogs.single.screenTimeHours, isNull);
+    expect(
+      controller.signals.where(
+        (signal) => signal.groupId == controller.activityLogs.single.id,
+      ),
+      hasLength(1),
+    );
+    expect(
+      controller.signals
+          .singleWhere((signal) => signal.type == SignalType.hydration)
+          .note,
+      ActivitySyncLogic.manualCorrectionNote,
+    );
+    expect(
+      controller.signals.where((signal) => signal.type == SignalType.exercise),
+      isEmpty,
+    );
 
-      final restored = AppController(
-        initialPrivacyConsent: testAdultPrivacyConsent,
-      );
-      await restored.load();
-      expect(restored.activityLogs.single.hydrationLiters, 2.2);
-      expect(restored.activityLogs.single.studyHours, 0);
+    final restored = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+    );
+    await restored.load();
+    expect(restored.activityLogs.single.hydrationLiters, 2.2);
+    expect(restored.activityLogs.single.studyHours, isNull);
 
-      expect(() => controller.saveActivityLog(), throwsArgumentError);
-    },
-  );
+    expect(() => controller.saveActivityLog(), throwsArgumentError);
+  });
 
   test(
     'Version 0.10 history persists, edits, and deletes manual entries',

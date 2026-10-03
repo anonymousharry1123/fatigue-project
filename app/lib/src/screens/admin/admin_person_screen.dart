@@ -168,7 +168,7 @@ class _DriverCard extends StatelessWidget {
           const SizedBox(height: 10),
         ],
         Text(
-          'Confidence ${(confidence * 100).round()}%',
+          'Data quality ${(confidence * 100).round()}%',
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
       ],

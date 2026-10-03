@@ -1,5 +1,7 @@
 # Version 0.32 — on-device Energy model
 
+> **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
+
 Implemented in `0.32.0+33`. The model is optional: deterministic Energy remains
 the default unless one account's genuine, consented data passes all gates.
 Cognitive remains deterministic/report-only. This is a wellness estimate, not

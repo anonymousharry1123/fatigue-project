@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'activity_sync_logic.dart';
 import 'fatigue_engine.dart';
 import 'models.dart';
+import 'personal_baseline_logic.dart';
 import 'sleep_sync_logic.dart';
 
 enum InsightTrendMetric { energy, sleep, training, study }
@@ -99,11 +100,26 @@ class InsightsSnapshot {
   final int sourceCheckInCount;
 
   bool get hasCurrentData => currentSummary.trackedDayCount > 0;
+
+  /// Every plotted score uses the same current deterministic rules. These are
+  /// recomputations from available observations, not the result shown that day.
+  String get energyModelVersion => FatigueEngine.energyModelVersion;
+  String get cognitiveModelVersion => FatigueEngine.cognitiveModelVersion;
+  String get calculationBasis =>
+      'Recomputed experimental estimates · current deterministic rules '
+      '($energyModelVersion; $cognitiveModelVersion). '
+      'No learned personalization. Past days use end-of-day observations; '
+      'today uses entries up to now. Available earlier records form each '
+      'day’s personal baseline. Missing history can change these estimates; '
+      'they are not the scores originally shown on those dates.';
 }
 
 abstract final class InsightsLogic {
   static const currentDayCount = 7;
-  static const queryLookbackDays = 20;
+  // Supply the same baseline window for the earliest displayed historical day
+  // as Today receives. The controller uses this constant for cloud queries.
+  static const queryLookbackDays =
+      currentDayCount * 2 + PersonalBaselineLogic.windowDays;
 
   static const _scoreSignalTypes = {
     SignalType.sleep,
@@ -113,6 +129,10 @@ abstract final class InsightsLogic {
     SignalType.screenTime,
     SignalType.caffeine,
     SignalType.reactionTime,
+    SignalType.hrv,
+    SignalType.restingHeartRate,
+    SignalType.nap,
+    SignalType.steps,
   };
 
   static InsightsSnapshot build({
@@ -131,7 +151,8 @@ abstract final class InsightsLogic {
           (item) =>
               !item.timestamp.isBefore(modelStart) &&
               !item.timestamp.isAfter(cutoff) &&
-              item.value.isFinite,
+              item.value.isFinite &&
+              item.value >= 0,
         )
         .toList(growable: false);
     final scopedCheckIns = checkIns
@@ -234,6 +255,10 @@ abstract final class InsightsLogic {
             checkIns: checkIns,
             now: cutoff,
             day: day,
+            personalBaselines: PersonalBaselineLogic.build(
+              signals: signals,
+              asOf: cutoff,
+            ),
           );
     return InsightDay(
       date: day,
@@ -242,8 +267,10 @@ abstract final class InsightsLogic {
       sleepHours: sleepReadings.firstOrNull?.value,
       trainingHours: total(SignalType.exercise),
       studyHours: total(SignalType.study),
-      estimatedEnergy: score?.energy,
-      estimatedCognitive: score?.cognitive,
+      estimatedEnergy: score?.canEstimateEnergy == true ? score!.energy : null,
+      estimatedCognitive: score?.canEstimateCognitive == true
+          ? score!.cognitive
+          : null,
       recordCount: recordCount,
     );
   }

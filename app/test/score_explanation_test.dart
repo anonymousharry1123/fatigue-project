@@ -51,6 +51,56 @@ void main() {
     DateTime? clock,
   }) => ScoreExplanation.build(snapshot: score, head: head, now: clock ?? now);
 
+  test('empty current estimates stay unavailable in explanations', () {
+    final empty = FatigueEngine.score(
+      signals: const [],
+      checkIns: const [],
+      now: now,
+    );
+    for (final head in ScoreHead.values) {
+      final result = explain(empty, head: head);
+      expect(result.value, isNull);
+      expect(result.confidence, 0);
+      expect(result.caveats.join(' '), contains('Not enough information'));
+      expect(result.caveats.join(' '), contains('experimental estimates'));
+    }
+  });
+
+  test('current inventory separates retired contexts from active inputs', () {
+    final current = FatigueEngine.score(
+      signals: [
+        SignalReading(
+          id: 'study',
+          type: SignalType.study,
+          value: 0,
+          timestamp: now,
+        ),
+        SignalReading(
+          id: 'water',
+          type: SignalType.hydration,
+          value: 2,
+          timestamp: now,
+        ),
+      ],
+      checkIns: const [],
+      now: now,
+    );
+    final result = explain(current);
+    expect(result.value, current.energy);
+    expect(result.inputs.map((input) => input.label), isNot(contains('Sleep')));
+    expect(
+      result.inputs.map((input) => input.label),
+      isNot(contains('Hydration')),
+    );
+    expect(result.usedInputCount, 1);
+    expect(result.inputTotal, 6);
+    expect(result.caveats.join(' '), contains('Sleep guidance is separate'));
+    expect(
+      result.caveats.join(' '),
+      isNot(contains('not in the current factor inventory')),
+    );
+  });
+
   test('explains saved score unchanged and ranks all impacts by magnitude', () {
     final positive = measured('Sleep', 4);
     final negative = measured('Hydration', -12);
@@ -398,7 +448,7 @@ void main() {
   });
 
   test('freshness is relative to calculation, not time the panel opened', () {
-    final score = snapshot(drivers: [measured('Sleep', 1)]);
+    final score = snapshot(drivers: [measured('Sleep', 1)], inputCount: 1);
     final result = explain(score, clock: now.add(const Duration(days: 3)));
     expect(
       result.drivers.single.freshnessLabel,
@@ -502,7 +552,12 @@ void main() {
   test(
     'personalization stays separate and cannot increase reported confidence',
     () {
-      final original = snapshot(drivers: [measured('Sleep', 1)], inputCount: 1);
+      final original = snapshot(
+        drivers: [measured('Sleep', 1)],
+        inputCount: 1,
+        cognitiveDrivers: [measured('Reaction time', 1)],
+        cognitiveInputCount: 1,
+      );
       final score = original.withEnergyCorrection(5, '1');
       final result = explain(score);
       expect(result.value, 77);
@@ -515,7 +570,10 @@ void main() {
         'Personalized Energy adjustment',
       );
       expect(result.drivers.first.kind, EvidenceKind.estimated);
-      expect(result.caveats.join(' '), contains('does not raise confidence'));
+      expect(
+        result.caveats.join(' '),
+        contains('does not raise data coverage'),
+      );
       expect(
         explain(score, head: ScoreHead.cognitive).value,
         original.cognitive,
@@ -540,7 +598,7 @@ void main() {
         }
         expect(
           result.caveats.join(' '),
-          contains('saved confidence value is invalid'),
+          contains('saved data-quality value is invalid'),
         );
       }
       expect(explain(snapshot(inputCount: -5)).inputCount, 0);
@@ -593,6 +651,7 @@ void main() {
   test('invalid impacts sort last and are not formatted as real points', () {
     final result = explain(
       snapshot(
+        inputCount: 4,
         drivers: [
           measured('Sleep', double.nan),
           measured('Hydration', 2),

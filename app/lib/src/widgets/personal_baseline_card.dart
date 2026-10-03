@@ -37,7 +37,7 @@ class PersonalBaselineCard extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    '${baselines.readyCount}/4 ready · ${baselines.windowDays}-day private history',
+                    '${baselines.readyCount}/4 established · ${baselines.windowDays}-day private history',
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -67,7 +67,7 @@ class PersonalBaselineCard extends StatelessWidget {
         if (!compact) ...[
           const SizedBox(height: 13),
           Text(
-            'Tonyo compares these signals only with your own history. Confidence stays reduced while a baseline is still building.',
+            'These are usual patterns in your records, not healthy targets or age recommendations. Data quality stays limited while a baseline is building.',
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,

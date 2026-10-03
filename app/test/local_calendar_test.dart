@@ -75,13 +75,11 @@ void main() {
       for (final day in [DateTime(2026, 3, 8), DateTime(2026, 11, 1)]) {
         DateTime at(int hour) => DateTime(day.year, day.month, day.day, hour);
         final evidence = ForecastEvidence(
-          id: 'sleep-main',
-          kind: ForecastEvidenceKind.signal,
-          label: 'Sleep',
-          detail: 'Main sleep',
-          timestamp: at(7),
-          signalType: SignalType.sleep,
-          source: SignalSource.manual,
+          id: 'morning-check-in',
+          kind: ForecastEvidenceKind.checkIn,
+          label: 'Check-in',
+          detail: 'Recorded morning rating',
+          timestamp: at(6),
         );
         final plan = DailyPlanLogic.build(
           windows: [
@@ -115,6 +113,8 @@ void main() {
             cognitive: 70,
             confidence: .8,
             cognitiveConfidence: .8,
+            inputCount: 1,
+            cognitiveInputCount: 1,
             drivers: [],
           ),
           profile: const UserProfile(wakeHour: 7, bedHour: 23),

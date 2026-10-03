@@ -1987,3 +1987,47 @@ state.
 - [ ] Deploy/audit production rules and IAM; complete real-iPhone privacy/deletion QA
 - [ ] Keep this log updated each working day before merge/PR
 - [ ] Backfill earlier versions (0.1–0.7) prompt entries if curriculum requires a complete prompt history
+
+## 2026-10-03 — Default Firebase launch
+
+### Feature: Load Firebase configuration when launching Tonyo
+
+**Prompt:** “change app launch so it runs with firebase config pre loaded.”
+
+**Result:** Added the default **Tonyo (Firebase)** selected-device launch profile
+at the outer workspace, repository, and Flutter-app roots. App Run/Debug links
+use the Firebase profile through a `lib/`-scoped template; test launches do not
+inherit it. Updated the existing Edge profiles to use Flutter `toolArgs` and
+explicit workspace paths. Added executable `app/run.sh` to preload the ignored
+configuration and forward optional Flutter arguments from any working directory.
+The private configuration and Dart application code were not changed.
+
+**Challenge and solution:** A launch configuration in the nested repository is
+not discovered when the outer workspace or Flutter app is opened directly.
+Matching profiles at those roots resolve the same app and configuration file.
+Tool flags belong in `toolArgs`; the old `args` placement can still work with
+the current Flutter adapter, so it was not treated as a proven runtime failure.
+
+**Validation:** `bash -n app/run.sh` and `git diff --check` passed. Parsed all
+three launch files and verified their entry point, working directory, template
+scope, and configuration-file paths without printing configuration values.
+Invoked the launcher with a temporary mock Flutter executable from another
+working directory: Firebase flag and optional device/web-port arguments were
+forwarded correctly. A temporary copy with no configuration failed before
+invoking Flutter. No real app launch, Firebase connection, or test suite run was
+needed for this launch-only change.
+
+
+## 2026-10-03 — Biology Phase 1 safety and interpretation
+
+**Prompt:** Implement only Phase 1 of the supplied biology plan: teen-band sleep guidance and explicit coverage, remove exposure/recovery rewards and diagnostic inference, fix score persistence/history, version/invalidate derived state while preserving raw data and attempt safeguards, improve schedule safety and zero/missing behavior, test locally and document deferred phases.
+
+**Result:** Implemented the scoped changes; see [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Kept the earlier requested Firebase preload launch changes and the user's biology plan. No production access, deployment, privacy-rule weakening, external AI service or automatic retraining.
+
+**Challenges and solutions:** Reproduced a Firestore merge leaving stale personalization fields and fixed it with explicit null writes plus defensive reads. Unified historical series as labeled current deterministic recomputations with full prior-baseline lookback. Removed retired exposure features from model preparation without lowering the four-feature gate; isolated test fixtures gained prior heart history to exercise the existing trainer. Preserved valid attempt ledger when weights are incompatible. Fixed source-equivalence cache reuse and canceled obsolete native schedules before asynchronous mutation work. A new sleep detail ExpansionTile needed its own PageStorageKey to avoid colliding with the page's scroll offset; accessibility regression caught and verified the fix.
+
+**Validation:** Initial targeted and whole-suite runs exposed expected legacy assumptions (retired rewards, old schema number and predictive alert labels) plus the two cache/layout defects above. Tests were repaired against the new behavior without disabling privacy or accessibility checks. Final command results are recorded in the progress document. Executable Firestore tests are unavailable without Node/pnpm/Java; no live database was substituted.
+
+**Learning / next task:** A record does not prove complete observation coverage; personal usual values are not age targets. Passing synthetic software tests does not demonstrate biological accuracy. Next run the local emulator and physical-device Phase 1 release checks; do not begin Phases 2–5.
+
+**Final verification:** `flutter analyze --no-pub` found no issues; `flutter test` passed all 903 tests. The explicit America/Los_Angeles sleep/calendar/schedule run passed 28 tests. `git diff --check` passed. No unresolved Flutter failures; local Firestore emulator and physical-device checks remain untested as documented above.

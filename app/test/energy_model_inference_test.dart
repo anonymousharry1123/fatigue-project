@@ -140,7 +140,9 @@ void main() {
         snapshot: reference,
         day: DateTime.utc(2026, 7, 31),
       );
-      expect(oldPayload, isNot(contains('deterministicEnergy')));
+      expect(oldPayload, contains('deterministicEnergy'));
+      expect(oldPayload['deterministicEnergy'], isNull);
+      expect(oldPayload['personalizedModelVersion'], isNull);
       expect(
         scoreSnapshotFromCloud(oldPayload).withoutPersonalization().energy,
         64,

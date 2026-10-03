@@ -457,10 +457,14 @@ extension CoachPriorityInfo on CoachPriority {
   };
 
   String get detail => switch (this) {
-    CoachPriority.balanced => 'Balance deep work, movement, and recovery.',
-    CoachPriority.focus => 'Protect demanding study before other goals.',
-    CoachPriority.training => 'Protect the best safe training window.',
-    CoachPriority.recovery => 'Favor sleep, naps, and lower-intensity blocks.',
+    CoachPriority.balanced =>
+      'Leave room for tasks, breaks, and your saved sleep schedule.',
+    CoachPriority.focus =>
+      'Give optional study blocks priority around your commitments.',
+    CoachPriority.training =>
+      'Keep existing training plans separate from experimental scores.',
+    CoachPriority.recovery =>
+      'Leave space for a quieter day and your saved sleep schedule.',
   };
 }
 
@@ -655,6 +659,7 @@ class ScoreSnapshot {
     this.cognitiveConfidence = .2,
     this.cognitiveDrivers = const [],
     this.cognitiveInputCount = 0,
+    this.hasEnergyScore = true,
     this.hasCognitiveScore = true,
     this.previousCognitive,
     this.day,
@@ -678,7 +683,12 @@ class ScoreSnapshot {
   final double cognitiveConfidence;
   final List<ScoreDriver> cognitiveDrivers;
   final int cognitiveInputCount;
+  final bool hasEnergyScore;
   final bool hasCognitiveScore;
+
+  /// Data availability, not a probability of correctness or exercise clearance.
+  bool get canEstimateEnergy => hasEnergyScore && inputCount > 0;
+  bool get canEstimateCognitive => hasCognitiveScore && cognitiveInputCount > 0;
   final int? previousCognitive;
   final DateTime? day;
   final DateTime? calculatedAt;
@@ -696,13 +706,18 @@ class ScoreSnapshot {
   final String? energyModelVersion;
   final String? cognitiveModelVersion;
 
-  ScoreSnapshot withoutPersonalization() => deterministicEnergy == null
+  ScoreSnapshot withoutPersonalization() =>
+      deterministicEnergy == null &&
+          personalizedModelVersion == null &&
+          !drivers.any(
+            (driver) => driver.label == 'Personalized Energy adjustment',
+          )
       ? this
-      : _withEnergy(deterministicEnergy!, null, null);
+      : _withEnergy(deterministicEnergy ?? energy, null, null);
 
   ScoreSnapshot withEnergyCorrection(double correction, String modelVersion) {
     final base = withoutPersonalization();
-    if (!correction.isFinite) return base;
+    if (!correction.isFinite || !base.canEstimateEnergy) return base;
     final adjusted = (base.energy + correction.clamp(-10, 10)).round().clamp(
       0,
       100,
@@ -729,7 +744,7 @@ class ScoreSnapshot {
           (value - reference).toDouble(),
           'Bounded on-device correction from your consented Energy outcomes',
           explanation:
-              'Validated against held-out days. Not a medical assessment; confidence is unchanged.',
+              'Compared with held-out recorded days; this is not evidence of medical accuracy. Data coverage is unchanged.',
           source: SignalSource.model,
           evidenceSources: const [SignalSource.model],
           containsDemoEvidence: false,
@@ -738,6 +753,7 @@ class ScoreSnapshot {
     cognitiveConfidence: cognitiveConfidence,
     cognitiveDrivers: cognitiveDrivers,
     cognitiveInputCount: cognitiveInputCount,
+    hasEnergyScore: hasEnergyScore,
     hasCognitiveScore: hasCognitiveScore,
     previousCognitive: previousCognitive,
     day: day,
@@ -754,10 +770,16 @@ class ScoreSnapshot {
     cognitiveModelVersion: cognitiveModelVersion,
   );
 
-  int? get cognitiveChange =>
-      previousCognitive == null ? null : cognitive - previousCognitive!;
-  double get completeness => (inputCount / 7).clamp(0, 1);
-  double get cognitiveCompleteness => (cognitiveInputCount / 6).clamp(0, 1);
+  int? get cognitiveChange => !canEstimateCognitive || previousCognitive == null
+      ? null
+      : cognitive - previousCognitive!;
+  int get energyInputTotal =>
+      energyModelVersion == 'energy-rules-v3-phase1' ? 6 : 7;
+  int get cognitiveInputTotal =>
+      cognitiveModelVersion == 'cognitive-rules-v3-phase1' ? 5 : 6;
+  double get completeness => (inputCount / energyInputTotal).clamp(0, 1);
+  double get cognitiveCompleteness =>
+      (cognitiveInputCount / cognitiveInputTotal).clamp(0, 1);
   List<ScoreDriver> get energyPositiveDrivers =>
       drivers.where((driver) => driver.isPositive).toList(growable: false);
   List<ScoreDriver> get energyNegativeDrivers =>
@@ -781,13 +803,19 @@ class ForecastPoint {
     this.energy,
     this.uncertainty, {
     this.updatedAt,
+    this.rulesVersion,
     this.signalEvidenceIds = const [],
     this.checkInEvidenceIds = const [],
   });
   final DateTime time;
   final double energy;
+
+  /// Width of an uncalibrated heuristic band, not a statistical interval.
   final double uncertainty;
   final DateTime? updatedAt;
+
+  /// Null identifies a legacy, incompatible derived forecast.
+  final String? rulesVersion;
   final List<String> signalEvidenceIds;
   final List<String> checkInEvidenceIds;
 }

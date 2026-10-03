@@ -260,6 +260,60 @@ void main() {
   );
 
   test(
+    'schedule edits replace pending reminders within the new waking window',
+    () async {
+      final app = local()..onboardingComplete = true;
+      addTearDown(app.dispose);
+      await app.refreshGuidance();
+      await app.setCoachPlanNotifications(true);
+      final oldTimes = service.scheduled
+          .map((item) => item.scheduledAt)
+          .toList();
+      expect(oldTimes, isNotEmpty);
+      await app.updateProfile(app.profile.copyWith(wakeHour: 9, bedHour: 1));
+      final updated = service.scheduled;
+      expect(updated, isNotEmpty);
+      expect(
+        updated.map((item) => item.scheduledAt),
+        isNot(orderedEquals(oldTimes)),
+      );
+      for (final reminder in updated) {
+        final block = app.recommendations.singleWhere(
+          (item) => item.id == reminder.sourceRecommendationId,
+        );
+        expect(reminder.scheduledAt, block.scheduledAt);
+        expect(
+          reminder.scheduledAt.isBefore(DateTime(2026, 9, 20, 9)),
+          isFalse,
+        );
+        expect(
+          reminder.scheduledAt
+              .add(Duration(minutes: block.durationMinutes!))
+              .isAfter(DateTime(2026, 9, 21, 1)),
+          isFalse,
+        );
+      }
+    },
+  );
+
+  test(
+    'evidence loss removes guidance and reconciles away scheduled reminders',
+    () async {
+      final app = local();
+      addTearDown(app.dispose);
+      await app.refreshGuidance();
+      await app.setCoachPlanNotifications(true);
+      expect(service.scheduled, isNotEmpty);
+      app.checkIns.clear();
+      app.signals.clear();
+      await app.refreshGuidance();
+      expect(app.recommendations, isEmpty);
+      expect(service.scheduled, isEmpty);
+      expect(app.scheduledCoachNotificationCount, 0);
+    },
+  );
+
+  test(
     'daily reminder preference syncs independently and survives account reload',
     () async {
       final repo = MemoryCloudRepository(signedInUid: 'owner')

@@ -1,4 +1,5 @@
 import 'energy_model_summary.dart';
+import 'fatigue_engine.dart';
 import 'models.dart';
 import 'score_explanation.dart';
 
@@ -37,6 +38,8 @@ class ModelTransparencyState {
       signedIn &&
       consentEnabled &&
       localModel != null &&
+      snapshot.canEstimateEnergy &&
+      snapshot.energyModelVersion == FatigueEngine.energyModelVersion &&
       snapshot.deterministicEnergy != null &&
       snapshot.personalizedModelVersion == 'energy-ridge-v1';
 
@@ -57,7 +60,7 @@ class ModelTransparencyState {
   String get modelStatusTitle => personalizedEnergyApplied
       ? 'Personalized Energy'
       : localModel != null && signedIn && consentEnabled
-      ? 'Model ready · baseline used'
+      ? 'Local model available · no correction'
       : 'Standard scoring on this device';
 
   String get modelStatusDetail {
@@ -66,7 +69,7 @@ class ModelTransparencyState {
       final sign = delta > 0 ? '+' : '−';
       return 'The standard Energy estimate is ${snapshot.deterministicEnergy}. '
           'Your on-device model contributes $sign${delta.abs()} points to this '
-          'score. The adjustment is limited to ±10; Cognitive and confidence '
+          'score. The adjustment is limited to ±10; Cognitive and data quality '
           'are unchanged.';
     }
     if (localModel != null && signedIn && consentEnabled) {
@@ -80,7 +83,7 @@ class ModelTransparencyState {
           'your consent.';
     }
     if (cloudModel != null) {
-      return 'Firebase contains a model summary, not its weights. Without an '
+      return 'Firebase contains a historical model summary, not its weights. Without an '
           'accepted local model, this device uses the standard rules. A model '
           'trained on another device is not automatically installed here.';
     }

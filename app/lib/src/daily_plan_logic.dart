@@ -1,13 +1,23 @@
 import 'models.dart';
 import 'local_day.dart';
+import 'schedule_logic.dart';
 
-/// Builds Version 0.29's grounded, morning-to-evening Coach timeline.
-///
-/// Forecast windows decide *when* an action fits. Score confidence controls
-/// how specific or aggressive it may be. The saved user priority resolves the
-/// deliberate recovery-versus-training conflict in the rebound window.
+/// Optional schedule blocks. Experimental forecasts do not establish optimal
+/// timing or authorize exercise intensity. No fixed-commitment model exists.
 class DailyPlanLogic {
   const DailyPlanLogic._();
+
+  static const planVersion = 'phase1';
+
+  static bool isCurrentPlan(Recommendation item) =>
+      item.day != null &&
+      item.id.startsWith('${_dayIdentifier(item.day!)}-$planVersion-') &&
+      const {
+        CoachPlanPhase.morning,
+        CoachPlanPhase.deepWork,
+        CoachPlanPhase.midday,
+        CoachPlanPhase.evening,
+      }.contains(item.planPhase);
 
   static List<Recommendation> build({
     required List<ForecastWindow> windows,
@@ -16,302 +26,125 @@ class DailyPlanLogic {
     required DateTime day,
     required DateTime generatedAt,
   }) {
-    final byType = {for (final window in windows) window.type: window};
-    if (!ForecastWindowType.values.every(byType.containsKey)) return const [];
-
-    final targetDay = localDay(day);
-    final wakeAt = _atDecimalHour(targetDay, profile.wakeHour);
-    var bedAt = _atDecimalHour(targetDay, profile.bedHour);
-    if (!bedAt.isAfter(wakeAt)) {
-      bedAt = _atDecimalHour(localDay(targetDay, 1), profile.bedHour);
+    if (!score.canEstimateEnergy && !score.canEstimateCognitive) {
+      return const [];
     }
-
-    final peak = byType[ForecastWindowType.peak]!;
-    final crash = byType[ForecastWindowType.crash]!;
-    final rebound = byType[ForecastWindowType.recovery]!;
-    final planConfidence = ((score.confidence + score.cognitiveConfidence) / 2)
+    final targetDay = localDay(day);
+    if (!sameLocalDay(targetDay, generatedAt)) return const [];
+    final waking = ScheduleLogic.wakingWindow(targetDay, profile);
+    if (waking == null) return const [];
+    final byId = <String, ForecastEvidence>{};
+    for (final window in windows) {
+      for (final item in window.evidence) {
+        if (item.id.trim().isNotEmpty &&
+            sameLocalDay(item.timestamp, generatedAt) &&
+            !item.timestamp.isAfter(generatedAt)) {
+          byId['${item.kind.name}:${item.id}'] = item;
+        }
+      }
+    }
+    final evidence = byId.values.toList(growable: false);
+    if (evidence.isEmpty) return const [];
+    final coverage = ((score.confidence + score.cognitiveConfidence) / 2)
         .clamp(0, 1)
         .toDouble();
-    final highConfidence = planConfidence >= .65;
-    final canTrainNormally = highConfidence && score.energy >= 65;
+    final plan = <Recommendation>[];
+    var availableAt = waking.wake;
+    final windDown = waking.bed.subtract(const Duration(minutes: 45));
 
-    final focusMinutes = switch ((profile.coachPriority, highConfidence)) {
-      (CoachPriority.focus, true) => 75,
-      (CoachPriority.focus, false) => 45,
-      (CoachPriority.balanced, true) => 60,
-      (CoachPriority.balanced, false) => 35,
-      (CoachPriority.training, true) => 45,
-      (CoachPriority.training, false) => 30,
-      (CoachPriority.recovery, true) => 45,
-      (CoachPriority.recovery, false) => 30,
-    };
-    final napMinutes = profile.coachPriority == CoachPriority.recovery
-        ? 25
-        : 20;
-    final recoveryMinutes = profile.coachPriority == CoachPriority.recovery
-        ? 45
-        : 30;
-    final trainingMinutes = !canTrainNormally
-        ? 20
-        : switch (profile.coachPriority) {
-            CoachPriority.training => 60,
-            CoachPriority.balanced => 45,
-            CoachPriority.focus => 35,
-            CoachPriority.recovery => 25,
-          };
-
-    final taperAt = bedAt.subtract(const Duration(minutes: 90));
-    final eveningAt = bedAt.subtract(const Duration(minutes: 45));
-    final morningAt = wakeAt.add(const Duration(minutes: 15));
-    final focusAt = _clamp(
-      peak.start,
-      wakeAt.add(const Duration(minutes: 45)),
-      taperAt.subtract(Duration(minutes: focusMinutes + 30)),
-    );
-    final hydrationAt = _clamp(
-      crash.start.subtract(const Duration(minutes: 30)),
-      focusAt.add(Duration(minutes: focusMinutes + 15)),
-      taperAt.subtract(const Duration(minutes: 90)),
-    );
-    final napAt = _clamp(
-      crash.start,
-      hydrationAt.add(const Duration(minutes: 15)),
-      taperAt.subtract(const Duration(minutes: 75)),
-    );
-
-    // Training and recovery both want the rebound window. Training goes first
-    // only when the person explicitly prioritizes it and the evidence supports
-    // normal intensity. Every other case protects recovery first.
-    final trainingFirst =
-        profile.coachPriority == CoachPriority.training && canTrainNormally;
-    final reboundStart = _clamp(
-      rebound.start,
-      napAt.add(Duration(minutes: napMinutes + 15)),
-      taperAt.subtract(const Duration(minutes: 75)),
-    );
-    final trainingAt = trainingFirst
-        ? reboundStart
-        : reboundStart.add(Duration(minutes: recoveryMinutes + 10));
-    final recoveryAt = trainingFirst
-        ? reboundStart.add(Duration(minutes: trainingMinutes + 10))
-        : reboundStart;
-
-    Recommendation? item({
+    void add({
       required String slug,
       required String title,
       required String detail,
-      required String category,
       required CoachPlanPhase phase,
-      required ForecastWindow window,
-      required DateTime scheduledAt,
-      required int durationMinutes,
-      required String decisionReason,
-      RecommendationPriority priority = RecommendationPriority.routine,
+      required DateTime preferredAt,
+      required int minutes,
+      required DateTime limit,
     }) {
-      final evidence = window.evidence
-          .where((value) => value.id.isNotEmpty)
-          .toList(growable: false);
-      if (evidence.isEmpty) return null;
-      final labels = evidence
-          .map((value) => value.label)
-          .toSet()
-          .take(2)
-          .join(' and ');
-      return Recommendation(
-        id: '${_dayIdentifier(targetDay)}-$slug',
-        title: title,
-        detail:
-            '$detail Timed from the ${_windowLabel(window.type)} window using linked $labels data.',
-        timeLabel: _clock(scheduledAt),
-        category: category,
-        priority: priority,
-        windowType: window.type,
-        scheduledAt: scheduledAt,
-        day: targetDay,
-        generatedAt: generatedAt,
-        signalEvidenceIds: evidence
-            .where((value) => value.kind == ForecastEvidenceKind.signal)
-            .map((value) => value.id)
-            .toSet()
-            .toList(growable: false),
-        checkInEvidenceIds: evidence
-            .where((value) => value.kind == ForecastEvidenceKind.checkIn)
-            .map((value) => value.id)
-            .toSet()
-            .toList(growable: false),
-        evidence: evidence,
-        planPhase: phase,
-        durationMinutes: durationMinutes,
-        planConfidence: planConfidence,
-        decisionReason: decisionReason,
+      final at = preferredAt.isBefore(availableAt) ? availableAt : preferredAt;
+      final end = at.add(Duration(minutes: minutes));
+      if (at.isBefore(waking.wake) || end.isAfter(limit)) return;
+      plan.add(
+        Recommendation(
+          id: '${_dayIdentifier(targetDay)}-$planVersion-$slug',
+          title: title,
+          detail: detail,
+          timeLabel: _clock(at),
+          category: switch (phase) {
+            CoachPlanPhase.morning => 'Morning',
+            CoachPlanPhase.deepWork => 'Focus',
+            CoachPlanPhase.midday => 'Break',
+            _ => 'Evening',
+          },
+          scheduledAt: at,
+          day: targetDay,
+          generatedAt: generatedAt,
+          signalEvidenceIds: evidence
+              .where((item) => item.kind == ForecastEvidenceKind.signal)
+              .map((item) => item.id)
+              .toList(growable: false),
+          checkInEvidenceIds: evidence
+              .where((item) => item.kind == ForecastEvidenceKind.checkIn)
+              .map((item) => item.id)
+              .toList(growable: false),
+          evidence: evidence,
+          planPhase: phase,
+          durationMinutes: minutes,
+          planConfidence: coverage,
+          decisionReason:
+              'Optional timing within your saved wake and bed schedule; not a validated alertness or recovery window.',
+        ),
       );
+      availableAt = end.add(const Duration(minutes: 10));
     }
 
-    final confidenceReason = highConfidence
-        ? 'Higher-confidence windows support a specific time block.'
-        : 'Lower confidence keeps this block shorter and flexible.';
-    final trainingDecision = trainingFirst
-        ? 'Training is first because it is your priority and confidence supports normal intensity.'
-        : !canTrainNormally
-        ? 'Recovery is first and training stays light because readiness or confidence is limited.'
-        : '${profile.coachPriority.label} keeps recovery ahead of training in the shared rebound window.';
-
-    final values = <Recommendation?>[
-      item(
-        slug: 'morning-setup',
-        title: 'Start with a calm morning setup',
-        detail:
-            'Use a short check-in and choose the day’s one most important task.',
-        category: 'Morning',
-        phase: CoachPlanPhase.morning,
-        window: peak,
-        scheduledAt: morningAt,
-        durationMinutes: 15,
-        decisionReason:
-            'Anchored to your usual ${_clock(wakeAt)} wake time and ${profile.coachPriority.label.toLowerCase()} priority.',
+    add(
+      slug: 'morning-setup',
+      title: 'Consider a brief morning check-in',
+      detail: 'If useful, record how you feel and choose one task for the day.',
+      phase: CoachPlanPhase.morning,
+      preferredAt: waking.wake.add(const Duration(minutes: 15)),
+      minutes: 10,
+      limit: windDown,
+    );
+    add(
+      slug: 'focus',
+      title: 'Optional focus block',
+      detail:
+          'Choose a task that fits how you feel. Shorten or skip this block as needed.',
+      phase: CoachPlanPhase.deepWork,
+      preferredAt: waking.wake.add(const Duration(minutes: 45)),
+      minutes: 30,
+      limit: windDown,
+    );
+    add(
+      slug: 'break',
+      title: 'Consider a pause',
+      detail: 'If it fits your day, take a brief break from your current task.',
+      phase: CoachPlanPhase.midday,
+      preferredAt: waking.wake.add(
+        Duration(minutes: waking.bed.difference(waking.wake).inMinutes ~/ 2),
       ),
-      item(
-        slug: 'deep-work',
-        title: 'Protect a $focusMinutes-minute focus block',
-        detail:
-            'Use the strongest predicted cognitive stretch for demanding study or focused work.',
-        category: 'Deep work',
-        phase: CoachPlanPhase.deepWork,
-        window: peak,
-        scheduledAt: focusAt,
-        durationMinutes: focusMinutes,
-        decisionReason: profile.coachPriority == CoachPriority.focus
-            ? 'Focus-first priority protects the longest safe peak block. $confidenceReason'
-            : confidenceReason,
-        priority: profile.coachPriority == CoachPriority.focus || highConfidence
-            ? RecommendationPriority.important
-            : RecommendationPriority.routine,
-      ),
-      item(
-        slug: 'hydration',
-        title: 'Hydrate before the predicted dip',
-        detail:
-            'Use a normal hydration break before the lower-energy stretch begins.',
-        category: 'Hydration',
-        phase: CoachPlanPhase.midday,
-        window: crash,
-        scheduledAt: hydrationAt,
-        durationMinutes: 10,
-        decisionReason: 'Placed before the dip so it does not interrupt rest.',
-      ),
-      item(
-        slug: 'nap',
-        title: 'Try a $napMinutes-minute recovery nap',
-        detail:
-            'Keep the nap brief and use the lowest predicted-energy period.',
-        category: 'Nap',
-        phase: CoachPlanPhase.nap,
-        window: crash,
-        scheduledAt: napAt,
-        durationMinutes: napMinutes,
-        decisionReason: profile.coachPriority == CoachPriority.recovery
-            ? 'Recovery-first priority gives the nap five additional minutes.'
-            : 'A short duration supports recovery without crowding the rebound.',
-        priority:
-            profile.coachPriority == CoachPriority.recovery || score.energy < 62
-            ? RecommendationPriority.important
-            : RecommendationPriority.routine,
-      ),
-      item(
-        slug: 'rebound-recovery',
-        title: 'Protect a rebound recovery block',
-        detail:
-            'Reduce demands while energy begins moving out of its lowest stretch.',
-        category: 'Recovery',
-        phase: CoachPlanPhase.recovery,
-        window: rebound,
-        scheduledAt: recoveryAt,
-        durationMinutes: recoveryMinutes,
-        decisionReason: trainingDecision,
-        priority:
-            profile.coachPriority == CoachPriority.recovery || !canTrainNormally
-            ? RecommendationPriority.important
-            : RecommendationPriority.routine,
-      ),
-      item(
-        slug: 'training',
-        title: canTrainNormally
-            ? 'Place training in the rebound'
-            : 'Keep training light and flexible',
-        detail: canTrainNormally
-            ? 'Use the post-dip rise for planned movement at your normal intensity.'
-            : 'Favor easy movement and stop if it does not feel restorative.',
-        category: 'Training',
-        phase: CoachPlanPhase.training,
-        window: rebound,
-        scheduledAt: trainingAt,
-        durationMinutes: trainingMinutes,
-        decisionReason: trainingDecision,
-        priority:
-            profile.coachPriority == CoachPriority.training && canTrainNormally
-            ? RecommendationPriority.important
-            : RecommendationPriority.routine,
-      ),
-      item(
-        slug: 'taper',
-        title: 'Taper stimulation before bed',
-        detail:
-            'Lower task intensity, bright-screen exposure, and hard training as bedtime approaches.',
-        category: 'Taper',
-        phase: CoachPlanPhase.taper,
-        window: rebound,
-        scheduledAt: taperAt,
-        durationMinutes: 30,
-        decisionReason:
-            'Anchored 90 minutes before your usual ${_clock(bedAt)} bedtime.',
-        priority: profile.coachPriority == CoachPriority.recovery
-            ? RecommendationPriority.important
-            : RecommendationPriority.routine,
-      ),
-      item(
-        slug: 'evening-recovery',
-        title: 'Protect your recovery wind-down',
-        detail:
-            'Use the final block for a consistent, low-demand transition to sleep.',
-        category: 'Evening',
-        phase: CoachPlanPhase.evening,
-        window: rebound,
-        scheduledAt: eveningAt,
-        durationMinutes: 30,
-        decisionReason:
-            'Ends near your saved bedtime and keeps the plan morning-to-evening.',
-      ),
-    ];
-
-    final plan = values.whereType<Recommendation>().toList()
-      ..sort((left, right) => left.scheduledAt!.compareTo(right.scheduledAt!));
+      minutes: 10,
+      limit: windDown,
+    );
+    add(
+      slug: 'wind-down',
+      title: 'Optional quiet wind-down',
+      detail: 'Leave room for a low-demand transition to your saved bedtime.',
+      phase: CoachPlanPhase.evening,
+      preferredAt: windDown,
+      minutes: 30,
+      limit: waking.bed,
+    );
     return List.unmodifiable(plan);
   }
 
-  static DateTime _atDecimalHour(DateTime day, double hour) =>
-      DateTime(day.year, day.month, day.day, 0, ((hour % 24) * 60).round());
-
-  static DateTime _clamp(DateTime value, DateTime minimum, DateTime maximum) {
-    if (maximum.isBefore(minimum)) return minimum;
-    if (value.isBefore(minimum)) return minimum;
-    if (value.isAfter(maximum)) return maximum;
-    return value;
-  }
-
-  static String _dayIdentifier(DateTime day) =>
-      '${day.year.toString().padLeft(4, '0')}-'
-      '${day.month.toString().padLeft(2, '0')}-'
-      '${day.day.toString().padLeft(2, '0')}';
+  static String _dayIdentifier(DateTime day) => localDayKey(day);
 
   static String _clock(DateTime value) {
     final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute ${value.hour >= 12 ? 'PM' : 'AM'}';
   }
-
-  static String _windowLabel(ForecastWindowType type) => switch (type) {
-    ForecastWindowType.peak => 'peak-focus',
-    ForecastWindowType.crash => 'lower-energy',
-    ForecastWindowType.recovery => 'recovery',
-  };
 }

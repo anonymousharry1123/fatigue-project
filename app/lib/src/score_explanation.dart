@@ -77,8 +77,8 @@ class ScoreExplanation {
   final int? value;
   final double confidence;
 
-  /// Historical completeness fields, kept separate from the factor inventory.
-  /// Energy's denominator is seven even though newer versions have ten factors.
+  /// Coverage denominators follow the saved rule version: Phase 1 has six
+  /// Energy and five Cognitive categories; legacy saved counts retain 7/6.
   final int inputCount;
   final int inputTotal;
   final double? freshness;
@@ -109,14 +109,24 @@ class ScoreExplanation {
     required DateTime now,
   }) {
     final isEnergy = head == ScoreHead.energy;
-    final hasScore = isEnergy || snapshot.hasCognitiveScore;
+    final hasScore = isEnergy
+        ? snapshot.canEstimateEnergy
+        : snapshot.canEstimateCognitive;
+    final isPhase1 =
+        (isEnergy
+                ? snapshot.energyModelVersion
+                : snapshot.cognitiveModelVersion)
+            ?.endsWith('v3-phase1') ==
+        true;
     final rawConfidence = isEnergy
         ? snapshot.confidence
         : snapshot.cognitiveConfidence;
     final rawFreshness = isEnergy
         ? snapshot.freshness
         : snapshot.cognitiveFreshness;
-    final inputTotal = isEnergy ? 7 : 6;
+    final inputTotal = isEnergy
+        ? snapshot.energyInputTotal
+        : snapshot.cognitiveInputTotal;
     final rawInputCount = isEnergy
         ? snapshot.inputCount
         : snapshot.cognitiveInputCount;
@@ -146,7 +156,9 @@ class ScoreExplanation {
           );
         })
         .toList(growable: false);
-    final definitions = isEnergy ? _energyInputs : _cognitiveInputs;
+    final definitions = isPhase1
+        ? (isEnergy ? _phase1EnergyInputs : _phase1CognitiveInputs)
+        : (isEnergy ? _energyInputs : _cognitiveInputs);
     final legacyInventoryUnknown =
         !hasScore || (rawInputCount > 0 && sourceDrivers.isEmpty);
     final inputs = definitions
@@ -191,13 +203,15 @@ class ScoreExplanation {
         .toList(growable: false);
 
     final caveats = <String>[
-      'Energy and Cognitive scores are model estimates, not measurements or medical assessments.',
-      'Confidence summarizes recorded coverage, freshness, source quality and baseline maturity. It is not the probability that a score is correct.',
+      'Energy and Cognitive scores are experimental estimates, not measurements or medical assessments.',
+      'Data coverage summarizes recorded inputs, freshness, source quality and baseline maturity. It is not the probability that a score is correct.',
       'Driver points describe the scoring formula, not proof that an input caused a change in how you feel. Rounding and the 0–100 limit can affect the final total.',
-      if (isEnergy)
-        'The saved Energy coverage count is capped at 7. The inventory shows all 10 current factor categories; extra drivers do not change that historical denominator.',
+      if (isEnergy && !isPhase1)
+        'The saved Energy coverage count is capped at 7. The inventory shows the 10 legacy factor categories; extra drivers do not change that historical denominator.',
       if (!hasScore)
-        'No Cognitive Score was stored for this day. Missing is not zero.',
+        'Not enough information to estimate ${head.label}. Missing is not zero.',
+      if (isPhase1)
+        'Sleep guidance is separate. Caffeine, fluid volume and activity duration add no score points or coverage; naps have no assigned restorative equivalent.',
       if (legacyInventoryUnknown && hasScore)
         'The saved coverage count has no supporting driver inventory. Which inputs were present is unknown.',
       if (snapshot.calculatedAt == null)
@@ -234,9 +248,9 @@ class ScoreExplanation {
               sourceDrivers.any(
                 (driver) => driver.label == 'Personalized Energy adjustment',
               )))
-        'The personalized Energy adjustment is capped at ±10 points. It is not another input and does not raise confidence or change Cognitive Score.',
+        'The personalized Energy adjustment is capped at ±10 points. It is not another input and does not raise data coverage or change Cognitive Score.',
       if (!rawConfidence.isFinite || rawConfidence < 0 || rawConfidence > 1)
-        'The saved confidence value is invalid or out of range; this display uses a safe bounded value, not a recalculated confidence.',
+        'The saved data-quality value is invalid or out of range; this display uses a bounded value without recalculation.',
       if (rawFreshness != null &&
           (!rawFreshness.isFinite || rawFreshness < 0 || rawFreshness > 1))
         'The saved freshness value is invalid or out of range; this display does not infer new freshness from it.',
@@ -247,6 +261,13 @@ class ScoreExplanation {
       if (sourceDrivers.any(
         (driver) =>
             driver.label != 'Personalized Energy adjustment' &&
+            !(isPhase1 &&
+                {
+                  'Hydration',
+                  'Exercise',
+                  'Movement',
+                  'Caffeine',
+                }.contains(driver.label)) &&
             !definitions.any(
               (definition) => definition.$2.contains(driver.label),
             ),
@@ -290,6 +311,23 @@ const _energyInputs = <(String, Set<String>)>[
 const _cognitiveInputs = <(String, Set<String>)>[
   ('Reaction time', {'Reaction time'}),
   ('Sleep', {'Sleep'}),
+  ('Study load', {'Study load'}),
+  ('Screen time', {'Screen time'}),
+  ('Mood', {'Mood'}),
+  ('Stress', {'Stress'}),
+];
+
+const _phase1EnergyInputs = <(String, Set<String>)>[
+  ('HRV vs baseline', {'HRV vs baseline'}),
+  ('Resting HR vs baseline', {'Resting HR vs baseline'}),
+  ('Workload', {'Workload'}),
+  ('Screen time', {'Screen time'}),
+  ('Mood', {'Mood'}),
+  ('Stress', {'Stress'}),
+];
+
+const _phase1CognitiveInputs = <(String, Set<String>)>[
+  ('Reaction time', {'Reaction time'}),
   ('Study load', {'Study load'}),
   ('Screen time', {'Screen time'}),
   ('Mood', {'Mood'}),

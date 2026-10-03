@@ -109,6 +109,12 @@ void main() {
         migrationVersion: localMigrationVersion,
         signals: [
           SignalReading(
+            id: 'study',
+            type: SignalType.study,
+            value: 2,
+            timestamp: napEnd,
+          ),
+          SignalReading(
             id: 'main-sleep',
             type: SignalType.sleep,
             value: 8,
@@ -125,12 +131,8 @@ void main() {
       ),
     );
 
-  double napCredit(AppController controller) => controller.score.drivers
-      .singleWhere((driver) => driver.label == 'Nap recovery')
-      .contribution;
-
   test(
-    'resume updates nap recovery and all derived views only after time passes',
+    'resume ages experimental estimates without nap rewards and throttles repeated refreshes',
     () async {
       var now = napEnd;
       final source = repository();
@@ -144,7 +146,10 @@ void main() {
       final initialForecastWrites = source.forecastReplaceCallCount;
       final initialGuidance = controller.guidanceRefreshes;
       final initialInsights = controller.insightsRefreshes;
-      expect(napCredit(controller), 0);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
 
       await controller.handleAppResumed();
       expect(source.signalQueries, initialQueries);
@@ -155,8 +160,11 @@ void main() {
 
       now = napEnd.add(const Duration(hours: 1));
       await controller.handleAppResumed();
-      expect(napCredit(controller), 3);
-      expect(controller.score.energy, baseEnergy + 3);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
+      expect(controller.score.energy, baseEnergy);
       expect(source.scoreUpsertCallCount, initialWrites + 1);
       expect(
         source.forecastReplaceCallCount,
@@ -177,7 +185,10 @@ void main() {
 
       now = napEnd.add(const Duration(hours: 6));
       await controller.handleAppResumed();
-      expect(napCredit(controller), 0);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
       expect(controller.score.energy, baseEnergy);
       expect(controller.guidanceRefreshes, initialGuidance + 2);
       expect(controller.insightsRefreshes, initialInsights + 2);
@@ -194,10 +205,10 @@ void main() {
       final expiredWrites = source.scoreUpsertCallCount;
       now = napEnd.add(const Duration(hours: 7));
       await controller.handleAppResumed();
-      expect(source.signalQueries, expiredQueries);
-      expect(source.scoreUpsertCallCount, expiredWrites);
-      expect(controller.guidanceRefreshes, initialGuidance + 2);
-      expect(controller.insightsRefreshes, initialInsights + 2);
+      expect(source.signalQueries, greaterThan(expiredQueries));
+      expect(source.scoreUpsertCallCount, expiredWrites + 1);
+      expect(controller.guidanceRefreshes, initialGuidance + 3);
+      expect(controller.insightsRefreshes, initialInsights + 3);
 
       await controller.signOut();
       final signedOutQueries = source.signalQueries;
@@ -208,7 +219,7 @@ void main() {
   );
 
   test(
-    'active nap snapshots refresh with time and expired zero snapshots are reusable',
+    'all score snapshots age while same-minute snapshots are reusable',
     () async {
       var now = napEnd;
       final source = repository();
@@ -216,7 +227,10 @@ void main() {
       final controller = _Controller(source, () => now, writer);
       addTearDown(controller.dispose);
       await controller.load();
-      expect(napCredit(controller), 0);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
       final firstWrites = source.scoreUpsertCallCount;
 
       // UTC and local encodings of an instant are the same cache timestamp.
@@ -228,21 +242,31 @@ void main() {
       now = napEnd.add(const Duration(hours: 1));
       await controller.refreshScores();
       expect(controller.scoreLoadedFromSnapshot, isFalse);
-      expect(napCredit(controller), 3);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
       expect(source.scoreUpsertCallCount, firstWrites + 1);
 
       now = napEnd.add(const Duration(hours: 6));
       await controller.refreshScores();
       expect(controller.scoreLoadedFromSnapshot, isFalse);
-      expect(napCredit(controller), 0);
+      expect(
+        controller.score.drivers.map((driver) => driver.label),
+        isNot(contains('Nap recovery')),
+      );
       expect(source.scoreUpsertCallCount, firstWrites + 2);
       final saved = await source.scoreSnapshotForDay('nap-user', now);
       expect(saved?.calculatedAt?.isAtSameMomentAs(now), isTrue);
       expect(saved?.energy, controller.score.energy);
       now = napEnd.add(const Duration(hours: 7));
       await controller.refreshScores();
+      expect(controller.scoreLoadedFromSnapshot, isFalse);
+      expect(source.scoreUpsertCallCount, firstWrites + 3);
+      now = now.add(const Duration(seconds: 20));
+      await controller.refreshScores();
       expect(controller.scoreLoadedFromSnapshot, isTrue);
-      expect(source.scoreUpsertCallCount, firstWrites + 2);
+      expect(source.scoreUpsertCallCount, firstWrites + 3);
       expect(writer.writes, 0);
     },
   );

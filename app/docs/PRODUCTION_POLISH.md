@@ -1,5 +1,7 @@
 # Production polish — 0.35.0+37
 
+> **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
+
 This pass improves everyday interaction and recovery after interrupted work.
 It does not constitute production release approval.
 

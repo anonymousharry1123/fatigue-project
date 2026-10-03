@@ -463,7 +463,7 @@ void main() {
         outcomeConsent: false,
         healthAuthorized: false,
       );
-      expect(cloudSchemaVersion, 14);
+      expect(cloudSchemaVersion, 15);
       expect(profile.keys, isNot(contains('privacyConsent')));
       expect(profile.keys, isNot(contains('outcomeConsentUpdatedAt')));
       expect(

@@ -28,6 +28,12 @@ class EnergyResidualModel {
   static const maximumArtifactBytes = 4096;
   static const maximumCorrection = 10.0;
   static const featureNames = MlPrepBuilder.energyFeatureNames;
+  static const retiredFeatureNames = {
+    'sleepDeviation',
+    'movement',
+    'hydration',
+    'caffeine',
+  };
 
   final String ownerKey;
   final DateTime trainedAt;
@@ -116,6 +122,14 @@ class EnergyResidualModel {
           bounds is! Map ||
           !_sameKeys(bounds, {'start', 'end', 'timezone'})) {
         throw const FormatException('Incompatible Energy feature schema.');
+      }
+      for (final name in retiredFeatureNames) {
+        final index = featureNames.indexOf(name);
+        if (weights[index] != 0 || coverage[name] != 0) {
+          throw const FormatException(
+            'Retired Energy features must remain inactive.',
+          );
+        }
       }
       final count = json['labelCount'];
       final owner = json['ownerKey'];
@@ -459,6 +473,13 @@ DateTime _utcDate(Object? value) {
 Float64List? _design(Map<String, double?> values, Map<String, double?> ages) {
   const names = EnergyResidualModel.featureNames;
   if (!_sameKeys(values, names.toSet()) || !_sameKeys(ages, names.toSet())) {
+    return null;
+  }
+  // Fail closed even for callers that bypass feature preparation. A retired
+  // value must not increase intercept coverage or resurrect an old effect.
+  if (EnergyResidualModel.retiredFeatureNames.any(
+    (name) => values[name] != null || ages[name] != null,
+  )) {
     return null;
   }
   final x = Float64List(9);

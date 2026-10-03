@@ -93,15 +93,32 @@ PrepSnapshot benchmarkSnapshot({
   bool includeCognitive = false,
   bool maximumWindow = false,
 }) {
+  // Phase 1 keeps the four-observed-feature training gate. Reserve seven days
+  // inside the fixed 30-day fixture for prior HRV/resting-HR baselines; at most
+  // 23 labeled days remain. These fabricated values test software only.
+  days = days.clamp(0, 23);
   final zone = DateTime(2026, 7, 15).timeZoneOffset.inHours == -7
       ? 'America/Los_Angeles'
       : 'Etc/UTC';
   final window = PrepWindow.endingOn(DateTime(2026, 7, 31), timezone: zone);
   String time(int day, int hour) =>
-      window.start.add(Duration(days: day, hours: hour)).toIso8601String();
+      window.start.add(Duration(days: day + 7, hours: hour)).toIso8601String();
   final signals = <Map<String, dynamic>>[];
   final checks = <Map<String, dynamic>>[];
   final outcomes = <Map<String, dynamic>>[];
+  for (var day = -7; day < 0; day++) {
+    for (final entry in {'hrv': 50, 'restingHeartRate': 60}.entries) {
+      signals.add({
+        'id': 'observed-baseline-$day-${entry.key}',
+        'provenance': 'observed',
+        'timestamp': time(day, 6),
+        'createdAt': time(day, 6),
+        'type': entry.key,
+        'value': entry.value,
+        'source': 'manual',
+      });
+    }
+  }
   for (var day = 0; day < days; day++) {
     for (final entry in {
       'exercise': 1,
@@ -109,6 +126,8 @@ PrepSnapshot benchmarkSnapshot({
       'study': 2,
       'screenTime': 2,
       'caffeine': 1,
+      'hrv': 50,
+      'restingHeartRate': 60,
     }.entries) {
       signals.add({
         'id': 'observed-$day-${entry.key}',
@@ -120,7 +139,7 @@ PrepSnapshot benchmarkSnapshot({
         'source': 'manual',
       });
     }
-    for (final hour in [8, 20]) {
+    for (final hour in [if (maximumWindow) 7, 8, 20]) {
       checks.add({
         'id': 'observed-$day-check-$hour',
         'provenance': 'observed',
@@ -166,8 +185,9 @@ PrepSnapshot benchmarkSnapshot({
     }
   }
   if (maximumWindow) {
-    // Stay one document below each hard cap, with 99 Energy labels. No caps
-    // are bypassed; reaching even one would correctly block training.
+    // Stay one document below each hard cap. Each labeled day needs one prior
+    // same-day check-in; with 23 days that leaves 76 labels in 99 check-ins.
+    // No caps are bypassed; reaching even one correctly blocks training.
     for (var day = 0; day < days; day++) {
       checks.add({
         'id': 'extra-$day-check',
@@ -201,7 +221,7 @@ PrepSnapshot benchmarkSnapshot({
         'consentVersion': 1,
       });
     }
-    for (var i = 0; outcomes.length < 99; i++) {
+    for (var i = 0; checks.length < 99; i++) {
       checks.add({
         'id': 'load-check-$i',
         'provenance': 'observed',

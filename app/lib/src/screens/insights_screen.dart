@@ -41,7 +41,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     Text(
-                      'Your daily patterns and model-estimated trends',
+                      'Recorded patterns and experimental estimates',
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 12,
@@ -83,7 +83,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           ),
           const SectionHeader('Model associations'),
           _AssociationsCard(associations: insights.associations),
-          const SectionHeader('Today’s model'),
+          const SectionHeader('Today’s experimental estimates'),
           TonyoCard(
             color: TonyoPalette.of(context).surface,
             child: Column(
@@ -105,7 +105,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(
-                            'Ranked drivers · evidence-aware confidence',
+                            'Ranked inputs · data coverage and quality',
                             style: TextStyle(
                               color: TonyoPalette.of(context).muted,
                               fontSize: 10,
@@ -119,7 +119,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 const SizedBox(height: 18),
                 _ConfidencePanel(
                   title: 'Energy',
-                  score: score.energy,
+                  score: score.canEstimateEnergy ? score.energy : null,
                   confidence: score.confidence,
                   completeness: score.completeness,
                   freshness: score.freshness,
@@ -134,7 +134,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ),
                 _ConfidencePanel(
                   title: 'Cognitive',
-                  score: score.cognitive,
+                  score: score.canEstimateCognitive ? score.cognitive : null,
                   confidence: score.cognitiveConfidence,
                   completeness: score.cognitiveCompleteness,
                   freshness: score.cognitiveFreshness,
@@ -148,20 +148,30 @@ class _InsightsScreenState extends State<InsightsScreen> {
           const SectionHeader('Today’s Energy drivers'),
           _RankedDriversCard(
             key: const Key('insights-energy-drivers'),
-            positive: score.energyPositiveDrivers,
-            negative: score.energyNegativeDrivers,
-            neutral: score.energyNeutralDrivers,
+            positive: score.canEstimateEnergy
+                ? score.energyPositiveDrivers
+                : [],
+            negative: score.canEstimateEnergy
+                ? score.energyNegativeDrivers
+                : [],
+            neutral: score.canEstimateEnergy ? score.energyNeutralDrivers : [],
             emptyMessage:
-                'Log sleep, activity, and a check-in to explain your Energy estimate.',
+                'Not enough current information to estimate Energy. An optional check-in can add an observation.',
           ),
           const SectionHeader('Today’s Cognitive drivers'),
           _RankedDriversCard(
             key: const Key('insights-cognitive-model'),
-            positive: score.cognitivePositiveDrivers,
-            negative: score.cognitiveNegativeDrivers,
-            neutral: score.cognitiveNeutralDrivers,
+            positive: score.canEstimateCognitive
+                ? score.cognitivePositiveDrivers
+                : [],
+            negative: score.canEstimateCognitive
+                ? score.cognitiveNegativeDrivers
+                : [],
+            neutral: score.canEstimateCognitive
+                ? score.cognitiveNeutralDrivers
+                : [],
             emptyMessage:
-                'Complete a reaction test, sleep or activity log, and check-in to explain cognitive readiness.',
+                'Not enough current information to estimate the experimental Cognitive score.',
           ),
           const SizedBox(height: 14),
           TonyoCard(
@@ -178,14 +188,14 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     const SizedBox(width: 11),
                     Expanded(
                       child: Text(
-                        '${score.cognitiveInputCount}/6 inputs · ${(score.cognitiveConfidence * 100).round()}% confidence',
+                        '${score.cognitiveInputCount} current Cognitive inputs · data quality',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 );
                 final detail = Text(
-                  'Confidence combines input coverage with the age, source, and quality of supporting records. Contributions are associations used by this wellness model—not medical findings or proof of cause.',
+                  'Data quality describes the coverage, age, source, and quality of records. It is not the probability that a score is correct. These experimental rules are not medical findings or proof of cause.',
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 10,
@@ -253,6 +263,16 @@ class _InsightsSourceCard extends StatelessWidget {
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                insights.calculationBasis,
+                key: const Key('insights-calculation-basis'),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 10,
+                  height: 1.35,
                 ),
               ),
             ],
@@ -418,7 +438,10 @@ class _WeeklyOverview extends StatelessWidget {
         ),
         const SizedBox(height: 9),
         Text(
-          '${current.trackedDayCount}/7 days include model-input data. Comparisons use the prior seven days.',
+          '${current.trackedDayCount}/7 days have entries; '
+          '${insights.currentDays.where((day) => day.sleepHours != null).length} main-sleep observations; '
+          '${insights.currentDays.where((day) => day.estimatedEnergy != null).length} eligible Energy estimates. '
+          'Averages use recorded days only. Comparisons use the prior seven days.',
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
       ],
@@ -612,7 +635,7 @@ class _DailyTrendCard extends StatelessWidget {
 
   static String _trendCaption(InsightTrendMetric value) => switch (value) {
     InsightTrendMetric.energy =>
-      'Daily Energy values are recalculated wellness-model estimates, not measurements or diagnoses.',
+      'Daily Energy values use the current deterministic rules, without learned personalization. Experimental recomputations are not measurements; days without current supporting inputs stay blank.',
     InsightTrendMetric.sleep =>
       'Latest main sleep for each day; naps are tracked separately and missing days remain blank.',
     InsightTrendMetric.training =>
@@ -640,7 +663,9 @@ class _TrendBar extends StatelessWidget {
     final color = _color(metric, TonyoPalette.of(context));
     final metricLabel = _DailyTrendCard._metricLabel(metric);
     final valueLabel = value == null
-        ? 'Not logged'
+        ? metric == InsightTrendMetric.energy
+              ? 'Not enough information to estimate'
+              : 'Not logged'
         : metric == InsightTrendMetric.energy
         ? '${value.round()} out of 100, estimated'
         : '${value.toStringAsFixed(1)} hours';
@@ -749,7 +774,7 @@ class _AssociationsCard extends StatelessWidget {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                'These comparisons describe your entries and Tonyo’s current model. They do not establish that one behavior caused an outcome.',
+                'These compare entries with a score partly calculated from those same entries. They describe the current rules, not an independent health outcome or evidence that a behavior helps.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10.5,
@@ -849,7 +874,7 @@ class _ConfidencePanel extends StatelessWidget {
   });
 
   final String title;
-  final int score;
+  final int? score;
   final double confidence;
   final double completeness;
   final double? freshness;
@@ -872,7 +897,7 @@ class _ConfidencePanel extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: .3)),
       ),
       child: Text(
-        '$score',
+        score?.toString() ?? '—',
         style: TextStyle(
           color: color,
           fontSize: 22,
@@ -887,20 +912,27 @@ class _ConfidencePanel extends StatelessWidget {
           spacing: 8,
           children: [
             Text(
-              '$title confidence',
+              '$title data quality',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             Text(
-              '${(confidence * 100).round()}%',
+              score == null ? 'Unavailable' : '${(confidence * 100).round()}%',
               style: TextStyle(color: color, fontWeight: FontWeight.w600),
             ),
           ],
         ),
         const SizedBox(height: 7),
+        if (score == null) ...[
+          const Text(
+            'Not enough information to estimate',
+            style: TextStyle(fontSize: 11),
+          ),
+          const SizedBox(height: 7),
+        ],
         ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: LinearProgressIndicator(
-            value: confidence,
+            value: score == null ? 0 : confidence,
             minHeight: 6,
             color: color,
             backgroundColor: TonyoPalette.of(context).surfaceRaised,
@@ -916,9 +948,10 @@ class _ConfidencePanel extends StatelessWidget {
     return Semantics(
       container: true,
       excludeSemantics: true,
-      label:
-          '$title estimated score: $score out of 100. '
-          '${(confidence * 100).round()}% confidence. $coverage. $age.',
+      label: score == null
+          ? '$title: Not enough information to estimate.'
+          : '$title experimental estimate: $score out of 100. '
+                '${(confidence * 100).round()}% data quality, not probability of correctness. $coverage. $age.',
       child: scale > 1.3
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,

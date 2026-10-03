@@ -4,7 +4,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'timezone_database.dart';
 
-const mlPrepVersion = 1;
+const mlPrepVersion = 2;
 
 enum PrepCollection { signals, checkIns, outcomes }
 

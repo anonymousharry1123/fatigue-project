@@ -1,982 +1,564 @@
-import 'package:app/src/demo_data.dart';
 import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/personal_baseline_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final now = DateTime(2026, 7, 21, 9);
+  final now = DateTime(2026, 7, 21, 15);
+  final day = DateTime(2026, 7, 21);
+  SignalReading reading(
+    SignalType type,
+    double value, {
+    String? id,
+    DateTime? at,
+    SignalSource source = SignalSource.manual,
+    double quality = 1,
+  }) => SignalReading(
+    id: id ?? type.name,
+    type: type,
+    value: value,
+    timestamp: at ?? now,
+    source: source,
+    quality: quality,
+  );
+  DailyCheckIn checkIn({
+    DateTime? at,
+    double energy = 6,
+    double mood = 6,
+    double stress = 5,
+    String id = 'check-in',
+  }) => DailyCheckIn(
+    id: id,
+    timestamp: at ?? now,
+    energy: energy,
+    mood: mood,
+    stress: stress,
+  );
+  ScoreSnapshot score(
+    List<SignalReading> signals, {
+    List<DailyCheckIn> checkIns = const [],
+    DateTime? at,
+  }) =>
+      FatigueEngine.score(signals: signals, checkIns: checkIns, now: at ?? now);
+  List<ForecastPoint> forecast(
+    ScoreSnapshot snapshot,
+    List<SignalReading> signals, {
+    List<DailyCheckIn> checkIns = const [],
+    DateTime? date,
+    DateTime? at,
+  }) => FatigueEngine.forecast(
+    snapshot,
+    date ?? day,
+    signals: signals,
+    checkIns: checkIns,
+    generatedAt: at ?? now,
+  );
 
-  test('Version 0.11 uses all seven explainable Energy Score factors', () {
-    final score = FatigueEngine.score(
-      signals: buildDemoSignals(now),
-      checkIns: buildDemoCheckIns(now),
-      now: now,
+  test(
+    'empty and yesterday-only inputs do not establish current estimates',
+    () {
+      for (final snapshot in [
+        score([]),
+        score(
+          [
+            reading(SignalType.sleep, 10),
+            reading(
+              SignalType.study,
+              0,
+              at: now.subtract(const Duration(days: 1)),
+            ),
+          ],
+          checkIns: [checkIn(at: now.subtract(const Duration(days: 1)))],
+        ),
+      ]) {
+        expect(snapshot.canEstimateEnergy, isFalse);
+        expect(snapshot.canEstimateCognitive, isFalse);
+        expect(snapshot.hasEnergyScore, isFalse);
+        expect(snapshot.hasCognitiveScore, isFalse);
+        expect(snapshot.confidence, 0);
+        expect(snapshot.cognitiveConfidence, 0);
+        expect(forecast(snapshot, []), isEmpty);
+      }
+    },
+  );
+
+  test('valid explicit zero is observed; missing and invalid are not zero', () {
+    final explicitZero = score([reading(SignalType.study, 0)]);
+    expect(explicitZero.canEstimateEnergy, isTrue);
+    expect(explicitZero.canEstimateCognitive, isTrue);
+    expect(explicitZero.inputCount, 1);
+    expect(explicitZero.completeness, closeTo(1 / 6, .00001));
+    expect(explicitZero.cognitiveCompleteness, closeTo(1 / 5, .00001));
+    expect(explicitZero.drivers.single.detail, startsWith('0.0 hr'));
+    for (final invalid in [double.nan, double.infinity, -1.0]) {
+      expect(
+        score([reading(SignalType.study, invalid)]).canEstimateEnergy,
+        isFalse,
+      );
+    }
+    expect(
+      score([reading(SignalType.reactionTime, 0)]).canEstimateCognitive,
+      isFalse,
     );
-
-    expect(score.energy, inInclusiveRange(0, 100));
-    expect(score.cognitive, inInclusiveRange(0, 100));
-    expect(score.confidence, inInclusiveRange(0, 1));
-    expect(score.cognitiveConfidence, lessThanOrEqualTo(.95));
-    expect(score.cognitiveConfidence, greaterThan(.85));
-    expect(score.freshness, inInclusiveRange(0, 1));
-    expect(score.cognitiveFreshness, inInclusiveRange(0, 1));
-    expect(score.inputCount, 7);
-    expect(score.cognitiveInputCount, 6);
-    expect(score.cognitiveCompleteness, 1);
-    expect(score.isEstimate, isTrue);
-    expect(score.drivers.map((driver) => driver.label).toSet(), {
-      'Sleep',
-      'Exercise',
-      'Hydration',
-      'Workload',
-      'Screen time',
-      'Mood',
-      'Stress',
-    });
-    expect(score.cognitiveDrivers.map((driver) => driver.label).toSet(), {
-      'Reaction time',
-      'Sleep',
-      'Study load',
-      'Screen time',
-      'Mood',
-      'Stress',
-    });
+    expect(
+      score([reading(SignalType.study, 2, quality: 0)]).canEstimateEnergy,
+      isFalse,
+    );
+    expect(
+      score([
+        reading(SignalType.study, 2, source: SignalSource.model),
+      ]).canEstimateEnergy,
+      isFalse,
+    );
   });
 
-  test('Version 0.12 compares reaction time and the previous daily score', () {
-    const previous = ScoreSnapshot(
-      energy: 70,
-      cognitive: 60,
-      confidence: .8,
-      drivers: [],
-      hasCognitiveScore: true,
+  test('future observations and check-ins cannot leak into current score', () {
+    final future = now.add(const Duration(hours: 1));
+    final snapshot = score(
+      [reading(SignalType.study, 0, at: future)],
+      checkIns: [checkIn(at: future)],
     );
-    final score = FatigueEngine.score(
+    expect(snapshot.canEstimateEnergy, isFalse);
+    final futureDay = FatigueEngine.score(
       signals: [
-        SignalReading(
-          id: 'reaction-today',
-          type: SignalType.reactionTime,
-          value: 250,
-          timestamp: DateTime(2026, 7, 21, 8),
-        ),
-        SignalReading(
-          id: 'reaction-yesterday',
-          type: SignalType.reactionTime,
-          value: 300,
-          timestamp: DateTime(2026, 7, 10, 8),
-        ),
+        reading(SignalType.study, 0, at: now.add(const Duration(days: 1))),
       ],
       checkIns: const [],
       now: now,
-      previousDay: previous,
+      day: now.add(const Duration(days: 1)),
     );
-
-    final reaction = score.cognitiveDrivers.single;
-    expect(reaction.label, 'Reaction time');
-    expect(reaction.contribution, greaterThan(0));
-    expect(reaction.detail, contains('250 ms vs 300 ms baseline'));
-    expect(score.previousCognitive, 60);
-    expect(score.cognitiveChange, score.cognitive - 60);
+    expect(futureDay.canEstimateEnergy, isFalse);
   });
 
-  test('legacy Energy-only snapshots do not create a false comparison', () {
-    const previous = ScoreSnapshot(
-      energy: 70,
-      cognitive: 0,
-      confidence: .8,
-      drivers: [],
-      hasCognitiveScore: false,
-    );
-    final score = FatigueEngine.score(
-      signals: const [],
-      checkIns: const [],
-      now: now,
-      previousDay: previous,
-    );
-
-    expect(score.previousCognitive, isNull);
-    expect(score.cognitiveChange, isNull);
-  });
-
-  test('daily activity values are totaled and future values are excluded', () {
-    final score = FatigueEngine.score(
-      signals: [
-        SignalReading(
-          id: 'water-1',
-          type: SignalType.hydration,
-          value: .8,
-          timestamp: DateTime(2026, 7, 21, 7),
-        ),
-        SignalReading(
-          id: 'water-2',
-          type: SignalType.hydration,
-          value: 1.2,
-          timestamp: DateTime(2026, 7, 21, 8),
-        ),
-        SignalReading(
-          id: 'future-water',
-          type: SignalType.hydration,
-          value: 5,
-          timestamp: DateTime(2026, 7, 21, 12),
-        ),
-      ],
-      checkIns: const [],
-      now: now,
-    );
-
-    expect(score.inputCount, 1);
-    expect(score.drivers.single.label, 'Hydration');
-    expect(score.drivers.single.detail, contains('2.0 L'));
-    expect(score.drivers.single.contribution, 0);
-  });
-
-  test('Version 0.25 scores manual activity corrections over imports', () {
-    final score = FatigueEngine.score(
-      signals: [
-        SignalReading(
-          id: 'health-workout',
-          type: SignalType.exercise,
-          value: 2,
-          timestamp: DateTime(2026, 7, 21, 8),
-          source: SignalSource.healthKit,
-        ),
-        SignalReading(
-          id: 'manual-exercise',
-          type: SignalType.exercise,
-          value: .5,
-          timestamp: DateTime(2026, 7, 21, 8, 30),
-        ),
-        SignalReading(
-          id: 'health-water',
-          type: SignalType.hydration,
-          value: .5,
-          timestamp: DateTime(2026, 7, 21, 8),
-          source: SignalSource.healthKit,
-        ),
-        SignalReading(
-          id: 'manual-water',
-          type: SignalType.hydration,
-          value: 2,
-          timestamp: DateTime(2026, 7, 21, 8, 30),
-        ),
-      ],
-      checkIns: const [],
-      now: now,
-    );
-
-    expect(
-      score.drivers.singleWhere((item) => item.label == 'Exercise').detail,
-      contains('0.5 hr'),
-    );
-    expect(
-      score.drivers.singleWhere((item) => item.label == 'Hydration').detail,
-      contains('2.0 L'),
-    );
-  });
-
-  test('Apple Health steps fill movement only when no workout exists', () {
-    final steps = SignalReading(
-      id: 'healthkit-steps-2026-07-21',
-      type: SignalType.steps,
-      value: 7000,
-      timestamp: now,
-      source: SignalSource.healthKit,
-    );
-    final stepsOnly = FatigueEngine.score(
-      signals: [steps],
-      checkIns: const [],
-      now: now,
-    );
-    final withWorkout = FatigueEngine.score(
-      signals: [
-        steps,
-        SignalReading(
-          id: 'workout',
-          type: SignalType.exercise,
-          value: 1,
-          timestamp: now,
-          source: SignalSource.healthKit,
-        ),
-      ],
-      checkIns: const [],
-      now: now,
-    );
-
-    expect(stepsOnly.inputCount, 1);
-    expect(stepsOnly.confidence, greaterThan(.2));
-    expect(stepsOnly.drivers.single.label, 'Movement');
-    expect(stepsOnly.drivers.single.detail, contains('7000 steps'));
-    expect(withWorkout.inputCount, 1);
-    expect(withWorkout.drivers.single.label, 'Exercise');
-  });
-
-  test('self-reported energy does not circularly change the Energy Score', () {
-    ScoreSnapshot calculate(double energy) => FatigueEngine.score(
-      signals: const [],
-      checkIns: [
-        DailyCheckIn(
-          id: 'check-in',
-          timestamp: DateTime(2026, 7, 21, 8),
-          energy: energy,
-          mood: 7,
-          stress: 4,
-        ),
-      ],
-      now: now,
-    );
-
-    expect(calculate(1).energy, calculate(10).energy);
-    expect(calculate(1).inputCount, 2);
-  });
-
-  test('Version 0.24 scores the preferred nightly sleep source once', () {
-    const importedGroup = 'healthkit-sleep-2026-07-21';
-    final manual = SignalReading(
-      id: 'sleep-manual-duration',
-      groupId: 'sleep-manual',
-      type: SignalType.sleep,
-      value: 8,
-      timestamp: DateTime(2026, 7, 21, 8),
-    );
-    final imported = SignalReading(
-      id: '$importedGroup-duration',
-      groupId: importedGroup,
-      type: SignalType.sleep,
-      value: 6.5,
-      timestamp: DateTime(2026, 7, 21, 8, 30),
-      source: SignalSource.healthKit,
-    );
-
-    ScoreDriver sleepDriver(SignalType architectureType) => FatigueEngine.score(
-      signals: [
-        manual,
-        imported,
-        SignalReading(
-          id: '$importedGroup-stage',
-          groupId: importedGroup,
-          type: architectureType,
-          value: 6.5,
-          timestamp: imported.timestamp,
-          source: SignalSource.healthKit,
-        ),
-      ],
-      checkIns: const [],
-      now: now,
-    ).drivers.singleWhere((item) => item.label == 'Sleep');
-
-    expect(sleepDriver(SignalType.sleepUnspecified).detail, contains('8.0 hr'));
-    expect(sleepDriver(SignalType.sleepCore).detail, contains('6.5 hr'));
-  });
-
-  test('Version 0.15 forecast is hourly, bounded, and signal-aware', () {
-    const score = ScoreSnapshot(
-      energy: 74,
-      cognitive: 78,
-      confidence: .82,
-      drivers: [],
-    );
-    List<SignalReading> inputs({required bool recovered}) => [
-      SignalReading(
-        id: 'sleep',
-        type: SignalType.sleep,
-        value: recovered ? 8.5 : 5,
-        timestamp: now.subtract(const Duration(hours: 2)),
-      ),
-      SignalReading(
-        id: 'bedtime',
-        type: SignalType.bedtime,
-        value: recovered ? 23 : 1,
-        timestamp: now.subtract(const Duration(hours: 10)),
-      ),
-      SignalReading(
-        id: 'study',
-        type: SignalType.study,
-        value: recovered ? 2 : 8,
-        timestamp: now.subtract(const Duration(hours: 1)),
-      ),
-      SignalReading(
-        id: 'exercise',
-        type: SignalType.exercise,
-        value: recovered ? .75 : 3,
-        timestamp: now.subtract(const Duration(hours: 1)),
-      ),
-      SignalReading(
-        id: 'hydration',
-        type: SignalType.hydration,
-        value: recovered ? 2.5 : .5,
-        timestamp: now.subtract(const Duration(minutes: 30)),
-      ),
-    ];
-    final recovered = FatigueEngine.forecast(
-      score,
-      now,
-      signals: inputs(recovered: true),
-      checkIns: [
-        DailyCheckIn(
-          id: 'ready',
-          timestamp: now,
-          energy: 8,
-          mood: 8,
-          stress: 2,
-        ),
-      ],
-      generatedAt: now,
-    );
-    final strained = FatigueEngine.forecast(
-      score,
-      now,
-      signals: inputs(recovered: false),
-      checkIns: [
-        DailyCheckIn(
-          id: 'strained',
-          timestamp: now,
-          energy: 3,
-          mood: 4,
-          stress: 9,
-        ),
-      ],
-      generatedAt: now,
-    );
-    final windows = FatigueEngine.windows(recovered, score);
-
-    expect(recovered, hasLength(17));
-    expect(
-      recovered.every(
-        (point) =>
-            point.energy >= 0 &&
-            point.energy <= 100 &&
-            point.uncertainty >= 0 &&
-            point.uncertainty <= 100,
-      ),
-      isTrue,
-    );
-    expect(recovered.every((point) => point.updatedAt == now), isTrue);
-    expect(
-      recovered.every(
-        (point) =>
-            point.signalEvidenceIds.contains('sleep') &&
-            point.signalEvidenceIds.contains('study') &&
-            point.checkInEvidenceIds.contains('ready'),
-      ),
-      isTrue,
-    );
-    expect(
-      recovered
-          .skip(1)
-          .indexed
-          .every(
-            (entry) =>
-                entry.$2.time.difference(recovered[entry.$1].time) ==
-                const Duration(hours: 1),
-          ),
-      isTrue,
-    );
-    expect(
-      recovered.map((point) => point.energy).reduce((a, b) => a + b) /
-          recovered.length,
-      greaterThan(
-        strained.map((point) => point.energy).reduce((a, b) => a + b) /
-            strained.length,
-      ),
-    );
-    expect(
-      windows.map((item) => item.type).toSet(),
-      ForecastWindowType.values.toSet(),
-    );
-  });
-
-  test('Version 0.15 uncertainty reflects evidence and forecast horizon', () {
-    const score = ScoreSnapshot(
-      energy: 70,
-      cognitive: 70,
-      confidence: .8,
-      drivers: [],
-    );
-    final complete = FatigueEngine.forecast(
-      score,
-      now,
-      signals: [
-        for (final entry in const {
-          SignalType.sleep: 8.0,
-          SignalType.bedtime: 23.0,
-          SignalType.study: 3.0,
-          SignalType.hydration: 2.0,
-        }.entries)
-          SignalReading(
-            id: entry.key.name,
-            type: entry.key,
-            value: entry.value,
-            timestamp: now,
-          ),
-      ],
-      checkIns: [
-        DailyCheckIn(
-          id: 'check-in',
-          timestamp: now,
-          energy: 7,
-          mood: 7,
-          stress: 3,
-        ),
-      ],
-      generatedAt: now,
-    );
-    final missing = FatigueEngine.forecast(score, now, generatedAt: now);
-    final tomorrow = FatigueEngine.forecast(
-      score,
-      now.add(const Duration(days: 1)),
-      signals: const [],
-      generatedAt: now,
-    );
-    final afterMidnightBedtime = FatigueEngine.forecast(
-      score,
-      now,
-      profile: const UserProfile(bedHour: 25),
-      generatedAt: now,
-    );
-
-    expect(missing.first.uncertainty, greaterThan(complete.first.uncertainty));
-    expect(tomorrow.last.uncertainty, greaterThan(missing.first.uncertainty));
-    expect(afterMidnightBedtime.last.time.hour, 23);
-    expect(
-      afterMidnightBedtime.every((point) => point.time.day == now.day),
-      isTrue,
-    );
-  });
-
-  test('Version 0.16 daily summaries expose confidence and staleness', () {
-    final updatedAt = now.subtract(const Duration(hours: 13));
-    final summary = ForecastDaySummary.fromPoints(now, [
-      ForecastPoint(now, 60, 20, updatedAt: updatedAt),
-      ForecastPoint(
-        now.add(const Duration(hours: 1)),
-        80,
-        18,
-        updatedAt: updatedAt,
-      ),
+  test('context-only logs never create score availability or coverage', () {
+    final snapshot = score([
+      reading(SignalType.sleep, 10),
+      reading(SignalType.nap, 2),
+      reading(SignalType.caffeine, 2),
+      reading(SignalType.hydration, 3),
+      reading(SignalType.exercise, 1),
+      reading(SignalType.steps, 9000),
     ]);
-
-    expect(summary.averageEnergy, 70);
-    expect(summary.lowEnergy, 60);
-    expect(summary.peakEnergy, 80);
-    expect(summary.peakTime, now.add(const Duration(hours: 1)));
-    expect(summary.averageUncertainty, 19);
-    expect(summary.isLowConfidence, isTrue);
-    expect(summary.isStaleAt(now), isTrue);
-  });
-
-  test('Version 0.17 derives key windows from linked forecast evidence', () {
-    const score = ScoreSnapshot(
-      energy: 70,
-      cognitive: 72,
-      confidence: .8,
-      drivers: [],
-    );
-    final signals = [
-      SignalReading(
-        id: 'sleep-linked',
-        type: SignalType.sleep,
-        value: 8.2,
-        timestamp: now.subtract(const Duration(hours: 2)),
-      ),
-      SignalReading(
-        id: 'study-linked',
-        type: SignalType.study,
-        value: 4.5,
-        timestamp: now.subtract(const Duration(hours: 1)),
-      ),
-      SignalReading(
-        id: 'hydration-unlinked',
-        type: SignalType.hydration,
-        value: 2.5,
-        timestamp: now,
-      ),
-    ];
-    final checkIns = [
-      DailyCheckIn(
-        id: 'check-in-linked',
-        timestamp: now,
-        energy: 7,
-        mood: 8,
-        stress: 4,
-      ),
-    ];
-    const energy = [70.0, 82.0, 78.0, 68.0, 52.0, 58.0, 67.0, 61.0];
-    final points = [
-      for (var index = 0; index < energy.length; index++)
-        ForecastPoint(
-          DateTime(now.year, now.month, now.day, 9 + index),
-          energy[index],
-          7,
-          updatedAt: now,
-          signalEvidenceIds: const ['sleep-linked', 'study-linked'],
-          checkInEvidenceIds: const ['check-in-linked'],
-        ),
-    ];
-
-    final windows = FatigueEngine.windows(
-      points,
-      score,
-      signals: signals,
-      checkIns: checkIns,
-    );
-    ForecastWindow window(ForecastWindowType type) =>
-        windows.singleWhere((item) => item.type == type);
-
-    expect(window(ForecastWindowType.peak).energy, 82);
-    expect(window(ForecastWindowType.crash).energy, 52);
-    expect(window(ForecastWindowType.recovery).energy, 67);
+    expect(snapshot.canEstimateEnergy, isFalse);
+    expect(snapshot.canEstimateCognitive, isFalse);
+    expect(snapshot.inputCount, 0);
     expect(
-      window(ForecastWindowType.peak).evidence.map((item) => item.id),
-      containsAll(['sleep-linked', 'check-in-linked']),
-    );
-    expect(window(ForecastWindowType.crash).reason, contains('study'));
-    expect(
-      windows.expand((item) => item.evidence).map((item) => item.id),
-      isNot(contains('hydration-unlinked')),
-    );
-  });
-
-  test('Version 0.18 grounds five actions in forecast windows', () {
-    final day = DateTime(2026, 7, 21);
-    final generatedAt = DateTime(2026, 7, 21, 8);
-    ForecastEvidence evidence(String id, String label, SignalType type) =>
-        ForecastEvidence(
-          id: id,
-          kind: ForecastEvidenceKind.signal,
-          label: label,
-          detail: 'Recent $label entry',
-          timestamp: generatedAt,
-          signalType: type,
-          source: SignalSource.manual,
-        );
-    final windows = [
-      ForecastWindow(
-        ForecastWindowType.peak,
-        day.add(const Duration(hours: 9)),
-        day.add(const Duration(hours: 11)),
-        82,
-        'Peak focus',
-        evidence: [evidence('sleep-1', 'Sleep', SignalType.sleep)],
-      ),
-      ForecastWindow(
-        ForecastWindowType.crash,
-        day.add(const Duration(hours: 14)),
-        day.add(const Duration(hours: 15, minutes: 30)),
-        48,
-        'Predicted crash',
-        evidence: [evidence('study-1', 'Study', SignalType.study)],
-      ),
-      ForecastWindow(
-        ForecastWindowType.recovery,
-        day.add(const Duration(hours: 17)),
-        day.add(const Duration(hours: 18, minutes: 30)),
-        68,
-        'Recovery',
-        evidence: [evidence('hydration-1', 'Hydration', SignalType.hydration)],
-      ),
-    ];
-
-    final recommendations = FatigueEngine.recommendations(
-      windows,
-      const ScoreSnapshot(
-        energy: 58,
-        cognitive: 65,
-        confidence: .8,
-        drivers: [],
-      ),
-      day: day,
-      generatedAt: generatedAt,
-    );
-
-    expect(recommendations, hasLength(5));
-    expect(recommendations.map((item) => item.category).toSet(), {
-      'Study',
-      'Hydration',
-      'Nap',
-      'Recovery',
-      'Training',
-    });
-    expect(recommendations.every((item) => item.isGrounded), isTrue);
-    expect(recommendations.every((item) => item.day == day), isTrue);
-    expect(
-      recommendations.every((item) => item.id.startsWith('2026-07-21-')),
+      snapshot.drivers.every((driver) => driver.contribution == 0),
       isTrue,
     );
     expect(
-      recommendations
-          .singleWhere((item) => item.category == 'Hydration')
-          .scheduledAt,
-      day.add(const Duration(hours: 13, minutes: 30)),
+      snapshot.drivers.map((driver) => driver.label),
+      isNot(contains('Sleep')),
     );
     expect(
-      recommendations
-          .singleWhere((item) => item.category == 'Study')
-          .windowType,
-      ForecastWindowType.peak,
+      snapshot.drivers.map((driver) => driver.label),
+      isNot(contains('Nap recovery')),
     );
-  });
-
-  test('Version 0.18 omits recommendations without linked evidence', () {
-    final day = DateTime(2026, 7, 21);
-    final windows = ForecastWindowType.values
-        .map(
-          (type) => ForecastWindow(
-            type,
-            day.add(Duration(hours: 9 + type.index * 3)),
-            day.add(Duration(hours: 10 + type.index * 3)),
-            70,
-            'No evidence',
-          ),
-        )
-        .toList();
-
-    final recommendations = FatigueEngine.recommendations(
-      windows,
-      const ScoreSnapshot(
-        energy: 70,
-        cognitive: 70,
-        confidence: .4,
-        drivers: [],
-      ),
-      day: day,
-    );
-
-    expect(recommendations, isEmpty);
   });
 
   test(
-    'Version 0.19 flags sustained patterns from only the last seven days',
+    'caffeine, fluid volume and exercise duration cannot alter scores or forecasts',
     () {
-      final target = DateTime(2026, 7, 21, 20);
-      final signals = <SignalReading>[
-        for (var index = 0; index < 4; index++)
-          SignalReading(
-            id: 'short-sleep-$index',
-            type: SignalType.sleep,
-            value: 5.5 + index * .1,
-            timestamp: target.subtract(Duration(days: index, hours: 12)),
-          ),
-        for (var index = 0; index < 3; index++)
-          SignalReading(
-            id: 'exercise-$index',
-            type: SignalType.exercise,
-            value: 2.25,
-            timestamp: target.subtract(Duration(days: index, hours: 4)),
-          ),
-        SignalReading(
-          id: 'old-short-sleep',
-          type: SignalType.sleep,
-          value: 3,
-          timestamp: target.subtract(const Duration(days: 8)),
-        ),
-      ];
-      final checkIns = [
-        for (var index = 0; index < 3; index++)
-          DailyCheckIn(
-            id: 'strained-$index',
-            timestamp: target.subtract(Duration(days: index, hours: 2)),
-            energy: 3,
-            mood: 4,
-            stress: 8,
-          ),
-      ];
+      final inputs = [reading(SignalType.study, 2)];
+      final reference = score(inputs);
+      final referenceForecast = forecast(reference, inputs);
+      expect(referenceForecast, isNotEmpty);
+      for (final type in [
+        SignalType.caffeine,
+        SignalType.hydration,
+        SignalType.exercise,
+        SignalType.steps,
+      ]) {
+        for (final value in [0.0, 1.0, 2.0, 4.0, 20.0]) {
+          final signals = [...inputs, reading(type, value)];
+          final changed = score(signals);
+          expect(changed.energy, reference.energy, reason: '$type $value');
+          expect(
+            changed.cognitive,
+            reference.cognitive,
+            reason: '$type $value',
+          );
+          expect(changed.confidence, reference.confidence);
+          expect(changed.inputCount, reference.inputCount);
+          final points = forecast(changed, signals);
+          expect(
+            points.map((point) => point.energy),
+            referenceForecast.map((point) => point.energy),
+          );
+          expect(
+            points.map((point) => point.uncertainty),
+            referenceForecast.map((point) => point.uncertainty),
+          );
+          expect(
+            points.expand((point) => point.signalEvidenceIds),
+            isNot(contains(type.name)),
+          );
+        }
+      }
+    },
+  );
 
-      final alerts = FatigueEngine.alerts(
-        signals,
-        checkIns,
-        const ScoreSnapshot(
-          energy: 55,
-          cognitive: 58,
+  test(
+    'sleep duration has no composite or forecast reward at fixed timing',
+    () {
+      final inputs = [reading(SignalType.study, 2)];
+      final short = [
+        ...inputs,
+        reading(SignalType.sleep, 5, at: day.add(const Duration(hours: 7))),
+      ];
+      final long = [
+        ...inputs,
+        reading(SignalType.sleep, 12, at: day.add(const Duration(hours: 7))),
+      ];
+      expect(score(long).energy, score(short).energy);
+      expect(score(long).cognitive, score(short).cognitive);
+      expect(
+        forecast(score(long), long).map((p) => p.energy),
+        forecast(score(short), short).map((p) => p.energy),
+      );
+    },
+  );
+
+  test('context retains activity source reconciliation and explicit zeros', () {
+    final snapshot = score([
+      reading(
+        SignalType.exercise,
+        2,
+        id: 'health-workout',
+        source: SignalSource.healthKit,
+      ),
+      reading(SignalType.exercise, 0, id: 'manual-exercise'),
+    ]);
+    final exercise = snapshot.drivers.single;
+    expect(exercise.detail, contains('0.0 hr'));
+    expect(exercise.source, SignalSource.manual);
+    expect(exercise.contribution, 0);
+    expect(snapshot.canEstimateEnergy, isFalse);
+  });
+
+  test(
+    'self-reported energy is not circularly used in current Energy score',
+    () {
+      expect(
+        score([], checkIns: [checkIn(energy: 2)]).energy,
+        score([], checkIns: [checkIn(energy: 9)]).energy,
+      );
+    },
+  );
+
+  test('current check-in differs from a stale or invalid check-in', () {
+    final current = score([], checkIns: [checkIn()]);
+    expect(current.canEstimateEnergy, isTrue);
+    expect(current.inputCount, 2);
+    expect(
+      score([], checkIns: [checkIn(mood: double.nan)]).canEstimateEnergy,
+      isFalse,
+    );
+    expect(
+      score(
+        [],
+        checkIns: [checkIn(at: day.subtract(const Duration(minutes: 1)))],
+      ).canEstimateEnergy,
+      isFalse,
+    );
+  });
+
+  test(
+    'reaction score comparisons require same version and adequate prior evidence',
+    () {
+      final currentSignals = [reading(SignalType.reactionTime, 250)];
+      final prior = FatigueEngine.score(
+        signals: [
+          reading(
+            SignalType.reactionTime,
+            300,
+            at: now.subtract(const Duration(days: 1)),
+          ),
+        ],
+        checkIns: const [],
+        now: now.subtract(const Duration(days: 1)),
+      );
+      final current = FatigueEngine.score(
+        signals: currentSignals,
+        checkIns: const [],
+        now: now,
+        previousDay: prior,
+      );
+      expect(current.canEstimateEnergy, isFalse);
+      expect(current.canEstimateCognitive, isTrue);
+      expect(current.previousCognitive, prior.cognitive);
+      final legacy = FatigueEngine.score(
+        signals: currentSignals,
+        checkIns: const [],
+        now: now,
+        previousDay: const ScoreSnapshot(
+          energy: 70,
+          cognitive: 80,
           confidence: .8,
+          cognitiveInputCount: 2,
           drivers: [],
         ),
-        now: target,
-        day: target,
       );
+      expect(legacy.previousCognitive, isNull);
+    },
+  );
 
-      expect(alerts, hasLength(3));
-      expect(alerts.map((alert) => alert.category).toSet(), {
-        RiskAlertCategory.sleepDebt,
-        RiskAlertCategory.trainingLoad,
-        RiskAlertCategory.fatigueStress,
-      });
+  test(
+    'forecast requires current compatible anchor and raw supporting observations',
+    () {
+      final signals = [reading(SignalType.study, 2)];
+      final snapshot = score(signals);
+      expect(forecast(snapshot, signals), isNotEmpty);
+      expect(forecast(snapshot, []), isEmpty);
       expect(
-        alerts.every((alert) => alert.id.startsWith('2026-07-21-')),
+        forecast(snapshot, signals, at: now.add(const Duration(days: 1))),
+        isEmpty,
+      );
+      const legacy = ScoreSnapshot(
+        energy: 80,
+        cognitive: 80,
+        confidence: .9,
+        inputCount: 7,
+        drivers: [],
+        energyModelVersion: 'energy-rules-v2-sleep',
+      );
+      expect(forecast(legacy, signals), isEmpty);
+      expect(forecast(score([]), signals), isEmpty);
+    },
+  );
+
+  test(
+    'experimental forecast points are bounded, versioned and carry source IDs',
+    () {
+      final signals = [reading(SignalType.study, 2)];
+      final snapshot = score(signals, checkIns: [checkIn()]);
+      final points = forecast(snapshot, signals, checkIns: [checkIn()]);
+      expect(points, hasLength(17));
+      expect(
+        points.every(
+          (p) => p.energy >= 0 && p.energy <= 100 && p.uncertainty >= 0,
+        ),
         isTrue,
       );
       expect(
-        alerts.expand((alert) => alert.signalEvidenceIds),
-        isNot(contains('old-short-sleep')),
+        points.every(
+          (p) =>
+              p.updatedAt == now &&
+              p.rulesVersion == FatigueEngine.energyModelVersion,
+        ),
+        isTrue,
       );
-      expect(alerts.every((alert) => alert.evidence.isNotEmpty), isTrue);
       expect(
-        alerts.map((alert) => alert.detail.toLowerCase()).join(' '),
-        isNot(anyOf(contains('diagnos'), contains('disease'))),
+        points.every(
+          (p) =>
+              p.signalEvidenceIds.contains('study') &&
+              p.checkInEvidenceIds.contains('check-in'),
+        ),
+        isTrue,
+      );
+      final tomorrow = forecast(
+        snapshot,
+        signals,
+        checkIns: [checkIn()],
+        date: day.add(const Duration(days: 1)),
+      );
+      expect(tomorrow.last.uncertainty, greaterThan(points.last.uncertainty));
+      final windows = FatigueEngine.windows(
+        points,
+        snapshot,
+        signals: signals,
+        checkIns: [checkIn()],
+      );
+      expect(
+        windows.map((w) => w.type).toSet(),
+        ForecastWindowType.values.toSet(),
+      );
+      expect(windows.every((w) => w.reason.startsWith('Experimental')), isTrue);
+      expect(
+        FatigueEngine.windows([ForecastPoint(now, 70, 10)], snapshot),
+        isEmpty,
       );
     },
   );
 
-  test('Version 0.19 does not treat same-day duplicates as sustained', () {
-    final target = DateTime(2026, 7, 21, 20);
-    final alerts = FatigueEngine.alerts(
-      [
-        for (var index = 0; index < 3; index++)
-          SignalReading(
-            id: 'same-day-sleep-$index',
-            type: SignalType.sleep,
-            value: 5,
-            timestamp: DateTime(2026, 7, 21, 7, index),
-          ),
-      ],
-      [
-        for (var index = 0; index < 3; index++)
-          DailyCheckIn(
-            id: 'same-day-check-in-$index',
-            timestamp: DateTime(2026, 7, 21, 8 + index),
-            energy: 3,
-            mood: 4,
-            stress: 8,
-          ),
-      ],
-      const ScoreSnapshot(
-        energy: 50,
-        cognitive: 55,
-        confidence: .8,
-        drivers: [],
-      ),
-      now: target,
-      day: target,
-    );
-
-    expect(alerts, isEmpty);
-  });
-
-  test('missing signals lower confidence without breaking scores', () {
-    final score = FatigueEngine.score(
-      signals: const [],
-      checkIns: const [],
-      now: now,
-    );
-
-    expect(score.confidence, lessThan(.5));
-    expect(score.inputCount, 0);
-    expect(score.confidence, .2);
-    expect(score.energy, inInclusiveRange(0, 100));
-    expect(score.cognitive, inInclusiveRange(0, 100));
-    expect(score.cognitiveInputCount, 0);
-    expect(score.cognitiveConfidence, .2);
-  });
-
-  test('Version 0.14 ranks positive and negative drivers independently', () {
-    final score = FatigueEngine.score(
-      signals: [
-        for (final entry in const {
-          SignalType.sleep: 5.0,
-          SignalType.hydration: 3.0,
-          SignalType.exercise: 1.0,
-          SignalType.study: 7.0,
-          SignalType.screenTime: 8.0,
-          SignalType.reactionTime: 245.0,
-        }.entries)
-          SignalReading(
-            id: entry.key.name,
-            type: entry.key,
-            value: entry.value,
-            timestamp: now,
-            source: SignalSource.healthKit,
-          ),
-      ],
-      checkIns: [
-        DailyCheckIn(
-          id: 'check-in',
-          timestamp: now,
-          energy: 7,
-          mood: 9,
-          stress: 8,
-        ),
-      ],
-      now: now,
-    );
-
-    expect(score.energyPositiveDrivers, isNotEmpty);
-    expect(score.energyNegativeDrivers, isNotEmpty);
-    expect(
-      score.energyPositiveDrivers.map((driver) => driver.contribution),
-      orderedEquals(
-        [...score.energyPositiveDrivers.map((driver) => driver.contribution)]
-          ..sort((left, right) => right.compareTo(left)),
-      ),
-    );
-    expect(
-      score.energyNegativeDrivers.map((driver) => driver.contribution),
-      orderedEquals(
-        [...score.energyNegativeDrivers.map((driver) => driver.contribution)]
-          ..sort(),
-      ),
-    );
-    expect(
-      score.drivers.every((driver) => driver.explanation.isNotEmpty),
-      isTrue,
-    );
-    expect(score.drivers.every((driver) => driver.freshness != null), isTrue);
-    expect(
-      score.drivers.singleWhere((driver) => driver.label == 'Hydration').source,
-      SignalSource.healthKit,
-    );
-  });
-
-  test('Version 0.14 confidence falls as evidence becomes stale', () {
-    final late = DateTime(2026, 7, 21, 23);
-
-    ScoreSnapshot calculate({required bool fresh}) {
-      final activityTime = fresh ? late : DateTime(2026, 7, 21);
-      final sleepTime = fresh ? late : DateTime(2026, 7, 15);
-      final checkInTime = fresh ? late : DateTime(2026, 7, 20, 13);
-      return FatigueEngine.score(
-        signals: [
-          for (final entry in const {
-            SignalType.hydration: 2.0,
-            SignalType.exercise: 1.0,
-            SignalType.study: 3.0,
-            SignalType.screenTime: 3.0,
-          }.entries)
-            SignalReading(
-              id: entry.key.name,
-              type: entry.key,
-              value: entry.value,
-              timestamp: activityTime,
-              source: fresh ? SignalSource.healthKit : SignalSource.model,
-            ),
-          SignalReading(
-            id: 'sleep',
-            type: SignalType.sleep,
-            value: 7.5,
-            timestamp: sleepTime,
-            source: fresh ? SignalSource.healthKit : SignalSource.model,
-          ),
-        ],
-        checkIns: [
-          DailyCheckIn(
-            id: 'check-in',
-            timestamp: checkInTime,
-            energy: 7,
-            mood: 7,
-            stress: 4,
-          ),
-        ],
-        now: late,
-      );
-    }
-
-    final fresh = calculate(fresh: true);
-    final stale = calculate(fresh: false);
-
-    expect(fresh.inputCount, stale.inputCount);
-    expect(fresh.completeness, stale.completeness);
-    expect(fresh.freshness, greaterThan(stale.freshness!));
-    expect(fresh.confidence, greaterThan(stale.confidence));
+  test('obsolete forecast-based nap/workout prescriptions are disabled', () {
+    final signals = [reading(SignalType.study, 2)];
+    final snapshot = score(signals);
+    final points = forecast(snapshot, signals);
+    final windows = FatigueEngine.windows(points, snapshot, signals: signals);
+    expect(windows, isNotEmpty);
+    expect(FatigueEngine.recommendations(windows, snapshot, day: day), isEmpty);
   });
 
   test(
-    'Version 0.27 compares physiology with mature personal baselines and gates confidence',
+    'fixed hours cannot infer overtraining; incomplete sleep does not infer deficit',
     () {
-      final today = DateTime(2026, 8, 20);
-
-      List<SignalReading> readings(int historyDays) => [
-        for (var daysAgo = 1; daysAgo <= historyDays; daysAgo++) ...[
-          SignalReading(
-            id: 'hrv-$daysAgo',
-            type: SignalType.hrv,
-            value: 50,
-            timestamp: today.subtract(Duration(days: daysAgo)),
+      final signals = [
+        for (var i = 0; i < 4; i++) ...[
+          reading(
+            SignalType.exercise,
+            5,
+            id: 'exercise-$i',
+            at: now.subtract(Duration(days: i)),
           ),
-          SignalReading(
-            id: 'rhr-$daysAgo',
-            type: SignalType.restingHeartRate,
-            value: 60,
-            timestamp: today.subtract(Duration(days: daysAgo)),
+          reading(
+            SignalType.sleep,
+            4,
+            id: 'sleep-$i',
+            at: now.subtract(Duration(days: i)),
           ),
-          SignalReading(
-            id: 'sleep-$daysAgo',
-            type: SignalType.sleep,
-            value: 8,
-            timestamp: today
-                .subtract(Duration(days: daysAgo))
-                .add(const Duration(hours: 7)),
-          ),
-          if (daysAgo <= 5)
-            SignalReading(
-              id: 'reaction-$daysAgo',
-              type: SignalType.reactionTime,
-              value: 280,
-              timestamp: today.subtract(Duration(days: daysAgo)),
-            ),
         ],
-        SignalReading(
-          id: 'hrv-today',
-          type: SignalType.hrv,
-          value: 60,
-          timestamp: today.add(const Duration(hours: 7)),
-        ),
-        SignalReading(
-          id: 'rhr-today',
-          type: SignalType.restingHeartRate,
-          value: 70,
-          timestamp: today.add(const Duration(hours: 7)),
-        ),
-        SignalReading(
-          id: 'sleep-today',
-          type: SignalType.sleep,
-          value: 8,
-          timestamp: today.add(const Duration(hours: 7)),
-        ),
-        SignalReading(
-          id: 'reaction-today',
-          type: SignalType.reactionTime,
-          value: 250,
-          timestamp: today.add(const Duration(hours: 8)),
-        ),
       ];
-
-      ScoreSnapshot calculate(int historyDays) {
-        final signals = readings(historyDays);
-        return FatigueEngine.score(
-          signals: signals,
-          checkIns: const [],
-          now: today.add(const Duration(hours: 12)),
-          day: today,
-          personalBaselines: PersonalBaselineLogic.build(
-            signals: signals,
-            asOf: today,
-          ),
-        );
-      }
-
-      final building = calculate(2);
-      final mature = calculate(8);
-
-      expect(mature.personalBaselines?.readyCount, 4);
-      expect(mature.baselineConfidence, 1);
-      expect(mature.confidence, greaterThan(building.confidence));
       expect(
-        mature.drivers
-            .singleWhere((driver) => driver.label == 'HRV vs baseline')
-            .contribution,
-        greaterThan(0),
-      );
-      expect(
-        mature.drivers
-            .singleWhere((driver) => driver.label == 'Resting HR vs baseline')
-            .contribution,
-        lessThan(0),
-      );
-      expect(
-        mature.cognitiveDrivers
-            .singleWhere((driver) => driver.label == 'Reaction time')
-            .detail,
-        contains('baseline'),
+        FatigueEngine.alerts(signals, [], score(signals), now: now),
+        isEmpty,
       );
     },
   );
+
+  test(
+    'repeated check-in observations are factual and require a current day',
+    () {
+      final checkIns = [
+        for (var i = 0; i < 3; i++)
+          checkIn(
+            id: 'report-$i',
+            energy: 3,
+            stress: 8,
+            at: now.subtract(Duration(days: i)),
+          ),
+      ];
+      final alerts = FatigueEngine.alerts(
+        [],
+        checkIns,
+        score([], checkIns: checkIns),
+        now: now,
+      );
+      expect(alerts, hasLength(1));
+      expect(alerts.single.title, 'Recent check-in observations');
+      expect(alerts.single.detail, contains('4/10'));
+      expect(alerts.single.severity, AlertSeverity.info);
+      expect(alerts.single.checkInEvidenceIds, hasLength(3));
+      expect(
+        FatigueEngine.alerts(
+          [],
+          checkIns,
+          score([]),
+          now: now.add(const Duration(days: 1)),
+        ),
+        isEmpty,
+      );
+      final sameDay = [
+        for (var i = 0; i < 3; i++)
+          checkIn(id: 'same-$i', energy: 3, stress: 8),
+      ];
+      expect(FatigueEngine.alerts([], sameDay, score([]), now: now), isEmpty);
+    },
+  );
+
+  test(
+    'data quality reflects evidence age without claiming prediction probability',
+    () {
+      final fresh = score([reading(SignalType.study, 2)]);
+      final older = score([reading(SignalType.study, 2, at: day)]);
+      expect(fresh.inputCount, older.inputCount);
+      expect(fresh.freshness, greaterThan(older.freshness!));
+      expect(fresh.confidence, greaterThan(older.confidence));
+    },
+  );
+
+  test(
+    'personal baselines retain raw history and bound experimental effects',
+    () {
+      final signals = [
+        for (var i = 1; i <= 8; i++) ...[
+          reading(
+            SignalType.hrv,
+            50,
+            id: 'hrv-$i',
+            at: now.subtract(Duration(days: i)),
+          ),
+          reading(
+            SignalType.restingHeartRate,
+            60,
+            id: 'rhr-$i',
+            at: now.subtract(Duration(days: i)),
+          ),
+        ],
+        reading(SignalType.hrv, 60),
+        reading(SignalType.restingHeartRate, 70),
+      ];
+      final baselines = PersonalBaselineLogic.build(
+        signals: signals,
+        asOf: day,
+      );
+      final snapshot = FatigueEngine.score(
+        signals: signals,
+        checkIns: const [],
+        now: now,
+        personalBaselines: baselines,
+      );
+      expect(baselines.metric(PersonalBaselineType.hrv)?.sampleCount, 8);
+      expect(snapshot.canEstimateEnergy, isTrue);
+      expect(
+        snapshot.energyPositiveDrivers.single.contribution,
+        inInclusiveRange(0, 8),
+      );
+      expect(
+        snapshot.energyNegativeDrivers.single.contribution,
+        inInclusiveRange(-8, 0),
+      );
+      expect(
+        snapshot.drivers.every(
+          (d) => d.explanation.isNotEmpty && d.evidenceAt != null,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'heart observations without a ready baseline do not expose neutral readiness',
+    () {
+      final signals = [
+        reading(SignalType.hrv, 50),
+        reading(SignalType.restingHeartRate, 60),
+      ];
+      final baseline = PersonalBaselineLogic.build(signals: signals, asOf: now);
+      final snapshot = FatigueEngine.score(
+        signals: signals,
+        checkIns: const [],
+        now: now,
+        personalBaselines: baseline,
+      );
+      expect(snapshot.canEstimateEnergy, isFalse);
+      expect(snapshot.inputCount, 0);
+      expect(snapshot.confidence, 0);
+      expect(snapshot.drivers, hasLength(2));
+      expect(
+        snapshot.drivers.every(
+          (driver) =>
+              driver.contribution == 0 &&
+              driver.explanation.contains('baseline is building'),
+        ),
+        isTrue,
+      );
+      expect(forecast(snapshot, signals), isEmpty);
+      final observed = FatigueEngine.score(
+        signals: [...signals, reading(SignalType.study, 0)],
+        checkIns: const [],
+        now: now,
+        personalBaselines: baseline,
+      );
+      expect(observed.canEstimateEnergy, isTrue);
+      expect(observed.inputCount, 1);
+    },
+  );
+
+  test('unavailable snapshots cannot acquire a personalized correction', () {
+    final snapshot = score([]);
+    final corrected = snapshot.withEnergyCorrection(10, 'unexpected-model');
+    expect(corrected.personalizedModelVersion, isNull);
+    expect(corrected.canEstimateEnergy, isFalse);
+  });
 }

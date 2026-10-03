@@ -33,38 +33,65 @@ PrepSnapshot changed(
 );
 
 void main() {
-  test('fixed ridge matches the closed-form constant-vector solution', () {
-    final snapshot = benchmarkSnapshot();
-    final report = MlPrepBuilder.build(snapshot);
-    final result = fit(snapshot, report: report);
-    expect(result.reason, 'accepted');
-    final model = result.model!;
-    final row = report.examples.first;
-    final trainingCount = report.examples
-        .where((r) => r.split == 'training')
-        .length;
-    final x = <double>[0];
-    for (final name in EnergyResidualModel.featureNames) {
-      final age = row.featureAgeHours[name];
-      final freshness = age == null ? 0.0 : (1 - age / 36).clamp(0.0, 1.0);
-      x[0] += freshness / 8;
-      x.add((row.features[name] ?? 0) * freshness);
-    }
-    for (var i = 1; i < x.length; i++) {
-      x[i] *= x[0];
-    }
-    final scale =
-        trainingCount *
-        8 /
-        (1 + trainingCount * x.fold<double>(0, (s, v) => s + v * v));
-    expect(model.intercept, closeTo(scale * x[0], 1e-9));
-    for (var i = 0; i < 8; i++) {
-      expect(model.weights[i], closeTo(scale * x[i + 1], 1e-9));
-    }
-    expect(result.candidateMae, lessThan(result.baselineMae! * .95));
-    expect(result.workingBytes, lessThan(1024 * 1024));
-    expect(model.ownerKey, prepFingerprint({'uid': snapshot.uid}));
-  });
+  test(
+    'fixed ridge matches a closed-form rank-one solution with aging baselines',
+    () {
+      final snapshot = benchmarkSnapshot();
+      final report = MlPrepBuilder.build(snapshot);
+      final result = fit(snapshot, report: report);
+      expect(result.reason, 'accepted');
+      final model = result.model!;
+      final trainingRows = report.examples
+          .where((r) => r.split == 'training')
+          .toList();
+      List<double> vector(TrainingExample row) {
+        final x = <double>[0];
+        for (final name in EnergyResidualModel.featureNames) {
+          final age = row.featureAgeHours[name];
+          final horizon =
+              name == 'recoveryDeviation' || name == 'sleepDeviation'
+              ? 720
+              : 36;
+          final freshness = age == null
+              ? 0.0
+              : (1 - age / horizon).clamp(0.0, 1.0);
+          x[0] += freshness / 8;
+          x.add((row.features[name] ?? 0) * freshness);
+        }
+        for (var i = 1; i < x.length; i++) {
+          x[i] *= x[0];
+        }
+        return x;
+      }
+
+      final rows = trainingRows.map(vector).toList();
+      final direction = rows.first
+          .map((value) => value / rows.first[0])
+          .toList();
+      // All nonzero features are constant in this software fixture. Older heart
+      // baseline evidence varies coverage only: x_i = coverage_i * direction.
+      for (final x in rows) {
+        for (var i = 0; i < x.length; i++) {
+          expect(x[i], closeTo(x[0] * direction[i], 1e-12));
+        }
+      }
+      final scale =
+          rows.fold<double>(0, (sum, x) => sum + x[0] * 8) /
+          (1 +
+              rows.fold<double>(0, (sum, x) => sum + x[0] * x[0]) *
+                  direction.fold<double>(
+                    0,
+                    (sum, value) => sum + value * value,
+                  ));
+      expect(model.intercept, closeTo(scale * direction[0], 1e-9));
+      for (var i = 0; i < 8; i++) {
+        expect(model.weights[i], closeTo(scale * direction[i + 1], 1e-9));
+      }
+      expect(result.candidateMae, lessThan(result.baselineMae! * .95));
+      expect(result.workingBytes, lessThan(1024 * 1024));
+      expect(model.ownerKey, prepFingerprint({'uid': snapshot.uid}));
+    },
+  );
 
   test('holdout labels never change fitted weights and are not refit', () {
     final first = fit(benchmarkSnapshot());
@@ -75,6 +102,157 @@ void main() {
     expect(second.model!.intercept, first.model!.intercept);
     expect(second.candidateMae, isNot(first.candidateMae));
     expect(second.model!.fingerprint, isNot(first.model!.fingerprint));
+  });
+
+  test(
+    'retired exposure changes cannot affect fitted or served corrections',
+    () {
+      final source = benchmarkSnapshot();
+      final originalReport = MlPrepBuilder.build(source);
+      final model = fit(source, report: originalReport).model!;
+      final altered = changed(
+        source,
+        signals: [
+          for (final row in source.signals)
+            if ({'exercise', 'hydration', 'caffeine'}.contains(row['type']))
+              ({...row, 'value': row['type'] == 'exercise' ? 10 : 8}
+                ..remove('createdAt'))
+            else
+              row,
+          for (final row in source.signals.where(
+            (row) => row['type'] == 'study',
+          ))
+            for (final type in [
+              'sleep',
+              'nap',
+              'bedtime',
+              'steps',
+              'sleepAwake',
+              'sleepCore',
+              'sleepDeep',
+              'sleepRem',
+              'sleepUnspecified',
+            ])
+              ({
+                ...row,
+                'id': '${row['id']}-$type-context',
+                'type': type,
+                'value': type == 'sleep' ? 13 : 1,
+              }..remove('createdAt')),
+        ],
+      );
+      final alteredReport = MlPrepBuilder.build(altered);
+      final alteredModel = fit(altered, report: alteredReport).model!;
+      expect(alteredModel.weights, model.weights);
+      expect(alteredModel.intercept, model.intercept);
+      for (var index = 0; index < originalReport.examples.length; index++) {
+        final before = originalReport.examples[index];
+        final after = alteredReport.examples[index];
+        expect(after.features, before.features);
+        expect(after.reference, before.reference);
+        expect(
+          after.warnings,
+          isNot(contains('historical_availability_unknown')),
+        );
+        for (final name in [
+          'sleepDeviation',
+          'movement',
+          'hydration',
+          'caffeine',
+        ]) {
+          expect(after.features[name], isNull);
+          expect(after.featureAgeHours[name], isNull);
+          expect(after.featureSources[name], isEmpty);
+        }
+        expect(
+          model.correction(
+            features: after.features,
+            featureAgeHours: after.featureAgeHours,
+          ),
+          model.correction(
+            features: before.features,
+            featureAgeHours: before.featureAgeHours,
+          ),
+        );
+      }
+    },
+  );
+
+  test('fixture reserves baseline days without lowering label minimum', () {
+    final source = benchmarkSnapshot(days: 30);
+    expect(source.outcomes, hasLength(23));
+    expect(fit(source).model?.labelCount, 23);
+    expect(fit(benchmarkSnapshot(days: 13)).model, isNull);
+  });
+
+  test(
+    'correction kernel rejects retired input slots even when their value is zero',
+    () {
+      final source = benchmarkSnapshot();
+      final report = MlPrepBuilder.build(source);
+      final model = fit(source, report: report).model!;
+      final row = report.examples.last;
+      expect(
+        model.correction(
+          features: row.features,
+          featureAgeHours: row.featureAgeHours,
+        ),
+        isNotNull,
+      );
+      for (final name in EnergyResidualModel.retiredFeatureNames) {
+        expect(
+          model.correction(
+            features: {...row.features, name: 0},
+            featureAgeHours: {...row.featureAgeHours, name: 0},
+          ),
+          isNull,
+        );
+        expect(
+          model.correction(
+            features: row.features,
+            featureAgeHours: {...row.featureAgeHours, name: 0},
+          ),
+          isNull,
+        );
+      }
+    },
+  );
+
+  test(
+    'current-reference artifacts reject retired coefficients and coverage',
+    () {
+      final original = fit(benchmarkSnapshot()).model!.toJson();
+      for (final name in EnergyResidualModel.retiredFeatureNames) {
+        final weights = List<double>.from(original['weights'] as List);
+        weights[EnergyResidualModel.featureNames.indexOf(name)] = 1;
+        final coverage = Map<String, double>.from(
+          original['featureCoverage'] as Map,
+        );
+        coverage[name] = .1;
+        for (final mutated in [
+          {...original, 'weights': weights},
+          {...original, 'featureCoverage': coverage},
+        ]) {
+          mutated['artifactChecksum'] = prepFingerprint(
+            {...mutated}..remove('artifactChecksum'),
+          );
+          expect(
+            () => EnergyResidualModel.fromJson(mutated),
+            throwsFormatException,
+          );
+        }
+      }
+    },
+  );
+
+  test('maximum software fixture remains below document and label caps', () {
+    final source = benchmarkSnapshot(days: 30, maximumWindow: true);
+    final report = MlPrepBuilder.build(source);
+    expect(source.signals, hasLength(1499));
+    expect(source.checkIns, hasLength(99));
+    expect(source.outcomes, hasLength(76));
+    expect(report.energyReady, isTrue);
+    expect(fit(source, report: report).model?.labelCount, 76);
   });
 
   test('opposite holdout trend and perfect deterministic reference reject', () {
@@ -351,11 +529,19 @@ void main() {
   test('missing and stale inputs attenuate every term including intercept', () {
     final model = fit(benchmarkSnapshot(residual: 4)).model!;
     final names = EnergyResidualModel.featureNames;
-    final values = {for (final name in names) name: 0.0};
-    final ages = {for (final name in names) name: 0.0};
+    final active = names
+        .where(
+          (name) => !EnergyResidualModel.retiredFeatureNames.contains(name),
+        )
+        .toList();
+    final values = {
+      for (final name in names) name: active.contains(name) ? 0.0 : null,
+    };
+    final ages = Map<String, double?>.of(values);
     final fresh = model.correction(features: values, featureAgeHours: ages)!;
     final halfMissing = {
-      for (var i = 0; i < names.length; i++) names[i]: i < 4 ? 0.0 : null,
+      for (final name in names)
+        name: active.take(2).contains(name) ? 0.0 : null,
     };
     expect(
       model.correction(features: halfMissing, featureAgeHours: halfMissing),
@@ -371,7 +557,9 @@ void main() {
     expect(
       model.correction(
         features: values,
-        featureAgeHours: {for (final n in names) n: 720},
+        featureAgeHours: {
+          for (final n in names) n: active.contains(n) ? 720 : null,
+        },
       ),
       0,
     );
@@ -382,8 +570,15 @@ void main() {
     () {
       final model = fit(benchmarkSnapshot()).model!;
       final names = EnergyResidualModel.featureNames;
-      final ages = {for (final n in names) n: 0.0};
-      final values = {for (final n in names) n: 1.0};
+      final active = names
+          .where(
+            (name) => !EnergyResidualModel.retiredFeatureNames.contains(name),
+          )
+          .toList();
+      final ages = {for (final n in names) n: active.contains(n) ? 0.0 : null};
+      final values = {
+        for (final n in names) n: active.contains(n) ? 1.0 : null,
+      };
       for (final bad in [
         double.nan,
         double.infinity,
@@ -420,10 +615,14 @@ void main() {
         ),
         isNull,
       );
-      for (var mask = 0; mask < 256; mask++) {
+      for (var mask = 0; mask < (1 << active.length); mask++) {
         final v = {
-          for (var i = 0; i < 8; i++)
-            names[i]: (mask & (1 << i)) == 0 ? -1.0 : 1.0,
+          for (final name in names)
+            name: !active.contains(name)
+                ? null
+                : (mask & (1 << active.indexOf(name))) == 0
+                ? -1.0
+                : 1.0,
         };
         expect(
           model.correction(features: v, featureAgeHours: ages),

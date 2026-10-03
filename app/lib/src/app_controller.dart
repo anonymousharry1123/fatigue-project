@@ -36,6 +36,7 @@ import 'privacy_consent.dart';
 import 'reaction_test_logic.dart';
 import 'recommendation_feedback_logic.dart';
 import 'screen_time_service.dart';
+import 'schedule_logic.dart';
 import 'sleep_sync_logic.dart';
 import 'today_dashboard_logic.dart';
 
@@ -763,7 +764,11 @@ class AppController extends ChangeNotifier {
 
   bool get isScoreLoading => isEnergyScoreLoading;
   String? get scoreError => energyScoreError;
-  bool get scoreLoadedFromSnapshot => _scoreLoadedFromSnapshot;
+  bool get scoreLoadedFromSnapshot =>
+      _scoreLoadedFromSnapshot &&
+      _scoreSnapshot != null &&
+      _currentScoreReference(_scoreSnapshot!, _now()) &&
+      _scoreReferenceKey(_scoreSnapshot!) == _scoreReferenceKey(score);
   bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
   bool get guidanceSavedToCloud => _guidanceSavedToCloud;
   InsightsSnapshot get insightsSnapshot =>
@@ -925,10 +930,10 @@ class AppController extends ChangeNotifier {
         ActivityLogEntry(
           id: group.key,
           timestamp: group.value.first.timestamp,
-          hydrationLiters: hydration ?? 0,
-          studyHours: study ?? 0,
-          exerciseHours: exercise ?? 0,
-          screenTimeHours: screenTime ?? 0,
+          hydrationLiters: hydration,
+          studyHours: study,
+          exerciseHours: exercise,
+          screenTimeHours: screenTime,
         ),
       );
     }
@@ -993,13 +998,59 @@ class AppController extends ChangeNotifier {
     sleepLogs: sleepLogs,
   );
 
+  bool _currentScoreReference(ScoreSnapshot value, DateTime at) =>
+      value.energyModelVersion == FatigueEngine.energyModelVersion &&
+      value.cognitiveModelVersion == FatigueEngine.cognitiveModelVersion &&
+      value.day != null &&
+      sameLocalDay(value.day!, at) &&
+      value.calculatedAt != null &&
+      !value.calculatedAt!.isAfter(at) &&
+      at.difference(value.calculatedAt!) < const Duration(minutes: 1);
+
+  String _scoreReferenceKey(ScoreSnapshot value) {
+    final fields =
+        scoreSnapshotToCloud(
+          snapshot: value.withoutPersonalization(),
+          day: value.day ?? localDay(_now()),
+        )..removeWhere(
+          (key, _) => const {
+            'calculatedAt',
+            'previousCognitive',
+            'cognitiveDelta',
+          }.contains(key),
+        );
+    try {
+      return jsonEncode(
+        fields,
+        toEncodable: (value) => (value as DateTime).toUtc().toIso8601String(),
+      );
+    } on Object {
+      return ''; // Malformed derived cache cannot displace a valid raw reference.
+    }
+  }
+
   ScoreSnapshot get score {
+    final at = _now();
+    final reference = FatigueEngine.score(
+      signals: signals,
+      checkIns: checkIns,
+      now: at,
+      personalBaselines: PersonalBaselineLogic.build(
+        signals: signals,
+        asOf: localDay(at),
+      ),
+    );
+    final cached = _scoreSnapshot;
+    // Never let an old cloud/device estimate outlive its source evidence.
     final value =
-        _scoreSnapshot ??
-        FatigueEngine.score(signals: signals, checkIns: checkIns, now: _now());
+        cached != null &&
+            _currentScoreReference(cached, at) &&
+            _scoreReferenceKey(cached) == _scoreReferenceKey(reference)
+        ? cached
+        : reference;
     return _energyModelService.model == null
         ? value.withoutPersonalization()
-        : value;
+        : _personalizeEnergy(value, signals, checkIns, at);
   }
 
   /// Opening transparency only projects already loaded state. No model load,
@@ -1021,7 +1072,7 @@ class AppController extends ChangeNotifier {
               hasCognitiveScore: false,
             ),
       viewedAt: at,
-      scoreFromCloud: visible && _scoreLoadedFromSnapshot,
+      scoreFromCloud: visible && scoreLoadedFromSnapshot,
       offline:
           accountVisible &&
           (cloudSyncError != null || energyScoreError != null),
@@ -1054,7 +1105,11 @@ class AppController extends ChangeNotifier {
   ) {
     final base = score.withoutPersonalization();
     final model = _energyModelService.model;
-    if (model == null || at.isBefore(model.trainedAt)) return base;
+    if (!base.canEstimateEnergy ||
+        model == null ||
+        at.isBefore(model.trainedAt)) {
+      return base;
+    }
     try {
       final input = MlPrepBuilder.energyInput(
         signals: sourceSignals,
@@ -1079,18 +1134,40 @@ class AppController extends ChangeNotifier {
   PersonalBaselines get personalBaselines =>
       score.personalBaselines ??
       PersonalBaselineLogic.build(signals: signals, asOf: _now());
-  List<ForecastPoint> forecastFor(DateTime day) =>
-      _forecastsByDay[_dayKey(day)] ??
-      FatigueEngine.forecast(
-        score,
-        day,
-        signals: signals,
-        checkIns: checkIns,
-        profile: profile,
-      );
+  bool _eligibleForecast(List<ForecastPoint> points) {
+    final at = _now();
+    final signalIds = signals.map((item) => item.id).toSet();
+    final checkInIds = checkIns.map((item) => item.id).toSet();
+    return score.canEstimateEnergy &&
+        points.isNotEmpty &&
+        points.every(
+          (point) =>
+              point.rulesVersion == FatigueEngine.energyModelVersion &&
+              point.signalEvidenceIds.every(signalIds.contains) &&
+              point.checkInEvidenceIds.every(checkInIds.contains) &&
+              point.updatedAt != null &&
+              !point.updatedAt!.isAfter(at) &&
+              sameLocalDay(point.updatedAt!, at) &&
+              at.difference(point.updatedAt!) <= forecastFreshnessWindow,
+        );
+  }
+
+  List<ForecastPoint> forecastFor(DateTime day) {
+    final cached = _forecastsByDay[_dayKey(day)];
+    if (cached != null && _eligibleForecast(cached)) return cached;
+    return FatigueEngine.forecast(
+      score,
+      day,
+      signals: signals,
+      checkIns: checkIns,
+      profile: profile,
+      generatedAt: _now(),
+    );
+  }
+
   List<ForecastPoint> forecastDataFor(DateTime day) {
     final saved = _forecastsByDay[_dayKey(day)];
-    if (saved != null) return saved;
+    if (saved != null && _eligibleForecast(saved)) return saved;
     if (isCloudAuthenticated && forecastError == null) return const [];
     return forecastFor(day);
   }
@@ -1182,7 +1259,7 @@ class AppController extends ChangeNotifier {
         _todaySignals = dashboardResults[1]! as List<SignalReading>;
         if (!forceRecalculate &&
             savedSnapshot != null &&
-            savedSnapshot.hasCognitiveScore &&
+            _currentScoreReference(savedSnapshot, calculationTime) &&
             savedSnapshot.freshness != null &&
             savedSnapshot.cognitiveFreshness != null &&
             savedSnapshot.personalBaselines != null &&
@@ -1343,7 +1420,8 @@ class AppController extends ChangeNotifier {
           final savedByDay = _groupForecasts(saved);
           if (days.every((targetDay) {
             final points = savedByDay[_dayKey(targetDay)] ?? const [];
-            return _isCompleteForecast(points, targetDay) &&
+            return _eligibleForecast(points) &&
+                _isCompleteForecast(points, targetDay) &&
                 !ForecastDaySummary.fromPoints(
                   targetDay,
                   points,
@@ -1580,8 +1658,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> refreshNotifications({bool notify = true}) async {
-    if (!_canProcessData) return;
-    if (isSignedOut || _isSigningOut) return;
+    if (!_canProcessData || isSignedOut || _isSigningOut) {
+      await _notificationService.cancelGuidance();
+      _notificationScheduleConfirmed = false;
+      return;
+    }
     if (!_notificationPreferencesPersisted) return;
     final sessionRevision = _sessionRevision;
     final uid = cloudUid;
@@ -1608,6 +1689,8 @@ class AppController extends ChangeNotifier {
         crashEnabled: crashNotificationsEnabled,
         recoveryEnabled: recoveryNotificationsEnabled,
         coachPlanEnabled: coachPlanNotificationsEnabled,
+        currentEvidenceEligible:
+            score.canEstimateEnergy || score.canEstimateCognitive,
       );
       if (!notificationsEnabled) {
         notificationPermission = NotificationPermissionState.unknown;
@@ -1817,6 +1900,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    // Native schedules survive app upgrades and sign-out. Clear before any
+    // privacy/network early return; eligible schedule reminders are rebuilt.
+    try {
+      await _notificationService.cancelGuidance();
+    } on Object {
+      notificationError =
+          'Previous reminders could not be cleared on this device.';
+    }
     await _deviceTimezoneService.refresh();
     _lastLocalDay = _dayKey(_now());
     final preferences = await SharedPreferences.getInstance();
@@ -1828,6 +1919,7 @@ class AppController extends ChangeNotifier {
         _restoreLocal(jsonDecode(raw) as Map<String, dynamic>);
         final saved = jsonDecode(raw) as Map<String, dynamic>;
         _localClockChanged =
+            saved['derivedRulesVersion'] != FatigueEngine.energyModelVersion ||
             saved['deviceTimezone'] != deviceTimezoneIdentifier ||
             saved['deviceUtcOffsetMinutes'] !=
                 _deviceTimezoneService.utcOffset.inMinutes;
@@ -2088,28 +2180,24 @@ class AppController extends ChangeNotifier {
     return current();
   }
 
+  // Kept as a private call-site name for the existing lifecycle path. All
+  // estimates now age, not a special nap reward (which no longer exists).
   static bool _napScoreNeedsRefresh(
     ScoreSnapshot? snapshot,
     DateTime at, {
     Duration minimumAge = Duration.zero,
   }) {
-    if (snapshot == null) return false;
-    final nap = snapshot.drivers
-        .where((driver) => driver.label == 'Nap recovery')
-        .firstOrNull;
-    if (nap == null) return false;
-    // Once every logged nap has expired and the stored contribution is already
-    // zero, elapsed time cannot change it again. A stale positive credit still
-    // needs one final recalculation, even after the six-hour window.
-    if (nap.contribution == 0 &&
-        nap.evidenceAt != null &&
-        at.difference(nap.evidenceAt!) >= const Duration(hours: 6)) {
-      return false;
+    if (snapshot == null) return true;
+    if (snapshot.energyModelVersion != FatigueEngine.energyModelVersion ||
+        snapshot.cognitiveModelVersion != FatigueEngine.cognitiveModelVersion ||
+        snapshot.day == null ||
+        !sameLocalDay(snapshot.day!, at)) {
+      return true;
     }
-    final calculatedAt = snapshot.calculatedAt;
-    if (calculatedAt == null) return true;
-    return !at.isAtSameMomentAs(calculatedAt) &&
-        at.difference(calculatedAt).abs() >= minimumAge;
+    final calculated = snapshot.calculatedAt;
+    if (calculated == null || calculated.isAfter(at)) return true;
+    return at.difference(calculated) >= const Duration(minutes: 1) &&
+        at.difference(calculated) >= minimumAge;
   }
 
   Future<void> completeOnboarding(
@@ -2341,6 +2429,11 @@ class AppController extends ChangeNotifier {
 
   Future<void> updateProfile(UserProfile value) async {
     final ensureCurrent = _beginMutation();
+    if (value.wakeHour != profile.wakeHour ||
+        value.bedHour != profile.bedHour) {
+      final error = ScheduleLogic.validationError(profile, value);
+      if (error != null) throw ArgumentError(error);
+    }
     profile = value;
     await _commit(forecastInputsChanged: true);
     ensureCurrent();
@@ -2373,10 +2466,10 @@ class AppController extends ChangeNotifier {
     DateTime? timestamp,
   }) async {
     final ensureCurrent = _beginMutation();
-    final hydration = ActivityLogLogic.valueOrZero(hydrationLiters);
-    final study = ActivityLogLogic.valueOrZero(studyHours);
-    final exercise = ActivityLogLogic.valueOrZero(exerciseHours);
-    final screenTime = ActivityLogLogic.valueOrZero(screenTimeHours);
+    final hydration = hydrationLiters;
+    final study = studyHours;
+    final exercise = exerciseHours;
+    final screenTime = screenTimeHours;
     if (!ActivityLogLogic.hasAnyLoggedValue(
       hydrationLiters: hydration,
       studyHours: study,
@@ -2385,16 +2478,17 @@ class AppController extends ChangeNotifier {
     )) {
       throw ArgumentError('Enter at least one activity value.');
     }
-    final values = <SignalType, double>{
+    final values = <SignalType, double?>{
       SignalType.hydration: hydration,
       SignalType.study: study,
       SignalType.exercise: exercise,
       SignalType.screenTime: screenTime,
     };
     for (final entry in values.entries) {
+      if (entry.value == null) continue;
       final message = ActivityLogEntry.validationMessage(
         entry.key,
-        entry.value,
+        entry.value!,
       );
       if (message != null) {
         throw ArgumentError.value(entry.value, entry.key.name, message);
@@ -2412,13 +2506,13 @@ class AppController extends ChangeNotifier {
     signals.insertAll(
       0,
       values.entries
-          .where((entry) => entry.value > 0)
+          .where((entry) => entry.value != null)
           .map(
             (entry) => SignalReading(
               id: '$groupId-${entry.key.name}',
               groupId: groupId,
               type: entry.key,
-              value: entry.value,
+              value: entry.value!,
               timestamp: recordedAt,
               recordedAt: now,
               note: switch (entry.key) {
@@ -3902,6 +3996,7 @@ class AppController extends ChangeNotifier {
         'uid': _syncOwnerUid,
         'baseline': _syncBaseline!.toJson(),
       },
+    'derivedRulesVersion': FatigueEngine.energyModelVersion,
     'deviceTimezone': deviceTimezoneIdentifier,
     'deviceUtcOffsetMinutes': _deviceTimezoneService.utcOffset.inMinutes,
     'privacyOwnerUid': _privacyOwnerUid,
@@ -3973,6 +4068,28 @@ class AppController extends ChangeNotifier {
     final uid = cloudUid;
     bool current() =>
         revision == _sessionRevision && uid == cloudUid && _canProcessData;
+    if (energyInputsChanged || forecastInputsChanged) {
+      // Retire derived views before the first persistence/network await. New
+      // values must not briefly show a curve or native reminder for old inputs.
+      if (energyInputsChanged) {
+        _scoreSnapshot = null;
+        _scoreLoadedFromSnapshot = false;
+        _insightsSnapshot = null;
+      }
+      _forecastsByDay.clear();
+      _forecastLoadedFromCloud = false;
+      _recommendations = [];
+      _riskAlerts = [];
+      _notificationRefreshGeneration++;
+      _notificationScheduleConfirmed = false;
+      try {
+        await _notificationService.cancelGuidance();
+      } on Object {
+        notificationError =
+            'Previous reminders could not be cleared on this device.';
+      }
+      if (!current()) return;
+    }
     await _invalidateModelPreparation();
     if (!current()) return;
     notifyListeners();

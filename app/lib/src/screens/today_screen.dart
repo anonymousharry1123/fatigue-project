@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../today_dashboard_logic.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
+import '../widgets/sleep_observation_card.dart';
 import 'model_transparency_screen.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -17,8 +18,8 @@ class TodayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final score = controller.score;
-    final status = TodayDashboardLogic.statusFor(score.energy);
-    final statusColor = _statusColor(status, context);
+    final available = score.canEstimateEnergy || score.canEstimateCognitive;
+    final statusColor = TonyoPalette.of(context).primary;
 
     return SafeArea(
       bottom: false,
@@ -73,7 +74,7 @@ class TodayScreen extends StatelessWidget {
                                 const SizedBox(width: 7),
                                 Flexible(
                                   child: Text(
-                                    status.label.toUpperCase(),
+                                    'EXPERIMENTAL ESTIMATES',
                                     key: const Key('fatigue-status'),
                                     style: TextStyle(
                                       color: statusColor,
@@ -115,12 +116,14 @@ class TodayScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        status.label,
+                        available
+                            ? 'Experimental estimates'
+                            : 'Not enough information to estimate',
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        status.detail,
+                        'These heuristic scores are not recovery or exercise clearance.',
                         style: TextStyle(
                           color: TonyoPalette.of(context).muted,
                           fontSize: 12,
@@ -140,11 +143,13 @@ class TodayScreen extends StatelessWidget {
                               constraints.maxWidth <
                               240 * MediaQuery.textScalerOf(context).scale(1);
                           final energy = _ScoreTile(
-                            value: score.energy,
+                            value: score.canEstimateEnergy
+                                ? score.energy
+                                : null,
                             label: 'Energy',
                             eyebrow: 'ESTIMATED ENERGY SCORE',
                             completeness: _confidenceLine(
-                              '${score.inputCount}/7 inputs',
+                              '${score.inputCount}/6 scored inputs',
                               score.confidence,
                               score.freshness,
                             ),
@@ -152,11 +157,13 @@ class TodayScreen extends StatelessWidget {
                           );
                           final cognitive = _ScoreTile(
                             key: const Key('cognitive-score-card'),
-                            value: score.cognitive,
+                            value: score.canEstimateCognitive
+                                ? score.cognitive
+                                : null,
                             label: 'Cognitive',
                             eyebrow: 'ESTIMATED COGNITIVE SCORE',
                             completeness: _confidenceLine(
-                              '${score.cognitiveInputCount}/6 cognitive inputs',
+                              '${score.cognitiveInputCount}/5 scored inputs',
                               score.cognitiveConfidence,
                               score.cognitiveFreshness,
                             ),
@@ -236,6 +243,12 @@ class TodayScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   _OfflineNotice(message: error),
                 ],
+                const SizedBox(height: 12),
+                SleepObservationCard(
+                  signals: controller.signals,
+                  now: controller.currentTime,
+                  ageBand: controller.privacyConsent?.ageBand,
+                ),
                 const SectionHeader('Today’s signals'),
                 LayoutBuilder(
                   key: const Key('recent-signal-grid'),
@@ -302,7 +315,7 @@ class TodayScreen extends StatelessWidget {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'This wellness estimate combines recent sleep, activity, reaction, mood, and stress inputs. It supports daily planning and is not a medical assessment.',
+                          'These experimental estimates use available workload, check-in, reaction, and heart observations. Sleep, caffeine, fluid volume, and exercise duration do not earn score points. This is not a medical assessment.',
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                             fontSize: 10,
@@ -321,14 +334,8 @@ class TodayScreen extends StatelessWidget {
     );
   }
 
-  static Color _statusColor(TodayFatigueStatus status, BuildContext context) =>
-      switch (status) {
-        TodayFatigueStatus.fresh => TonyoPalette.of(context).success,
-        TodayFatigueStatus.moderate => TonyoPalette.of(context).warning,
-        TodayFatigueStatus.fatigued => TonyoPalette.of(context).error,
-      };
-
   static String _cognitiveComparison(ScoreSnapshot score) {
+    if (!score.canEstimateCognitive) return 'No current estimate';
     final change = score.cognitiveChange;
     if (change == null) {
       return 'First Cognitive Score · comparison starts tomorrow';
@@ -342,7 +349,7 @@ class TodayScreen extends StatelessWidget {
     double confidence,
     double? freshness,
   ) =>
-      '$coverage · ${(confidence * 100).round()}% confidence${freshness == null ? '' : ' · ${(freshness * 100).round()}% fresh'}';
+      '$coverage · ${(confidence * 100).round()}% data quality${freshness == null ? '' : ' · ${(freshness * 100).round()}% fresh'}';
 }
 
 class _Header extends StatelessWidget {
@@ -456,7 +463,7 @@ class _ScoreTile extends StatelessWidget {
     this.comparison,
   });
 
-  final int value;
+  final int? value;
   final String label;
   final String eyebrow;
   final String completeness;
@@ -477,7 +484,16 @@ class _ScoreTile extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 8),
-      ScoreRing(value: value, label: label, size: 76, color: color),
+      if (value != null)
+        ScoreRing(value: value!, label: label, size: 76, color: color)
+      else
+        Semantics(
+          label: '$label: not enough information to estimate',
+          child: const SizedBox(
+            height: 76,
+            child: Center(child: Text('—', style: TextStyle(fontSize: 32))),
+          ),
+        ),
       const SizedBox(height: 8),
       Text(
         completeness,

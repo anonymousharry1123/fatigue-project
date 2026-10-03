@@ -99,15 +99,28 @@ class EnergyModelService {
       }
       _previousOutcomes = keys.toSet();
       if (json['model'] != null) {
-        final candidate = EnergyResidualModel.fromJson(
-          Map<String, dynamic>.from(json['model'] as Map),
-        );
-        if (candidate.ownerKey != prepFingerprint({'uid': uid})) {
-          throw const FormatException('Model owner mismatch.');
+        try {
+          final candidate = EnergyResidualModel.fromJson(
+            Map<String, dynamic>.from(json['model'] as Map),
+          );
+          if (candidate.ownerKey != prepFingerprint({'uid': uid})) {
+            throw const FormatException('Model owner mismatch.');
+          }
+          _model = candidate;
+          status =
+              'Accepted on-device Energy model restored. Cognitive stays deterministic.';
+        } on Object {
+          // A changed reference invalidates weights, not the valid attempt
+          // ledger. Do not reset its timestamp/outcome keys or silently train.
+          _model = null;
+          status =
+              'Saved model unavailable under current rules. Using deterministic scoring; training safeguards are unchanged.';
+          try {
+            await store.write(uid, _envelope(uid));
+          } on Object {
+            /* Incompatible weights remain unusable even if cleanup fails. */
+          }
         }
-        _model = candidate;
-        status =
-            'Accepted on-device Energy model restored. Cognitive stays deterministic.';
       }
     } on Object {
       if (!_current(uid, generation)) return;
@@ -262,7 +275,7 @@ class EnergyModelService {
         return;
       }
       status =
-          'Energy model accepted on device after holdout validation. Cognitive and confidence are unchanged.';
+          'Energy model accepted on device after holdout validation. Cognitive and data quality are unchanged.';
       if (previous?.fingerprint != _model!.fingerprint ||
           previous?.trainedAt != _model!.trainedAt) {
         try {

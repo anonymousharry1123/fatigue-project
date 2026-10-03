@@ -1,5 +1,7 @@
 # Version 0.33 — How your scores work
 
+> **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
+
 Open **Today → Why these scores?** or **Profile → How your scores work**.
 The screen explains the displayed estimate without changing it. Energy and
 Cognitive have separate drivers, confidence, completeness, and model versions.

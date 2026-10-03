@@ -278,11 +278,11 @@ class _ScoreOverview extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Badge(label: '${head.label} estimate', color: color),
+        _Badge(label: 'Experimental ${head.label} estimate', color: color),
         const SizedBox(height: 12),
         Semantics(
           label: explanation.value == null
-              ? '${head.label} score not recorded'
+              ? '${head.label}: Not enough information to estimate'
               : '${head.label} score ${explanation.value} out of 100',
           excludeSemantics: true,
           child: Text(
@@ -299,8 +299,8 @@ class _ScoreOverview extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           explanation.value == null
-              ? 'Not recorded in this saved snapshot'
-              : 'out of 100 · higher means more estimated capacity',
+              ? 'Not enough information to estimate'
+              : 'out of 100 · an experimental rule-based index',
           style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
         const SizedBox(height: 16),
@@ -326,8 +326,8 @@ class _ScoreOverview extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          'A wellness estimate for daily planning, not a diagnosis or '
-          'a measure of your worth.',
+          'This index is not a validated measure of health, readiness, or '
+          'safe exercise intensity.',
           style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
       ],
@@ -345,15 +345,15 @@ class _EvidenceQuality extends StatelessWidget {
       ? const _Notice(
           icon: Icons.help_outline_rounded,
           text:
-              'Confidence and input coverage were not recorded for this '
-              'missing score. They are not treated as zero.',
+              'Data quality and input coverage cannot establish an estimate '
+              'when supporting observations are missing. Missing is not zero.',
         )
       : TonyoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${explanation.confidencePercent}% confidence',
+                '${explanation.confidencePercent}% data quality',
                 key: const Key('transparency-confidence'),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
@@ -370,7 +370,7 @@ class _EvidenceQuality extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Confidence describes the evidence available to the model. '
+                'Data quality describes the records available to the rules. '
                 'It is not the probability that this score is correct.',
                 style: TextStyle(height: 1.5),
               ),
@@ -391,9 +391,9 @@ class _EvidenceQuality extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'More records alone may not raise confidence. Coverage across useful '
-                'inputs, their freshness, and personal-baseline readiness matter. '
-                'Refreshing the personalized model does not increase confidence.',
+                'More records alone may not raise data quality. Useful inputs, '
+                'freshness, and baseline observation counts matter. '
+                'Fitting a personalized model does not improve this measure.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   height: 1.5,
@@ -578,14 +578,14 @@ class _ModelDetails extends StatelessWidget {
             const _Detail(
               label: 'Model available on this device',
               value:
-                  'No usable personalized model. The deterministic estimate '
-                  'remains available.',
+                  'No usable personalized model. A deterministic estimate '
+                  'requires eligible current observations.',
             ),
           Divider(height: 32, color: TonyoPalette.of(context).border),
           if (state.cloudModel case final summary?)
             _ModelSummary(
               key: const Key('transparency-cloud-model'),
-              title: 'Firebase model summary',
+              title: 'Historical Firebase model summary',
               summary: summary,
               description:
                   'Summary only — not downloadable model weights. '
@@ -678,7 +678,7 @@ class _ModelSummary extends StatelessWidget {
         label: 'Held-out error reduction',
         value:
             '${summary.improvementPercent.toStringAsFixed(1)}% lower '
-            'error in the held-out days. Not an increase in confidence.',
+            'error in those held-out days. This does not establish medical accuracy or improve data quality.',
       ),
     ],
   );

@@ -65,7 +65,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Fill any categories you tracked. Blank or 0 values are skipped; only values above 0 are saved as signals. Saved manual exercise and hydration replace Apple Health totals for that day; clearing a category or deleting the manual log restores the imported fallback.',
+              'Fill any categories you tracked. Zero means you recorded none. Leave a field blank when it is unknown. Saved manual exercise and hydration replace Apple Health totals for that day; clearing a category or deleting the manual log restores the imported fallback.',
               style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
             const SizedBox(height: 18),
@@ -195,10 +195,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     final studyValue = _nullableParsed(_study);
     final exerciseValue = _nullableParsed(_exercise);
     final screenTimeValue = _nullableParsed(_screenTime);
-    final hydration = ActivityLogLogic.valueOrZero(hydrationValue);
-    final study = ActivityLogLogic.valueOrZero(studyValue);
-    final exercise = ActivityLogLogic.valueOrZero(exerciseValue);
-    final screenTime = ActivityLogLogic.valueOrZero(screenTimeValue);
+    final hydration = hydrationValue;
+    final study = studyValue;
+    final exercise = exerciseValue;
+    final screenTime = screenTimeValue;
     if (!ActivityLogLogic.hasAnyLoggedValue(
       hydrationLiters: hydration,
       studyHours: study,
@@ -287,10 +287,16 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     _pendingCreateTimestamp = null;
     _editingId = log.id;
     _editingTimestamp = log.timestamp;
-    _hydration.text = _number(log.hydrationLiters ?? 0);
-    _study.text = _number(log.studyHours ?? 0);
-    _exercise.text = _number(log.exerciseHours ?? 0);
-    _screenTime.text = _number(log.screenTimeHours ?? 0);
+    _hydration.text = log.hydrationLiters == null
+        ? ''
+        : _number(log.hydrationLiters!);
+    _study.text = log.studyHours == null ? '' : _number(log.studyHours!);
+    _exercise.text = log.exerciseHours == null
+        ? ''
+        : _number(log.exerciseHours!);
+    _screenTime.text = log.screenTimeHours == null
+        ? ''
+        : _number(log.screenTimeHours!);
   }
 
   void _cancelEdit() {
@@ -385,7 +391,10 @@ class _NumberField extends StatelessWidget {
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
-          decoration: InputDecoration(hintText: '0 if blank', errorMaxLines: 4),
+          decoration: InputDecoration(
+            hintText: 'Blank = not recorded',
+            errorMaxLines: 4,
+          ),
           validator: (raw) {
             final text = raw?.trim() ?? '';
             if (text.isEmpty) return null;
@@ -437,7 +446,7 @@ class _CategoryWeekCard extends StatelessWidget {
           const SizedBox(height: 14),
           Semantics(
             label:
-                '${ActivityLogLogic.categoryTitle(series.type)} over the last seven days. ${List.generate(series.days.length, (index) => '${_weekday(series.days[index])}: ${_format(series.values[index])} $unit').join('. ')}',
+                '${ActivityLogLogic.categoryTitle(series.type)} over the last seven days. ${List.generate(series.days.length, (index) => '${_weekday(series.days[index])}: ${series.isObserved(index) ? '${_format(series.values[index])} $unit' : 'not recorded'}').join('. ')}',
             child: ExcludeSemantics(
               child: SizedBox(
                 height: 124 + (MediaQuery.textScalerOf(context).scale(14) - 14),
@@ -466,7 +475,7 @@ class _CategoryWeekCard extends StatelessWidget {
                               height: MediaQuery.textScalerOf(
                                 context,
                               ).scale(14),
-                              child: entry.value > 0
+                              child: series.isObserved(entry.key)
                                   ? Text(
                                       _format(entry.value),
                                       style: TextStyle(
@@ -477,11 +486,14 @@ class _CategoryWeekCard extends StatelessWidget {
                                         fontWeight: FontWeight.w700,
                                       ),
                                     )
-                                  : null,
+                                  : const Text(
+                                      '—',
+                                      style: TextStyle(fontSize: 8),
+                                    ),
                             ),
                             const SizedBox(height: 4),
                             Container(
-                              height: height,
+                              height: series.isObserved(entry.key) ? height : 0,
                               decoration: BoxDecoration(
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(6),

@@ -96,7 +96,7 @@ void main() {
   });
 
   test(
-    'learned check-in context stays on the observation day while reference retains its history',
+    'learned and deterministic check-in context both stay on the observation day',
     () {
       final previous = {..._checkIn(9, 20, mood: 10, stress: 1)}
         ..remove('createdAt');
@@ -107,8 +107,8 @@ void main() {
       final row = report.examples.single;
       expect(row.features['mood'], isNull);
       expect(row.features['stress'], isNull);
-      expect(row.reference, 77);
-      expect(row.warnings, contains('historical_availability_unknown'));
+      expect(row.reference, 60);
+      expect(row.warnings, isNot(contains('historical_availability_unknown')));
     },
   );
 
@@ -167,7 +167,7 @@ void main() {
       report.examples.first.warnings,
       contains('baseline_cold_start_or_missing'),
     );
-    expect(report.examples.last.features['sleepDeviation'], 0);
+    expect(report.examples.last.features['sleepDeviation'], isNull);
     expect(
       report.examples.last.features['recoveryDeviation'],
       closeTo(.4, .0001),
@@ -183,7 +183,17 @@ void main() {
   });
 
   test('whole-day chronological split keeps paired outcomes together', () {
-    final signals = [for (var day = 10; day <= 23; day++) ..._context(day)];
+    final signals = [
+      for (var day = 2; day <= 8; day++) ...[
+        _signal(day, 8, 'hrv', 50),
+        _signal(day, 8, 'restingHeartRate', 60),
+      ],
+      for (var day = 10; day <= 23; day++) ...[
+        ..._context(day),
+        _signal(day, 8, 'hrv', 50),
+        _signal(day, 8, 'restingHeartRate', 60),
+      ],
+    ];
     final checks = [
       for (var day = 10; day <= 23; day++) ...[
         _checkIn(day, 8),
@@ -262,8 +272,43 @@ void main() {
     );
   });
 
+  test('retired fields cannot fill the four-active-feature readiness gate', () {
+    final checks = [
+      for (var day = 10; day <= 23; day++) ...[
+        _checkIn(day, 8),
+        _checkIn(day, 20),
+      ],
+    ];
+    final report = MlPrepBuilder.build(
+      _snapshot(
+        signals: [for (var day = 10; day <= 23; day++) ..._context(day)],
+        checkIns: checks,
+        outcomes: [
+          for (final check in checks.where(
+            (row) => (row['timestamp'] as String).contains('T20:'),
+          ))
+            _energy(check),
+        ],
+      ),
+    );
+    expect(report.examples, hasLength(14));
+    expect(
+      report.examples.every(
+        (row) => row.features.values.whereType<double>().length == 3,
+      ),
+      isTrue,
+    );
+    expect(report.energyReady, isFalse);
+    expect(_reasons(report), contains('insufficient_feature_coverage'));
+    expect(
+      ((report.toJson()['readiness'] as Map)['energy']
+          as Map)['minimumPresentFeaturesPerRow'],
+      4,
+    );
+  });
+
   test(
-    'missing differs from explicit zero and workouts take precedence over steps',
+    'retired exposures stay null while active explicit zero differs from missing',
     () {
       final check = _checkIn(10, 20);
       final report = MlPrepBuilder.build(
@@ -272,17 +317,22 @@ void main() {
             _signal(10, 8, 'exercise', 0),
             {..._signal(10, 9, 'steps', 10000), 'source': 'healthKit'},
             _signal(10, 9, 'caffeine', 0),
+            _signal(10, 9, 'study', 0),
+            _signal(10, 9, 'screenTime', 0),
           ],
           checkIns: [check],
           outcomes: [_energy(check)],
         ),
       );
       final row = report.examples.single;
-      expect(row.features['movement'], 0);
-      expect(row.features['caffeine'], 0);
-      expect(row.missingness['caffeine'], isFalse);
+      expect(row.features['movement'], isNull);
+      expect(row.features['caffeine'], isNull);
+      expect(row.missingness['caffeine'], isTrue);
       expect(row.features['hydration'], isNull);
-      expect(row.featureSources['movement']!.single, contains('exercise'));
+      expect(row.featureSources['movement'], isEmpty);
+      expect(row.features['studyScreenLoad'], 0);
+      expect(row.missingness['studyScreenLoad'], isFalse);
+      expect(row.features['mood'], isNull);
     },
   );
 
@@ -411,7 +461,7 @@ void main() {
       ),
     );
     expect(report.examples.single.day, '2026-07-09');
-    expect(report.examples.single.features['hydration'], 0);
+    expect(report.examples.single.features['hydration'], isNull);
     expect(report.examples.single.reference, 60);
   });
 

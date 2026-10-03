@@ -4,6 +4,102 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Version 0.10-a Firestore schema', () {
+    test(
+      'deterministic merge cannot restore obsolete personalized fallback',
+      () {
+        final day = DateTime(2026, 9, 7);
+        final oldPersonalized = ScoreSnapshot(
+          energy: 50,
+          cognitive: 45,
+          confidence: .7,
+          drivers: const [],
+        ).withEnergyCorrection(8, 'obsolete-personalized-model');
+        final deterministic = ScoreSnapshot(
+          energy: 72,
+          cognitive: 63,
+          confidence: .8,
+          drivers: const [],
+          energyModelVersion: 'current-rules',
+        );
+        // Firestore set(..., merge: true) retains omitted fields.
+        final merged = <String, dynamic>{
+          ...scoreSnapshotToCloud(snapshot: oldPersonalized, day: day),
+          ...scoreSnapshotToCloud(snapshot: deterministic, day: day),
+        };
+        final restored = scoreSnapshotFromCloud(merged);
+
+        expect(restored.deterministicEnergy, isNull);
+        expect(restored.personalizedModelVersion, isNull);
+        expect(restored.withoutPersonalization().energy, 72);
+      },
+    );
+
+    test('legacy stale personalization without its driver is ignored', () {
+      final restored = scoreSnapshotFromCloud({
+        'energy': 72,
+        'cognitive': 63,
+        'confidence': .8,
+        'drivers': const [],
+        'deterministicEnergy': 50,
+        'personalizedModelVersion': 'obsolete-personalized-model',
+        'day': DateTime(2026, 9, 7),
+      });
+
+      expect(restored.deterministicEnergy, isNull);
+      expect(restored.personalizedModelVersion, isNull);
+      expect(restored.withoutPersonalization().energy, 72);
+    });
+
+    test('valid personalized snapshot retains fallback and provenance', () {
+      final day = DateTime(2026, 9, 7);
+      final score = ScoreSnapshot(
+        energy: 60,
+        cognitive: 63,
+        confidence: .8,
+        inputCount: 2,
+        drivers: const [],
+      ).withEnergyCorrection(8, 'test-model');
+      final restored = scoreSnapshotFromCloud(
+        scoreSnapshotToCloud(snapshot: score, day: day),
+      );
+
+      expect(restored.energy, 68);
+      expect(restored.deterministicEnergy, 60);
+      expect(restored.personalizedModelVersion, 'test-model');
+      expect(restored.withoutPersonalization().energy, 60);
+    });
+
+    test(
+      'unavailable score merge clears old cognitive score and availability',
+      () {
+        final day = DateTime(2026, 9, 7);
+        final merged = <String, dynamic>{
+          'energy': 72,
+          'cognitive': 63,
+          'hasEnergyScore': true,
+          'hasCognitiveScore': true,
+          ...scoreSnapshotToCloud(
+            snapshot: const ScoreSnapshot(
+              energy: 0,
+              cognitive: 0,
+              confidence: 0,
+              hasEnergyScore: false,
+              hasCognitiveScore: false,
+              drivers: [],
+            ),
+            day: day,
+          ),
+        };
+        final restored = scoreSnapshotFromCloud(merged);
+
+        expect(merged['cognitive'], isNull);
+        expect(restored.hasEnergyScore, isFalse);
+        expect(restored.hasCognitiveScore, isFalse);
+        expect(restored.canEstimateEnergy, isFalse);
+        expect(restored.canEstimateCognitive, isFalse);
+      },
+    );
+
     test('serializes and restores every SignalReading field', () {
       final signal = SignalReading(
         id: 'signal-1',
@@ -360,6 +456,7 @@ void main() {
           DateTime.utc(2026, 7, 28, 9),
           75,
           6,
+          rulesVersion: 'experimental-test-rules',
           updatedAt: forecastUpdatedAt,
           signalEvidenceIds: const ['sleep-1', 'hydration-1'],
           checkInEvidenceIds: const ['check-in-1'],
@@ -427,6 +524,7 @@ void main() {
       expect(restoredForecast.time.toUtc(), DateTime.utc(2026, 7, 28, 9));
       expect(restoredForecast.energy, 75);
       expect(restoredForecast.uncertainty, 6);
+      expect(restoredForecast.rulesVersion, 'experimental-test-rules');
       expect(restoredForecast.updatedAt?.toUtc(), forecastUpdatedAt);
       expect(restoredForecast.signalEvidenceIds, ['sleep-1', 'hydration-1']);
       expect(restoredForecast.checkInEvidenceIds, ['check-in-1']);
@@ -532,6 +630,7 @@ void main() {
 
       expect(restored.signalEvidenceIds, isEmpty);
       expect(restored.checkInEvidenceIds, isEmpty);
+      expect(restored.rulesVersion, isNull);
     });
   });
 }

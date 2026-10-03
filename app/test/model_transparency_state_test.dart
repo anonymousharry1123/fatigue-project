@@ -27,7 +27,14 @@ EnergyModelSummary _summary({int trainedDay = 2}) =>
 
 void main() {
   final reference = FatigueEngine.score(
-    signals: const [],
+    signals: [
+      SignalReading(
+        id: 'explicit-zero-study',
+        type: SignalType.study,
+        value: 0,
+        timestamp: _now,
+      ),
+    ],
     checkIns: const [],
     now: _now,
   );
@@ -46,6 +53,33 @@ void main() {
   });
 
   test(
+    'old rule provenance cannot claim an active current personalization',
+    () {
+      final state = ModelTransparencyState(
+        snapshot: const ScoreSnapshot(
+          energy: 70,
+          cognitive: 60,
+          confidence: .8,
+          inputCount: 2,
+          drivers: [],
+          energyModelVersion: 'energy-rules-v2',
+          deterministicEnergy: 65,
+          personalizedModelVersion: 'energy-ridge-v1',
+        ),
+        viewedAt: _now,
+        signedIn: true,
+        consentEnabled: true,
+        localModel: _summary(),
+        cloudModel: _summary(),
+      );
+
+      expect(state.personalizedEnergyApplied, isFalse);
+      expect(state.energyModelVersion, 'energy-rules-v2');
+      expect(state.modelStatusTitle, isNot('Personalized Energy'));
+    },
+  );
+
+  test(
     'zero correction is model ready, not falsely applied personalization',
     () {
       final state = ModelTransparencyState(
@@ -56,7 +90,7 @@ void main() {
         localModel: _summary(),
       );
       expect(state.personalizedEnergyApplied, isFalse);
-      expect(state.modelStatusTitle, 'Model ready · baseline used');
+      expect(state.modelStatusTitle, 'Local model available · no correction');
     },
   );
 
@@ -74,7 +108,7 @@ void main() {
       );
       expect(state.personalizedEnergyApplied, isTrue);
       expect(state.modelStatusDetail, contains('+6 points'));
-      expect(state.modelStatusDetail, contains('confidence are unchanged'));
+      expect(state.modelStatusDetail, contains('data quality are unchanged'));
       expect(state.scoreSourceLabel, contains('on-device adjustment'));
       expect(state.snapshot.confidence, reference.confidence);
       expect(state.snapshot.cognitive, reference.cognitive);
@@ -129,7 +163,7 @@ void main() {
   });
 
   test(
-    'new driver evidence records aggregate sources and seeded input markers',
+    'current driver evidence preserves seeded input markers without sleep score points',
     () {
       final at = DateTime(2026, 9, 7, 18);
       final score = FatigueEngine.score(
@@ -161,12 +195,7 @@ void main() {
         ],
         now: at,
       );
-      final sleep = score.drivers.singleWhere((d) => d.label == 'Sleep');
-      expect(sleep.evidenceSources.toSet(), {
-        SignalSource.healthKit,
-        SignalSource.manual,
-      });
-      expect(sleep.containsDemoEvidence, isTrue);
+      expect(score.drivers.where((d) => d.label == 'Sleep'), isEmpty);
       final mood = score.drivers.singleWhere((d) => d.label == 'Mood');
       expect(mood.source, SignalSource.manual);
       expect(mood.containsDemoEvidence, isTrue);

@@ -2,9 +2,9 @@ import 'energy_model_summary.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 
-/// Version 14 adds explicit privacy receipts and consent-change timestamps.
+/// Version 15 persists score availability and clears obsolete personalization.
 /// Optional legacy fields remain unknown rather than acquiring current values.
-const int cloudSchemaVersion = 14;
+const int cloudSchemaVersion = 15;
 
 const int notificationPreferencesVersion = 1;
 
@@ -301,11 +301,13 @@ Map<String, Object?> scoreSnapshotToCloud({
     'energyModelVersion': snapshot.energyModelVersion,
   if (snapshot.cognitiveModelVersion != null)
     'cognitiveModelVersion': snapshot.cognitiveModelVersion,
-  if (snapshot.deterministicEnergy != null) ...{
-    'deterministicEnergy': snapshot.deterministicEnergy,
-    'personalizedModelVersion': snapshot.personalizedModelVersion,
-  },
-  if (snapshot.hasCognitiveScore) 'cognitive': snapshot.cognitive,
+  // Daily documents use merge writes. Nulls intentionally clear a previously
+  // personalized result; omission would revive its fallback on reload.
+  'deterministicEnergy': snapshot.deterministicEnergy,
+  'personalizedModelVersion': snapshot.personalizedModelVersion,
+  'hasEnergyScore': snapshot.hasEnergyScore,
+  'hasCognitiveScore': snapshot.hasCognitiveScore,
+  'cognitive': snapshot.hasCognitiveScore ? snapshot.cognitive : null,
   'confidence': snapshot.confidence,
   'cognitiveConfidence': snapshot.cognitiveConfidence,
   'freshness': snapshot.freshness,
@@ -328,45 +330,63 @@ Map<String, Object?> scoreSnapshotToCloud({
   'schemaVersion': cloudSchemaVersion,
 };
 
-ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) =>
-    ScoreSnapshot(
-      energy: (data['energy'] as num).round(),
-      energyModelVersion: data['energyModelVersion'] is String
-          ? data['energyModelVersion'] as String
-          : null,
-      cognitiveModelVersion: data['cognitiveModelVersion'] is String
-          ? data['cognitiveModelVersion'] as String
-          : null,
-      deterministicEnergy: (data['deterministicEnergy'] as num?)?.round(),
-      personalizedModelVersion: data['personalizedModelVersion'] as String?,
-      cognitive: (data['cognitive'] as num?)?.round() ?? 0,
-      confidence: (data['confidence'] as num).toDouble(),
-      cognitiveConfidence:
-          (data['cognitiveConfidence'] as num?)?.toDouble() ?? .2,
-      freshness: (data['freshness'] as num?)?.toDouble(),
-      cognitiveFreshness: (data['cognitiveFreshness'] as num?)?.toDouble(),
-      baselineConfidence: (data['baselineConfidence'] as num?)?.toDouble() ?? 0,
-      personalBaselines: data['personalBaselines'] == null
-          ? null
-          : personalBaselinesFromCloud(
-              (data['personalBaselines'] as Map).cast<String, dynamic>(),
-            ),
-      inputCount: (data['inputCount'] as num?)?.round() ?? 0,
-      cognitiveInputCount: (data['cognitiveInputCount'] as num?)?.round() ?? 0,
-      hasCognitiveScore: data.containsKey('cognitive'),
-      previousCognitive: (data['previousCognitive'] as num?)?.round(),
-      isEstimate: data['isEstimate'] as bool? ?? true,
-      day: cloudDateTime(data['day'], field: 'day'),
-      calculatedAt: data['calculatedAt'] == null
-          ? null
-          : cloudDateTime(data['calculatedAt'], field: 'calculatedAt'),
-      drivers: ((data['drivers'] as List?) ?? const [])
-          .map(_scoreDriverFromCloud)
-          .toList(),
-      cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const [])
-          .map(_scoreDriverFromCloud)
-          .toList(),
-    );
+ScoreSnapshot scoreSnapshotFromCloud(Map<String, dynamic> data) {
+  final drivers = ((data['drivers'] as List?) ?? const [])
+      .map(_scoreDriverFromCloud)
+      .toList();
+  // Legacy merge writes could retain both fields after drivers were replaced
+  // by a deterministic result. Require the existing adjustment provenance as
+  // well as a complete pair before honoring a personalized fallback.
+  final modelVersion = data['personalizedModelVersion'];
+  final fallback = data['deterministicEnergy'];
+  final hasPersonalization =
+      modelVersion is String &&
+      modelVersion.isNotEmpty &&
+      fallback is num &&
+      fallback.isFinite &&
+      fallback >= 0 &&
+      fallback <= 100 &&
+      drivers.any((driver) => driver.label == 'Personalized Energy adjustment');
+  return ScoreSnapshot(
+    energy: (data['energy'] as num).round(),
+    energyModelVersion: data['energyModelVersion'] is String
+        ? data['energyModelVersion'] as String
+        : null,
+    cognitiveModelVersion: data['cognitiveModelVersion'] is String
+        ? data['cognitiveModelVersion'] as String
+        : null,
+    deterministicEnergy: hasPersonalization ? fallback.round() : null,
+    personalizedModelVersion: hasPersonalization ? modelVersion : null,
+    hasEnergyScore: data['hasEnergyScore'] as bool? ?? true,
+    cognitive: (data['cognitive'] as num?)?.round() ?? 0,
+    confidence: (data['confidence'] as num).toDouble(),
+    cognitiveConfidence:
+        (data['cognitiveConfidence'] as num?)?.toDouble() ?? .2,
+    freshness: (data['freshness'] as num?)?.toDouble(),
+    cognitiveFreshness: (data['cognitiveFreshness'] as num?)?.toDouble(),
+    baselineConfidence: (data['baselineConfidence'] as num?)?.toDouble() ?? 0,
+    personalBaselines: data['personalBaselines'] == null
+        ? null
+        : personalBaselinesFromCloud(
+            (data['personalBaselines'] as Map).cast<String, dynamic>(),
+          ),
+    inputCount: (data['inputCount'] as num?)?.round() ?? 0,
+    cognitiveInputCount: (data['cognitiveInputCount'] as num?)?.round() ?? 0,
+    hasCognitiveScore:
+        (data['hasCognitiveScore'] as bool? ?? true) &&
+        data['cognitive'] is num,
+    previousCognitive: (data['previousCognitive'] as num?)?.round(),
+    isEstimate: data['isEstimate'] as bool? ?? true,
+    day: cloudDateTime(data['day'], field: 'day'),
+    calculatedAt: data['calculatedAt'] == null
+        ? null
+        : cloudDateTime(data['calculatedAt'], field: 'calculatedAt'),
+    drivers: drivers,
+    cognitiveDrivers: ((data['cognitiveDrivers'] as List?) ?? const [])
+        .map(_scoreDriverFromCloud)
+        .toList(),
+  );
+}
 
 Map<String, Object?> _scoreDriverToCloud(ScoreDriver driver) => {
   'label': driver.label,
@@ -462,6 +482,7 @@ Map<String, Object?> forecastPointToCloud(ForecastPoint point) => {
   'time': point.time,
   'energy': point.energy,
   'uncertainty': point.uncertainty,
+  'rulesVersion': point.rulesVersion,
   'updatedAt': point.updatedAt ?? DateTime.now().toUtc(),
   'signalEvidenceIds': point.signalEvidenceIds,
   'checkInEvidenceIds': point.checkInEvidenceIds,
@@ -483,6 +504,9 @@ ForecastPoint forecastPointFromCloud(Map<String, dynamic> data) {
     cloudDateTime(data['time'], field: 'time'),
     energy,
     uncertainty,
+    rulesVersion: data['rulesVersion'] is String
+        ? data['rulesVersion'] as String
+        : null,
     updatedAt: data['updatedAt'] == null
         ? null
         : cloudDateTime(data['updatedAt'], field: 'updatedAt'),

@@ -22,11 +22,24 @@ class _ForecastScreenState extends State<ForecastScreen> {
     final controller = AppScope.of(context);
     final today = DateTime.now();
     final selectedDay = localDay(today, _range == 1 ? 1 : 0);
-    final points = controller.forecastDataFor(selectedDay);
-    final windows = _range == 2
+    final canEstimate = controller.score.canEstimateEnergy;
+    final points = canEstimate
+        ? controller.forecastDataFor(selectedDay)
+        : const <ForecastPoint>[];
+    final windows = _range == 2 || !canEstimate
         ? const <ForecastWindow>[]
         : controller.windowsFor(selectedDay);
-    final week = controller.forecastSummariesFor(today);
+    final week = canEstimate
+        ? controller
+              .forecastSummariesFor(today)
+              .where(
+                (summary) => !summary.isStaleAt(
+                  today,
+                  maximumAge: AppController.forecastFreshnessWindow,
+                ),
+              )
+              .toList()
+        : const <ForecastDaySummary>[];
 
     return SafeArea(
       bottom: false,
@@ -59,7 +72,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            'Hourly wellness estimates from your recent recovery and workload.',
+            'Experimental hourly curve from recorded inputs and fixed timing rules.',
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -114,7 +127,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
             ),
           const SizedBox(height: 14),
           Text(
-            'Energy forecasts are wellness estimates, not medical advice. Uncertainty expands when inputs are missing, older, or farther into the future.',
+            'The curve and shaded bands are uncalibrated estimates, not statistical confidence intervals. They do not establish when you will feel alert or tired, or whether exercise is safe.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
@@ -162,26 +175,31 @@ class _DailyForecast extends StatelessWidget {
       DateTime.now(),
       maximumAge: AppController.forecastFreshnessWindow,
     );
+    if (stale) {
+      return Column(
+        children: [
+          _StatusBanner(
+            icon: Icons.history_rounded,
+            color: TonyoPalette.of(context).warning,
+            title: 'Forecast is out of date',
+            detail: 'Refresh to check whether current entries support a curve.',
+          ),
+          const SizedBox(height: 10),
+          _ForecastEmptyState(loading: loading, onRetry: onRetry),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (stale) ...[
-          _StatusBanner(
-            icon: Icons.history_rounded,
-            color: TonyoPalette.of(context).warning,
-            title: 'Forecast may be out of date',
-            detail: 'Refresh to include the latest logged signals.',
-          ),
-          const SizedBox(height: 10),
-        ],
         if (summary.isLowConfidence) ...[
           _StatusBanner(
             icon: Icons.visibility_outlined,
             color: TonyoPalette.of(context).secondary,
-            title: 'Limited confidence',
+            title: 'Limited data quality',
             detail:
-                'Typical uncertainty is ±${summary.averageUncertainty.round()} points. More recent sleep, workload, hydration, and check-in data can narrow the range.',
+                'The displayed band averages ±${summary.averageUncertainty.round()} points. This width is a rule-based display estimate, not a calibrated error range.',
           ),
           const SizedBox(height: 10),
         ],
@@ -206,7 +224,7 @@ class _DailyForecast extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Peak ${formatHour(summary.peakTime)}',
+                          'Curve high ${formatHour(summary.peakTime)}',
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                       ],
@@ -252,7 +270,8 @@ class _DailyForecast extends StatelessWidget {
                   ),
                   _MetricPill(
                     icon: Icons.shield_outlined,
-                    label: '±${summary.averageUncertainty.round()} uncertainty',
+                    label:
+                        '±${summary.averageUncertainty.round()} uncalibrated band',
                   ),
                 ],
               ),
@@ -281,7 +300,12 @@ class _DailyForecast extends StatelessWidget {
             ],
           ),
         ),
-        const SectionHeader('Key windows'),
+        const SectionHeader('Curve markers'),
+        Text(
+          'These markers describe the formula’s curve. Their timing is not a validated prediction of focus, a crash, or recovery.',
+          style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
+        ),
+        const SizedBox(height: 10),
         ...windows.map(
           (window) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -294,22 +318,25 @@ class _DailyForecast extends StatelessWidget {
             children: [
               _ModelInputRow(
                 icon: Icons.bedtime_outlined,
-                title: 'Sleep timing & recovery',
-                detail: 'Recent duration, bedtime, and wake rhythm',
+                title: 'Recorded sleep timing',
+                detail:
+                    'Recent wake/bed observations and your saved schedule adjust timing; they do not measure recovery.',
                 color: TonyoPalette.of(context).primary,
               ),
               Divider(height: 24, color: TonyoPalette.of(context).border),
               _ModelInputRow(
                 icon: Icons.wb_sunny_outlined,
-                title: 'Circadian rhythm',
-                detail: 'Morning rise, afternoon dip, and evening decline',
+                title: 'Fixed clock-time curve',
+                detail:
+                    'An assumed daily shape, not a measurement of your internal circadian phase.',
                 color: TonyoPalette.of(context).secondary,
               ),
               Divider(height: 24, color: TonyoPalette.of(context).border),
               _ModelInputRow(
                 icon: Icons.menu_book_outlined,
-                title: 'Workload & check-ins',
-                detail: 'Study, exercise, hydration, mood, and stress',
+                title: 'Experimental Energy reference',
+                detail:
+                    'Current scored inputs and fixed forecast adjustments. Caffeine, fluid volume and exercise duration add no recovery rewards.',
                 color: TonyoPalette.of(context).secondary,
               ),
             ],
@@ -329,17 +356,17 @@ class _ForecastWindowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = switch (window.type) {
       ForecastWindowType.peak => (
-        title: 'Peak focus',
+        title: 'Curve high',
         icon: Icons.center_focus_strong_rounded,
         color: TonyoPalette.of(context).primary,
       ),
       ForecastWindowType.crash => (
-        title: 'Predicted crash',
+        title: 'Curve low',
         icon: Icons.trending_down_rounded,
         color: TonyoPalette.of(context).error,
       ),
       ForecastWindowType.recovery => (
-        title: 'Recovery window',
+        title: 'Later curve rise',
         icon: Icons.battery_charging_full_rounded,
         color: TonyoPalette.of(context).secondary,
       ),
@@ -587,8 +614,8 @@ class _WeekForecast extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 lowConfidenceDays == 0
-                    ? 'All daily forecasts have usable confidence.'
-                    : '$lowConfidenceDays ${lowConfidenceDays == 1 ? 'day has' : 'days have'} wider uncertainty.',
+                    ? 'All displayed bands are uncalibrated estimates.'
+                    : '$lowConfidenceDays ${lowConfidenceDays == 1 ? 'day has' : 'days have'} a wider uncalibrated band.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -635,7 +662,7 @@ class _DaySummaryCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Peak ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
+          'Curve high ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
@@ -728,8 +755,8 @@ class _WeekChart extends StatelessWidget {
                         '${formatDate(summary.day)}, ${summary.day.year}. '
                         'Average estimated Energy: '
                         '${summary.averageEnergy.round()} out of 100. '
-                        'Uncertainty: plus or minus '
-                        '${summary.averageUncertainty.round()} points.',
+                        'Uncalibrated display band: plus or minus '
+                        '${summary.averageUncertainty.round()} points; not a statistical confidence interval.',
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -818,7 +845,7 @@ class _ForecastEmptyState extends StatelessWidget {
           Text(
             loading
                 ? 'Combining your recent signals and check-ins.'
-                : 'Tonyo could not find hourly points for this range.',
+                : 'Not enough current information to estimate this range. An optional check-in can add an observation.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TonyoPalette.of(context).muted,

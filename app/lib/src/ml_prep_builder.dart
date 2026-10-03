@@ -1,12 +1,10 @@
 import 'dart:math' as math;
 
-import 'activity_sync_logic.dart';
 import 'fatigue_engine.dart';
 import 'ml_prep_models.dart';
 import 'models.dart';
 import 'personal_baseline_logic.dart';
 import 'screen_time_logic.dart';
-import 'sleep_sync_logic.dart';
 
 /// A local inspection row. Cognitive rows retain milliseconds and have no
 /// score target/reference; this preparation module never fits a model.
@@ -405,18 +403,18 @@ abstract final class MlPrepBuilder {
         'provenance': provenance,
         'rejectedRows': rejected,
         'normalization': {
-          'version': 1,
+          'version': 2,
           'method': 'fixed_constants_no_fitted_parameters',
           'featureBounds': [-1, 1],
           'energyTarget': '(rating - 1) * 100 / 9',
-          'sleepDeviation': '(current / prior_ready_baseline - 1) / 0.25',
-          'movement': 'workout_hours / 2; steps / 10000 only without workout',
-          'hydration': '(liters - 2) / 2',
+          'sleepDeviation': 'retired_phase1_null_context_only',
+          'movement': 'retired_phase1_null_context_only',
+          'hydration': 'retired_phase1_null_context_only',
           'studyScreenLoad':
               'mean(study_hours / 8, screen_hours / 8); both required',
           'study': 'hours / 8',
           'screenTime': 'hours / 8',
-          'caffeine': 'drinks / 4',
+          'caffeine': 'retired_phase1_null_context_only',
           'mood': '(rating - 5.5) / 4.5',
           'stress': '(rating - 5.5) / 4.5',
           'priorReactionTrend':
@@ -518,64 +516,17 @@ abstract final class MlPrepBuilder {
         : rows.fold<double>(0, (sum, row) => sum + row.value);
     Iterable<String> ids(Iterable<SignalReading> rows) =>
         rows.map((row) => row.id);
-    final prior = signals
-        .where((row) => row.timestamp.isBefore(start))
-        .toList();
-    final sleepRows = SleepSyncLogic.preferredSleepReadings(
-      signals.where(
-        (row) =>
-            !row.timestamp.isBefore(start.subtract(const Duration(days: 6))),
-      ),
-    ).take(3).toList();
-    final sleep = sleepRows.isEmpty
-        ? null
-        : total(sleepRows)! / sleepRows.length;
-    final sleepDifference = PersonalBaselineLogic.differencePercent(
-      current: sleep,
-      baseline: baseline.metric(PersonalBaselineType.sleep),
-    );
+    // Phase 1 retires sleep/exposure-to-readiness mappings. Keep the eight
+    // artifact slots stable for metadata, but these slots have no value or
+    // freshness and can never contribute to fitting or live corrections.
     final features = <String, double?>{
-      'sleepDeviation': feature(
-        'sleepDeviation',
-        sleepDifference == null ? null : sleepDifference / 25,
-        ids([
-          ...sleepRows,
-          ...prior.where((row) => row.type == SignalType.sleep),
-        ]),
-      ),
+      'sleepDeviation': feature('sleepDeviation', null, const []),
     };
     final study = ofType(SignalType.study);
     final screen = ScreenTimeLogic.modelReadings(ofType(SignalType.screenTime));
     if (outcome.type == OutcomeType.observedEnergy) {
-      final workout = ActivitySyncLogic.aggregateForDay(
-        today,
-        type: SignalType.exercise,
-        day: start,
-      );
-      final movement =
-          workout ??
-          ActivitySyncLogic.aggregateForDay(
-            today,
-            type: SignalType.steps,
-            day: start,
-          );
-      features['movement'] = feature(
-        'movement',
-        movement == null
-            ? null
-            : movement.total / (workout != null ? 2 : 10000),
-        ids(movement?.evidence ?? []),
-      );
-      final water = ActivitySyncLogic.aggregateForDay(
-        today,
-        type: SignalType.hydration,
-        day: start,
-      );
-      features['hydration'] = feature(
-        'hydration',
-        water == null ? null : (water.total - 2) / 2,
-        ids(water?.evidence ?? []),
-      );
+      features['movement'] = feature('movement', null, const []);
+      features['hydration'] = feature('hydration', null, const []);
       features['studyScreenLoad'] = feature(
         'studyScreenLoad',
         study.isEmpty || screen.isEmpty
@@ -611,19 +562,7 @@ abstract final class MlPrepBuilder {
         ids(screen),
       );
     }
-    final caffeine = ofType(SignalType.caffeine);
-    features['caffeine'] = feature(
-      'caffeine',
-      total(caffeine) == null ? null : total(caffeine)! / 4,
-      ids(caffeine),
-    );
-    final referenceCheckIn = checkIns
-        .where(
-          (row) => !row.timestamp.isBefore(
-            start.subtract(const Duration(hours: 36)),
-          ),
-        )
-        .firstOrNull;
+    features['caffeine'] = feature('caffeine', null, const []);
     final checkIn = checkIns
         .where((row) => !row.timestamp.isBefore(start))
         .firstOrNull;
@@ -665,40 +604,24 @@ abstract final class MlPrepBuilder {
       now: now,
       personalBaselines: baseline,
     );
-    // The deterministic reference may use evidence even when a learned feature
-    // is missing (e.g. sleep before its baseline matures), so audit both paths.
+    // Audit only inputs that can affect the Energy reference. Context-only
+    // sleep, fluid and activity records remain in the raw snapshot but cannot
+    // make an otherwise eligible row fail historical-availability checks.
     final referenceIds = <String>{
-      ...ids(sleepRows),
-      ...ids(study),
-      ...ids(screen),
-      ...ids(caffeine),
-      // FatigueEngine can use each heart baseline independently even when the
-      // combined recovery feature is missing. Sleep stages also decide which
-      // total is preferred. Audit that historical evidence on the reference
-      // path as well as the normalized feature path.
-      ...ids(
-        signals.where(
-          (row) => {
-            SignalType.sleep,
-            SignalType.nap,
-            SignalType.hrv,
-            SignalType.restingHeartRate,
-            ...SleepSyncLogic.stageTypes,
-          }.contains(row.type),
+      if (outcome.type == OutcomeType.observedEnergy) ...{
+        ...ids(study),
+        ...ids(screen),
+        // FatigueEngine can use each heart baseline independently even when the
+        // combined learned feature is absent. Keep that baseline provenance.
+        ...ids(
+          signals.where(
+            (row) =>
+                row.type == SignalType.hrv ||
+                row.type == SignalType.restingHeartRate,
+          ),
         ),
-      ),
-      ...ids(
-        today.where(
-          (row) => {
-            SignalType.exercise,
-            SignalType.steps,
-            SignalType.hydration,
-            SignalType.hrv,
-            SignalType.restingHeartRate,
-          }.contains(row.type),
-        ),
-      ),
-      if (referenceCheckIn != null) referenceCheckIn.id,
+        if (checkIn != null) checkIn.id,
+      },
     };
     final used = <_Record>{
       ...featureEvidence.values.expand((rows) => rows),
@@ -708,8 +631,7 @@ abstract final class MlPrepBuilder {
       if (!hostTimezoneCompatible) 'host_timezone_mismatch',
       if (used.any((row) => row.availableAt == null))
         'historical_availability_unknown',
-      if (features['sleepDeviation'] == null ||
-          features['recoveryDeviation'] == null)
+      if (features['recoveryDeviation'] == null)
         'baseline_cold_start_or_missing',
     ];
     return TrainingExample(

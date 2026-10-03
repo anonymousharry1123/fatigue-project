@@ -63,6 +63,7 @@ void main() {
     bool recoveryEnabled = true,
     List<Recommendation> recommendations = const [],
     bool coachPlanEnabled = false,
+    bool currentEvidenceEligible = true,
   }) => NotificationLogic.build(
     now: now,
     points: forecast ?? points(),
@@ -87,38 +88,15 @@ void main() {
     recoveryEnabled: recoveryEnabled,
     recommendations: recommendations,
     coachPlanEnabled: coachPlanEnabled,
+    currentEvidenceEligible: currentEvidenceEligible,
   );
 
   group('Version 0.20 notification planning', () {
-    test('builds deterministic crash and recovery reminders', () {
-      final first = build();
-      final second = build();
-
-      expect(first.state, NotificationPlanState.ready);
-      expect(first.notifications, hasLength(2));
-      expect(
-        first.notifications.map((item) => item.id),
-        second.notifications.map((item) => item.id),
-      );
-      expect(
-        first.notifications.map((item) => item.platformId),
-        second.notifications.map((item) => item.platformId),
-      );
-      expect(
-        first.notifications.first.scheduledAt,
-        day.add(const Duration(hours: 14, minutes: 45)),
-      );
-      expect(
-        first.notifications.last.scheduledAt,
-        day.add(const Duration(hours: 17)),
-      );
-      expect(first.dismissedRiskAlertCount, 1);
-      for (final notification in first.notifications) {
-        expect(notification.sourceRiskAlertIds, ['active-risk']);
-        expect(notification.body, isNot(contains('Private')));
-        expect(notification.body.toLowerCase(), isNot(contains('diagnos')));
-        expect(notification.payload, startsWith('tonyo-guidance:'));
-      }
+    test('uncalibrated forecast windows never schedule precise alerts', () {
+      final plan = build();
+      expect(plan.state, NotificationPlanState.uncalibratedForecast);
+      expect(plan.notifications, isEmpty);
+      expect(plan.dismissedRiskAlertCount, 1);
     });
 
     test('suppresses stale forecasts', () {
@@ -137,17 +115,13 @@ void main() {
       expect(plan.notifications, isEmpty);
     });
 
-    test('suppresses past windows and honors category preferences', () {
+    test('forecast preferences cannot re-enable unvalidated timing alerts', () {
       expect(
-        build(forecastWindows: windows(past: true)).state,
-        NotificationPlanState.noFutureWindows,
+        build(forecastWindows: windows(past: true)).notifications,
+        isEmpty,
       );
-      final recoveryOnly = build(crashEnabled: false);
-      expect(recoveryOnly.notifications, hasLength(1));
-      expect(
-        recoveryOnly.notifications.single.kind,
-        GuidanceNotificationKind.recovery,
-      );
+      expect(build(crashEnabled: false).notifications, isEmpty);
+      expect(build(recoveryEnabled: false).notifications, isEmpty);
     });
   });
 
@@ -161,7 +135,7 @@ void main() {
     bool grounded = true,
     double confidence = .8,
   }) => Recommendation(
-    id: id,
+    id: '2026-08-15-phase1-$id',
     title: 'Protect a focus block',
     detail:
         'Private notes and sensitive evidence do not belong on a lock screen.',
@@ -174,6 +148,18 @@ void main() {
     durationMinutes: 35,
     planConfidence: confidence,
     signalEvidenceIds: grounded ? ['private-signal-id'] : [''],
+    planPhase: CoachPlanPhase.deepWork,
+    evidence: grounded
+        ? [
+            ForecastEvidence(
+              id: 'private-signal-id',
+              kind: ForecastEvidenceKind.signal,
+              label: 'Observation',
+              detail: 'Private details',
+              timestamp: now,
+            ),
+          ]
+        : [],
   );
 
   group('daily Coach reminder planning', () {
@@ -233,15 +219,14 @@ void main() {
           recommendations: recommendations,
           coachPlanEnabled: true,
         );
-        expect(
-          both.notifications.map((item) => item.kind).toSet(),
-          GuidanceNotificationKind.values.toSet(),
-        );
+        expect(both.notifications.map((item) => item.kind).toSet(), {
+          GuidanceNotificationKind.coachPlan,
+        });
       },
     );
 
     test(
-      'gentle grounded Coach plan is allowed with low, stale or absent forecast',
+      'schedule-based Coach plan can use current observations independently of a forecast',
       () {
         for (final forecast in [
           points(uncertainty: 18),
@@ -261,14 +246,47 @@ void main() {
           );
           expect(
             plan.notifications.single.body,
-            contains('gentle and flexible'),
+            contains('Optional schedule reminder'),
           );
         }
       },
     );
 
     test(
-      'today plan includes its post-midnight bedtime but excludes other plan days',
+      'current evidence loss cancels otherwise fresh schedule reminders',
+      () {
+        final plan = build(
+          recommendations: [step('focus')],
+          coachPlanEnabled: true,
+          currentEvidenceEligible: false,
+        );
+        expect(plan.notifications, isEmpty);
+      },
+    );
+
+    test('pre-upgrade plan IDs cannot revive removed prescriptions', () {
+      final plan = build(
+        recommendations: [
+          Recommendation(
+            id: '2026-08-15-training',
+            title: 'Normal intensity',
+            detail: 'Legacy',
+            timeLabel: '13:00',
+            category: 'Training',
+            day: day,
+            scheduledAt: now.add(const Duration(hours: 1)),
+            generatedAt: now,
+            signalEvidenceIds: ['old'],
+            planPhase: CoachPlanPhase.training,
+          ),
+        ],
+        coachPlanEnabled: true,
+      );
+      expect(plan.notifications, isEmpty);
+    });
+
+    test(
+      'post-midnight reminders are omitted when same-day evidence will have expired',
       () {
         final bedtime = day.add(const Duration(days: 1, minutes: 30));
         final plan = build(
@@ -289,11 +307,19 @@ void main() {
             step('too-far', at: day.add(const Duration(days: 2))),
           ],
         );
-        expect(plan.notifications, hasLength(1));
-        expect(plan.notifications.single.sourceRecommendationId, 'bedtime');
-        expect(plan.notifications.single.scheduledAt, bedtime);
+        expect(plan.notifications, isEmpty);
       },
     );
+
+    test('does not schedule beyond supporting observation freshness', () {
+      final plan = build(
+        recommendations: [
+          step('expired-at-delivery', at: now.add(const Duration(hours: 13))),
+        ],
+        coachPlanEnabled: true,
+      );
+      expect(plan.notifications, isEmpty);
+    });
 
     test(
       'rejects past, insufficient lead, ungrounded and stale recommendations',
@@ -316,7 +342,7 @@ void main() {
           ],
         );
         expect(plan.notifications.map((item) => item.sourceRecommendationId), [
-          'valid',
+          '2026-08-15-phase1-valid',
         ]);
       },
     );
@@ -368,7 +394,9 @@ void main() {
         );
         expect(
           first.notifications
-              .singleWhere((item) => item.sourceRecommendationId == 'Aa')
+              .singleWhere(
+                (item) => item.sourceRecommendationId == '2026-08-15-phase1-Aa',
+              )
               .scheduledAt,
           now.add(const Duration(hours: 1)),
         );
@@ -407,13 +435,13 @@ void main() {
         expect(first.id, later.id);
         expect(
           first.payload,
-          'tonyo-guidance:coach:${Uri.encodeComponent(id)}',
+          'tonyo-guidance:coach:${Uri.encodeComponent('2026-08-15-phase1-$id')}',
         );
         expect(
           Uri.decodeComponent(
             first.payload.substring('tonyo-guidance:coach:'.length),
           ),
-          id,
+          '2026-08-15-phase1-$id',
         );
       },
     );

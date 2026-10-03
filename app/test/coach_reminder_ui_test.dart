@@ -293,7 +293,7 @@ void main() {
   );
 
   testWidgets(
-    'Profile offers daily plan reminders alongside forecast categories at large text',
+    'Profile offers optional reminders and marks unvalidated forecast alerts unavailable',
     (tester) async {
       final controller = _ReminderController();
       addTearDown(controller.dispose);
@@ -322,6 +322,14 @@ void main() {
         find.byKey(const Key('notification-crash-switch')),
         findsOneWidget,
       );
+      for (final key in [
+        'notification-crash-switch',
+        'notification-recovery-switch',
+      ]) {
+        final toggle = tester.widget<SwitchListTile>(find.byKey(Key(key)));
+        expect(toggle.value, isFalse);
+        expect(toggle.onChanged, isNull);
+      }
       expect(
         find.byKey(const Key('notification-master-switch')),
         findsOneWidget,

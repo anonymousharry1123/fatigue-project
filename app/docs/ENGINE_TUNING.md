@@ -1,5 +1,7 @@
 # FatigueEngine Tuning Loop (Cohort Lab + Versions 0.11–0.12)
 
+> **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
+
 Use this checklist whenever you change scoring weights. The synthetic cohort
 (~3000 students) is the shared simulator; Versions 0.11–0.12 persist Energy
 and Cognitive scores through the live-app path. Keep both aligned.

@@ -6,7 +6,6 @@ import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
 import 'package:app/src/screen_time_service.dart';
-import 'package:app/src/today_dashboard_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,39 +83,57 @@ void main() {
     expect(find.text('Connected data sources'), findsOneWidget);
   });
 
-  testWidgets('Version 0.20 exposes explicit forecast alert controls', (
-    tester,
-  ) async {
-    final notifications = _WidgetNotificationService();
-    final controller = readyController(notificationService: notifications);
-    await tester.pumpWidget(TonyoApp(controller: controller));
+  testWidgets(
+    'Phase 1 disables unvalidated forecast alerts while preserving opt-in',
+    (tester) async {
+      final notifications = _WidgetNotificationService();
+      final controller = readyController(notificationService: notifications);
+      await tester.pumpWidget(TonyoApp(controller: controller));
 
-    await tester.tap(find.text('Profile'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Notifications').hitTestable(),
-      200,
-      scrollable: activeVerticalScrollable(),
-    );
-    await tester.tap(find.text('Notifications'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Notifications').hitTestable(),
+        200,
+        scrollable: activeVerticalScrollable(),
+      );
+      await tester.tap(find.text('Notifications'));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('notification-master-switch')), findsOneWidget);
-    expect(find.textContaining('Permission is requested only'), findsOneWidget);
-    expect(find.textContaining('never presents a diagnosis'), findsOneWidget);
-    expect(controller.notificationsEnabled, isFalse);
+      expect(
+        find.byKey(const Key('notification-master-switch')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Permission is requested only'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('never presents a diagnosis'), findsOneWidget);
+      expect(controller.notificationsEnabled, isFalse);
 
-    await tester.tap(find.byKey(const Key('notification-master-switch')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('notification-master-switch')));
+      await tester.pumpAndSettle();
 
-    expect(notifications.permissionRequests, 1);
-    expect(controller.notificationsEnabled, isTrue);
-    expect(find.byKey(const Key('notification-crash-switch')), findsOneWidget);
+      expect(notifications.permissionRequests, 1);
+      expect(controller.notificationsEnabled, isTrue);
+      expect(
+        find.byKey(const Key('notification-crash-switch')),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.byKey(const Key('notification-crash-switch')));
-    await tester.pumpAndSettle();
-    expect(controller.crashNotificationsEnabled, isFalse);
-  });
+      final crash = tester.widget<SwitchListTile>(
+        find.byKey(const Key('notification-crash-switch')),
+      );
+      expect(crash.value, isFalse);
+      expect(crash.onChanged, isNull);
+      expect(
+        find.textContaining(
+          'forecast timing has not been prospectively validated',
+        ),
+        findsWidgets,
+      );
+    },
+  );
 
   testWidgets('Version 0.31 requires confirmation for outcome learning', (
     tester,
@@ -225,8 +242,13 @@ void main() {
       find.byKey(const Key('insights-associations')),
       220,
     );
+    await _scrollMainListTo(
+      tester,
+      find.textContaining('not medical findings or proof of cause'),
+      160,
+    );
     expect(
-      find.textContaining('do not establish that one behavior caused'),
+      find.textContaining('not medical findings or proof of cause'),
       findsOneWidget,
     );
   });
@@ -485,18 +507,20 @@ void main() {
     await tester.pumpWidget(TonyoApp(controller: controller));
 
     expect(find.text('ESTIMATED ENERGY SCORE'), findsOneWidget);
-    expect(find.textContaining('7/7 inputs'), findsOneWidget);
-    expect(
-      find.text(TodayDashboardLogic.statusFor(controller.score.energy).label),
-      findsOneWidget,
+    expect(find.textContaining('4/6 scored inputs'), findsOneWidget);
+    expect(find.text('Experimental estimates'), findsOneWidget);
+    expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
+    expect(find.textContaining('5/5 scored inputs'), findsOneWidget);
+    expect(find.textContaining('First Cognitive Score'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Today’s signals'),
+      200,
+      scrollable: activeVerticalScrollable(),
     );
-    expect(find.byKey(const Key('recent-signal-grid')), findsOneWidget);
     expect(find.text('Today’s signals'), findsOneWidget);
     expect(find.text('8.0 hr'), findsOneWidget);
     expect(find.text('2.2 L'), findsOneWidget);
-    expect(find.text('ESTIMATED COGNITIVE SCORE'), findsOneWidget);
-    expect(find.textContaining('6/6 cognitive inputs'), findsOneWidget);
-    expect(find.textContaining('First Cognitive Score'), findsOneWidget);
+    expect(find.byKey(const Key('recent-signal-grid')), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Today’s score factors'),
       250,
@@ -509,7 +533,7 @@ void main() {
       250,
       scrollable: activeVerticalScrollable(),
     );
-    expect(find.textContaining('This wellness estimate'), findsOneWidget);
+    expect(find.textContaining('These experimental estimates'), findsOneWidget);
     expect(find.text('WHAT SHAPED THIS ESTIMATE'), findsOneWidget);
   });
 
@@ -567,18 +591,22 @@ void main() {
 
     await _scrollMainListTo(tester, find.text('Daily Score Models'), 250);
     expect(find.text('Daily Score Models'), findsOneWidget);
-    expect(find.textContaining('100% coverage'), findsWidgets);
+    await _scrollMainListTo(tester, find.textContaining('67% coverage'), 120);
+    expect(find.textContaining('67% coverage'), findsWidgets);
     expect(find.textContaining('% fresh'), findsWidgets);
     await _scrollMainListTo(tester, find.text('SUPPORTING TODAY'), 250);
     expect(find.text('SUPPORTING TODAY'), findsWidgets);
     expect(find.text('REDUCING TODAY'), findsWidgets);
-    expect(find.textContaining('recovery range'), findsWidgets);
+    expect(find.textContaining('experimental estimate'), findsWidgets);
   });
 
   testWidgets('Version 0.16 presents uncertainty and forecast provenance', (
     tester,
   ) async {
-    await tester.pumpWidget(TonyoApp(controller: readyController()));
+    final controller = readyController()
+      ..signals = buildDemoSignals(DateTime.now())
+      ..checkIns = buildDemoCheckIns(DateTime.now());
+    await tester.pumpWidget(TonyoApp(controller: controller));
 
     await tester.tap(
       find.descendant(
@@ -588,7 +616,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Limited confidence'), findsOneWidget);
+    expect(find.textContaining('Experimental hourly curve'), findsOneWidget);
     expect(find.byTooltip('Refresh forecast'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('Calculated on this device'),
@@ -641,40 +669,40 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('Key windows'),
+      find.text('Curve markers'),
       250,
       scrollable: activeVerticalScrollable(),
     );
-    expect(find.text('Key windows'), findsOneWidget);
+    expect(find.text('Curve markers'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('forecast-window-peak')),
       250,
       scrollable: activeVerticalScrollable(),
     );
-    expect(find.text('Peak focus'), findsOneWidget);
+    expect(find.text('Curve high'), findsOneWidget);
     expect(find.text('LINKED EVIDENCE'), findsWidgets);
     expect(
       find.byKey(const Key('forecast-evidence-signal-sleep-live')),
       findsWidgets,
     );
     await tester.scrollUntilVisible(
-      find.text('Predicted crash'),
+      find.text('Curve low'),
       250,
       scrollable: activeVerticalScrollable(),
     );
-    expect(find.text('Predicted crash'), findsOneWidget);
+    expect(find.text('Curve low'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Recovery window'),
+      find.text('Later curve rise'),
       250,
       scrollable: activeVerticalScrollable(),
     );
-    expect(find.text('Recovery window'), findsOneWidget);
+    expect(find.text('Later curve rise'), findsOneWidget);
     expect(find.textContaining('Linked signal'), findsWidgets);
     expect(find.textContaining('Linked check-in'), findsWidgets);
   });
 
   testWidgets(
-    'Coach shows a reminder timeline, optional feedback, and wellness flags',
+    'Coach shows optional schedule reminders, feedback, and factual observations',
     (tester) async {
       final now = DateTime.now();
       final controller =
@@ -726,7 +754,7 @@ void main() {
           .singleWhere((item) => item.planPhase == CoachPlanPhase.deepWork)
           .id;
       final taperId = controller.recommendations
-          .singleWhere((item) => item.planPhase == CoachPlanPhase.taper)
+          .singleWhere((item) => item.planPhase == CoachPlanPhase.evening)
           .id;
 
       await tester.pumpWidget(TonyoApp(controller: controller));
@@ -741,20 +769,23 @@ void main() {
       expect(find.text('Generated daily plan'), findsOneWidget);
       expect(find.byKey(const Key('coach-daily-plan-summary')), findsOneWidget);
       expect(find.textContaining('Morning-to-evening plan'), findsOneWidget);
-      expect(find.textContaining('optional reminders'), findsOneWidget);
+      expect(
+        find.textContaining('optional scheduling suggestions'),
+        findsOneWidget,
+      );
       expect(find.text('RECOVERY FIRST'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('Wellness flags'),
+        find.text('Recorded patterns'),
         180,
         scrollable: activeVerticalScrollable(),
       );
-      expect(find.text('Wellness flags'), findsOneWidget);
+      expect(find.text('Recorded patterns'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('Short-sleep pattern'),
+        find.text('Recent check-in observations'),
         180,
         scrollable: activeVerticalScrollable(),
       );
-      expect(find.text('Short-sleep pattern'), findsOneWidget);
+      expect(find.text('Recent check-in observations'), findsOneWidget);
       expect(find.textContaining('fixture'), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(Key('dismiss-risk-$alertId')),
@@ -766,12 +797,12 @@ void main() {
       expect(find.byKey(Key('risk-alert-$alertId')), findsNothing);
 
       await tester.scrollUntilVisible(
-        find.textContaining('Protect a '),
+        find.text('Optional focus block'),
         220,
         scrollable: activeVerticalScrollable(),
       );
       expect(find.textContaining('focus block'), findsOneWidget);
-      expect(find.textContaining('WINDOW'), findsWidgets);
+      expect(find.text('OPTIONAL SCHEDULE'), findsWidgets);
       expect(find.byIcon(Icons.link_rounded), findsWidgets);
       expect(find.byIcon(Icons.balance_rounded), findsWidgets);
       expect(find.byKey(Key('accept-recommendation-$focusId')), findsNothing);
@@ -799,11 +830,11 @@ void main() {
       expect(find.byKey(Key('record-outcome-$focusId')), findsNothing);
       expect(controller.outcomeForRecommendation(focusId), isNull);
       await tester.scrollUntilVisible(
-        find.text('Taper stimulation before bed'),
+        find.text('Optional quiet wind-down'),
         220,
         scrollable: activeVerticalScrollable(),
       );
-      expect(find.text('Taper stimulation before bed'), findsOneWidget);
+      expect(find.text('Optional quiet wind-down'), findsOneWidget);
       expect(find.byKey(Key('dismiss-recommendation-$taperId')), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(Key('not-helpful-recommendation-$taperId')),
@@ -841,7 +872,10 @@ void main() {
   testWidgets('Version 0.16 Week view uses calculated daily summaries', (
     tester,
   ) async {
-    await tester.pumpWidget(TonyoApp(controller: readyController()));
+    final controller = readyController()
+      ..signals = buildDemoSignals(DateTime.now())
+      ..checkIns = buildDemoCheckIns(DateTime.now());
+    await tester.pumpWidget(TonyoApp(controller: controller));
     await tester.tap(
       find.descendant(
         of: find.byType(NavigationBar),
@@ -860,7 +894,7 @@ void main() {
     expect(find.text('7-DAY OUTLOOK'), findsOneWidget);
     await _scrollMainListTo(tester, find.text('Daily summaries'), 250);
     expect(find.text('Daily summaries'), findsOneWidget);
-    expect(find.textContaining('Peak '), findsWidgets);
+    expect(find.textContaining('Curve high '), findsWidgets);
   });
 
   testWidgets('Version 0.16 handles an empty authenticated forecast range', (
@@ -905,10 +939,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Log today’s activity'), findsOneWidget);
-    expect(
-      find.textContaining('Blank or 0 values are skipped'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Zero means you recorded none'), findsOneWidget);
     expect(find.text('None'), findsNothing);
     await tester.enterText(find.byKey(const Key('hydration-field')), '11');
     await _scrollMainListTo(tester, find.text('Save activity'), 200);
@@ -928,12 +959,12 @@ void main() {
     expect(controller.activityLogs.single.hydrationLiters, 2.5);
     expect(controller.activityLogs.single.studyHours, 0);
     expect(controller.activityLogs.single.exerciseHours, 0);
-    expect(controller.activityLogs.single.screenTimeHours, 0);
+    expect(controller.activityLogs.single.screenTimeHours, isNull);
     expect(
       controller.signals.where(
         (signal) => signal.groupId == controller.activityLogs.single.id,
       ),
-      hasLength(1),
+      hasLength(3),
     );
     expect(find.text('Last 7 days by category'), findsOneWidget);
     expect(find.text('Hydration'), findsWidgets);

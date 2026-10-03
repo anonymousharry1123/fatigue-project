@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'privacy_test_support.dart';
 import 'package:app/src/activity_sync_logic.dart';
 import 'package:app/src/app_controller.dart';
@@ -48,7 +50,7 @@ void main() {
 
   for (final type in ActivityLogEntry.allowedTypes) {
     test(
-      'only positive ${type.name} is saved locally and in the cloud',
+      'explicit ${type.name} is saved while omitted fields remain absent',
       () async {
         final repository = repositoryFor();
         final controller = controllerFor(repository);
@@ -56,10 +58,10 @@ void main() {
 
         await controller.saveActivityLog(
           id: 'activity-single',
-          hydrationLiters: type == SignalType.hydration ? .25 : 0,
-          studyHours: type == SignalType.study ? .25 : 0,
-          exerciseHours: type == SignalType.exercise ? .25 : 0,
-          screenTimeHours: type == SignalType.screenTime ? .25 : 0,
+          hydrationLiters: type == SignalType.hydration ? .25 : null,
+          studyHours: type == SignalType.study ? .25 : null,
+          exerciseHours: type == SignalType.exercise ? .25 : null,
+          screenTimeHours: type == SignalType.screenTime ? .25 : null,
           timestamp: day,
         );
 
@@ -79,7 +81,7 @@ void main() {
   }
 
   test(
-    'mixed positive, zero, and omitted fields create only positive signals',
+    'positive and zero values survive sync and local restore while blanks stay absent',
     () async {
       final repository = repositoryFor();
       final controller = controllerFor(repository);
@@ -97,9 +99,22 @@ void main() {
       for (final signals in [controller.signals, cloud.signals]) {
         expect(
           signals.map((signal) => signal.type),
-          unorderedEquals([SignalType.hydration, SignalType.screenTime]),
+          unorderedEquals([
+            SignalType.hydration,
+            SignalType.study,
+            SignalType.screenTime,
+          ]),
         );
-        expect(signals.every((signal) => signal.value > 0), isTrue);
+        expect(
+          signals
+              .singleWhere((signal) => signal.type == SignalType.study)
+              .value,
+          0,
+        );
+        expect(
+          signals.where((signal) => signal.type == SignalType.exercise),
+          isEmpty,
+        );
       }
       final restored = AppController(
         initialPrivacyConsent: testAdultPrivacyConsent,
@@ -111,12 +126,32 @@ void main() {
         controller.signals.map((signal) => signal.toJson()),
       );
       expect(restored.activityLogs.single.studyHours, 0);
-      expect(restored.activityLogs.single.exerciseHours, 0);
+      expect(restored.activityLogs.single.exerciseHours, isNull);
+      final exported =
+          (jsonDecode(controller.exportJson())
+                  as Map<String, dynamic>)['signals']
+              as List;
+      final exportedSignals = exported
+          .map(
+            (item) =>
+                SignalReading.fromJson((item as Map).cast<String, dynamic>()),
+          )
+          .toList();
+      expect(
+        exportedSignals
+            .singleWhere((signal) => signal.type == SignalType.study)
+            .value,
+        0,
+      );
+      expect(
+        exportedSignals.where((signal) => signal.type == SignalType.exercise),
+        isEmpty,
+      );
     },
   );
 
   test(
-    'editing to zero or blank removes only that log category and restores Health fallback',
+    'zero preserves a manual override while blank restores imported fallback',
     () async {
       final preserved = [
         SignalReading(
@@ -187,9 +222,23 @@ void main() {
         final edited = signals.where(
           (signal) => signal.groupId == 'activity-edited',
         );
-        expect(edited, hasLength(1));
-        expect(edited.single.type, SignalType.study);
-        expect(edited.single.value, 2);
+        expect(edited, hasLength(3));
+        expect(
+          edited.singleWhere((signal) => signal.type == SignalType.study).value,
+          2,
+        );
+        expect(
+          edited
+              .singleWhere((signal) => signal.type == SignalType.exercise)
+              .value,
+          0,
+        );
+        expect(
+          edited
+              .singleWhere((signal) => signal.type == SignalType.screenTime)
+              .value,
+          0,
+        );
         expect(
           signals
               .where((signal) => signal.groupId != 'activity-edited')
@@ -198,7 +247,7 @@ void main() {
         );
         for (final entry in {
           SignalType.hydration: .4,
-          SignalType.exercise: 1.5,
+          SignalType.exercise: 0.0,
         }.entries) {
           final total = ActivitySyncLogic.aggregateForDay(
             signals,
@@ -206,7 +255,7 @@ void main() {
             day: day,
           )!;
           expect(total.total, entry.value);
-          expect(total.usesManualCorrection, isFalse);
+          expect(total.usesManualCorrection, entry.key == SignalType.exercise);
         }
       }
       expect(repository.inputPatchCallCount, 2);
@@ -216,7 +265,7 @@ void main() {
   );
 
   test(
-    'all-zero or blank submissions leave existing data and cloud writes unchanged',
+    'blank submission is rejected but explicit all-zero replacement is saved',
     () async {
       final repository = repositoryFor();
       final controller = controllerFor(repository);
@@ -233,22 +282,57 @@ void main() {
       final writesBefore = repository.inputPatchCallCount;
 
       await expectLater(controller.saveActivityLog(), throwsArgumentError);
-      await expectLater(
-        controller.saveActivityLog(
-          id: 'activity-existing',
-          hydrationLiters: 0,
-          studyHours: 0,
-          exerciseHours: 0,
-          screenTimeHours: 0,
-        ),
-        throwsArgumentError,
-      );
-
       expect(controller.exportJson(), before);
       expect(preferences.getString('tonyo_state_v1'), persistedBefore);
       expect(await repository.readUser(uid), same(cloudBefore));
       expect(repository.inputPatchCallCount, writesBefore);
+      await controller.saveActivityLog(
+        id: 'activity-existing',
+        hydrationLiters: 0,
+        studyHours: 0,
+        exerciseHours: 0,
+        screenTimeHours: 0,
+        timestamp: day,
+      );
+      final cloud = (await repository.readUser(uid))!;
+      for (final signals in [controller.signals, cloud.signals]) {
+        expect(signals, hasLength(4));
+        expect(signals.every((signal) => signal.value == 0), isTrue);
+      }
+      expect(controller.activityLogs.single.exerciseHours, 0);
+      expect(repository.inputPatchCallCount, writesBefore + 1);
       expect(repository.replaceUserCallCount, 0);
+    },
+  );
+
+  test(
+    'device backup round trip preserves explicit zero and missing categories',
+    () async {
+      final original = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        clock: () => day.add(const Duration(hours: 12)),
+      );
+      addTearDown(original.dispose);
+      await original.saveActivityLog(
+        id: 'activity-zero-backup',
+        studyHours: 0,
+        exerciseHours: 0,
+        timestamp: day,
+      );
+      final raw = await original.exportDeviceBackup();
+      final restored = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        clock: () => day.add(const Duration(hours: 12)),
+      );
+      addTearDown(restored.dispose);
+      await restored.restoreDeviceBackup(restored.previewDeviceBackup(raw));
+      final log = restored.activityLogs.single;
+      expect(log.studyHours, 0);
+      expect(log.exerciseHours, 0);
+      expect(log.hydrationLiters, isNull);
+      expect(log.screenTimeHours, isNull);
+      expect(restored.signals, hasLength(2));
+      expect(restored.signals.every((signal) => signal.value == 0), isTrue);
     },
   );
 

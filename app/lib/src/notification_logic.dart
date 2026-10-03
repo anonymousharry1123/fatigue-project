@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'daily_plan_logic.dart';
 import 'local_day.dart';
 import 'notification_service.dart';
 
@@ -9,6 +10,7 @@ enum NotificationPlanState {
   staleForecast,
   lowConfidence,
   noFutureWindows,
+  uncalibratedForecast,
 }
 
 class NotificationPlan {
@@ -44,6 +46,7 @@ abstract final class NotificationLogic {
     required bool recoveryEnabled,
     List<Recommendation> recommendations = const [],
     bool coachPlanEnabled = false,
+    bool currentEvidenceEligible = false,
   }) {
     final forecast = _forecastPlan(
       now: now,
@@ -54,7 +57,9 @@ abstract final class NotificationLogic {
       crashEnabled: crashEnabled,
       recoveryEnabled: recoveryEnabled,
     );
-    if (!enabled || !coachPlanEnabled) return forecast;
+    if (!enabled || !coachPlanEnabled || !currentEvidenceEligible) {
+      return forecast;
+    }
     final coach = _coachReminders(now, recommendations);
     if (coach.isEmpty) return forecast;
     final notifications = [...forecast.notifications, ...coach]
@@ -82,7 +87,21 @@ abstract final class NotificationLogic {
       final grounded =
           item.signalEvidenceIds.any((id) => id.trim().isNotEmpty) ||
           item.checkInEvidenceIds.any((id) => id.trim().isNotEmpty);
-      if (item.id.trim().isEmpty ||
+      final freshEvidence = item.evidence.any(
+        (evidence) =>
+            time != null &&
+            sameLocalDay(evidence.timestamp, now) &&
+            sameLocalDay(evidence.timestamp, time) &&
+            time.difference(evidence.timestamp) <= maximumCoachPlanAge &&
+            !evidence.timestamp.isAfter(now) &&
+            now.difference(evidence.timestamp) <= maximumCoachPlanAge &&
+            (evidence.kind == ForecastEvidenceKind.signal
+                ? item.signalEvidenceIds.contains(evidence.id)
+                : item.checkInEvidenceIds.contains(evidence.id)),
+      );
+      if (!DailyPlanLogic.isCurrentPlan(item) ||
+          !freshEvidence ||
+          item.id.trim().isEmpty ||
           item.title.trim().isEmpty ||
           !grounded ||
           item.day == null ||
@@ -92,7 +111,8 @@ abstract final class NotificationLogic {
           !time.isBefore(end) ||
           generated == null ||
           generated.isAfter(now.add(const Duration(minutes: 5))) ||
-          now.difference(generated) > maximumCoachPlanAge) {
+          now.difference(generated) > maximumCoachPlanAge ||
+          time.difference(generated) > maximumCoachPlanAge) {
         continue;
       }
       final previous = byId[item.id];
@@ -121,10 +141,6 @@ abstract final class NotificationLogic {
       final durationLabel = duration != null && duration > 0 && duration <= 1440
           ? '$duration min · '
           : '';
-      final gentle =
-          item.planConfidence == null ||
-          !item.planConfidence!.isFinite ||
-          item.planConfidence! < .65;
       result.add(
         GuidanceNotification(
           id: '${_dayId(localDay(now))}-coach-${item.id}',
@@ -133,7 +149,7 @@ abstract final class NotificationLogic {
           scheduledAt: item.scheduledAt!,
           title: item.title.trim(),
           body:
-              '$durationLabel${gentle ? "Keep it gentle and flexible. " : ""}Open Coach for your daily plan.',
+              '${durationLabel}Optional schedule reminder. Open Coach for your daily plan.',
           sourceRecommendationId: item.id,
         ),
       );
@@ -180,71 +196,9 @@ abstract final class NotificationLogic {
       return suppressed(NotificationPlanState.lowConfidence);
     }
 
-    final byType = {for (final window in windows) window.type: window};
-    final activeRisks = riskAlerts
-        .where((item) => !item.dismissed)
-        .toList(growable: false);
-    final riskIds = activeRisks
-        .map((item) => item.id)
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
-    final day = localDay(points.first.time);
-    final notifications = <GuidanceNotification>[];
-    final threshold = now.add(minimumLeadTime);
-
-    final crash = byType[ForecastWindowType.crash];
-    if (crashEnabled && crash != null) {
-      final scheduledAt = crash.start.subtract(leadTime);
-      if (scheduledAt.isAfter(threshold)) {
-        notifications.add(
-          GuidanceNotification(
-            id: '${_dayId(day)}-crash',
-            platformId: _platformId(day, GuidanceNotificationKind.crash),
-            kind: GuidanceNotificationKind.crash,
-            scheduledAt: scheduledAt,
-            title: 'Lower-energy window ahead',
-            body: activeRisks.isEmpty
-                ? 'Your forecast suggests lower energy soon. Consider switching to a lighter task.'
-                : 'Your forecast and recent wellness patterns favor a lighter block with room to recover.',
-            sourceRiskAlertIds: riskIds,
-          ),
-        );
-      }
-    }
-
-    final recovery = byType[ForecastWindowType.recovery];
-    if (recoveryEnabled && recovery != null) {
-      if (recovery.start.isAfter(threshold)) {
-        notifications.add(
-          GuidanceNotification(
-            id: '${_dayId(day)}-recovery',
-            platformId: _platformId(day, GuidanceNotificationKind.recovery),
-            kind: GuidanceNotificationKind.recovery,
-            scheduledAt: recovery.start,
-            title: 'Recovery window starting',
-            body:
-                'Your forecast is moving out of its lower-energy stretch. Check how you feel before increasing demand.',
-            sourceRiskAlertIds: riskIds,
-          ),
-        );
-      }
-    }
-
-    notifications.sort(
-      (left, right) => left.scheduledAt.compareTo(right.scheduledAt),
-    );
-    return NotificationPlan(
-      state: notifications.isEmpty
-          ? NotificationPlanState.noFutureWindows
-          : NotificationPlanState.ready,
-      notifications: List.unmodifiable(notifications),
-      dismissedRiskAlertCount: dismissedCount,
-    );
-  }
-
-  static int _platformId(DateTime day, GuidanceNotificationKind kind) {
-    final dayNumber = day.year * 10000 + day.month * 100 + day.day;
-    return (dayNumber * 10 + kind.index) & _idMask;
+    // No current forecast is prospectively calibrated. Neither its timing nor
+    // its heuristic coverage can justify a precise peak/crash notification.
+    return suppressed(NotificationPlanState.uncalibratedForecast);
   }
 
   static String _dayId(DateTime day) =>

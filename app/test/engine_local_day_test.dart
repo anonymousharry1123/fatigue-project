@@ -40,14 +40,23 @@ void main() {
 
     test('forecast uses local wall-clock hours across clock changes $day', () {
       final clock = DateTime(day.year, day.month, day.day, 12).toUtc();
-      final points = FatigueEngine.forecast(
-        const ScoreSnapshot(
-          energy: 60,
-          cognitive: 65,
-          confidence: .2,
-          drivers: [],
+      final inputs = [
+        SignalReading(
+          id: 'study',
+          type: SignalType.study,
+          value: 2,
+          timestamp: clock,
         ),
+      ];
+      final snapshot = FatigueEngine.score(
+        signals: inputs,
+        checkIns: const [],
+        now: clock,
+      );
+      final points = FatigueEngine.forecast(
+        snapshot,
         day.toUtc(),
+        signals: inputs,
         generatedAt: clock,
       );
       expect(points.first.time.hour, 7);

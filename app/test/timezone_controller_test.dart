@@ -53,6 +53,11 @@ class _Controller extends AppController {
     bool forceRecalculate = false,
   }) async {
     calls.add('score:$forceRecalculate');
+    await super.refreshScores(
+      day: day,
+      notify: notify,
+      forceRecalculate: forceRecalculate,
+    );
   }
 
   @override
@@ -92,7 +97,13 @@ void main() {
         ..onboardingComplete = true;
       addTearDown(controller.dispose);
       await controller.handleAppResumed();
-      expect(controller.calls, isEmpty);
+      expect(controller.calls, [
+        'score:true',
+        'forecast:true',
+        'guidance',
+        'insights',
+      ]);
+      controller.calls.clear();
       region = 'Asia/Tokyo';
       await controller.handleAppResumed();
       expect(controller.deviceTimezoneIdentifier, 'Asia/Tokyo');

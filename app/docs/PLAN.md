@@ -44,6 +44,10 @@ Do **not** wait until merge to invent history. Append as work happens.
 
 ## Current Progress
 
+### Biology Phase 1 — implemented locally (2026-10-03)
+
+Current safety changes supersede retired sleep/nap/exposure rewards and forecast notifications in the historical versions below. See [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md) for implementation, migration, tests and remaining release checks. Phases 2–5 are deferred.
+
 ### Version 0.1 — Basic Structure ✅
 
 - Flutter application skeleton

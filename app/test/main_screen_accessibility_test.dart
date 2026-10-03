@@ -104,7 +104,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(
-            find.text('Your daily patterns and model-estimated trends'),
+            find.text('Recorded patterns and experimental estimates'),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
@@ -183,7 +183,11 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(
-            find.bySemanticsLabel(RegExp('Uncertainty: plus or minus')),
+            find.bySemanticsLabel(
+              RegExp(
+                'Uncalibrated display band: plus or minus .*not a statistical confidence interval',
+              ),
+            ),
             findsWidgets,
           );
           expect(tester.takeException(), isNull);

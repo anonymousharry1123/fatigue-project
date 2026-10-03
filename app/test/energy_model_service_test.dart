@@ -65,6 +65,44 @@ void main() {
   );
 
   test(
+    'reference upgrade drops weights but preserves training-attempt ledger',
+    () async {
+      final harness = _Harness();
+      await harness.create().refresh(ready);
+      final before =
+          jsonDecode(harness.store.values['isolated-benchmark']!)
+              as Map<String, dynamic>;
+      final artifact = Map<String, dynamic>.from(before['model'] as Map);
+      artifact['referenceRulesVersion'] = 'energy-rules-v2';
+      artifact['artifactChecksum'] = prepFingerprint(
+        {...artifact}..remove('artifactChecksum'),
+      );
+      harness.store.values['isolated-benchmark'] = jsonEncode({
+        ...before,
+        'model': artifact,
+      });
+      harness.at = harness.at.add(const Duration(hours: 3));
+      final writes = harness.writer.writes;
+      final restored = harness.create();
+      await restored.load();
+      expect(restored.model, isNull);
+      final after =
+          jsonDecode(harness.store.values['isolated-benchmark']!) as Map;
+      expect(after['model'], isNull);
+      expect(after['lastAttemptAt'], before['lastAttemptAt']);
+      expect(after['eligibleOutcomeKeys'], before['eligibleOutcomeKeys']);
+      expect(
+        harness.writer.writes,
+        writes,
+      ); // Local migration never uploads/trains.
+      await restored.refresh(moreOutcomes);
+      expect(restored.model, isNull);
+      expect(restored.status, contains('once per 24 hours'));
+      expect(harness.writer.writes, writes);
+    },
+  );
+
+  test(
     'persisted daily throttle survives recreation and permits new outcomes at exactly 24h',
     () async {
       final harness = _Harness();

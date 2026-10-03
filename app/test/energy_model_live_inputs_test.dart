@@ -11,7 +11,7 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
-    'new app logs preserve availability and can form eligible future rows',
+    'new app logs preserve availability without inventing training eligibility',
     () async {
       // Isolated generated test data, never inserted into a real account.
       final zone = DateTime(2026, 7, 15).timeZoneOffset.inHours == -7
@@ -58,8 +58,23 @@ void main() {
       final report = MlPrepBuilder.build(snapshot);
       expect(
         report.energyReady,
-        isTrue,
+        isFalse,
         reason: '${report.toJson()['readiness']}',
+      );
+      // Each Energy outcome excludes its own check-in; these rows have no
+      // earlier same-day mood/stress or mature heart baseline. Retired fluid,
+      // exercise and caffeine slots cannot substitute for eligible inputs.
+      expect(
+        ((report.toJson()['readiness'] as Map)['energy'] as Map)['reasons'],
+        contains('insufficient_feature_coverage'),
+      );
+      expect(
+        report.examples.every((row) => row.features['mood'] == null),
+        isTrue,
+      );
+      expect(
+        report.examples.every((row) => row.features['hydration'] == null),
+        isTrue,
       );
       expect(
         report.examples.where((row) => row.head == 'energy'),

@@ -35,7 +35,7 @@ class CoachScreen extends StatelessWidget {
           const SizedBox(height: 10),
           _GuidanceNotice(message: error),
         ],
-        const SectionHeader('Wellness flags'),
+        const SectionHeader('Recorded patterns'),
         if (controller.alerts.isEmpty)
           const _NoRiskAlertsCard()
         else
@@ -107,7 +107,7 @@ class _CoachHeader extends StatelessWidget {
             Text('AI Coach', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 5),
             Text(
-              'A prioritized morning-to-evening plan from your recent patterns',
+              'Optional blocks around your saved wake and bed times',
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -209,7 +209,7 @@ class _DailyPlanOverview extends StatelessWidget {
     final feedbackCount = controller.recommendationFeedbackHistoryCount;
     final confidence = plan.firstOrNull?.planConfidence;
     final range = plan.isEmpty
-        ? 'Waiting for grounded forecast windows'
+        ? 'Waiting for enough current information'
         : '${plan.first.timeLabel}–${plan.last.timeLabel}';
     return TonyoCard(
       key: const Key('coach-daily-plan-summary'),
@@ -242,7 +242,7 @@ class _DailyPlanOverview extends StatelessWidget {
               ),
               if (confidence != null)
                 _SmallTag(
-                  label: '${(confidence * 100).round()}% PLAN CONFIDENCE',
+                  label: '${(confidence * 100).round()}% DATA COVERAGE',
                 ),
               if (feedbackCount > 0)
                 _SmallTag(label: '$feedbackCount PAST RESPONSES'),
@@ -259,7 +259,7 @@ class _DailyPlanOverview extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             feedbackCount == 0
-                ? 'Follow the timeline with optional reminders, and share what helped to shape future plans.'
+                ? 'These are optional scheduling suggestions, not validated predictions of your best times.'
                 : 'Your feedback helps prioritize future advice. Today’s blocks stay in time order.',
             style: TextStyle(
               color: TonyoPalette.of(context).secondary,
@@ -374,7 +374,7 @@ class _DailyPlanRemindersState extends State<_DailyPlanReminders> {
           ],
           const SizedBox(height: 8),
           Text(
-            'Open Tonyo each day to refresh your plan and schedule today’s reminders. Notification permission is requested when you turn reminders on. Manage forecast alerts in Profile → Notifications.',
+            'Open Tonyo each day to refresh your plan and schedule today’s reminders. Permission is requested when you turn reminders on. Experimental, uncalibrated forecasts do not trigger alerts.',
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,
@@ -440,13 +440,12 @@ class _NoRiskAlertsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'No sustained pattern flagged',
+                'No recorded pattern to show',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 3),
               Text(
-                'Tonyo checks the last seven days for recurring sleep, training, '
-                'energy, and stress patterns.',
+                'This does not establish recovery or rule out a health concern. Missing entries limit what Tonyo can describe.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -560,8 +559,7 @@ class _NoRecommendationsCard extends StatelessWidget {
               ),
               SizedBox(height: 3),
               Text(
-                'Recommendations appear only when they can be linked to your '
-                'forecast and supporting data.',
+                'Not enough information to estimate. Optional schedule suggestions require current supporting observations.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -641,8 +639,7 @@ class _RecommendationCard extends StatelessWidget {
               _SmallTag(label: _phaseLabel(phase).toUpperCase()),
             if (item.durationMinutes case final duration?)
               _SmallTag(label: '$duration MIN'),
-            if (item.windowType case final window?)
-              _SmallTag(label: '${_windowLabel(window).toUpperCase()} WINDOW'),
+            const _SmallTag(label: 'OPTIONAL SCHEDULE'),
           ],
         ),
         const SizedBox(height: 10),
@@ -960,12 +957,6 @@ Color _severityColor(AlertSeverity severity, BuildContext context) =>
       AlertSeverity.caution => TonyoPalette.of(context).warning,
       AlertSeverity.high => TonyoPalette.of(context).error,
     };
-
-String _windowLabel(ForecastWindowType type) => switch (type) {
-  ForecastWindowType.peak => 'Peak',
-  ForecastWindowType.crash => 'Crash',
-  ForecastWindowType.recovery => 'Recovery',
-};
 
 String _phaseLabel(CoachPlanPhase phase) => switch (phase) {
   CoachPlanPhase.morning => 'Morning',
