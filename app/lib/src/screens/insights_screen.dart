@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../app.dart';
 import '../app_controller.dart';
 import '../insights_logic.dart';
@@ -37,11 +39,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Insights',
+                      context.tr('Insights'),
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     Text(
-                      'Recorded patterns and experimental estimates',
+                      context.tr(
+                        'Recorded patterns and experimental estimates',
+                      ),
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 12,
@@ -51,7 +55,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ),
               ),
               IconButton.filledTonal(
-                tooltip: 'Refresh insights',
+                tooltip: context.tr('Refresh insights'),
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: controller.isInsightsLoading
                     ? null
@@ -101,11 +105,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Daily Score Models',
+                            context.tr('Daily Score Models'),
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(
-                            'Ranked inputs · data coverage and quality',
+                            context.tr(
+                              'Ranked inputs · data coverage and quality',
+                            ),
                             style: TextStyle(
                               color: TonyoPalette.of(context).muted,
                               fontSize: 10,
@@ -188,14 +194,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     const SizedBox(width: 11),
                     Expanded(
                       child: Text(
-                        '${score.cognitiveInputCount} current Cognitive inputs · data quality',
+                        context.tr(
+                          '${score.cognitiveInputCount} current Cognitive inputs · data quality',
+                        ),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 );
                 final detail = Text(
-                  'Data quality describes the coverage, age, source, and quality of records. It is not the probability that a score is correct. These experimental rules are not medical findings or proof of cause.',
+                  context.tr(
+                    'Data quality describes the coverage, age, source, and quality of records. It is not the probability that a score is correct. These experimental rules are not medical findings or proof of cause.',
+                  ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 10,
@@ -251,15 +261,19 @@ class _InsightsSourceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                controller.insightsLoadedFromCloud
-                    ? 'Your private Firestore range'
-                    : 'Your on-device entries',
+                context.tr(
+                  controller.insightsLoadedFromCloud
+                      ? 'Your private Firestore range'
+                      : 'Your on-device entries',
+                ),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 3),
               Text(
-                '${insights.sourceSignalCount} signals · '
-                '${insights.sourceCheckInCount} check-ins · no cohort comparisons',
+                context.tr(
+                  '${insights.sourceSignalCount} signals · '
+                  '${insights.sourceCheckInCount} check-ins · no cohort comparisons',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -267,7 +281,7 @@ class _InsightsSourceCard extends StatelessWidget {
               ),
               const SizedBox(height: 7),
               Text(
-                insights.calculationBasis,
+                context.tr(insights.calculationBasis),
                 key: const Key('insights-calculation-basis'),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
@@ -308,7 +322,7 @@ class _InsightsNotice extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            message,
+            context.tr(message),
             style: TextStyle(
               color: TonyoPalette.of(context).warning,
               fontSize: 11,
@@ -337,12 +351,14 @@ class _EmptyInsightsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Not enough recent entries yet',
+                context.tr('Not enough recent entries yet'),
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 3),
               Text(
-                'Log sleep, training, or study to build your private seven-day trends.',
+                context.tr(
+                  'Log sleep, training, or study to build your private seven-day trends.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -438,10 +454,12 @@ class _WeeklyOverview extends StatelessWidget {
         ),
         const SizedBox(height: 9),
         Text(
-          '${current.trackedDayCount}/7 days have entries; '
-          '${insights.currentDays.where((day) => day.sleepHours != null).length} main-sleep observations; '
-          '${insights.currentDays.where((day) => day.estimatedEnergy != null).length} eligible Energy estimates. '
-          'Averages use recorded days only. Comparisons use the prior seven days.',
+          context.tr(
+            '${current.trackedDayCount}/7 days have entries; '
+            '${insights.currentDays.where((day) => day.sleepHours != null).length} main-sleep observations; '
+            '${insights.currentDays.where((day) => day.estimatedEnergy != null).length} eligible Energy estimates. '
+            'Averages use recorded days only. Comparisons use the prior seven days.',
+          ),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
       ],
@@ -493,7 +511,7 @@ class _OverviewCard extends StatelessWidget {
         Icon(value.icon, color: value.color, size: 19),
         const SizedBox(height: 8),
         Text(
-          value.value,
+          context.tr(value.value),
           style: TextStyle(
             color: value.color,
             fontSize: 18,
@@ -501,12 +519,12 @@ class _OverviewCard extends StatelessWidget {
           ),
         ),
         Text(
-          value.label,
+          context.tr(value.label),
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10),
         ),
         const SizedBox(height: 5),
         Text(
-          value.comparison,
+          context.tr(value.comparison),
           style: TextStyle(
             color: TonyoPalette.of(context).muted,
             fontSize: 8.5,
@@ -556,7 +574,7 @@ class _DailyTrendCard extends StatelessWidget {
                 ChoiceChip(
                   key: Key('insight-metric-${value.name}'),
                   materialTapTargetSize: MaterialTapTargetSize.padded,
-                  label: Text(_metricLabel(value)),
+                  label: Text(context.tr(_metricLabel(value))),
                   selected: metric == value,
                   onSelected: (_) => onMetricChanged(value),
                 ),
@@ -601,7 +619,7 @@ class _DailyTrendCard extends StatelessWidget {
                     Padding(
                       padding: EdgeInsets.only(top: 10),
                       child: Text(
-                        'Swipe to view more days.',
+                        context.tr('Swipe to view more days.'),
                         style: TextStyle(
                           color: TonyoPalette.of(context).muted,
                           fontSize: 10,
@@ -614,7 +632,7 @@ class _DailyTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            _trendCaption(metric),
+            context.tr(_trendCaption(metric)),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,
@@ -674,13 +692,13 @@ class _TrendBar extends StatelessWidget {
       excludeSemantics: true,
       label:
           '${_dayLabel(day.date)}, ${formatDate(day.date)}, ${day.date.year}. '
-          '$metricLabel: $valueLabel',
+          '${context.tr(metricLabel)}: ${context.tr(valueLabel)}',
       child: Column(
         children: [
           SizedBox(
             height: MediaQuery.textScalerOf(context).scale(18),
             child: Text(
-              _valueLabel(value, metric),
+              context.tr(_valueLabel(value, metric)),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 8,
@@ -713,7 +731,7 @@ class _TrendBar extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            _dayLabel(day.date),
+            context.tr(_dayLabel(day.date)),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 8.5,
@@ -774,7 +792,9 @@ class _AssociationsCard extends StatelessWidget {
             SizedBox(width: 9),
             Expanded(
               child: Text(
-                'These compare entries with a score partly calculated from those same entries. They describe the current rules, not an independent health outcome or evidence that a behavior helps.',
+                context.tr(
+                  'These compare entries with a score partly calculated from those same entries. They describe the current rules, not an independent health outcome or evidence that a behavior helps.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10.5,
@@ -787,7 +807,9 @@ class _AssociationsCard extends StatelessWidget {
         const SizedBox(height: 14),
         if (associations.isEmpty)
           Text(
-            'At least three matched days with varied sleep, training, or study entries are needed for an association summary.',
+            context.tr(
+              'At least three matched days with varied sleep, training, or study entries are needed for an association summary.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -843,12 +865,12 @@ class _AssociationRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                association.title,
+                context.tr(association.title),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 3),
               Text(
-                association.detail,
+                context.tr(association.detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -897,7 +919,7 @@ class _ConfidencePanel extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: .3)),
       ),
       child: Text(
-        score?.toString() ?? '—',
+        context.tr(score?.toString() ?? '—'),
         style: TextStyle(
           color: color,
           fontSize: 22,
@@ -912,19 +934,26 @@ class _ConfidencePanel extends StatelessWidget {
           spacing: 8,
           children: [
             Text(
-              '$title data quality',
+              context.tr(
+                '{title} data quality',
+                args: {'title': context.tr(title)},
+              ),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             Text(
-              score == null ? 'Unavailable' : '${(confidence * 100).round()}%',
+              context.tr(
+                score == null
+                    ? 'Unavailable'
+                    : '${(confidence * 100).round()}%',
+              ),
               style: TextStyle(color: color, fontWeight: FontWeight.w600),
             ),
           ],
         ),
         const SizedBox(height: 7),
         if (score == null) ...[
-          const Text(
-            'Not enough information to estimate',
+          Text(
+            context.tr('Not enough information to estimate'),
             style: TextStyle(fontSize: 11),
           ),
           const SizedBox(height: 7),
@@ -940,7 +969,7 @@ class _ConfidencePanel extends StatelessWidget {
         ),
         const SizedBox(height: 7),
         Text(
-          '$coverage · $age',
+          '${context.tr(coverage)} · ${context.tr(age)}',
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 9),
         ),
       ],
@@ -949,9 +978,20 @@ class _ConfidencePanel extends StatelessWidget {
       container: true,
       excludeSemantics: true,
       label: score == null
-          ? '$title: Not enough information to estimate.'
-          : '$title experimental estimate: $score out of 100. '
-                '${(confidence * 100).round()}% data quality, not probability of correctness. $coverage. $age.',
+          ? context.tr(
+              '{title}: Not enough information to estimate.',
+              args: {'title': context.tr(title)},
+            )
+          : context.tr(
+              '{title} experimental estimate: {score} out of 100. {quality}% data quality, not probability of correctness. {coverage}. {age}.',
+              args: {
+                'title': context.tr(title),
+                'score': score,
+                'quality': (confidence * 100).round(),
+                'coverage': context.tr(coverage),
+                'age': context.tr(age),
+              },
+            ),
       child: scale > 1.3
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -987,7 +1027,7 @@ class _RankedDriversCard extends StatelessWidget {
     if (positive.isEmpty && negative.isEmpty && neutral.isEmpty) {
       return TonyoCard(
         child: Text(
-          emptyMessage,
+          context.tr(emptyMessage),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
       );
@@ -1057,7 +1097,7 @@ class _DriverGroup extends StatelessWidget {
           const SizedBox(width: 7),
           Expanded(
             child: Text(
-              title,
+              context.tr(title),
               style: TextStyle(
                 color: color,
                 fontSize: 9,
@@ -1106,7 +1146,7 @@ class _RankedDriverRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            '$rank',
+            context.tr('$rank'),
             style: TextStyle(
               color: color,
               fontSize: 10,
@@ -1123,7 +1163,7 @@ class _RankedDriverRow extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      driver.label,
+                      context.tr(driver.label),
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1131,7 +1171,9 @@ class _RankedDriverRow extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${driver.contribution > 0 ? '+' : ''}${driver.contribution.round()} pts',
+                    context.tr(
+                      '${driver.contribution > 0 ? '+' : ''}${driver.contribution.round()} pts',
+                    ),
                     style: TextStyle(
                       color: color,
                       fontSize: 11,
@@ -1142,7 +1184,7 @@ class _RankedDriverRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                driver.detail,
+                context.tr(driver.detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).text,
                   fontSize: 10,
@@ -1151,7 +1193,7 @@ class _RankedDriverRow extends StatelessWidget {
               if (driver.explanation.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  driver.explanation,
+                  context.tr(driver.explanation),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 9.5,
@@ -1210,7 +1252,7 @@ class _EvidenceChip extends StatelessWidget {
       border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: Text(
-      label,
+      context.tr(label),
       style: TextStyle(
         color: TonyoPalette.of(context).muted,
         fontSize: 8,

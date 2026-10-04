@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
@@ -71,7 +73,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         child: Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: !widget.requireReview && !_busy,
-            title: const Text('Privacy center'),
+            title: Text(context.tr('Privacy center')),
           ),
           body: SafeArea(
             top: false,
@@ -102,7 +104,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                       key: const Key('privacy-resume-deletion-sign-in'),
                       onPressed: _busy ? null : _signOut,
                       icon: const Icon(Icons.login_rounded),
-                      label: const Text('Sign in to finish deletion'),
+                      label: Text(context.tr('Sign in to finish deletion')),
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -111,7 +113,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                           ? null
                           : () => _deleteData(clearDeviceOnly: true),
                       icon: const Icon(Icons.phone_iphone_rounded),
-                      label: const Text('Erase only this device’s Tonyo cache'),
+                      label: Text(
+                        context.tr('Erase only this device’s Tonyo cache'),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -121,10 +125,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                     icon: Icons.fact_check_outlined,
                     color: TonyoPalette.of(context).warning,
                     title: 'A quick review before you continue',
-                    text:
-                        'Your existing records stay in place. Review your age '
-                        'band, region, and data use before new tracking, Health '
-                        'imports, or optional learning can start.',
+                    text: context.tr(
+                      'Your existing records stay in place. Review your age '
+                      'band, region, and data use before new tracking, Health '
+                      'imports, or optional learning can start.',
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TonyoCard(
@@ -135,8 +140,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         if (_controller.isCloudAuthenticated) ...[
                           const SizedBox(height: 12),
                           Text(
-                            'If the account could not be verified while offline, '
-                            'retry when connected to check it and sync pending changes.',
+                            context.tr(
+                              'If the account could not be verified while offline, '
+                              'retry when connected to check it and sync pending changes.',
+                            ),
                             style: TextStyle(
                               color: TonyoPalette.of(context).muted,
                             ),
@@ -150,8 +157,8 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                             icon: const Icon(Icons.sync_rounded),
                             label: Text(
                               _retryingConnection
-                                  ? 'Checking connection…'
-                                  : 'Retry connection',
+                                  ? context.tr('Checking connection…')
+                                  : context.tr('Retry connection'),
                             ),
                           ),
                           if (_connectionError case final error?) ...[
@@ -159,7 +166,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                             Semantics(
                               liveRegion: true,
                               child: Text(
-                                error,
+                                context.tr(error),
                                 style: TextStyle(
                                   color: TonyoPalette.of(context).warning,
                                 ),
@@ -182,14 +189,25 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                       const SizedBox(height: 8),
                       if (consent != null) ...[
                         Text(
-                          '${consent.ageBand.label} · ${consent.region.label}',
+                          context.tr(
+                            "{value0} · {value1}",
+                            args: {
+                              'value0': context.tr(consent.ageBand.label),
+                              'value1': context.tr(consent.region.label),
+                            },
+                          ),
                           key: const Key('privacy-saved-age-region'),
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Acknowledged ${_date(consent.acceptedAt)} · '
-                          'Policy version ${consent.policyVersion}',
+                          context.tr(
+                            "Acknowledged {value0} · Policy version {value1}",
+                            args: {
+                              'value0': _date(consent.acceptedAt),
+                              'value1': consent.policyVersion,
+                            },
+                          ),
                           key: const Key('privacy-consent-receipt'),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
@@ -197,8 +215,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Age and region are saved with your consent record. '
-                          'They cannot be changed here to bypass a protection.',
+                          context.tr(
+                            'Age and region are saved with your consent record. '
+                            'They cannot be changed here to bypass a protection.',
+                          ),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                           ),
@@ -210,7 +230,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         const SizedBox(height: 10),
                         if (_ageLocked && consent == null)
                           Text(
-                            'Selected age band: ${_ageBand!.label}',
+                            context.tr(
+                              "Selected age band: {value0}",
+                              args: {'value0': context.tr(_ageBand!.label)},
+                            ),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         PrivacyChoicesForm(
@@ -249,10 +272,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                           icon: const Icon(Icons.check_rounded),
                           label: Text(
                             _ageLocked
-                                ? 'Guardian setup unavailable'
+                                ? context.tr('Guardian setup unavailable')
                                 : _busy
-                                ? 'Saving…'
-                                : 'Save privacy choices',
+                                ? context.tr('Saving…')
+                                : context.tr('Save privacy choices'),
                           ),
                         ),
                       ],
@@ -269,7 +292,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                       ] else if (_controller.guardianConsentVerified) ...[
                         const SizedBox(height: 12),
                         Text(
-                          'Guardian authorization verified by the account service.',
+                          context.tr(
+                            'Guardian authorization verified by the account service.',
+                          ),
                           key: Key('privacy-guardian-verified'),
                           style: TextStyle(
                             color: TonyoPalette.of(context).success,
@@ -287,11 +312,13 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                               ? null
                               : () => _run(_controller.handleAppResumed),
                           icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Check account status'),
+                          label: Text(context.tr('Check account status')),
                         ),
                         Text(
-                          'Checks the account service without changing your '
-                          'saved choices or opting you into outcome learning.',
+                          context.tr(
+                            'Checks the account service without changing your '
+                            'saved choices or opting you into outcome learning.',
+                          ),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                           ),
@@ -315,15 +342,21 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                       ],
                       Text(
                         _controller.isCloudAuthenticated
-                            ? 'Generate a fresh export of your private Tonyo account '
-                                  'and this device’s available app data.'
-                            : 'Generate an export of Tonyo data stored on this '
-                                  'device. This does not fetch another account.',
+                            ? context.tr(
+                                'Generate a fresh export of your private Tonyo account '
+                                'and this device’s available app data.',
+                              )
+                            : context.tr(
+                                'Generate an export of Tonyo data stored on this '
+                                'device. This does not fetch another account.',
+                              ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Includes sensitive wellness information. Nothing is '
-                        'copied or shared until you explicitly choose to do so.',
+                        context.tr(
+                          'Includes sensitive wellness information. Nothing is '
+                          'copied or shared until you explicitly choose to do so.',
+                        ),
                         style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                       const SizedBox(height: 14),
@@ -335,8 +368,8 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         icon: const Icon(Icons.download_outlined),
                         label: Text(
                           _controller.isExportingData
-                              ? 'Preparing export…'
-                              : 'Generate data export',
+                              ? context.tr('Preparing export…')
+                              : context.tr('Generate data export'),
                         ),
                       ),
                       if (showExport) ...[
@@ -349,7 +382,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                           icon: Icon(
                             _copied ? Icons.check_rounded : Icons.copy_outlined,
                           ),
-                          label: Text(_copied ? 'Copied' : 'Copy JSON export'),
+                          label: Text(
+                            _copied
+                                ? context.tr('Copied')
+                                : context.tr('Copy JSON export'),
+                          ),
                         ),
                         TextButton(
                           key: const Key('privacy-dismiss-export'),
@@ -359,7 +396,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                                   _export = null;
                                   _copied = false;
                                 }),
-                          child: const Text('Dismiss export from this screen'),
+                          child: Text(
+                            context.tr('Dismiss export from this screen'),
+                          ),
                         ),
                       ],
                     ],
@@ -372,16 +411,20 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Reset clears tracking records while keeping your '
-                        'account and profile. Deletion removes your Tonyo '
-                        'account data and this device’s Tonyo cache.',
+                      Text(
+                        context.tr(
+                          'Reset clears tracking records while keeping your '
+                          'account and profile. Deletion removes your Tonyo '
+                          'account data and this device’s Tonyo cache.',
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Neither action deletes the original data in Apple '
-                        'Health, files you exported, or copies cached on other '
-                        'devices. Manage Apple Health access in iOS Settings.',
+                        context.tr(
+                          'Neither action deletes the original data in Apple '
+                          'Health, files you exported, or copies cached on other '
+                          'devices. Manage Apple Health access in iOS Settings.',
+                        ),
                         style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                       const SizedBox(height: 14),
@@ -393,7 +436,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                               ? null
                               : _resetTracking,
                           icon: const Icon(Icons.restart_alt_rounded),
-                          label: const Text('Reset tracking data'),
+                          label: Text(context.tr('Reset tracking data')),
                         ),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
@@ -407,10 +450,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                         icon: const Icon(Icons.delete_outline_rounded),
                         label: Text(
                           _controller.deletionPending
-                              ? 'Retry unfinished deletion'
+                              ? context.tr('Retry unfinished deletion')
                               : _controller.isCloudAuthenticated
-                              ? 'Delete account and data'
-                              : 'Delete local data',
+                              ? context.tr('Delete account and data')
+                              : context.tr('Delete local data'),
                         ),
                       ),
                     ],
@@ -436,7 +479,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                     key: const Key('privacy-review-sign-out'),
                     onPressed: _busy ? null : _signOut,
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Return to welcome without continuing'),
+                    label: Text(
+                      context.tr('Return to welcome without continuing'),
+                    ),
                   ),
                 ],
               ],
@@ -451,8 +496,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Save the data on this device, including unsynced changes, as a JSON '
-        'backup. No internet is needed.',
+        context.tr(
+          'Save the data on this device, including unsynced changes, as a JSON '
+          'backup. No internet is needed.',
+        ),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 10),
@@ -463,7 +510,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
             : _saveBackup,
         style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
         icon: const Icon(Icons.save_alt_rounded),
-        label: Text(_savingBackup ? 'Saving backup…' : 'Save device backup'),
+        label: Text(
+          _savingBackup
+              ? context.tr('Saving backup…')
+              : context.tr('Save device backup'),
+        ),
       ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
@@ -472,11 +523,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
             ? null
             : _restoreBackup,
         icon: const Icon(Icons.restore_rounded),
-        label: const Text('Restore from backup'),
+        label: Text(context.tr('Restore from backup')),
       ),
       if (!_controller.canRestoreDeviceBackup && !_controller.deletionPending)
         Text(
-          'Finish privacy review before restoring records.',
+          context.tr('Finish privacy review before restoring records.'),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
     ],
@@ -547,10 +598,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         _DataUseRow(
           icon: Icons.phone_iphone_rounded,
           title: 'On this device',
-          text:
-              'Your entries and imported Health summaries support wellness '
-              'scores and forecasts. An offline cache, preparation snapshot, '
-              'and any personalized model weights stay on this device.',
+          text: context.tr(
+            'Your entries and imported Health summaries support wellness '
+            'scores and forecasts. An offline cache, preparation snapshot, '
+            'and any personalized model weights stay on this device.',
+          ),
         ),
         const SizedBox(height: 16),
         _DataUseRow(
@@ -570,22 +622,24 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                     'a copy.',
         ),
         const SizedBox(height: 16),
-        const _DataUseRow(
+        _DataUseRow(
           icon: Icons.tune_rounded,
           title: 'Separate, optional controls',
-          text:
-              'Health access, notifications, and outcome learning are separate '
-              'choices. Agreeing to this notice does not enable them. '
-              'Personalized Energy training runs only when you request it.',
+          text: context.tr(
+            'Health access, notifications, and outcome learning are separate '
+            'choices. Agreeing to this notice does not enable them. '
+            'Personalized Energy training runs only when you request it.',
+          ),
         ),
         const SizedBox(height: 16),
-        const _DataUseRow(
+        _DataUseRow(
           icon: Icons.favorite_border_rounded,
           title: 'Wellness estimates, not a diagnosis',
-          text:
-              'Tonyo can be incomplete or wrong. It does not diagnose, treat, '
-              'or replace medical care. Do not rely on its scores for '
-              'medical or safety-critical decisions.',
+          text: context.tr(
+            'Tonyo can be incomplete or wrong. It does not diagnose, treat, '
+            'or replace medical care. Do not rely on its scores for '
+            'medical or safety-critical decisions.',
+          ),
         ),
       ],
     ),
@@ -598,9 +652,11 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         _heading(context, 'Optional outcome learning'),
         const SizedBox(height: 8),
         Text(
-          'Link future check-ins, reaction tests, and optional Coach ratings '
-          'to private outcome records. Energy personalization uses eligible '
-          'records only after a separate model refresh.',
+          context.tr(
+            'Link future check-ins, reaction tests, and optional Coach ratings '
+            'to private outcome records. Energy personalization uses eligible '
+            'records only after a separate model refresh.',
+          ),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         Material(
@@ -608,12 +664,16 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
           child: SwitchListTile(
             key: const Key('privacy-outcome-switch'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow outcome learning'),
+            title: Text(context.tr('Allow outcome learning')),
             subtitle: Text(
               _controller.outcomeConsent
-                  ? 'On · turn off to stop new outcomes and remove this '
-                        'device’s personalized model from use.'
-                  : 'Off · not required to use ordinary wellness tracking.',
+                  ? context.tr(
+                      'On · turn off to stop new outcomes and remove this '
+                      'device’s personalized model from use.',
+                    )
+                  : context.tr(
+                      'Off · not required to use ordinary wellness tracking.',
+                    ),
             ),
             value: _controller.outcomeConsent,
             onChanged:
@@ -626,8 +686,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
           ),
         ),
         Text(
-          'Turning this off does not delete previously saved outcomes. '
-          'Reset tracking or delete data below to remove those records.',
+          context.tr(
+            'Turning this off does not delete previously saved outcomes. '
+            'Reset tracking or delete data below to remove those records.',
+          ),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
       ],
@@ -651,24 +713,26 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Allow optional outcome learning?'),
+          title: Text(context.tr('Allow optional outcome learning?')),
           scrollable: true,
-          content: const Text(
-            'Future Energy check-ins, reaction tests, and optional completed '
-            'Coach ratings will be saved as private outcome records. '
-            'Eligible outcomes can support a small on-device Energy model '
-            'when you separately choose Refresh Energy model. Model weights '
-            'are not uploaded. You can turn this off at any time.',
+          content: Text(
+            context.tr(
+              'Future Energy check-ins, reaction tests, and optional completed '
+              'Coach ratings will be saved as private outcome records. '
+              'Eligible outcomes can support a small on-device Energy model '
+              'when you separately choose Refresh Energy model. Model weights '
+              'are not uploaded. You can turn this off at any time.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Not now'),
+              child: Text(context.tr('Not now')),
             ),
             FilledButton(
               key: const Key('privacy-confirm-outcomes'),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Allow future outcomes'),
+              child: Text(context.tr('Allow future outcomes')),
             ),
           ],
         ),
@@ -713,23 +777,25 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Copy sensitive data?'),
+        title: Text(context.tr('Copy sensitive data?')),
         scrollable: true,
-        content: const Text(
-          'This export contains private wellness and account information. '
-          'Your clipboard may be readable by other apps or synced to other '
-          'devices. Copy only on a device you trust. Tonyo cannot erase '
-          'copies after you share them.',
+        content: Text(
+          context.tr(
+            'This export contains private wellness and account information. '
+            'Your clipboard may be readable by other apps or synced to other '
+            'devices. Copy only on a device you trust. Tonyo cannot erase '
+            'copies after you share them.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           FilledButton(
             key: const Key('privacy-confirm-copy'),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Copy to clipboard'),
+            child: Text(context.tr('Copy to clipboard')),
           ),
         ],
       ),
@@ -757,7 +823,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       if (mounted) {
         setState(() => _export = null);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tracking data cleared. Account kept.')),
+          SnackBar(
+            content: Text(context.tr('Tracking data cleared. Account kept.')),
+          ),
         );
       }
     });
@@ -815,7 +883,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         // error panel is outside this long, accessible scroll view.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_error!),
+            content: Text(context.tr(_error!)),
             duration: const Duration(seconds: 6),
           ),
         );
@@ -827,7 +895,7 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
   }
 
   static Widget _heading(BuildContext context, String text) =>
-      Text(text, style: Theme.of(context).textTheme.titleLarge);
+      Text(context.tr(text), style: Theme.of(context).textTheme.titleLarge);
 
   static String _date(DateTime value) {
     final local = value.toLocal();
@@ -870,8 +938,10 @@ class PrivacyChoicesForm extends StatelessWidget {
     children: [
       if (!locked) ...[
         Text(
-          'Choose your age band and region. We ask before account details '
-          'so age-appropriate protections can apply. No date of birth is needed.',
+          context.tr(
+            'Choose your age band and region. We ask before account details '
+            'so age-appropriate protections can apply. No date of birth is needed.',
+          ),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         const SizedBox(height: 16),
@@ -881,12 +951,14 @@ class PrivacyChoicesForm extends StatelessWidget {
           isExpanded: true,
           isDense: false,
           itemHeight: null,
-          decoration: const InputDecoration(labelText: 'Age band'),
-          hint: const Text('Choose your age band'),
+          decoration: InputDecoration(labelText: context.tr('Age band')),
+          hint: Text(context.tr('Choose your age band')),
           items: PrivacyAgeBand.values
               .map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: Text(value.label)),
+                (value) => DropdownMenuItem(
+                  value: value,
+                  child: Text(context.tr(value.label)),
+                ),
               )
               .toList(),
           onChanged: enabled ? onAgeChanged : null,
@@ -898,12 +970,14 @@ class PrivacyChoicesForm extends StatelessWidget {
           isExpanded: true,
           isDense: false,
           itemHeight: null,
-          decoration: const InputDecoration(labelText: 'Region'),
-          hint: const Text('Choose your region'),
+          decoration: InputDecoration(labelText: context.tr('Region')),
+          hint: Text(context.tr('Choose your region')),
           items: PrivacyRegion.values
               .map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: Text(value.label)),
+                (value) => DropdownMenuItem(
+                  value: value,
+                  child: Text(context.tr(value.label)),
+                ),
               )
               .toList(),
           onChanged: enabled ? onRegionChanged : null,
@@ -916,28 +990,35 @@ class PrivacyChoicesForm extends StatelessWidget {
           icon: Icons.family_restroom_rounded,
           color: TonyoPalette.of(context).warning,
           title: 'A guardian step is needed',
-          text:
-              'This build requires verified guardian authorization before '
-              'under-18 tracking or account setup. A checkbox is not '
-              'verification. New guardian setup is not available in this '
-              'build; no name, email, or health data is needed to stop here.',
+          text: context.tr(
+            'This build requires verified guardian authorization before '
+            'under-18 tracking or account setup. A checkbox is not '
+            'verification. New guardian setup is not available in this '
+            'build; no name, email, or health data is needed to stop here.',
+          ),
         ),
       ],
       const SizedBox(height: 16),
       Text(
         cloudEnabled
-            ? 'Tonyo uses your wellness entries and any Health summaries you '
-                  'choose to import for scores and forecasts. Signed-in data '
-                  'syncs to your private Firebase account, with an offline '
-                  'cache on this device. Firebase handles passwords.'
-            : 'Tonyo uses your wellness entries for scores and forecasts. '
-                  'This build stores app data on this device. Passwords '
-                  'are never saved by Tonyo.',
+            ? context.tr(
+                'Tonyo uses your wellness entries and any Health summaries you '
+                'choose to import for scores and forecasts. Signed-in data '
+                'syncs to your private Firebase account, with an offline '
+                'cache on this device. Firebase handles passwords.',
+              )
+            : context.tr(
+                'Tonyo uses your wellness entries for scores and forecasts. '
+                'This build stores app data on this device. Passwords '
+                'are never saved by Tonyo.',
+              ),
       ),
       const SizedBox(height: 12),
       Text(
-        'Health access and outcome learning are separate opt-ins. '
-        'You can export your data or request deletion in Privacy center.',
+        context.tr(
+          'Health access and outcome learning are separate opt-ins. '
+          'You can export your data or request deletion in Privacy center.',
+        ),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 10),
@@ -949,9 +1030,11 @@ class PrivacyChoicesForm extends StatelessWidget {
           controlAffinity: ListTileControlAffinity.leading,
           value: acknowledged,
           onChanged: enabled ? (value) => onAcknowledged(value ?? false) : null,
-          title: const Text(
-            'I have read this data-use notice and understand Tonyo provides '
-            'wellness estimates, not medical advice or a diagnosis.',
+          title: Text(
+            context.tr(
+              'I have read this data-use notice and understand Tonyo provides '
+              'wellness estimates, not medical advice or a diagnosis.',
+            ),
           ),
         ),
       ),
@@ -980,12 +1063,12 @@ class _PrivacyHero extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          'Your data. Your choices.',
+          context.tr('Your data. Your choices.'),
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
         Text(
-          'Know what Tonyo uses. Decide what comes next.',
+          context.tr('Know what Tonyo uses. Decide what comes next.'),
           style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.5),
         ),
       ],
@@ -1019,9 +1102,12 @@ class _PrivacyNotice extends StatelessWidget {
       children: [
         Icon(icon, color: color),
         const SizedBox(height: 8),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          context.tr(title),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 5),
-        Text(text, style: const TextStyle(height: 1.5)),
+        Text(context.tr(text), style: const TextStyle(height: 1.5)),
       ],
     ),
   );
@@ -1047,9 +1133,15 @@ class _DataUseRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              context.tr(title),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 4),
-            Text(text, style: TextStyle(color: TonyoPalette.of(context).muted)),
+            Text(
+              context.tr(text),
+              style: TextStyle(color: TonyoPalette.of(context).muted),
+            ),
           ],
         ),
       ),
@@ -1093,37 +1185,53 @@ class _ExportSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Export ready',
+            context.tr('Export ready'),
             style: TextStyle(
               color: TonyoPalette.of(context).success,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          Text('${utf8.encode(data).length} bytes · JSON format'),
+          Text(
+            context.tr(
+              "{value0} bytes · JSON format",
+              args: {'value0': utf8.encode(data).length},
+            ),
+          ),
           Text(
             decoded['cloud'] == null
-                ? 'Scope: this device’s Tonyo data'
-                : 'Scope: your Tonyo cloud records and this device’s data',
+                ? context.tr('Scope: this device’s Tonyo data')
+                : context.tr(
+                    'Scope: your Tonyo cloud records and this device’s data',
+                  ),
           ),
           if (counts.isNotEmpty) ...[
             const SizedBox(height: 8),
             for (final count in counts.entries)
-              Text('${count.key}: ${count.value}'),
+              Text(
+                context.tr(
+                  "{value0}: {value1}",
+                  args: {'value0': count.key, 'value1': count.value},
+                ),
+              ),
           ],
           const SizedBox(height: 10),
           Text(
-            'Tonyo records only—not a complete Apple Health archive, Firebase '
-            'password, or files from another device. Keep the export somewhere '
-            'private; this preview is held only while this screen is open.',
+            context.tr(
+              'Tonyo records only—not a complete Apple Health archive, Firebase '
+              'password, or files from another device. Keep the export somewhere '
+              'private; this preview is held only while this screen is open.',
+            ),
             style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
           if (decoded['cloud'] != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Cloud collections are read in sequence, not as one atomic '
-              'snapshot. Nested subcollections are not included. Local and '
-              'cloud counts may overlap or differ while syncing.',
+              context.tr(
+                'Cloud collections are read in sequence, not as one atomic '
+                'snapshot. Nested subcollections are not included. Local and '
+                'cloud counts may overlap or differ while syncing.',
+              ),
               style: TextStyle(color: TonyoPalette.of(context).warning),
             ),
           ],
@@ -1176,14 +1284,14 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
     return AlertDialog(
       title: Text(
         widget.clearDeviceOnly
-            ? 'Erase only this device?'
+            ? context.tr('Erase only this device?')
             : widget.reset
-            ? 'Reset tracking data?'
+            ? context.tr('Reset tracking data?')
             : widget.retry
-            ? 'Retry account deletion?'
+            ? context.tr('Retry account deletion?')
             : widget.cloud
-            ? 'Delete account and data?'
-            : 'Delete local data?',
+            ? context.tr('Delete account and data?')
+            : context.tr('Delete local data?'),
       ),
       scrollable: true,
       content: Column(
@@ -1192,25 +1300,35 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
         children: [
           Text(
             widget.clearDeviceOnly
-                ? 'This erases only this device’s Tonyo cache. It does not '
-                      'confirm deletion of the cloud account or any remaining '
-                      'cloud data. Sign in again to finish cloud deletion.'
+                ? context.tr(
+                    'This erases only this device’s Tonyo cache. It does not '
+                    'confirm deletion of the cloud account or any remaining '
+                    'cloud data. Sign in again to finish cloud deletion.',
+                  )
                 : widget.reset
-                ? 'This permanently clears tracking signals, check-ins, outcomes, '
-                      'scores, guidance, and the personalized model. Your account '
-                      'and profile stay. Connected Apple Health can import '
-                      'records again; disconnect it first if you want to stop imports.'
+                ? context.tr(
+                    'This permanently clears tracking signals, check-ins, outcomes, '
+                    'scores, guidance, and the personalized model. Your account '
+                    'and profile stay. Connected Apple Health can import '
+                    'records again; disconnect it first if you want to stop imports.',
+                  )
                 : widget.cloud
-                ? 'This permanently deletes your Tonyo data in Firestore, '
-                      'your Firebase sign-in account, and this device’s Tonyo '
-                      'cache. Your password is verified before deletion starts.'
-                : 'This permanently deletes the Tonyo profile, tracking records, '
-                      'settings, and cache on this device.',
+                ? context.tr(
+                    'This permanently deletes your Tonyo data in Firestore, '
+                    'your Firebase sign-in account, and this device’s Tonyo '
+                    'cache. Your password is verified before deletion starts.',
+                  )
+                : context.tr(
+                    'This permanently deletes the Tonyo profile, tracking records, '
+                    'settings, and cache on this device.',
+                  ),
           ),
           const SizedBox(height: 12),
           Text(
-            'This cannot be undone. Original Apple Health data, exported '
-            'files, and other devices’ cached copies are not erased.',
+            context.tr(
+              'This cannot be undone. Original Apple Health data, exported '
+              'files, and other devices’ cached copies are not erased.',
+            ),
             style: TextStyle(color: TonyoPalette.of(context).error),
           ),
           const SizedBox(height: 18),
@@ -1222,7 +1340,9 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
               enableSuggestions: false,
               autocorrect: false,
               autofillHints: const [AutofillHints.password],
-              decoration: const InputDecoration(labelText: 'Current password'),
+              decoration: InputDecoration(
+                labelText: context.tr('Current password'),
+              ),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 14),
@@ -1233,7 +1353,12 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
             autocorrect: false,
             enableSuggestions: false,
             textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(labelText: 'Type $word to confirm'),
+            decoration: InputDecoration(
+              labelText: context.tr(
+                "Type {value0} to confirm",
+                args: {'value0': word},
+              ),
+            ),
             onChanged: (_) => setState(() {}),
           ),
         ],
@@ -1241,7 +1366,7 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(context.tr('Cancel')),
         ),
         FilledButton(
           key: const Key('privacy-confirm-deletion'),
@@ -1262,10 +1387,10 @@ class _DestructiveConfirmationState extends State<_DestructiveConfirmation> {
               : null,
           child: Text(
             widget.clearDeviceOnly
-                ? 'Erase this device only'
+                ? context.tr('Erase this device only')
                 : widget.reset
-                ? 'Reset tracking'
-                : 'Delete permanently',
+                ? context.tr('Reset tracking')
+                : context.tr('Delete permanently'),
           ),
         ),
       ],

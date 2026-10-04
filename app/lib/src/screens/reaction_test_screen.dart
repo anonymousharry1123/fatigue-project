@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/translated_text.dart';
 import '../app_controller.dart';
 import '../models.dart';
 import '../reaction_test_logic.dart';
@@ -175,12 +177,12 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reaction Test'),
+        title: const TranslatedText('Reaction Test'),
         backgroundColor: Colors.transparent,
         actions: [
           IconButton.filledTonal(
             onPressed: _help,
-            tooltip: 'Reaction test instructions',
+            tooltip: context.tr('Reaction test instructions'),
             icon: const Icon(Icons.question_mark_rounded, size: 20),
           ),
         ],
@@ -194,7 +196,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
             enabled: phase != _ReactionPhase.saving,
             liveRegion: true,
             label:
-                '$_instruction. $_footer'
+                '${context.tr(_instruction)}. ${context.tr(_footer)}'
                 '${results.isNotEmpty ? '. ${savedAverage == null ? 'Latest round' : 'Test average'}: $latest milliseconds' : ''}',
             onTap: phase == _ReactionPhase.saving ? null : _tap,
             child: ExcludeSemantics(
@@ -218,7 +220,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
+                              TranslatedText(
                                 _instruction,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
@@ -243,14 +245,14 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                 Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(
+                                    TranslatedText(
                                       latest == 0 ? '—' : '$latest',
                                       style: const TextStyle(
                                         fontSize: 36,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    const Text(
+                                    const TranslatedText(
                                       'ms',
                                       style: TextStyle(
                                         fontSize: 14,
@@ -279,7 +281,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                                   ),
                                 ),
                               const SizedBox(height: 20),
-                              Text(
+                              TranslatedText(
                                 _footer,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
@@ -352,19 +354,19 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        const TranslatedText(
                           'Personal baseline',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 3),
-                        Text(
+                        TranslatedText(
                           '${baseline.round()} ms',
                           style: TextStyle(
                             color: TonyoPalette.of(context).secondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        Text(
+                        TranslatedText(
                           savedAverage == null
                               ? 'Your baseline is ${baseline.round()} ms from recent tests.'
                               : ReactionTestLogic.comparisonLabel(
@@ -385,7 +387,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
           ] else ...[
             const SizedBox(height: 12),
             TonyoCard(
-              child: Text(
+              child: TranslatedText(
                 'Complete a few valid tests to build your personal reaction baseline.',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
@@ -433,7 +435,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text(
+                TranslatedText(
                   phase == _ReactionPhase.saveFailed
                       ? 'Your three rounds are ready. Tap Retry saving to try again without repeating the test.'
                       : phase == _ReactionPhase.complete
@@ -511,7 +513,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Too soon — wait until the panel turns green.'),
+            content: TranslatedText(
+              'Too soon — wait until the panel turns green.',
+            ),
           ),
         );
       case _ReactionPhase.ready:
@@ -527,7 +531,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
+              content: TranslatedText(
                 elapsed < ReactionTestLogic.minValidMs
                     ? 'That tap was unrealistically fast and was discarded.'
                     : 'That reaction was too slow and was discarded.',
@@ -630,9 +634,9 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('How it works'),
+        title: const TranslatedText('How it works'),
         scrollable: true,
-        content: const Text(
+        content: const TranslatedText(
           'Start a round, wait for the panel to turn green and display “TAP NOW”, '
           'then tap as quickly as you can. Early taps and out-of-range times '
           'do not count. After three valid rounds, Tonyo compares your average '
@@ -642,7 +646,7 @@ class _ReactionTestScreenState extends State<ReactionTestScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
+            child: const TranslatedText('Got it'),
           ),
         ],
       ),
@@ -675,7 +679,7 @@ class _StatCard extends StatelessWidget {
             Icon(icon, color: color, size: 16),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(
+              child: TranslatedText(
                 title,
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
@@ -687,11 +691,11 @@ class _StatCard extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Text(
+        TranslatedText(
           value,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
         ),
-        Text(
+        TranslatedText(
           detail,
           style: TextStyle(
             color: color,

@@ -426,7 +426,7 @@ void main() {
     await _scrollMainListTo(tester, find.text('Daily check-in'), 200);
     await tester.tap(find.text('Daily check-in'));
     await tester.pumpAndSettle();
-    expect(find.text('How are you feeling?'), findsOneWidget);
+    expect(find.text('How do you feel right now?'), findsOneWidget);
     expect(find.text('Energy'), findsWidgets);
     await tester.scrollUntilVisible(
       find.text('Stress'),
@@ -518,6 +518,11 @@ void main() {
       scrollable: activeVerticalScrollable(),
     );
     expect(find.text('Today’s signals'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('8.0 hr'),
+      200,
+      scrollable: activeVerticalScrollable(),
+    );
     expect(find.text('8.0 hr'), findsOneWidget);
     expect(find.text('2.2 L'), findsOneWidget);
     expect(find.byKey(const Key('recent-signal-grid')), findsOneWidget);

@@ -153,9 +153,16 @@ abstract final class MlPrepBuilder {
           (row) => window.contains(row.timestamp) && !row.timestamp.isAfter(at),
         )
         .toList();
+    final researchCheckInIds = checkIns
+        .where((row) => row.isResearchCheckIn)
+        .map((row) => row.id)
+        .toSet();
     final selectedChecks = checkIns
         .where(
-          (row) => window.contains(row.timestamp) && !row.timestamp.isAfter(at),
+          (row) =>
+              !researchCheckInIds.contains(row.id) &&
+              window.contains(row.timestamp) &&
+              !row.timestamp.isAfter(at),
         )
         .toList();
     if (selectedSignals.length >= PrepCollection.signals.maximumDocuments ||
@@ -214,6 +221,15 @@ abstract final class MlPrepBuilder {
     final hostTimezoneCompatible = _hostTimezoneMatches(snapshot.window);
     final rejected = <Map<String, String>>[];
     final provenance = <String, Map<String, int>>{};
+    // Reject both research rows and any old outcome referencing their IDs.
+    // These custom measurement versions are not compatible legacy labels,
+    // including when an incomplete or duplicated source cannot be parsed.
+    final researchCheckInIds = {
+      for (final raw in snapshot.checkIns)
+        if (DailyCheckIn.researchFields.any(raw.containsKey) &&
+            raw['id'] is String)
+          raw['id'] as String,
+    };
     final collections = {
       'signals': snapshot.signals,
       'checkIns': snapshot.checkIns,
@@ -241,6 +257,12 @@ abstract final class MlPrepBuilder {
         }
         if (parsed.containsKey(id)) {
           reject('duplicate_document_id');
+          continue;
+        }
+        if (collection.key == 'checkIns' &&
+            (DailyCheckIn.researchFields.any(raw.containsKey) ||
+                researchCheckInIds.contains(id))) {
+          reject('research_measurement_not_compatible');
           continue;
         }
         try {
@@ -279,7 +301,7 @@ abstract final class MlPrepBuilder {
       } else if (outcome.consentVersion != snapshot.consent.version) {
         reason = 'consent_version_mismatch';
       } else {
-        reason = _sourceProblem(outcome, records);
+        reason = _sourceProblem(outcome, records, researchCheckInIds);
       }
       final key =
           '${outcome.type.name}/${outcome.source.name}/${outcome.sourceId}';
@@ -439,11 +461,16 @@ abstract final class MlPrepBuilder {
   static String? _sourceProblem(
     OutcomeRecord outcome,
     Map<String, Map<String, _Record>> records,
+    Set<String> researchCheckInIds,
   ) {
     if (outcome.source == OutcomeSource.coach) {
       // Completed recommendation provenance is outside the bounded snapshot.
       // A typed outcome alone cannot establish that its source was real.
       return 'coach_source_unverified';
+    }
+    if (outcome.source == OutcomeSource.checkIn &&
+        researchCheckInIds.contains(outcome.sourceId)) {
+      return 'research_measurement_not_compatible';
     }
     final collection = outcome.source == OutcomeSource.checkIn
         ? 'checkIns'
@@ -568,12 +595,12 @@ abstract final class MlPrepBuilder {
         .firstOrNull;
     features['mood'] = feature(
       'mood',
-      checkIn == null ? null : (checkIn.mood - 5.5) / 4.5,
+      checkIn == null ? null : (checkIn.mood! - 5.5) / 4.5,
       checkIn == null ? [] : [checkIn.id],
     );
     features['stress'] = feature(
       'stress',
-      checkIn == null ? null : (checkIn.stress - 5.5) / 4.5,
+      checkIn == null ? null : (checkIn.stress! - 5.5) / 4.5,
       checkIn == null ? [] : [checkIn.id],
     );
     double? heartDifference(PersonalBaselineType type) =>
@@ -725,6 +752,9 @@ abstract final class MlPrepBuilder {
         groupId: raw['groupId'] as String?,
       );
     } else if (collection == 'checkIns') {
+      if (DailyCheckIn.researchFields.any(raw.containsKey)) {
+        throw const FormatException('Incompatible research measurement.');
+      }
       final energy = _rating(raw['energy']);
       final mood = _rating(raw['mood']);
       final stress = _rating(raw['stress']);

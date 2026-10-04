@@ -19,6 +19,17 @@ abstract final class TonyoFirebaseOptions {
   );
   static const iosBundleId = String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID');
 
+  static bool get hasAnySuppliedValue => [
+    apiKey,
+    webAppId,
+    iosAppId,
+    messagingSenderId,
+    projectId,
+    authDomain,
+    storageBucket,
+    iosBundleId,
+  ].any((value) => value.isNotEmpty);
+
   static String get appId => selectAppId(
     isWeb: kIsWeb,
     platform: defaultTargetPlatform,

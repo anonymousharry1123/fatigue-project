@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../theme.dart';
 import 'add_data_screen.dart';
 import 'coach_screen.dart';
@@ -102,14 +104,14 @@ class _ShellScreenState extends State<ShellScreen> {
       selectedIndex: _index,
       onDestinationSelected: _selectTab,
       destinations: [
-        const NavigationDestination(
-          icon: Icon(Icons.today_outlined),
-          selectedIcon: Icon(Icons.today_rounded),
-          label: 'Today',
+        NavigationDestination(
+          icon: const Icon(Icons.today_outlined),
+          selectedIcon: const Icon(Icons.today_rounded),
+          label: context.tr('Today'),
         ),
-        const NavigationDestination(
-          icon: Icon(Icons.show_chart_rounded),
-          label: 'Forecast',
+        NavigationDestination(
+          icon: const Icon(Icons.show_chart_rounded),
+          label: context.tr('Forecast'),
         ),
         NavigationDestination(
           icon: Container(
@@ -124,17 +126,17 @@ class _ShellScreenState extends State<ShellScreen> {
               color: Theme.of(context).colorScheme.onPrimary,
             ),
           ),
-          label: 'Add',
+          label: context.tr('Add'),
         ),
-        const NavigationDestination(
-          icon: Icon(Icons.chat_bubble_outline_rounded),
-          selectedIcon: Icon(Icons.chat_bubble_rounded),
-          label: 'Coach',
+        NavigationDestination(
+          icon: const Icon(Icons.chat_bubble_outline_rounded),
+          selectedIcon: const Icon(Icons.chat_bubble_rounded),
+          label: context.tr('Coach'),
         ),
-        const NavigationDestination(
-          icon: Icon(Icons.person_outline_rounded),
-          selectedIcon: Icon(Icons.person_rounded),
-          label: 'Profile',
+        NavigationDestination(
+          icon: const Icon(Icons.person_outline_rounded),
+          selectedIcon: const Icon(Icons.person_rounded),
+          label: context.tr('Profile'),
         ),
       ],
     ),

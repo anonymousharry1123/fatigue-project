@@ -1,3 +1,5 @@
+import 'language_preference.dart';
+
 enum SignalType {
   sleep,
   nap,
@@ -316,68 +318,325 @@ class DailyCheckIn {
   const DailyCheckIn({
     required this.id,
     required this.timestamp,
-    required this.energy,
-    required this.mood,
-    required this.stress,
+    this.energy,
+    this.mood,
+    this.stress,
+    this.fatigue,
+    this.sleepiness,
+    this.focus,
     this.period = CheckInPeriod.morning,
     this.note = '',
     this.recordedAt,
+    this.localDate,
+    this.timezone,
+    this.utcOffsetMinutes,
+    this.questionnaireVersion,
+    this.questionnaireLanguage,
+    this.source,
+    this.questionnaireSnapshot,
+    this.originalLegacyRatings,
+    this.legacyPeriodMissing = false,
   });
 
-  /// Energy, mood, and stress use an intuitive 1–10 scale.
   final String id;
   final DateTime timestamp;
-  final double energy;
-  final double mood;
-  final double stress;
+  final double? energy;
+  final double? mood;
+  final double? stress;
+  final double? fatigue;
+  final double? sleepiness;
+  final double? focus;
   final CheckInPeriod period;
   final String note;
 
-  /// Actual save/edit time. An older observation date must not imply that a
-  /// retrospectively entered check-in was already available on that date.
+  /// Actual save/edit time, separately from the observation instant.
   final DateTime? recordedAt;
+  final String? localDate;
+  final String? timezone;
+  final int? utcOffsetMinutes;
+  final String? questionnaireVersion;
+  final String? questionnaireLanguage;
+  final String? source;
+  final Map<String, dynamic>? questionnaireSnapshot;
 
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'timestamp': timestamp.toUtc().toIso8601String(),
+  /// Compatibility projection only: old no-period 1–5 values may still be
+  /// displayed/scored on the former 1–10 scale, but serialization keeps the
+  /// original responses and absent period. This is never a research response.
+  final Map<String, Object?>? originalLegacyRatings;
+  final bool legacyPeriodMissing;
+
+  static const measurementIds = [
+    'energy',
+    'fatigue',
+    'sleepiness',
+    'focus',
+    'mood',
+    'stress',
+  ];
+  static const researchFields = [
+    'fatigue',
+    'sleepiness',
+    'focus',
+    'localDate',
+    'timezone',
+    'utcOffsetMinutes',
+    'questionnaireVersion',
+    'questionnaireLanguage',
+    'questionnaireSnapshot',
+    'source',
+    'completionStatus',
+    'answeredItemCount',
+  ];
+  bool get isResearchCheckIn =>
+      questionnaireVersion != null ||
+      fatigue != null ||
+      sleepiness != null ||
+      focus != null ||
+      localDate != null ||
+      timezone != null ||
+      utcOffsetMinutes != null ||
+      questionnaireLanguage != null ||
+      questionnaireSnapshot != null ||
+      source != null;
+  Map<String, double?> get ratings => {
     'energy': energy,
+    'fatigue': fatigue,
+    'sleepiness': sleepiness,
+    'focus': focus,
     'mood': mood,
     'stress': stress,
-    'period': period.name,
-    'note': note,
-    if (recordedAt != null) 'recordedAt': recordedAt!.toUtc().toIso8601String(),
   };
+  int get answeredItemCount =>
+      ratings.values.where((value) => value != null).length;
+  String? get completionStatus => !isResearchCheckIn
+      ? null
+      : answeredItemCount == 6
+      ? 'complete'
+      : answeredItemCount == 0
+      ? 'empty'
+      : 'partial';
+  bool get isValidResearchResponse =>
+      isResearchCheckIn && researchValidationMessage == null;
+
+  String? get researchValidationMessage {
+    if (questionnaireVersion == null) {
+      return 'A questionnaire version is required.';
+    }
+    for (final value in ratings.values) {
+      if (value != null &&
+          (!value.isFinite ||
+              value < 1 ||
+              value > 10 ||
+              value != value.roundToDouble())) {
+        return 'Each answered rating must be an integer from 1 to 10.';
+      }
+    }
+    if (answeredItemCount == 0) return 'Choose at least one rating.';
+    if (source != 'selfReport' ||
+        recordedAt == null ||
+        recordedAt!.isBefore(timestamp)) {
+      return 'The response source or recording time is invalid.';
+    }
+    if (questionnaireVersion!.isEmpty ||
+        questionnaireVersion!.length > 100 ||
+        !const [
+          'en',
+          'es',
+          'zh-Hans',
+          'zh-Hant',
+        ].contains(questionnaireLanguage)) {
+      return 'The questionnaire version or language is invalid.';
+    }
+    final date = localDate;
+    final parsed = date == null ? null : DateTime.tryParse(date);
+    if (date == null ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
+        parsed == null ||
+        '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}' !=
+            date ||
+        utcOffsetMinutes == null ||
+        utcOffsetMinutes! < -840 ||
+        utcOffsetMinutes! > 840 ||
+        (timezone != null && (timezone!.isEmpty || timezone!.length > 100))) {
+      return 'The captured local date or timezone metadata is invalid.';
+    }
+    final atOffset = timestamp.toUtc().add(
+      Duration(minutes: utcOffsetMinutes!),
+    );
+    final expectedDate =
+        '${atOffset.year.toString().padLeft(4, '0')}-${atOffset.month.toString().padLeft(2, '0')}-${atOffset.day.toString().padLeft(2, '0')}';
+    if (date != expectedDate) {
+      return 'The captured local date does not match the observation instant.';
+    }
+    if (note.length > 10000 ||
+        originalLegacyRatings != null ||
+        legacyPeriodMissing) {
+      return 'The response contains invalid legacy metadata or an oversized note.';
+    }
+    return validQuestionnaireSnapshot(
+          questionnaireSnapshot,
+          version: questionnaireVersion!,
+          language: questionnaireLanguage!,
+        )
+        ? null
+        : 'The saved questionnaire definition is invalid.';
+  }
+
+  static bool validQuestionnaireSnapshot(
+    Map<String, dynamic>? value, {
+    required String version,
+    required String language,
+  }) {
+    bool text(Object? value, int maximum, {bool empty = false}) =>
+        value is String &&
+        (empty || value.isNotEmpty) &&
+        value.length <= maximum;
+    bool keys(Map value, List<String> expected) =>
+        value.length == expected.length && expected.every(value.containsKey);
+    if (value == null ||
+        !keys(value, [
+          'version',
+          'language',
+          'kind',
+          'status',
+          'recallPeriod',
+          'recallPeriodText',
+          'items',
+        ]) ||
+        value['version'] != version ||
+        value['language'] != language ||
+        value['kind'] != 'customSelfReport' ||
+        value['status'] != 'draftNotClinicallyValidated' ||
+        value['recallPeriod'] != 'right now' ||
+        !text(value['recallPeriodText'], 100)) {
+      return false;
+    }
+    final items = value['items'];
+    if (items is! List || items.length != measurementIds.length) return false;
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item is! Map ||
+          !keys(item, ['id', 'label', 'prompt', 'anchors', 'optional']) ||
+          item['id'] != measurementIds[i] ||
+          !text(item['label'], 100) ||
+          !text(item['prompt'], 500, empty: true) ||
+          item['optional'] != true) {
+        return false;
+      }
+      final anchors = item['anchors'];
+      if (anchors is! Map ||
+          !keys(anchors, ['1', '5', '10']) ||
+          !anchors.values.every((value) => text(value, 300))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Map<String, Object?> toJson() {
+    final issue = researchValidationMessage;
+    if (isResearchCheckIn && issue != null) {
+      throw FormatException(issue);
+    }
+    return {
+      'id': id,
+      'timestamp': timestamp.toUtc().toIso8601String(),
+      for (final entry in ratings.entries)
+        if (isResearchCheckIn ||
+            entry.value != null ||
+            const ['energy', 'mood', 'stress'].contains(entry.key))
+          entry.key: originalLegacyRatings?.containsKey(entry.key) == true
+              ? originalLegacyRatings![entry.key]
+              : isResearchCheckIn
+              ? entry.value?.toInt()
+              : entry.value,
+      if (!legacyPeriodMissing) 'period': period.name,
+      'note': note,
+      if (recordedAt != null)
+        'recordedAt': recordedAt!.toUtc().toIso8601String(),
+      if (localDate != null) 'localDate': localDate,
+      if (isResearchCheckIn || timezone != null) 'timezone': timezone,
+      if (utcOffsetMinutes != null) 'utcOffsetMinutes': utcOffsetMinutes,
+      if (questionnaireVersion != null)
+        'questionnaireVersion': questionnaireVersion,
+      if (questionnaireLanguage != null)
+        'questionnaireLanguage': questionnaireLanguage,
+      if (source != null) 'source': source,
+      if (questionnaireSnapshot != null)
+        'questionnaireSnapshot': questionnaireSnapshot,
+      if (isResearchCheckIn) 'completionStatus': completionStatus,
+      if (isResearchCheckIn) 'answeredItemCount': answeredItemCount,
+    };
+  }
 
   factory DailyCheckIn.fromJson(Map<String, dynamic> json) {
     final timestamp = DateTime.parse(json['timestamp'] as String).toLocal();
     final periodName = json['period'] as String?;
-    final legacyScale = periodName == null;
-    final period = periodName != null
-        ? CheckInPeriod.values.byName(periodName)
-        : timestamp.hour < 14
-        ? CheckInPeriod.morning
-        : CheckInPeriod.evening;
-    return DailyCheckIn(
+    final research = researchFields.any(json.containsKey);
+    if (research && json['questionnaireVersion'] == null) {
+      throw const FormatException(
+        'Measurement metadata requires its questionnaire version.',
+      );
+    }
+    if (research && periodName == null) {
+      throw const FormatException(
+        'A research check-in requires its selected period.',
+      );
+    }
+    final legacyScale = !research && periodName == null;
+    final result = DailyCheckIn(
       id: json['id'] as String,
       timestamp: timestamp,
       energy: _ratingFromJson(json['energy'], legacyScale: legacyScale),
       mood: _ratingFromJson(json['mood'], legacyScale: legacyScale),
       stress: _ratingFromJson(json['stress'], legacyScale: legacyScale),
-      period: period,
+      fatigue: _ratingFromJson(json['fatigue']),
+      sleepiness: _ratingFromJson(json['sleepiness']),
+      focus: _ratingFromJson(json['focus']),
+      period: periodName != null
+          ? CheckInPeriod.values.byName(periodName)
+          : timestamp.hour < 14
+          ? CheckInPeriod.morning
+          : CheckInPeriod.evening,
       note: (json['note'] as String?) ?? '',
       recordedAt: json['recordedAt'] == null
           ? null
           : DateTime.parse(json['recordedAt'] as String).toLocal(),
+      localDate: json['localDate'] as String?,
+      timezone: json['timezone'] as String?,
+      utcOffsetMinutes: json['utcOffsetMinutes'] as int?,
+      questionnaireVersion: json['questionnaireVersion'] as String?,
+      questionnaireLanguage: json['questionnaireLanguage'] as String?,
+      source: json['source'] as String?,
+      questionnaireSnapshot: json['questionnaireSnapshot'] == null
+          ? null
+          : Map<String, dynamic>.from(json['questionnaireSnapshot'] as Map),
+      originalLegacyRatings: legacyScale
+          ? Map.unmodifiable({
+              for (final key in const ['energy', 'mood', 'stress'])
+                key: json[key],
+            })
+          : null,
+      legacyPeriodMissing: legacyScale,
     );
+    if (research) {
+      final issue = result.researchValidationMessage;
+      if (issue != null) throw FormatException(issue);
+      if (json['completionStatus'] != result.completionStatus ||
+          json['answeredItemCount'] != result.answeredItemCount) {
+        throw const FormatException(
+          'Response completeness does not match its answers.',
+        );
+      }
+    }
+    return result;
   }
 
-  /// Migrates pre-0.8 1–5 ratings (no period field) onto the 1–10 scale.
-  static double _ratingFromJson(Object? raw, {required bool legacyScale}) {
+  static double? _ratingFromJson(Object? raw, {bool legacyScale = false}) {
+    if (raw == null) return null;
     final value = (raw as num).toDouble();
-    if (legacyScale && value > 0 && value <= 5) {
-      return (value * 2).clamp(1, 10);
-    }
-    return value.clamp(1, 10);
+    if (legacyScale && value > 0 && value <= 5) return value * 2;
+    return value;
   }
 }
 
@@ -481,6 +740,7 @@ class UserProfile {
     this.role = 'Student athlete',
     this.goal = 'Balance focus and training',
     this.coachPriority = CoachPriority.balanced,
+    this.preferredLanguage = defaultLanguagePreference,
     this.wakeHour = 7,
     this.bedHour = 23,
   });
@@ -490,6 +750,7 @@ class UserProfile {
   final String role;
   final String goal;
   final CoachPriority coachPriority;
+  final String preferredLanguage;
   final double wakeHour;
   final double bedHour;
 
@@ -499,6 +760,7 @@ class UserProfile {
     String? role,
     String? goal,
     CoachPriority? coachPriority,
+    String? preferredLanguage,
     double? wakeHour,
     double? bedHour,
   }) => UserProfile(
@@ -507,6 +769,9 @@ class UserProfile {
     role: role ?? this.role,
     goal: goal ?? this.goal,
     coachPriority: coachPriority ?? this.coachPriority,
+    preferredLanguage: preferredLanguage == null
+        ? this.preferredLanguage
+        : normalizeLanguagePreference(preferredLanguage),
     wakeHour: wakeHour ?? this.wakeHour,
     bedHour: bedHour ?? this.bedHour,
   );
@@ -517,6 +782,7 @@ class UserProfile {
     'role': role,
     'goal': goal,
     'coachPriority': coachPriority.name,
+    'preferredLanguage': normalizeLanguagePreference(preferredLanguage),
     'wakeHour': wakeHour,
     'bedHour': bedHour,
   };
@@ -528,6 +794,7 @@ class UserProfile {
       ageRange: (json['ageRange'] as String?) ?? '16–18',
       role: (json['role'] as String?) ?? 'Student athlete',
       goal: goal,
+      preferredLanguage: normalizeLanguagePreference(json['preferredLanguage']),
       coachPriority: json['coachPriority'] == null
           ? coachPriorityFromGoal(goal)
           : CoachPriority.values.byName(json['coachPriority'] as String),

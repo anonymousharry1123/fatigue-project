@@ -2,9 +2,9 @@ import 'energy_model_summary.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 
-/// Version 15 persists score availability and clears obsolete personalization.
+/// Version 16 adds separate raw research check-ins and captured questionnaire metadata.
 /// Optional legacy fields remain unknown rather than acquiring current values.
-const int cloudSchemaVersion = 15;
+const int cloudSchemaVersion = 16;
 
 const int notificationPreferencesVersion = 1;
 
@@ -60,29 +60,26 @@ SignalReading signalFromCloud(String id, Map<String, dynamic> data) {
 }
 
 Map<String, Object?> checkInToCloud(DailyCheckIn checkIn) => {
-  'period': checkIn.period.name,
-  'energy': checkIn.energy,
-  'mood': checkIn.mood,
-  'stress': checkIn.stress,
-  'note': checkIn.note,
+  ...checkIn.toJson()..remove('id'),
   'timestamp': checkIn.timestamp,
   if (checkIn.recordedAt != null) 'recordedAt': checkIn.recordedAt,
   'schemaVersion': cloudSchemaVersion,
 };
 
 DailyCheckIn checkInFromCloud(String id, Map<String, dynamic> data) =>
-    DailyCheckIn(
-      id: id,
-      period: CheckInPeriod.values.byName(data['period'] as String),
-      energy: (data['energy'] as num).toDouble(),
-      mood: (data['mood'] as num).toDouble(),
-      stress: (data['stress'] as num).toDouble(),
-      note: (data['note'] as String?) ?? '',
-      timestamp: cloudDateTime(data['timestamp'], field: 'timestamp'),
-      recordedAt: data['recordedAt'] == null
-          ? null
-          : cloudDateTime(data['recordedAt'], field: 'recordedAt'),
-    );
+    DailyCheckIn.fromJson({
+      ...data,
+      'id': id,
+      'timestamp': cloudDateTime(
+        data['timestamp'],
+        field: 'timestamp',
+      ).toUtc().toIso8601String(),
+      if (data['recordedAt'] != null)
+        'recordedAt': cloudDateTime(
+          data['recordedAt'],
+          field: 'recordedAt',
+        ).toUtc().toIso8601String(),
+    });
 
 Map<String, Object?> profileToCloud({
   required UserProfile profile,

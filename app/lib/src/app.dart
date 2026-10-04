@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_controller.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/privacy_center_screen.dart';
 import 'screens/shell_screen.dart';
@@ -137,6 +139,14 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
               key: ValueKey(navigatorIdentity),
               navigatorObservers: [_notificationNavigation],
               title: 'Tonyo',
+              locale: localeForLanguage(controller.effectiveLanguage),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
               debugShowCheckedModeBanner: false,
               scrollBehavior: const TonyoScrollBehavior(),
               theme: buildTonyoTheme(

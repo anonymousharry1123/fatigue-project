@@ -245,10 +245,10 @@ abstract final class FatigueEngine {
       );
     }
     if (latestCheckIn != null) {
-      final moodImpact = ((latestCheckIn.mood - 5.5) * 1.8)
+      final moodImpact = ((latestCheckIn.mood! - 5.5) * 1.8)
           .clamp(-8, 8)
           .toDouble();
-      final stressImpact = ((5.5 - latestCheckIn.stress) * 2)
+      final stressImpact = ((5.5 - latestCheckIn.stress!) * 2)
           .clamp(-9, 9)
           .toDouble();
       energy += moodImpact + stressImpact;
@@ -256,7 +256,7 @@ abstract final class FatigueEngine {
         _checkInDriver(
           'Mood',
           moodImpact,
-          '${latestCheckIn.mood.round()}/10 at latest check-in',
+          '${latestCheckIn.mood!.round()}/10 at latest check-in',
           checkIn: latestCheckIn,
           cutoff: cutoff,
         ),
@@ -265,7 +265,7 @@ abstract final class FatigueEngine {
         _checkInDriver(
           'Stress',
           stressImpact,
-          '${latestCheckIn.stress.round()}/10 at latest check-in',
+          '${latestCheckIn.stress!.round()}/10 at latest check-in',
           checkIn: latestCheckIn,
           cutoff: cutoff,
         ),
@@ -357,10 +357,10 @@ abstract final class FatigueEngine {
       );
     }
     if (latestCheckIn != null) {
-      final moodImpact = ((latestCheckIn.mood - 5.5) * 1.5)
+      final moodImpact = ((latestCheckIn.mood! - 5.5) * 1.5)
           .clamp(-7, 7)
           .toDouble();
-      final stressImpact = ((5.5 - latestCheckIn.stress) * 2)
+      final stressImpact = ((5.5 - latestCheckIn.stress!) * 2)
           .clamp(-9, 9)
           .toDouble();
       cognitive += moodImpact + stressImpact;
@@ -368,7 +368,7 @@ abstract final class FatigueEngine {
         _checkInDriver(
           'Mood',
           moodImpact,
-          '${latestCheckIn.mood.round()}/10 at latest check-in',
+          '${latestCheckIn.mood!.round()}/10 at latest check-in',
           checkIn: latestCheckIn,
           cutoff: cutoff,
         ),
@@ -377,7 +377,7 @@ abstract final class FatigueEngine {
         _checkInDriver(
           'Stress',
           stressImpact,
-          '${latestCheckIn.stress.round()}/10 at latest check-in',
+          '${latestCheckIn.stress!.round()}/10 at latest check-in',
           checkIn: latestCheckIn,
           cutoff: cutoff,
         ),
@@ -488,11 +488,13 @@ abstract final class FatigueEngine {
           }.contains(item.type) ||
           item.value > 0);
 
-  static bool _isUsableCheckIn(DailyCheckIn item) => [
-    item.energy,
-    item.mood,
-    item.stress,
-  ].every((value) => value.isFinite && value >= 1 && value <= 10);
+  // Custom research ratings have different wording and a separate measurement
+  // version. They are raw self-reports, never inputs to these legacy estimates.
+  static bool _isUsableCheckIn(DailyCheckIn item) =>
+      !item.isResearchCheckIn &&
+      [item.energy, item.mood, item.stress].every(
+        (value) => value != null && value.isFinite && value >= 1 && value <= 10,
+      );
 
   static String _baselineDetail(
     PersonalBaselineMetric? baseline, {
@@ -876,9 +878,9 @@ abstract final class FatigueEngine {
     final latestCheckIn = recentCheckIns.firstOrNull;
     final checkInAdjustment = latestCheckIn == null
         ? 0.0
-        : ((latestCheckIn.energy - 5.5) * 1.1 +
-                  (latestCheckIn.mood - 5.5) * .45 -
-                  (latestCheckIn.stress - 5.5) * .65)
+        : ((latestCheckIn.energy! - 5.5) * 1.1 +
+                  (latestCheckIn.mood! - 5.5) * .45 -
+                  (latestCheckIn.stress! - 5.5) * .65)
               .clamp(-8.0, 8.0);
     final workload = studyHours;
 
@@ -1161,7 +1163,11 @@ abstract final class FatigueEngine {
     }
     final linkedCheckIns =
         checkIns
-            .where((checkIn) => linkedCheckInIds.contains(checkIn.id))
+            .where(
+              (checkIn) =>
+                  _isUsableCheckIn(checkIn) &&
+                  linkedCheckInIds.contains(checkIn.id),
+            )
             .toList()
           ..sort((left, right) => right.timestamp.compareTo(left.timestamp));
     if (linkedCheckIns.firstOrNull case final checkIn?) {
@@ -1176,7 +1182,7 @@ abstract final class FatigueEngine {
           kind: ForecastEvidenceKind.checkIn,
           label: '${checkIn.period.label} check-in',
           detail:
-              'Energy ${checkIn.energy.round()}/10 · mood ${checkIn.mood.round()}/10 · stress ${checkIn.stress.round()}/10',
+              'Energy ${checkIn.energy!.round()}/10 · mood ${checkIn.mood!.round()}/10 · stress ${checkIn.stress!.round()}/10',
           timestamp: checkIn.timestamp,
         ),
       ));
@@ -1281,7 +1287,7 @@ abstract final class FatigueEngine {
     // and age-supported comparisons are shown separately with coverage.
     final strainedByDay = <String, DailyCheckIn>{};
     for (final item in recentCheckIns.where(
-      (item) => item.stress >= 7 && item.energy <= 4,
+      (item) => item.stress! >= 7 && item.energy! <= 4,
     )) {
       strainedByDay.putIfAbsent(_dayIdentifier(item.timestamp), () => item);
     }
@@ -1320,7 +1326,7 @@ abstract final class FatigueEngine {
     kind: ForecastEvidenceKind.checkIn,
     label: '${checkIn.period.label} check-in',
     detail:
-        'Energy ${checkIn.energy.round()}/10 · mood ${checkIn.mood.round()}/10 · stress ${checkIn.stress.round()}/10',
+        'Energy ${checkIn.energy!.round()}/10 · mood ${checkIn.mood!.round()}/10 · stress ${checkIn.stress!.round()}/10',
     timestamp: checkIn.timestamp,
   );
 

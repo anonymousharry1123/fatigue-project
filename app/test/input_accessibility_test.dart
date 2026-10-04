@@ -11,7 +11,6 @@ import 'package:app/src/screens/daily_checkin_screen.dart';
 import 'package:app/src/screens/sleep_log_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -62,27 +61,30 @@ void main() {
     });
   }
 
-  testWidgets('check-in slider announces its name and rating', (tester) async {
+  testWidgets('check-in starts unset with accessible explicit rating choices', (
+    tester,
+  ) async {
     final controller = AppController(
       initialPrivacyConsent: testAdultPrivacyConsent,
     );
     addTearDown(controller.dispose);
     final semantics = tester.ensureSemantics();
     await _pump(tester, controller, const DailyCheckInScreen());
-    await tester.scrollUntilVisible(find.byType(Slider).first, 250);
-    final energy = tester.getSemantics(find.byType(Slider).first);
-    expect(energy.label, 'Energy');
-    SemanticsNode? rating;
-    energy.visitChildren((child) {
-      if (child.value.isNotEmpty) rating = child;
-      return true;
-    });
-    expect(rating?.value, '6 out of 10');
-    expect(rating?.increasedValue, '7 out of 10');
-    expect(rating?.decreasedValue, '5 out of 10');
+    final choice = find.byKey(const Key('rating-energy-6'));
+    await tester.scrollUntilVisible(choice, 250);
+    await tester.ensureVisible(choice);
+    final card = find.byKey(const Key('rating-energy'));
     expect(
-      tester.getSize(find.byType(Slider).first).height,
-      greaterThanOrEqualTo(48),
+      find.descendant(of: card, matching: find.text('Not answered')),
+      findsOneWidget,
+    );
+    expect(tester.getSize(choice), const Size(48, 48));
+    expect(find.bySemanticsLabel('Energy, 6 out of 10'), findsOneWidget);
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: card, matching: find.text('6 out of 10')),
+      findsOneWidget,
     );
     semantics.dispose();
   });
@@ -132,6 +134,17 @@ void main() {
     final controller = _FailingSaveController();
     addTearDown(controller.dispose);
     await _pump(tester, controller, const DailyCheckInScreen());
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('checkin-period-morning')),
+      250,
+    );
+    await tester.tap(find.byKey(const Key('checkin-period-morning')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('rating-energy-6')),
+      250,
+    );
+    await tester.ensureVisible(find.byKey(const Key('rating-energy-6')));
+    await tester.tap(find.byKey(const Key('rating-energy-6')));
     await tester.scrollUntilVisible(find.byType(TextField), 300);
     await tester.enterText(find.byType(TextField), 'A busy day');
     await tester.tap(find.text('Save check-in'));
@@ -349,24 +362,36 @@ class _FailingSaveController extends AppController {
   }
 
   @override
-  Future<void> addCheckIn({
+  Future<void> saveSelfReportCheckIn({
     String? id,
-    required double energy,
-    required double mood,
-    required double stress,
+    required CheckInPeriod period,
+    double? energy,
+    double? fatigue,
+    double? sleepiness,
+    double? focus,
+    double? mood,
+    double? stress,
     String note = '',
+    required Map<String, dynamic> questionnaireSnapshot,
+    required String questionnaireLanguage,
     DateTime? timestamp,
   }) async {
     checkInAttempts++;
     checkInIds.add(id);
     await Future.wait([
       pending.future,
-      super.addCheckIn(
+      super.saveSelfReportCheckIn(
         id: id,
+        period: period,
         energy: energy,
+        fatigue: fatigue,
+        sleepiness: sleepiness,
+        focus: focus,
         mood: mood,
         stress: stress,
         note: note,
+        questionnaireSnapshot: questionnaireSnapshot,
+        questionnaireLanguage: questionnaireLanguage,
         timestamp: timestamp,
       ),
     ]);

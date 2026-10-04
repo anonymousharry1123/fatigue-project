@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/translated_text.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -22,12 +24,12 @@ class AddDataScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
-          Text(
+          TranslatedText(
             'Add & Explore',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 5),
-          Text(
+          TranslatedText(
             'Log how you feel and run your daily reaction benchmark.',
             style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
@@ -63,7 +65,8 @@ class AddDataScreen extends StatelessWidget {
             icon: Icons.sentiment_satisfied_alt_rounded,
             color: TonyoPalette.of(context).secondary,
             title: 'Daily check-in',
-            detail: 'Energy, mood, and stress · 1–10',
+            detail:
+                'Energy, fatigue, sleepiness, focus, mood, and stress · 1–10',
             badge: '${controller.checkIns.length} saved',
             onTap: () => _push(context, const DailyCheckInScreen()),
           ),
@@ -101,17 +104,33 @@ class AddDataScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      const TranslatedText(
                         'Your saved inputs',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '${controller.activityLogs.length} activity logs, ${controller.sleepLogs.length} sleep logs, ${controller.checkIns.length} check-ins, and ${controller.signals.where((item) => item.type == SignalType.reactionTime).length} reaction tests are ${controller.cloudSyncError != null
-                            ? 'saved on this device, with cloud sync pending'
-                            : controller.isCloudAuthenticated
-                            ? 'synced to your account and cached offline'
-                            : 'saved on this device'}.',
+                      TranslatedText(
+                        context.tr(
+                          '{activities} activity logs, {sleeps} sleep logs, {checkins} check-ins, and {reactions} reaction tests are {storage}.',
+                          args: {
+                            'activities': controller.activityLogs.length,
+                            'sleeps': controller.sleepLogs.length,
+                            'checkins': controller.checkIns.length,
+                            'reactions': controller.signals
+                                .where(
+                                  (item) =>
+                                      item.type == SignalType.reactionTime,
+                                )
+                                .length,
+                            'storage': context.tr(
+                              controller.cloudSyncError != null
+                                  ? 'saved on this device, with cloud sync pending'
+                                  : controller.isCloudAuthenticated
+                                  ? 'synced to your account and cached offline'
+                                  : 'saved on this device',
+                            ),
+                          },
+                        ),
                         style: TextStyle(
                           color: TonyoPalette.of(context).muted,
                           fontSize: 11,
@@ -165,7 +184,7 @@ class _LaunchCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    TranslatedText(
                       title,
                       style: const TextStyle(
                         fontSize: 16,
@@ -173,7 +192,7 @@ class _LaunchCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Text(
+                    TranslatedText(
                       detail,
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
@@ -190,7 +209,7 @@ class _LaunchCard extends StatelessWidget {
                         color: color.withValues(alpha: .13),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Text(
+                      child: TranslatedText(
                         badge,
                         style: TextStyle(
                           color: color,

@@ -552,3 +552,154 @@ test('server-authorized lab operators can use synthetic paths but not other user
   await assertFails(getDoc(child(db)));
   await assertFails(setDoc(child(db), { value: 2 }));
 });
+
+// Phase 2A uses existing owner checkIns documents. These are synthetic custom
+// item definitions, not published instruments or real participant responses.
+const researchCheckIn = (changes = {}) => ({
+  energy: 7, fatigue: 3, sleepiness: null, focus: null, mood: null, stress: null,
+  period: 'morning', note: '',
+  timestamp: Timestamp.fromDate(new Date('2026-10-04T18:00:00Z')),
+  recordedAt: Timestamp.fromDate(new Date('2026-10-04T18:01:00Z')),
+  localDate: '2026-10-04', timezone: 'America/Los_Angeles', utcOffsetMinutes: -420,
+  questionnaireVersion: 'tonyo-self-report-draft-v1', questionnaireLanguage: 'en',
+  source: 'selfReport', completionStatus: 'partial', answeredItemCount: 2,
+  schemaVersion: 16,
+  questionnaireSnapshot: {
+    version: 'tonyo-self-report-draft-v1', language: 'en', kind: 'customSelfReport',
+    status: 'draftNotClinicallyValidated', recallPeriod: 'right now', recallPeriodText: 'right now',
+    items: ['energy', 'fatigue', 'sleepiness', 'focus', 'mood', 'stress'].map(id => ({
+      id, label: id, prompt: '', anchors: {'1': 'low', '5': 'middle', '10': 'high'}, optional: true,
+    })),
+  }, ...changes,
+});
+
+test('Phase 2A partial integer answers and explicit clearing survive real server reload/export', async () => {
+  await seed();
+  const db = signedIn();
+  const ref = child(db, 'checkIns', 'measurement');
+  await assertSucceeds(setDoc(ref, researchCheckIn()));
+  await assertSucceeds(runTransaction(db, async transaction => {
+    const previous = await transaction.get(ref);
+    assert.equal(previous.data().energy, 7);
+    transaction.set(ref, { energy: null, answeredItemCount: 1 }, { merge: true });
+  }));
+  const fresh = signedIn();
+  const loaded = (await assertSucceeds(getDocFromServer(child(fresh, 'checkIns', 'measurement')))).data();
+  assert.equal(loaded.energy, null);
+  assert.equal(loaded.fatigue, 3);
+  assert.equal(loaded.sleepiness, null);
+  assert.equal(loaded.period, 'morning');
+  assert.equal(loaded.completionStatus, 'partial');
+  assert.equal(loaded.questionnaireSnapshot.items.length, 6);
+  assert.equal((await assertSucceeds(getDocsFromServer(collection(fresh, 'users/owner/checkIns')))).size, 1);
+});
+
+test('Phase 2A rejects zero, fractional, empty and malformed metadata without filling missing answers', async () => {
+  await seed();
+  const db = signedIn();
+  for (const value of [0, -1, 11, 6.5, '7', Number.NaN]) {
+    await assertFails(setDoc(child(db, 'checkIns', 'invalid'), researchCheckIn({ energy: value })));
+  }
+  for (const changes of [
+    { energy: null, fatigue: null, answeredItemCount: 0, completionStatus: 'empty' },
+    { answeredItemCount: 6 }, { completionStatus: 'complete' }, { period: 'afternoon' },
+    { questionnaireVersion: null }, { questionnaireLanguage: 'unknown' },
+    { localDate: 'today' }, { utcOffsetMinutes: 900 }, { source: 'model' },
+    { questionnaireSnapshot: {} }, { recordedAt: Timestamp.fromMillis(0) },
+  ]) {
+    await assertFails(setDoc(child(db, 'checkIns', 'invalid'), researchCheckIn(changes)));
+  }
+  const missingMarker = researchCheckIn();
+  delete missingMarker.questionnaireVersion;
+  await assertFails(setDoc(child(db, 'checkIns', 'invalid'), missingMarker));
+});
+
+test('Phase 2A definitions cannot be downgraded, rewritten or attached to a legacy response', async () => {
+  await seed();
+  const db = signedIn();
+  const ref = child(db, 'checkIns', 'measurement');
+  await assertSucceeds(setDoc(ref, researchCheckIn()));
+  await assertFails(setDoc(ref, { period: 'morning', energy: 7, mood: 6, stress: 4 }));
+  await assertFails(updateDoc(ref, { questionnaireVersion: deleteField() }));
+  await assertFails(updateDoc(ref, { 'questionnaireSnapshot.items': [] }));
+  const changed = researchCheckIn();
+  changed.questionnaireSnapshot.items[0].anchors['10'] = 'different wording';
+  await assertFails(setDoc(ref, changed));
+  await assertFails(updateDoc(ref, { timestamp: Timestamp.fromDate(new Date('2026-10-04T17:00:00Z')) }));
+  const legacy = child(db, 'checkIns', 'legacy');
+  await assertSucceeds(setDoc(legacy, { period: 'morning', energy: 7, mood: 6, stress: 4 }));
+  await assertFails(setDoc(legacy, researchCheckIn()));
+  await assertSucceeds(updateDoc(legacy, { note: 'retained legacy edit' }));
+});
+
+test('Phase 2A complete response stays six independent values and permits deliberate clearing', async () => {
+  await seed();
+  const db = signedIn();
+  const ref = child(db, 'checkIns', 'complete');
+  await assertSucceeds(setDoc(ref, researchCheckIn({
+    sleepiness: 4, focus: 8, mood: 6, stress: 2, completionStatus: 'complete', answeredItemCount: 6,
+  })));
+  const data = (await getDocFromServer(ref)).data();
+  assert.deepEqual(['energy', 'fatigue', 'sleepiness', 'focus', 'mood', 'stress'].map(key => data[key]), [7, 3, 4, 8, 6, 2]);
+  await assertSucceeds(updateDoc(ref, { fatigue: deleteField(), answeredItemCount: 5, completionStatus: 'partial' }));
+  assert.equal((await getDocFromServer(ref)).data().fatigue, undefined);
+});
+
+test('Phase 2A enforces privacy/guardian/account isolation while optional learning remains separate', async () => {
+  await seed();
+  const owner = signedIn();
+  await assertSucceeds(setDoc(child(owner, 'checkIns', 'measurement'), researchCheckIn()));
+  await assertFails(setDoc(child(signedIn('other'), 'checkIns', 'cross'), researchCheckIn()));
+  await assertFails(getDoc(child(signedIn('other'), 'checkIns', 'measurement')));
+  await assertFails(setDoc(child(owner, 'outcomes', 'not-opted-in'), { value: 7 }));
+  await seed(profile({ privacyConsent: privacy({ ageBand: '16to17' }) }));
+  await assertFails(setDoc(child(owner, 'checkIns', 'minor'), researchCheckIn()));
+  await assertSucceeds(setDoc(child(signedIn('owner', guardianClaims), 'checkIns', 'minor'), researchCheckIn()));
+  await seed({ consentFlags: flags(false) });
+  await assertFails(setDoc(child(owner, 'checkIns', 'no-consent'), researchCheckIn()));
+  await assertSucceeds(getDocsFromServer(collection(owner, 'users/owner/checkIns')));
+  await assertSucceeds(deleteDoc(child(owner, 'checkIns', 'measurement')));
+});
+
+test('Phase 2A snapshot bounds still reject malformed keys, types and oversized text', async () => {
+  await seed();
+  const db = signedIn();
+  const mutations = [
+    data => { data.questionnaireSnapshot.extra = true; },
+    data => { delete data.questionnaireSnapshot.status; },
+    data => { data.questionnaireSnapshot.items[2].extra = true; },
+    data => { delete data.questionnaireSnapshot.items[2].prompt; },
+    data => { data.questionnaireSnapshot.items[2].anchors.extra = 'unexpected'; },
+    data => { delete data.questionnaireSnapshot.items[2].anchors['5']; },
+    data => { data.questionnaireSnapshot.items[2].label = 12; },
+    data => { data.questionnaireSnapshot.items[2].prompt = {}; },
+    data => { data.questionnaireSnapshot.items[2].anchors['1'] = []; },
+    data => { data.questionnaireSnapshot.items[2].label = ''; },
+    data => { data.questionnaireSnapshot.items[2].label = 'x'.repeat(101); },
+    data => { data.questionnaireSnapshot.items[2].prompt = 'x'.repeat(501); },
+    data => { data.questionnaireSnapshot.items[2].anchors['10'] = 'x'.repeat(301); },
+    data => { data.questionnaireSnapshot.items[2].optional = false; },
+    data => { data.questionnaireSnapshot.items[2].id = 'energy'; },
+  ];
+  for (const mutate of mutations) {
+    const data = researchCheckIn();
+    mutate(data);
+    await assertFails(setDoc(child(db, 'checkIns', 'bad-shape'), data));
+  }
+});
+
+test('Phase 2A counts duplicate ratings and supports bounded Unicode text under guardian checks', async () => {
+  await seed(profile({ privacyConsent: privacy({ ageBand: '16to17' }) }));
+  const db = signedIn('owner', guardianClaims);
+  const data = researchCheckIn({ energy: 7, fatigue: 7, sleepiness: 7, focus: 7,
+    mood: 7, stress: 7, completionStatus: 'complete', answeredItemCount: 6 });
+  data.questionnaireSnapshot.items[0].label = '精力';
+  data.questionnaireSnapshot.items[0].prompt = 'línea\n下一行';
+  const ref = child(db, 'checkIns', 'same-ratings');
+  await assertSucceeds(setDoc(ref, data));
+  await assertSucceeds(updateDoc(ref, { note: 'same six answers retained' }));
+  const saved = (await getDocFromServer(ref)).data();
+  assert.equal(saved.answeredItemCount, 6);
+  assert.equal(saved.questionnaireSnapshot.items[0].label, '精力');
+  assert.equal(saved.questionnaireSnapshot.items[0].prompt, 'línea\n下一行');
+});

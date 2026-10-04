@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../account_error.dart';
 import '../app_controller.dart';
 import '../theme.dart';
@@ -56,7 +58,7 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_isSubmitting,
     child: AlertDialog(
-      title: const Text('Sign in to Tonyo'),
+      title: Text(context.tr('Sign in to Tonyo')),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -65,7 +67,9 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
+                  context.tr(
+                    'Your existing local data is migrated only if this cloud account has no Tonyo data yet.',
+                  ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 12,
@@ -80,14 +84,14 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.username],
                   autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Email'),
+                  decoration: InputDecoration(labelText: context.tr('Email')),
                   validator: (value) {
                     final email = value?.trim() ?? '';
-                    if (email.isEmpty) return 'Enter your email.';
+                    if (email.isEmpty) return context.tr('Enter your email.');
                     if (!RegExp(
                       r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                     ).hasMatch(email)) {
-                      return 'Enter a valid email address.';
+                      return context.tr('Enter a valid email address.');
                     }
                     return null;
                   },
@@ -102,9 +106,11 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                   enableSuggestions: false,
                   textInputAction: TextInputAction.done,
                   autofillHints: const [AutofillHints.password],
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  decoration: InputDecoration(
+                    labelText: context.tr('Password'),
+                  ),
                   validator: (value) => value == null || value.isEmpty
-                      ? 'Enter your password.'
+                      ? context.tr('Enter your password.')
                       : null,
                   onFieldSubmitted: (_) => _signIn(),
                 ),
@@ -113,7 +119,7 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                   Semantics(
                     liveRegion: true,
                     child: Text(
-                      _error!,
+                      context.tr(_error!),
                       key: const Key('profile-sign-in-error'),
                       style: TextStyle(color: TonyoPalette.of(context).error),
                     ),
@@ -128,13 +134,13 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
         TextButton(
           key: const Key('profile-sign-in-cancel'),
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('Cancel')),
         ),
         FilledButton(
           key: const Key('profile-sign-in-submit'),
           onPressed: _isSubmitting ? null : _signIn,
           child: _isSubmitting
-              ? const Row(
+              ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox.square(
@@ -142,10 +148,10 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
-                    Text('Signing in…'),
+                    Text(context.tr('Signing in…')),
                   ],
                 )
-              : const Text('Sign in'),
+              : Text(context.tr('Sign in')),
         ),
       ],
     ),

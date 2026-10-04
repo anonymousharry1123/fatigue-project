@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../theme.dart';
 import '../theme_controller.dart';
 import '../typography.dart';
@@ -12,12 +14,15 @@ class AppearanceScreen extends StatelessWidget {
     final controller = ThemeScope.of(context);
     final preferences = controller.preferences;
     return Scaffold(
-      appBar: AppBar(title: const Text('Appearance')),
+      appBar: AppBar(title: Text(context.tr('Appearance'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text('Mode', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              context.tr('Mode'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             Card(
               child: Column(
@@ -36,7 +41,7 @@ class AppearanceScreen extends StatelessWidget {
                       child: ListTile(
                         key: ValueKey('appearance-mode-${mode.name}'),
                         leading: Icon(icon),
-                        title: Text(label),
+                        title: Text(context.tr(label)),
                         trailing: preferences.mode == mode
                             ? Icon(
                                 Icons.check_circle,
@@ -62,8 +67,8 @@ class AppearanceScreen extends StatelessWidget {
               child: ListTile(
                 key: const Key('appearance-font-picker'),
                 leading: const Icon(Icons.text_fields_rounded),
-                title: const Text('Font'),
-                subtitle: Text(preferences.font.label),
+                title: Text(context.tr('Font')),
+                subtitle: Text(context.tr(preferences.font.label)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute(builder: (_) => const _FontScreen()),
@@ -71,7 +76,10 @@ class AppearanceScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Text('Theme', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              context.tr('Theme'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             for (final preset in tonyoThemePresets) ...[
               _ThemeChoice(
@@ -104,7 +112,7 @@ class AppearanceScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Semantics(
                 liveRegion: true,
-                child: const Text('Saving appearance…'),
+                child: Text(context.tr('Saving appearance…')),
               ),
             ],
           ],
@@ -124,9 +132,9 @@ Future<void> _saveSelection(
     ..clearSnackBars()
     ..showSnackBar(
       SnackBar(
-        content: Text(controller.error!),
+        content: Text(context.tr(controller.error!)),
         action: SnackBarAction(
-          label: 'Retry',
+          label: context.tr('Retry'),
           onPressed: () =>
               _saveSelection(context, controller, controller.retry()),
         ),
@@ -142,17 +150,17 @@ class _FontScreen extends StatelessWidget {
     final controller = ThemeScope.of(context);
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Font')),
+      appBar: AppBar(title: Text(context.tr('Font'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              'Clear, professional fonts for your daily insights.',
+              context.tr('Clear, professional fonts for your daily insights.'),
               style: theme.textTheme.bodyLarge,
             ),
             const SizedBox(height: 20),
-            Text('Preview', style: theme.textTheme.titleLarge),
+            Text(context.tr('Preview'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             Card(
               key: const Key('appearance-font-preview'),
@@ -161,19 +169,27 @@ class _FontScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Your day', style: theme.textTheme.headlineMedium),
+                    Text(
+                      context.tr('Your day'),
+                      style: theme.textTheme.headlineMedium,
+                    ),
                     const SizedBox(height: 8),
-                    const Text('A clear view of your energy and recovery.'),
+                    Text(
+                      context.tr('A clear view of your energy and recovery.'),
+                    ),
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 24,
                       runSpacing: 12,
                       children: [
                         Text(
-                          'Energy 82 / 100',
+                          context.tr('Energy 82 / 100'),
                           style: theme.textTheme.titleMedium,
                         ),
-                        Text('Sleep 7.5 h', style: theme.textTheme.titleMedium),
+                        Text(
+                          context.tr('Sleep 7.5 h'),
+                          style: theme.textTheme.titleMedium,
+                        ),
                       ],
                     ),
                   ],
@@ -200,7 +216,7 @@ class _FontScreen extends StatelessWidget {
             if (controller.isSaving)
               Semantics(
                 liveRegion: true,
-                child: const Text('Saving appearance…'),
+                child: Text(context.tr('Saving appearance…')),
               ),
           ],
         ),
@@ -256,10 +272,10 @@ class _FontChoice extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(font.label, style: sample.titleMedium),
+                      Text(context.tr(font.label), style: sample.titleMedium),
                       const SizedBox(height: 4),
                       Text(
-                        font.description,
+                        context.tr(font.description),
                         style: sample.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -308,7 +324,7 @@ class _ThemeChoice extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '$label theme',
+      label: context.tr("{value0} theme", args: {'value0': context.tr(label)}),
       child: Card(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -332,7 +348,7 @@ class _ThemeChoice extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        label,
+                        context.tr(label),
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -451,7 +467,7 @@ class _CustomThemeScreenState extends State<_CustomThemeScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Custom theme')),
+    appBar: AppBar(title: Text(context.tr('Custom theme'))),
     body: SafeArea(
       child: Form(
         key: _formKey,
@@ -497,7 +513,9 @@ class _CustomThemeScreenState extends State<_CustomThemeScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Colors are adjusted for readability in light and dark mode.',
+                context.tr(
+                  'Colors are adjusted for readability in light and dark mode.',
+                ),
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               if (_saveFailed) ...[
@@ -505,8 +523,10 @@ class _CustomThemeScreenState extends State<_CustomThemeScreen> {
                 Semantics(
                   liveRegion: true,
                   child: Text(
-                    widget.controller.error ??
-                        'Could not save appearance. Please retry.',
+                    context.tr(
+                      widget.controller.error ??
+                          'Could not save appearance. Please retry.',
+                    ),
                   ),
                 ),
               ],
@@ -516,17 +536,17 @@ class _CustomThemeScreenState extends State<_CustomThemeScreen> {
                 onPressed: _saving ? null : _apply,
                 child: Text(
                   _saving
-                      ? 'Saving…'
+                      ? context.tr('Saving…')
                       : _saveFailed
-                      ? 'Retry'
-                      : 'Apply',
+                      ? context.tr('Retry')
+                      : context.tr('Apply'),
                 ),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
                 key: const Key('appearance-custom-cancel'),
                 onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text(context.tr('Cancel')),
               ),
             ],
           ),
@@ -605,7 +625,7 @@ class _ColorPickerState extends State<_ColorPicker> {
             children: [
               Expanded(
                 child: Text(
-                  widget.label,
+                  context.tr(widget.label),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -622,13 +642,16 @@ class _ColorPickerState extends State<_ColorPicker> {
             enableSuggestions: false,
             textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
-              labelText: '${widget.label} hex',
-              hintText: '#2563EB',
+              labelText: context.tr(
+                "{value0} hex",
+                args: {'value0': context.tr(widget.label)},
+              ),
+              hintText: context.tr('#2563EB'),
               errorMaxLines: 3,
             ),
             autovalidateMode: AutovalidateMode.onUserInteraction,
             validator: (value) => _parse(value ?? '') == null
-                ? 'Enter six hex digits, such as #2563EB.'
+                ? context.tr('Enter six hex digits, such as #2563EB.')
                 : null,
             onChanged: (value) {
               final color = _parse(value);
@@ -643,7 +666,15 @@ class _ColorPickerState extends State<_ColorPicker> {
             (1, 'Green', _color.g),
             (2, 'Blue', _color.b),
           ]) ...[
-            Text('$label · ${(channel * 255).round()}'),
+            Text(
+              context.tr(
+                "{value0} · {value1}",
+                args: {
+                  'value0': context.tr(label),
+                  'value1': (channel * 255).round(),
+                },
+              ),
+            ),
             Slider(
               key: ValueKey('appearance-${widget.id}-${label.toLowerCase()}'),
               value: (channel * 255).roundToDouble(),
@@ -651,8 +682,14 @@ class _ColorPickerState extends State<_ColorPicker> {
               max: 255,
               divisions: 255,
               label: '${(channel * 255).round()}',
-              semanticFormatterCallback: (value) =>
-                  '${widget.label}, $label, ${value.round()} of 255',
+              semanticFormatterCallback: (value) => context.tr(
+                '{channel}, {color}, {value} of 255',
+                args: {
+                  'channel': context.tr(widget.label),
+                  'color': context.tr(label),
+                  'value': value.round(),
+                },
+              ),
               onChanged: widget.enabled
                   ? (value) => _setChannel(index, value)
                   : null,
@@ -674,10 +711,10 @@ class _SaveError extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(controller.error!),
+        Text(context.tr(controller.error!)),
         TextButton(
           onPressed: controller.isSaving ? null : controller.retry,
-          child: const Text('Retry'),
+          child: Text(context.tr('Retry')),
         ),
       ],
     ),
@@ -693,7 +730,10 @@ class _ThemePreview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Preview', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          context.tr('Preview'),
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 12),
         Card(
           child: Padding(
@@ -702,16 +742,17 @@ class _ThemePreview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Your day',
+                  context.tr('Your day'),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                const Text('A sample of your selected colors.'),
+                Text(context.tr('A sample of your selected colors.')),
                 const SizedBox(height: 16),
                 Semantics(
                   image: true,
-                  label:
-                      'Sample chart. Main color: solid line. Secondary color: dashed line.',
+                  label: context.tr(
+                    'Sample chart. Main color: solid line. Secondary color: dashed line.',
+                  ),
                   child: SizedBox(
                     height: 72,
                     child: CustomPaint(
@@ -729,11 +770,11 @@ class _ThemePreview extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     Text(
-                      '— Main color',
+                      context.tr('— Main color'),
                       style: TextStyle(color: scheme.primary),
                     ),
                     Text(
-                      'Secondary color (dashed)',
+                      context.tr('Secondary color (dashed)'),
                       style: TextStyle(color: scheme.secondary),
                     ),
                   ],
@@ -741,7 +782,7 @@ class _ThemePreview extends StatelessWidget {
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () {},
-                  child: const Text('Sample button'),
+                  child: Text(context.tr('Sample button')),
                 ),
               ],
             ),

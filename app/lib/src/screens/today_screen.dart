@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../app.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -7,6 +9,7 @@ import '../today_dashboard_logic.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
 import '../widgets/sleep_observation_card.dart';
+import '../widgets/self_report_card.dart';
 import 'model_transparency_screen.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -22,6 +25,7 @@ class TodayScreen extends StatelessWidget {
     final olderObservation = available
         ? null
         : _olderObservationNotice(
+            context,
             controller.signals,
             controller.checkIns,
             controller.currentTime,
@@ -42,6 +46,11 @@ class TodayScreen extends StatelessWidget {
                   onOpenProfile: onOpenProfile,
                 ),
                 const SizedBox(height: 18),
+                TodaySelfReportCard(
+                  checkIns: controller.checkIns,
+                  now: controller.currentTime,
+                ),
+                const SizedBox(height: 12),
                 TonyoCard(
                   key: const Key('energy-score-card'),
                   padding: const EdgeInsets.all(18),
@@ -81,7 +90,7 @@ class TodayScreen extends StatelessWidget {
                                 const SizedBox(width: 7),
                                 Flexible(
                                   child: Text(
-                                    'EXPERIMENTAL ESTIMATES',
+                                    context.tr('EXPERIMENTAL ESTIMATES'),
                                     key: const Key('fatigue-status'),
                                     style: TextStyle(
                                       color: statusColor,
@@ -107,9 +116,11 @@ class TodayScreen extends StatelessWidget {
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
-                                  controller.scoreLoadedFromSnapshot
-                                      ? 'Saved snapshot'
-                                      : 'Live estimate',
+                                  context.tr(
+                                    controller.scoreLoadedFromSnapshot
+                                        ? 'Saved snapshot'
+                                        : 'Live estimate',
+                                  ),
                                   style: TextStyle(
                                     color: TonyoPalette.of(context).muted,
                                     fontSize: 10,
@@ -123,14 +134,18 @@ class TodayScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        available
-                            ? 'Experimental estimates'
-                            : 'Not enough information to estimate',
+                        context.tr(
+                          available
+                              ? 'Experimental estimates'
+                              : 'Not enough information to estimate',
+                        ),
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'These heuristic scores are not recovery or exercise clearance.',
+                        context.tr(
+                          'These heuristic scores are not recovery or exercise clearance.',
+                        ),
                         style: TextStyle(
                           color: TonyoPalette.of(context).muted,
                           fontSize: 12,
@@ -140,7 +155,7 @@ class TodayScreen extends StatelessWidget {
                       if (olderObservation != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          olderObservation,
+                          context.tr(olderObservation),
                           key: const Key('latest-observation-age'),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
@@ -240,11 +255,11 @@ class TodayScreen extends StatelessWidget {
                       vertical: 14,
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(Icons.insights_rounded, size: 20),
                       SizedBox(width: 10),
-                      Expanded(child: Text('Why these scores?')),
+                      Expanded(child: Text(context.tr('Why these scores?'))),
                       SizedBox(width: 8),
                       Icon(Icons.arrow_forward_rounded, size: 18),
                     ],
@@ -334,7 +349,9 @@ class TodayScreen extends StatelessWidget {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'These experimental estimates use available workload, check-in, reaction, and heart observations. Sleep, caffeine, fluid volume, and exercise duration do not earn score points. This is not a medical assessment.',
+                          context.tr(
+                            'These experimental estimates use available workload, check-in, reaction, and heart observations. Sleep, caffeine, fluid volume, and exercise duration do not earn score points. This is not a medical assessment.',
+                          ),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                             fontSize: 10,
@@ -364,6 +381,7 @@ class TodayScreen extends StatelessWidget {
   }
 
   static String? _olderObservationNotice(
+    BuildContext context,
     List<SignalReading> signals,
     List<DailyCheckIn> checkIns,
     DateTime now,
@@ -383,11 +401,13 @@ class TodayScreen extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
     if (!latest.isBefore(today)) return null;
     final elapsed = now.difference(latest);
-    final age = elapsed.inDays > 0
-        ? '${elapsed.inDays} ${elapsed.inDays == 1 ? 'day' : 'days'}'
-        : elapsed.inHours > 0
-        ? '${elapsed.inHours} ${elapsed.inHours == 1 ? 'hour' : 'hours'}'
-        : '${elapsed.inMinutes} ${elapsed.inMinutes == 1 ? 'minute' : 'minutes'}';
+    final age = context.tr(
+      elapsed.inDays > 0
+          ? '${elapsed.inDays} ${elapsed.inDays == 1 ? 'day' : 'days'}'
+          : elapsed.inHours > 0
+          ? '${elapsed.inHours} ${elapsed.inHours == 1 ? 'hour' : 'hours'}'
+          : '${elapsed.inMinutes} ${elapsed.inMinutes == 1 ? 'minute' : 'minutes'}',
+    );
     String pad(int value) => value.toString().padLeft(2, '0');
     final date = '${latest.year}-${pad(latest.month)}-${pad(latest.day)}';
     final time = '${pad(latest.hour)}:${pad(latest.minute)}';
@@ -412,16 +432,18 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = Text(
-      _dateLabel(),
+      Localizations.localeOf(context).languageCode == 'en'
+          ? _dateLabel()
+          : MaterialLocalizations.of(context).formatFullDate(DateTime.now()),
       style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 12),
     );
     final greeting = Text(
-      '${_greeting()}, $name',
+      '${context.tr(_greeting())}, $name',
       style: Theme.of(context).textTheme.headlineMedium,
     );
     final profile = IconButton(
       key: const Key('today-profile-button'),
-      tooltip: 'Open profile',
+      tooltip: context.tr('Open profile'),
       onPressed: onOpenProfile,
       padding: const EdgeInsets.all(2),
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -525,7 +547,7 @@ class _ScoreTile extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       Text(
-        eyebrow,
+        context.tr(eyebrow),
         textAlign: TextAlign.center,
         style: TextStyle(
           color: color,
@@ -539,7 +561,10 @@ class _ScoreTile extends StatelessWidget {
         ScoreRing(value: value!, label: label, size: 76, color: color)
       else
         Semantics(
-          label: '$label: not enough information to estimate',
+          label: context.tr(
+            '{label}: not enough information to estimate',
+            args: {'label': context.tr(label)},
+          ),
           child: const SizedBox(
             height: 76,
             child: Center(child: Text('—', style: TextStyle(fontSize: 32))),
@@ -547,14 +572,14 @@ class _ScoreTile extends StatelessWidget {
         ),
       const SizedBox(height: 8),
       Text(
-        completeness,
+        context.tr(completeness),
         textAlign: TextAlign.center,
         style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 8.5),
       ),
       if (comparison != null) ...[
         const SizedBox(height: 4),
         Text(
-          comparison!,
+          context.tr(comparison!),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: TonyoPalette.of(context).secondary,
@@ -587,7 +612,7 @@ class _SignalSummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  summary.type.label,
+                  context.tr(summary.type.label),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 9,
@@ -596,7 +621,7 @@ class _SignalSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  summary.displayValue,
+                  context.tr(summary.displayValue),
                   style: TextStyle(
                     color: summary.isAvailable
                         ? TonyoPalette.of(context).text
@@ -606,7 +631,9 @@ class _SignalSummaryCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  summary.isAvailable ? 'Logged today' : 'Not logged',
+                  context.tr(
+                    summary.isAvailable ? 'Logged today' : 'Not logged',
+                  ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 8.5,
@@ -670,7 +697,7 @@ class _DriverCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    subtitle,
+                    context.tr(subtitle),
                     style: TextStyle(
                       color: color,
                       fontSize: 8.5,
@@ -679,7 +706,7 @@ class _DriverCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    title,
+                    context.tr(title),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ],
@@ -690,7 +717,7 @@ class _DriverCard extends StatelessWidget {
         const SizedBox(height: 14),
         if (drivers.isEmpty)
           Text(
-            'Log today’s signals to personalize this estimate.',
+            context.tr('Log today’s signals to personalize this estimate.'),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -740,7 +767,7 @@ class _TodayDriverLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: Text(
-      label,
+      context.tr(label),
       style: TextStyle(
         color: color,
         fontSize: 8,
@@ -778,14 +805,14 @@ class _DriverRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  driver.label,
+                  context.tr(driver.label),
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
-                  driver.detail,
+                  context.tr(driver.detail),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 9,
@@ -795,7 +822,9 @@ class _DriverRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${driver.isPositive ? '+' : ''}${driver.contribution.round()} pts',
+            context.tr(
+              '${driver.isPositive ? '+' : ''}${driver.contribution.round()} pts',
+            ),
             style: TextStyle(
               color: color,
               fontSize: 10,
@@ -824,7 +853,7 @@ class _OfflineNotice extends StatelessWidget {
       const SizedBox(width: 7),
       Expanded(
         child: Text(
-          message,
+          context.tr(message),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
       ),

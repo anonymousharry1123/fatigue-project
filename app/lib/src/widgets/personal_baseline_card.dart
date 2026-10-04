@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../models.dart';
 import '../theme.dart';
 import 'common_widgets.dart';
@@ -32,12 +34,14 @@ class PersonalBaselineCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Your personal baselines',
+                  Text(
+                    context.tr('Your personal baselines'),
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    '${baselines.readyCount}/4 established · ${baselines.windowDays}-day private history',
+                    context.tr(
+                      '${baselines.readyCount}/4 established · ${baselines.windowDays}-day private history',
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -47,7 +51,7 @@ class PersonalBaselineCard extends StatelessWidget {
               ),
             ),
             Text(
-              '${(baselines.overallReadiness * 100).round()}%',
+              context.tr('${(baselines.overallReadiness * 100).round()}%'),
               style: TextStyle(
                 color: TonyoPalette.of(context).secondary,
                 fontWeight: FontWeight.w600,
@@ -67,7 +71,9 @@ class PersonalBaselineCard extends StatelessWidget {
         if (!compact) ...[
           const SizedBox(height: 13),
           Text(
-            'These are usual patterns in your records, not healthy targets or age recommendations. Data quality stays limited while a baseline is building.',
+            context.tr(
+              'These are usual patterns in your records, not healthy targets or age recommendations. Data quality stays limited while a baseline is building.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,
@@ -97,12 +103,12 @@ class _BaselineRow extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            metric.type.label,
+            context.tr(metric.type.label),
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ),
         Text(
-          '$displayValue ${metric.type.unit}',
+          context.tr('$displayValue ${metric.type.unit}'),
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 10),
@@ -117,9 +123,11 @@ class _BaselineRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            metric.isReady
-                ? '${metric.sampleCount} days'
-                : '${metric.sampleCount}/${metric.minimumSamples}',
+            context.tr(
+              metric.isReady
+                  ? '${metric.sampleCount} days'
+                  : '${metric.sampleCount}/${metric.minimumSamples}',
+            ),
             style: TextStyle(
               color: metric.isReady
                   ? TonyoPalette.of(context).success

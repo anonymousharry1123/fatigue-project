@@ -67,6 +67,17 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 pnpm test:running
   Cognitive values, availability, baseline and change fields on a server reload.
 - These Phase 1 payloads retain privacy, guardian, cross-account and optional
   outcome-consent restrictions, including owner export/deletion after revocation.
+- Phase 2A custom check-ins preserve six independent integer answers, skipped
+  values, explicit clearing and honest completeness through transactions and
+  fresh server reads. Zero, fractional and empty submissions are denied.
+- New-format records require bounded wording/version/language/time metadata.
+  Missing versions, malformed or extra definition fields, and attempts to
+  downgrade or rewrite original provenance are denied. Legacy edits remain
+  available, but cannot silently upgrade an old measurement into a new one.
+- Complete and partial writes retain owner/consent/guardian/outcome gates.
+  Duplicate answers still count individually; Unicode and multiline wording,
+  including a complete guardian-authorized update, fit the rules expression
+  budget without dropping validation.
 
 The Phase 1 cases mirror the current `cloud_schema.dart` wire format; the Dart
 serialization suite verifies the app-to-wire conversion. Explicit server reads
@@ -112,3 +123,23 @@ system-wide installation or persistent shell change was needed. The initial
 sandboxed run could not bind loopback sockets (`EPERM`); the approved local
 emulator retry passed. See [the progress record](../../docs/BIOLOGY_UPGRADE_PROGRESS.md)
 for exact runtime paths and executed command.
+
+Verified on 2026-10-04 after the Phase 2A changes: **35 executable cases passed;
+0 failures, skips, cancellations or TODO cases**, including seven new measurement
+cases. Existing runtimes and the locked dependencies were reused. Initial runs
+exposed the rules expression limit; equivalent exact-key/type/length validation
+was simplified and the full suite rerun successfully. No rules were deployed.
+
+## Native Flutter app integration
+
+`pnpm test:app` is a separate opt-in harness. It starts local Auth and Firestore
+emulators for the fixed demo project, creates a fresh iOS simulator, and runs
+the native Flutter app integration scenario followed by a separate process
+restart verification. It never selects a preexisting simulator or physical
+device. `pnpm test` remains the security-rules suite described above; its case
+counts do not include the Flutter integration scenarios.
+
+See [Phase 1 emulator integration](../../docs/PHASE1_EMULATOR_INTEGRATION.md)
+for prerequisites, exact commands, isolation guards, current results, and
+limitations. Do not pass the normal Firebase configuration or use `run.sh`
+for these local integration checks.

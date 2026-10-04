@@ -8,6 +8,7 @@ import 'package:app/src/model_transparency_state.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/score_explanation.dart';
 import 'package:app/src/screens/model_transparency_screen.dart';
+import 'package:app/src/screens/today_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -412,8 +413,15 @@ void main() {
     final owner = controller();
     await tester.pumpWidget(TonyoApp(controller: owner));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
+    await tester.scrollUntilVisible(
       find.byKey(const Key('today-score-transparency')),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byType(TodayScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.tap(find.byKey(const Key('today-score-transparency')));
     await tester.pumpAndSettle();

@@ -110,7 +110,12 @@ abstract final class DailyHistoryLogic {
     final itemsByDay = <DateTime, List<DailyHistoryItem>>{};
 
     void add(DailyHistoryItem item) {
-      final day = dayFor(item.timestamp);
+      final capturedDate = item.checkIn?.isResearchCheckIn == true
+          ? item.checkIn?.localDate
+          : null;
+      final day = capturedDate == null
+          ? dayFor(item.timestamp)
+          : DateTime.parse(capturedDate);
       itemsByDay.putIfAbsent(day, () => []).add(item);
     }
 

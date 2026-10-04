@@ -100,8 +100,8 @@ class AdminPersonScreen extends StatelessWidget {
           for (final checkIn in person.checkIns)
             TonyoCard(
               child: Text(
-                '${checkIn.period.label}: energy ${checkIn.energy.round()}/10 · '
-                'mood ${checkIn.mood.round()}/10 · stress ${checkIn.stress.round()}/10'
+                '${checkIn.period.label}: energy ${_rating(checkIn.energy)} · '
+                'mood ${_rating(checkIn.mood)} · stress ${_rating(checkIn.stress)}'
                 '${checkIn.note.isEmpty ? '' : '\n${checkIn.note}'}',
               ),
             ),
@@ -117,6 +117,11 @@ class AdminPersonScreen extends StatelessWidget {
     );
   }
 }
+
+String _rating(double? value) =>
+    value == null || !value.isFinite || value < 1 || value > 10
+    ? 'Not reported'
+    : '${value.round()}/10';
 
 class _DriverCard extends StatelessWidget {
   const _DriverCard({required this.drivers, required this.confidence});

@@ -90,6 +90,9 @@ void main() {
       ),
     );
     await tester.scrollUntilVisible(find.text('Cloud account'), 200);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Cloud account'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Cloud account'));
     await tester.pumpAndSettle();
     expect(find.byType(AccountSignInDialog), findsOneWidget);

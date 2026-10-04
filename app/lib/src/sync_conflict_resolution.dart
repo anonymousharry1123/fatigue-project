@@ -319,20 +319,42 @@ extension InputConflictResolution on AppController {
 
     for (final id in checkInIds) {
       final source = checkIns.where((item) => item.id == id).firstOrNull;
+      if (source != null &&
+          (source.isResearchCheckIn || source.energy == null)) {
+        // A backup or old client can supply noncanonical outcome IDs. Match
+        // the linked source too, so draft answers never acquire legacy labels.
+        final incompatibleIds = <String>{
+          for (final outcome in _outcomes)
+            if (outcome.source == OutcomeSource.checkIn &&
+                outcome.sourceId == id)
+              outcome.id,
+          for (final entry in _pendingOutcomeWrites.entries)
+            if (entry.value?.source == OutcomeSource.checkIn &&
+                entry.value?.sourceId == id)
+              entry.key,
+        };
+        for (final outcomeId in incompatibleIds) {
+          reconcile(outcomeId, null, sourceDeleted: true);
+        }
+      }
       reconcile(
         'energy-checkin-$id',
-        source == null || !outcomeConsent
+        source == null ||
+                source.isResearchCheckIn ||
+                source.energy == null ||
+                !outcomeConsent
             ? null
             : OutcomeRecord(
                 id: 'energy-checkin-$id',
                 type: OutcomeType.observedEnergy,
-                value: source.energy,
+                value: source.energy!,
                 observedAt: source.timestamp,
                 recordedAt: _now(),
                 source: OutcomeSource.checkIn,
                 sourceId: id,
               ),
-        sourceDeleted: source == null,
+        sourceDeleted:
+            source == null || source.isResearchCheckIn || source.energy == null,
       );
     }
     for (final id in reactionSignalIds) {

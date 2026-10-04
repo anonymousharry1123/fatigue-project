@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
@@ -11,6 +12,8 @@ import 'cloud_sync.dart';
 import 'energy_model_repository.dart';
 import 'energy_model_summary.dart';
 import 'firebase_options.dart';
+import 'firebase_emulator_options.dart';
+import 'firestore_value_codec.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 import 'ml_prep_models.dart';
@@ -30,23 +33,58 @@ class FirebaseRuntime {
   final EnergyModelMetadataWriter energyModelMetadataWriter;
 
   static Future<FirebaseRuntime?> initialize() async {
-    if (!TonyoFirebaseOptions.isConfigured) return null;
-    await Firebase.initializeApp(options: TonyoFirebaseOptions.currentPlatform);
-    final auth = FirebaseAccountAuth(FirebaseAuth.instance);
+    final FirebaseApp app;
+    if (TonyoFirebaseEmulatorOptions.enabled) {
+      TonyoFirebaseEmulatorOptions.validate(
+        isDebugBuild: kDebugMode,
+        hasFirebaseConfiguration: TonyoFirebaseOptions.hasAnySuppliedValue,
+      );
+      // The current Firestore platform factory requires a default Core app even
+      // when all Firestore/Auth clients below target a named app. Give that
+      // scaffold the same synthetic demo options; never load real options.
+      final scaffold = await Firebase.initializeApp(
+        options: TonyoFirebaseEmulatorOptions.options,
+      );
+      if (scaffold.options.projectId !=
+          TonyoFirebaseEmulatorOptions.projectId) {
+        throw StateError('Local emulators require a synthetic default app.');
+      }
+      app = await Firebase.initializeApp(
+        name: TonyoFirebaseEmulatorOptions.appName,
+        options: TonyoFirebaseEmulatorOptions.options,
+      );
+    } else {
+      if (!TonyoFirebaseOptions.isConfigured) return null;
+      app = await Firebase.initializeApp(
+        options: TonyoFirebaseOptions.currentPlatform,
+      );
+    }
+    final firebaseAuth = FirebaseAuth.instanceFor(app: app);
+    final firestore = FirebaseFirestore.instanceFor(app: app);
+    if (TonyoFirebaseEmulatorOptions.enabled) {
+      // Configure both native clients before any repository/listener can use
+      // them. The named app also isolates its native Auth session/cache.
+      await firebaseAuth.useAuthEmulator(
+        TonyoFirebaseEmulatorOptions.host,
+        TonyoFirebaseEmulatorOptions.authPort,
+        automaticHostMapping: false,
+      );
+      firestore.settings = const Settings(persistenceEnabled: false);
+      firestore.useFirestoreEmulator(
+        TonyoFirebaseEmulatorOptions.host,
+        TonyoFirebaseEmulatorOptions.firestorePort,
+        automaticHostMapping: false,
+      );
+    }
+    final auth = FirebaseAccountAuth(firebaseAuth);
     return FirebaseRuntime(
       auth: auth,
       energyModelMetadataWriter: FirestoreEnergyModelMetadataWriter(
-        firestore: FirebaseFirestore.instance,
+        firestore: firestore,
         auth: auth,
       ),
-      prepSource: FirestorePrepDataSource(
-        firestore: FirebaseFirestore.instance,
-        auth: auth,
-      ),
-      repository: FirestoreCloudRepository(
-        firestore: FirebaseFirestore.instance,
-        auth: auth,
-      ),
+      prepSource: FirestorePrepDataSource(firestore: firestore, auth: auth),
+      repository: FirestoreCloudRepository(firestore: firestore, auth: auth),
     );
   }
 }
@@ -496,21 +534,29 @@ class FirestoreCloudRepository implements CloudRepository {
           if (item.edit.after == null) {
             transaction.delete(ref);
           } else {
-            transaction.set(ref, {
-              ...syncMergedData(item.edit.before, item.edit.after!),
-              'schemaVersion': cloudSchemaVersion,
-            }, SetOptions(merge: true));
+            transaction.set(
+              ref,
+              encodeFirestoreDocument({
+                ...syncMergedData(item.edit.before, item.edit.after!),
+                'schemaVersion': cloudSchemaVersion,
+              }),
+              SetOptions(merge: true),
+            );
           }
         }
         if (last && patch.root.isNotEmpty) {
-          transaction.set(user, {
-            ...syncMergedData(
-              patch.rootData(useBefore: true),
-              patch.rootData(),
-            ),
-            'schemaVersion': cloudSchemaVersion,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          transaction.set(
+            user,
+            encodeFirestoreDocument({
+              ...syncMergedData(
+                patch.rootData(useBefore: true),
+                patch.rootData(),
+              ),
+              'schemaVersion': cloudSchemaVersion,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }),
+            SetOptions(merge: true),
+          );
         }
       });
       if (last) break;
@@ -855,9 +901,10 @@ class FirestoreCloudRepository implements CloudRepository {
   @override
   Future<void> upsertOutcome(String uid, OutcomeRecord outcome) async {
     await _requireOutcomeConsent(uid);
-    await _user(
-      uid,
-    ).collection('outcomes').doc(outcome.id).set(outcomeToCloud(outcome));
+    await _user(uid)
+        .collection('outcomes')
+        .doc(outcome.id)
+        .set(encodeFirestoreDocument(outcomeToCloud(outcome)));
   }
 
   @override
@@ -981,10 +1028,7 @@ class FirestoreCloudRepository implements CloudRepository {
   );
 
   static Map<String, dynamic> _normalizeDates(Map<String, dynamic> data) =>
-      data.map(
-        (key, value) =>
-            MapEntry(key, value is Timestamp ? value.toDate() : value),
-      );
+      normalizeFirestoreDocument(data);
 
   static Object? _normalizeCloudValue(Object? value) => switch (value) {
     Timestamp timestamp => timestamp.toDate().toUtc(),

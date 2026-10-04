@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../models.dart';
 import '../theme.dart';
 
@@ -38,11 +40,14 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleWidget = Semantics(
       header: true,
-      child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+      child: Text(
+        context.tr(title),
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
     );
     final actionWidget = action == null
         ? null
-        : TextButton(onPressed: onTap, child: Text(action!));
+        : TextButton(onPressed: onTap, child: Text(context.tr(action!)));
     final large = MediaQuery.textScalerOf(context).scale(1) > 1.4;
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
@@ -101,8 +106,8 @@ class ScoreRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
     return Semantics(
-      label: '$label score',
-      value: '$value out of 100',
+      label: context.tr('{label} score', args: {'label': context.tr(label)}),
+      value: context.tr('{value} out of 100', args: {'value': value}),
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -137,7 +142,7 @@ class ScoreRing extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          label.toUpperCase(),
+                          context.tr(label).toUpperCase(),
                           style: TextStyle(
                             fontSize: size * .075,
                             color: TonyoPalette.of(context).muted,

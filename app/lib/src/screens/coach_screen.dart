@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../app.dart';
 import '../app_controller.dart';
 import '../models.dart';
@@ -57,9 +59,11 @@ class CoachScreen extends StatelessWidget {
           ),
         const SizedBox(height: 14),
         Text(
-          'Guidance is based on your recent Tonyo entries and is for general '
-          'wellness only. It does not diagnose a medical condition. If symptoms '
-          'are severe, unusual, or persistent, talk with a qualified clinician.',
+          context.tr(
+            'Guidance is based on your recent Tonyo entries and is for general '
+            'wellness only. It does not diagnose a medical condition. If symptoms '
+            'are severe, unusual, or persistent, talk with a qualified clinician.',
+          ),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: TonyoPalette.of(context).muted,
@@ -74,11 +78,11 @@ class CoachScreen extends StatelessWidget {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Coach'),
+        title: Text(context.tr('AI Coach')),
         backgroundColor: Colors.transparent,
         actions: [
           IconButton(
-            tooltip: 'Refresh guidance',
+            tooltip: context.tr('Refresh guidance'),
             onPressed: controller.isGuidanceLoading
                 ? null
                 : controller.refreshGuidance,
@@ -104,10 +108,15 @@ class _CoachHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('AI Coach', style: Theme.of(context).textTheme.headlineMedium),
+            Text(
+              context.tr('AI Coach'),
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
             const SizedBox(height: 5),
             Text(
-              'Optional blocks around your saved wake and bed times',
+              context.tr(
+                'Optional blocks around your saved wake and bed times',
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -117,7 +126,7 @@ class _CoachHeader extends StatelessWidget {
         ),
       ),
       IconButton.filledTonal(
-        tooltip: 'Refresh guidance',
+        tooltip: context.tr('Refresh guidance'),
         onPressed: controller.isGuidanceLoading
             ? null
             : controller.refreshGuidance,
@@ -153,14 +162,16 @@ class _GuidanceSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Generated daily plan',
+                Text(
+                  context.tr('Generated daily plan'),
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$recommendationCount plan blocks \u00b7 $alertCount active '
-                  '${alertCount == 1 ? 'flag' : 'flags'}',
+                  context.tr(
+                    '$recommendationCount plan blocks \u00b7 $alertCount active '
+                    '${alertCount == 1 ? 'flag' : 'flags'}',
+                  ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 11,
@@ -179,7 +190,7 @@ class _GuidanceSummary extends StatelessWidget {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        source,
+                        context.tr(source),
                         style: TextStyle(
                           color: TonyoPalette.of(context).secondary,
                           fontSize: 10,
@@ -209,7 +220,7 @@ class _DailyPlanOverview extends StatelessWidget {
     final feedbackCount = controller.recommendationFeedbackHistoryCount;
     final confidence = plan.firstOrNull?.planConfidence;
     final range = plan.isEmpty
-        ? 'Waiting for enough current information'
+        ? context.tr('Waiting for enough current information')
         : '${plan.first.timeLabel}–${plan.last.timeLabel}';
     return TonyoCard(
       key: const Key('coach-daily-plan-summary'),
@@ -226,7 +237,7 @@ class _DailyPlanOverview extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  'Morning-to-evening plan · $range',
+                  context.tr('Morning-to-evening plan · $range'),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -250,7 +261,7 @@ class _DailyPlanOverview extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            controller.profile.coachPriority.detail,
+            context.tr(controller.profile.coachPriority.detail),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -258,9 +269,11 @@ class _DailyPlanOverview extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            feedbackCount == 0
-                ? 'These are optional scheduling suggestions, not validated predictions of your best times.'
-                : 'Your feedback helps prioritize future advice. Today’s blocks stay in time order.',
+            context.tr(
+              feedbackCount == 0
+                  ? 'These are optional scheduling suggestions, not validated predictions of your best times.'
+                  : 'Your feedback helps prioritize future advice. Today’s blocks stay in time order.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).secondary,
               fontSize: 10,
@@ -334,12 +347,14 @@ class _DailyPlanRemindersState extends State<_DailyPlanReminders> {
             child: SwitchListTile(
               key: const Key('coach-plan-reminder-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text(
-                'Daily plan reminders',
+              title: Text(
+                context.tr('Daily plan reminders'),
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               subtitle: Text(
-                'A notification when each upcoming plan block starts.',
+                context.tr(
+                  'A notification when each upcoming plan block starts.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -353,7 +368,7 @@ class _DailyPlanRemindersState extends State<_DailyPlanReminders> {
           Semantics(
             liveRegion: true,
             child: Text(
-              status,
+              context.tr(status),
               key: const Key('coach-plan-reminder-summary'),
               style: TextStyle(
                 color: error != null
@@ -369,12 +384,14 @@ class _DailyPlanRemindersState extends State<_DailyPlanReminders> {
               key: const Key('coach-enable-notifications'),
               onPressed: busy ? null : () => _change(true),
               icon: const Icon(Icons.notifications_outlined, size: 18),
-              label: const Text('Enable notifications'),
+              label: Text(context.tr('Enable notifications')),
             ),
           ],
           const SizedBox(height: 8),
           Text(
-            'Open Tonyo each day to refresh your plan and schedule today’s reminders. Permission is requested when you turn reminders on. Experimental, uncalibrated forecasts do not trigger alerts.',
+            context.tr(
+              'Open Tonyo each day to refresh your plan and schedule today’s reminders. Permission is requested when you turn reminders on. Experimental, uncalibrated forecasts do not trigger alerts.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,
@@ -411,7 +428,7 @@ class _GuidanceNotice extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            message,
+            context.tr(message),
             style: TextStyle(
               color: TonyoPalette.of(context).warning,
               fontSize: 11,
@@ -440,12 +457,14 @@ class _NoRiskAlertsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'No recorded pattern to show',
+                context.tr('No recorded pattern to show'),
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 3),
               Text(
-                'This does not establish recovery or rule out a health concern. Missing entries limit what Tonyo can describe.',
+                context.tr(
+                  'This does not establish recovery or rule out a health concern. Missing entries limit what Tonyo can describe.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -488,7 +507,7 @@ class _RiskAlertCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _riskLabel(alert.category).toUpperCase(),
+                      context.tr(_riskLabel(alert.category)).toUpperCase(),
                       style: TextStyle(
                         color: color,
                         fontSize: 9,
@@ -498,7 +517,7 @@ class _RiskAlertCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      alert.title,
+                      context.tr(alert.title),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ],
@@ -508,7 +527,7 @@ class _RiskAlertCard extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            alert.detail,
+            context.tr(alert.detail),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -527,7 +546,7 @@ class _RiskAlertCard extends StatelessWidget {
                   () => controller.dismissRiskAlert(alert.id),
                 ),
                 icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Dismiss'),
+                label: Text(context.tr('Dismiss')),
               ),
             ],
           ),
@@ -554,12 +573,14 @@ class _NoRecommendationsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Add recent entries to build your plan',
+                context.tr('Add recent entries to build your plan'),
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               SizedBox(height: 3),
               Text(
-                'Not enough information to estimate. Optional schedule suggestions require current supporting observations.',
+                context.tr(
+                  'Not enough information to estimate. Optional schedule suggestions require current supporting observations.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -603,7 +624,7 @@ class _RecommendationCard extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        item.timeLabel,
+                        context.tr(item.timeLabel),
                         style: TextStyle(
                           color: TonyoPalette.of(context).secondary,
                           fontSize: 10,
@@ -616,7 +637,7 @@ class _RecommendationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    item.title,
+                    context.tr(item.title),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ],
@@ -626,7 +647,7 @@ class _RecommendationCard extends StatelessWidget {
         ),
         const SizedBox(height: 9),
         Text(
-          item.detail,
+          context.tr(item.detail),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
         const SizedBox(height: 10),
@@ -662,7 +683,7 @@ class _RecommendationCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    reason,
+                    context.tr(reason),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -719,7 +740,7 @@ class _RecommendationActionsState extends State<_RecommendationActions> {
         _PlanReminderStatus(controller: widget.controller, item: item),
         const SizedBox(height: 12),
         Text(
-          'Was this advice helpful? (optional)',
+          context.tr('Was this advice helpful? (optional)'),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),
         const SizedBox(height: 6),
@@ -736,7 +757,11 @@ class _RecommendationActionsState extends State<_RecommendationActions> {
                     : Icons.thumb_up_alt_outlined,
                 size: 17,
               ),
-              label: Text(item.helpful == true ? 'Helpful · saved' : 'Helpful'),
+              label: Text(
+                context.tr(
+                  item.helpful == true ? 'Helpful · saved' : 'Helpful',
+                ),
+              ),
             ),
             OutlinedButton.icon(
               key: ValueKey('not-helpful-recommendation-${item.id}'),
@@ -748,7 +773,9 @@ class _RecommendationActionsState extends State<_RecommendationActions> {
                 size: 17,
               ),
               label: Text(
-                item.helpful == false ? 'Not helpful · saved' : 'Not helpful',
+                context.tr(
+                  item.helpful == false ? 'Not helpful · saved' : 'Not helpful',
+                ),
               ),
             ),
           ],
@@ -813,7 +840,7 @@ class _PlanReminderStatus extends StatelessWidget {
         const SizedBox(width: 7),
         Expanded(
           child: Text(
-            text,
+            context.tr(text),
             style: TextStyle(
               color: active
                   ? TonyoPalette.of(context).success
@@ -836,7 +863,7 @@ class _EvidenceSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     if (evidence.isEmpty) {
       return Text(
-        'Linked to recent private data',
+        context.tr('Linked to recent private data'),
         style: TextStyle(
           color: TonyoPalette.of(context).secondary,
           fontSize: 10,
@@ -846,9 +873,11 @@ class _EvidenceSummary extends StatelessWidget {
     }
     final labels = evidence
         .take(2)
-        .map((item) => item.label)
+        .map((item) => context.tr(item.label))
         .toList(growable: true);
-    if (evidence.length > 2) labels.add('+${evidence.length - 2} more');
+    if (evidence.length > 2) {
+      labels.add(context.tr('+${evidence.length - 2} more'));
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -885,8 +914,10 @@ Future<void> _saveCoachAction(
   } catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not save this change. Please try again.'),
+      SnackBar(
+        content: Text(
+          context.tr('Could not save this change. Please try again.'),
+        ),
       ),
     );
   }
@@ -906,7 +937,7 @@ class _SmallTag extends StatelessWidget {
       border: Border.all(color: TonyoPalette.of(context).border),
     ),
     child: Text(
-      label,
+      context.tr(label),
       style: TextStyle(
         color: TonyoPalette.of(context).muted,
         fontSize: 8,

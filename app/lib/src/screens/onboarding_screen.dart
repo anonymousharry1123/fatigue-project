@@ -1,9 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../account_error.dart';
 import '../app.dart';
 import '../models.dart';
+import '../widgets/language_picker.dart';
 import '../privacy_consent.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -38,6 +41,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _role = 'Student athlete';
   String _goal = 'Balance focus and training';
   CoachPriority _coachPriority = CoachPriority.balanced;
+  String _preferredLanguage = 'en';
   double _wake = 7;
   double _bed = 23;
 
@@ -47,6 +51,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_initializedPage) return;
     _initializedPage = true;
     final controller = AppScope.of(context);
+    _preferredLanguage = controller.effectiveLanguage;
     // The privacy gate may replace this route after verified sign-in. Restore
     // only that authenticated, successfully loaded account's remaining setup;
     // never ask it to register or verify the password again.
@@ -100,7 +105,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Semantics(
                     liveRegion: true,
                     child: Text(
-                      _accountError!,
+                      context.tr(_accountError!),
                       key: const Key('onboarding-account-error'),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
@@ -145,7 +150,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       backgroundColor: TonyoPalette.of(context).primary,
                     ),
                     child: _isSubmitting
-                        ? const Row(
+                        ? Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox.square(
@@ -155,41 +160,49 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 ),
                               ),
                               SizedBox(width: 12),
-                              Text('Please wait…'),
+                              Text(context.tr('Please wait…')),
                             ],
                           )
                         : Text(
                             _page == 0
                                 ? AppScope.of(context).canResumeLocalProfile
-                                      ? 'Continue local profile'
+                                      ? context.tr('Continue local profile')
                                       : AppScope.of(context).isSignedOut &&
                                             AppScope.of(context).cloudEnabled
-                                      ? 'Sign in'
-                                      : 'Create my account'
+                                      ? context.tr('Sign in')
+                                      : context.tr('Create my account')
                                 : _page == 1
                                 ? _ageLocked
-                                      ? 'Guardian setup unavailable'
-                                      : 'Continue with these choices'
+                                      ? context.tr('Guardian setup unavailable')
+                                      : context.tr(
+                                          'Continue with these choices',
+                                        )
                                 : _page == 2
                                 ? _signInExisting &&
                                           AppScope.of(context).cloudEnabled
-                                      ? 'Sign in'
-                                      : 'Continue to my profile'
+                                      ? context.tr('Sign in')
+                                      : context.tr('Continue to my profile')
                                 : _page == 3
-                                ? 'Set my schedule'
+                                ? context.tr('Set my schedule')
                                 : _existingAccountVerified
-                                ? 'Finish account setup'
-                                : 'Start with demo data',
+                                ? context.tr('Finish account setup')
+                                : context.tr('Start with demo data'),
                           ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   AppScope.of(context).cloudEnabled
-                      ? 'Your data choices come before account setup.'
+                      ? context.tr(
+                          'Your data choices come before account setup.',
+                        )
                       : AppScope.of(context).canResumeLocalProfile
-                      ? 'Local mode. No password verification or Firebase sign-in.'
-                      : 'Local mode. No Firebase account is created.',
+                      ? context.tr(
+                          'Local mode. No password verification or Firebase sign-in.',
+                        )
+                      : context.tr(
+                          'Local mode. No Firebase account is created.',
+                        ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 11,
@@ -217,16 +230,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 20),
         Text(
-          _signInExisting ? 'Welcome back' : 'Create your account',
+          _signInExisting
+              ? context.tr('Welcome back')
+              : context.tr('Create your account'),
           style: Theme.of(context).textTheme.headlineLarge,
         ),
         const SizedBox(height: 8),
         Text(
           AppScope.of(context).cloudEnabled
               ? _signInExisting
-                    ? 'Sign in to restore your private Tonyo cloud data.'
-                    : 'Your account securely syncs your Tonyo data through Firebase.'
-              : 'Firebase values are not configured, so this build uses local demo storage.',
+                    ? context.tr(
+                        'Sign in to restore your private Tonyo cloud data.',
+                      )
+                    : context.tr(
+                        'Your account securely syncs your Tonyo data through Firebase.',
+                      )
+              : context.tr(
+                  'Firebase values are not configured, so this build uses local demo storage.',
+                ),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
         if (AppScope.of(context).cloudEnabled) ...[
@@ -256,8 +277,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     },
               child: Text(
                 _signInExisting
-                    ? 'Create a new account instead'
-                    : 'Already have an account? Sign in',
+                    ? context.tr('Create a new account instead')
+                    : context.tr('Already have an account? Sign in'),
               ),
             ),
           ),
@@ -269,15 +290,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.email],
-          decoration: const InputDecoration(
-            labelText: 'Email',
+          decoration: InputDecoration(
+            labelText: context.tr('Email'),
             prefixIcon: Icon(Icons.mail_outline_rounded),
           ),
           validator: (value) {
             final email = value?.trim() ?? '';
-            if (email.isEmpty) return 'Enter your email';
+            if (email.isEmpty) return context.tr('Enter your email');
             if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-              return 'Enter a valid email';
+              return context.tr('Enter a valid email');
             }
             return null;
           },
@@ -302,7 +323,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 : AutofillHints.newPassword,
           ],
           decoration: InputDecoration(
-            labelText: 'Password',
+            labelText: context.tr('Password'),
             prefixIcon: const Icon(Icons.lock_outline_rounded),
             suffixIcon: IconButton(
               key: const Key('password-visibility'),
@@ -318,10 +339,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           validator: (value) {
             if (_signInExisting) {
-              return (value ?? '').isEmpty ? 'Enter your password' : null;
+              return (value ?? '').isEmpty
+                  ? context.tr('Enter your password')
+                  : null;
             }
             if ((value ?? '').length < 8) {
-              return 'Use at least 8 characters';
+              return context.tr('Use at least 8 characters');
             }
             return null;
           },
@@ -337,7 +360,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             autocorrect: false,
             textInputAction: TextInputAction.done,
             decoration: InputDecoration(
-              labelText: 'Confirm password',
+              labelText: context.tr('Confirm password'),
               prefixIcon: const Icon(Icons.lock_reset_rounded),
               suffixIcon: IconButton(
                 key: const Key('confirm-password-visibility'),
@@ -355,7 +378,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             validator: (value) => value != _passwordController.text
-                ? 'Passwords do not match'
+                ? context.tr('Passwords do not match')
                 : null,
           ),
         ],
@@ -372,8 +395,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Expanded(
                 child: Text(
                   AppScope.of(context).cloudEnabled
-                      ? 'Firebase Authentication handles your password. Tonyo never writes passwords to Firestore or its local cache.'
-                      : 'Your password is validated for this demo flow but is never saved.',
+                      ? context.tr(
+                          'Firebase Authentication handles your password. Tonyo never writes passwords to Firestore or its local cache.',
+                        )
+                      : context.tr(
+                          'Your password is validated for this demo flow but is never saved.',
+                        ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 11,
@@ -394,19 +421,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Align(
         alignment: Alignment.centerLeft,
         child: IconButton.filledTonal(
-          tooltip: 'Back to welcome',
+          tooltip: context.tr('Back to welcome'),
           onPressed: _isSubmitting ? null : _previous,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
       ),
       const SizedBox(height: 20),
       Text(
-        'Before you begin',
+        context.tr('Before you begin'),
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
       Text(
-        'Your choices come first. Account details come later.',
+        context.tr('Your choices come first. Account details come later.'),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       if (AppScope.of(context).cloudEnabled) ...[
@@ -416,14 +443,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: TextButton(
             key: const Key('onboarding-privacy-existing-account'),
             onPressed: _isSubmitting ? null : _openExistingAccount,
-            child: const Text('Already have an account? Sign in'),
+            child: Text(context.tr('Already have an account? Sign in')),
           ),
         ),
       ],
       const SizedBox(height: 20),
       if (_ageLocked && _ageBand != null) ...[
         Text(
-          'Selected age band: ${_ageBand!.label}',
+          context.tr(
+            "Selected age band: {value0}",
+            args: {'value0': context.tr(_ageBand!.label)},
+          ),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
@@ -452,7 +482,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _welcome(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(28, 36, 28, 10),
     children: [
-      const SizedBox(height: 12),
+      LanguagePicker(
+        key: const Key('onboarding-language-picker'),
+        value: _preferredLanguage,
+        onChanged: _isSubmitting
+            ? null
+            : (value) {
+                setState(() => _preferredLanguage = value);
+                AppScope.of(context).previewOnboardingLanguage(value);
+              },
+      ),
+      const SizedBox(height: 8),
+      Text(
+        context.tr(
+          'Some technical details and notifications are still in English.',
+        ),
+        style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 12),
+      ),
+      const SizedBox(height: 24),
       Center(
         child: Container(
           width: 74,
@@ -470,13 +517,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 20),
       Text(
-        'Tonyo',
+        context.tr('Tonyo'),
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
       Text(
-        'Make more informed choices about focus and recovery with estimates shaped by your daily signals.',
+        context.tr(
+          'Make more informed choices about focus and recovery with estimates shaped by your daily signals.',
+        ),
         textAlign: TextAlign.center,
         style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.45),
       ),
@@ -486,13 +535,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         TextButton(
           key: const Key('onboarding-welcome-sign-in'),
           onPressed: _isSubmitting ? null : _openExistingAccount,
-          child: const Text('Already have an account? Sign in'),
+          child: Text(context.tr('Already have an account? Sign in')),
         ),
       ],
       if (AppScope.of(context).canResumeLocalProfile) ...[
         const SizedBox(height: 18),
         Text(
-          'You are signed out. Continue your saved local profile on this device. Local mode does not verify a password or sign you into Firebase.',
+          context.tr(
+            'You are signed out. Continue your saved local profile on this device. Local mode does not verify a password or sign you into Firebase.',
+          ),
           key: Key('onboarding-local-resume-notice'),
           textAlign: TextAlign.center,
           style: TextStyle(color: TonyoPalette.of(context).muted, height: 1.45),
@@ -508,11 +559,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               runSpacing: 8,
               children: [
                 Text(
-                  'Tomorrow’s energy forecast',
+                  context.tr('Tomorrow’s energy forecast'),
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 Text(
-                  'Illustrative demo',
+                  context.tr('Illustrative demo'),
                   style: TextStyle(
                     color: TonyoPalette.of(context).secondary,
                     fontSize: 11,
@@ -539,7 +590,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 24),
       Text(
-        'LEARNS FROM YOUR SIGNALS',
+        context.tr('LEARNS FROM YOUR SIGNALS'),
         style: TextStyle(
           color: TonyoPalette.of(context).muted,
           fontSize: 11,
@@ -576,39 +627,61 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       const SizedBox(height: 20),
-      Text('Make it yours', style: Theme.of(context).textTheme.headlineLarge),
+      Text(
+        context.tr('Make it yours'),
+        style: Theme.of(context).textTheme.headlineLarge,
+      ),
       const SizedBox(height: 8),
       Text(
-        'These details shape recommendations. You can change them later.',
+        context.tr(
+          'These details shape recommendations. You can change them later.',
+        ),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 28),
       TextField(
         controller: _nameController,
         textCapitalization: TextCapitalization.words,
-        decoration: const InputDecoration(labelText: 'First name'),
+        decoration: InputDecoration(labelText: context.tr('First name')),
       ),
       const SizedBox(height: 14),
       Text(
-        'Age band: ${AppScope.of(context).privacyConsent?.ageBand.label ?? _ageBand?.label ?? 'Review required'}',
+        context.tr(
+          "Age band: {value0}",
+          args: {
+            'value0': context.tr(
+              AppScope.of(context).privacyConsent?.ageBand.label ??
+                  _ageBand?.label ??
+                  'Review required',
+            ),
+          },
+        ),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
         initialValue: _role,
-        decoration: const InputDecoration(labelText: 'I am a…'),
+        decoration: InputDecoration(labelText: context.tr('I am a…')),
         items: ['Student', 'Athlete', 'Student athlete']
-            .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+            .map(
+              (item) =>
+                  DropdownMenuItem(value: item, child: Text(context.tr(item))),
+            )
             .toList(),
         onChanged: (value) => setState(() => _role = value!),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
         initialValue: _goal,
-        decoration: const InputDecoration(labelText: 'Primary goal'),
+        decoration: InputDecoration(labelText: context.tr('Primary goal')),
         items:
             ['Improve focus', 'Improve recovery', 'Balance focus and training']
-                .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                .map(
+                  (item) => DropdownMenuItem(
+                    value: item,
+                    child: Text(context.tr(item)),
+                  ),
+                )
                 .toList(),
         onChanged: (value) => setState(() {
           _goal = value!;
@@ -619,11 +692,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       DropdownButtonFormField<CoachPriority>(
         key: const Key('onboarding-coach-priority'),
         initialValue: _coachPriority,
-        decoration: const InputDecoration(labelText: 'AI Coach priority'),
+        decoration: InputDecoration(labelText: context.tr('AI Coach priority')),
         items: CoachPriority.values
             .map(
-              (value) =>
-                  DropdownMenuItem(value: value, child: Text(value.label)),
+              (value) => DropdownMenuItem(
+                value: value,
+                child: Text(context.tr(value.label)),
+              ),
             )
             .toList(),
         onChanged: (value) => setState(() => _coachPriority = value!),
@@ -639,7 +714,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             SizedBox(width: 14),
             Expanded(
               child: Text(
-                'Tonyo is a wellness tool, not medical advice. It never diagnoses fatigue or burnout.',
+                context.tr(
+                  'Tonyo is a wellness tool, not medical advice. It never diagnoses fatigue or burnout.',
+                ),
               ),
             ),
           ],
@@ -660,12 +737,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 20),
       Text(
-        'Your usual rhythm',
+        context.tr('Your usual rhythm'),
         style: Theme.of(context).textTheme.headlineLarge,
       ),
       const SizedBox(height: 8),
       Text(
-        'Tonyo uses your routine to build an initial circadian forecast.',
+        context.tr(
+          'Tonyo uses your routine to build an initial circadian forecast.',
+        ),
         style: TextStyle(color: TonyoPalette.of(context).muted),
       ),
       const SizedBox(height: 32),
@@ -709,12 +788,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Start with a useful demo',
+                    context.tr('Start with a useful demo'),
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 5),
                   Text(
-                    'Fixture signals make every dashboard immediately explorable. Replace them with your entries whenever you’re ready.',
+                    context.tr(
+                      'Fixture signals make every dashboard immediately explorable. Replace them with your entries whenever you’re ready.',
+                    ),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                 ],
@@ -874,6 +955,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         coachPriority: _coachPriority,
         wakeHour: _wake,
         bedHour: _bed,
+        preferredLanguage: _preferredLanguage,
       );
       if (_existingAccountVerified) {
         await controller.completeAuthenticatedOnboarding(profile);
@@ -950,7 +1032,7 @@ class _SignalPill extends StatelessWidget {
         Icon(icon, size: 16, color: TonyoPalette.of(context).primary),
         const SizedBox(width: 7),
         Text(
-          label,
+          context.tr(label),
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       ],
@@ -984,12 +1066,12 @@ class _SliderSetting extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              title,
+              context.tr(title),
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
           Text(
-            label,
+            context.tr(label),
             style: TextStyle(
               color: TonyoPalette.of(context).secondary,
               fontWeight: FontWeight.w600,

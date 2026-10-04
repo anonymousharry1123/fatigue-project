@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../app_controller.dart';
+import '../evidence_provenance.dart';
+import '../l10n/app_localizations.dart';
 import '../local_day.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -51,12 +53,12 @@ class _ForecastScreenState extends State<ForecastScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'Energy Forecast',
+                  context.tr('Energy Forecast'),
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
               ),
               IconButton.filledTonal(
-                tooltip: 'Refresh forecast',
+                tooltip: context.tr('Refresh forecast'),
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: controller.isForecastLoading
                     ? null
@@ -72,7 +74,9 @@ class _ForecastScreenState extends State<ForecastScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            'Experimental hourly curve from recorded inputs and fixed timing rules.',
+            context.tr(
+              'Experimental hourly curve from recorded inputs and fixed timing rules.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -83,10 +87,10 @@ class _ForecastScreenState extends State<ForecastScreen> {
             direction: MediaQuery.textScalerOf(context).scale(1) > 1.3
                 ? Axis.vertical
                 : Axis.horizontal,
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Today')),
-              ButtonSegment(value: 1, label: Text('Tomorrow')),
-              ButtonSegment(value: 2, label: Text('Week')),
+            segments: [
+              ButtonSegment(value: 0, label: Text(context.tr('Today'))),
+              ButtonSegment(value: 1, label: Text(context.tr('Tomorrow'))),
+              ButtonSegment(value: 2, label: Text(context.tr('Week'))),
             ],
             selected: {_range},
             showSelectedIcon: false,
@@ -127,7 +131,9 @@ class _ForecastScreenState extends State<ForecastScreen> {
             ),
           const SizedBox(height: 14),
           Text(
-            'The curve and shaded bands are uncalibrated estimates, not statistical confidence intervals. They do not establish when you will feel alert or tired, or whether exercise is safe.',
+            context.tr(
+              'The curve and shaded bands are uncalibrated estimates, not statistical confidence intervals. They do not establish when you will feel alert or tired, or whether exercise is safe.',
+            ),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
@@ -198,8 +204,10 @@ class _DailyForecast extends StatelessWidget {
             icon: Icons.visibility_outlined,
             color: TonyoPalette.of(context).secondary,
             title: 'Limited data quality',
-            detail:
-                'The displayed band averages ±${summary.averageUncertainty.round()} points. This width is a rule-based display estimate, not a calibrated error range.',
+            detail: context.tr(
+              'The displayed band averages ±{points} points. This width is a rule-based display estimate, not a calibrated error range.',
+              args: {'points': summary.averageUncertainty.round()},
+            ),
           ),
           const SizedBox(height: 10),
         ],
@@ -215,7 +223,7 @@ class _DailyForecast extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _dayHeading(day),
+                          _dayHeading(context, day),
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                             fontSize: 11,
@@ -224,7 +232,10 @@ class _DailyForecast extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Curve high ${formatHour(summary.peakTime)}',
+                          context.tr(
+                            'Curve high {time}',
+                            args: {'time': _time(context, summary.peakTime)},
+                          ),
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                       ],
@@ -261,17 +272,27 @@ class _DailyForecast extends StatelessWidget {
                 children: [
                   _MetricPill(
                     icon: Icons.show_chart_rounded,
-                    label: 'Average ${summary.averageEnergy.round()}',
+                    label: context.tr(
+                      'Average {value}',
+                      args: {'value': summary.averageEnergy.round()},
+                    ),
                   ),
                   _MetricPill(
                     icon: Icons.unfold_more_rounded,
-                    label:
-                        '${summary.lowEnergy.round()}–${summary.peakEnergy.round()} range',
+                    label: context.tr(
+                      '{low}–{high} range',
+                      args: {
+                        'low': summary.lowEnergy.round(),
+                        'high': summary.peakEnergy.round(),
+                      },
+                    ),
                   ),
                   _MetricPill(
                     icon: Icons.shield_outlined,
-                    label:
-                        '±${summary.averageUncertainty.round()} uncalibrated band',
+                    label: context.tr(
+                      '±{points} uncalibrated band',
+                      args: {'points': summary.averageUncertainty.round()},
+                    ),
                   ),
                 ],
               ),
@@ -288,7 +309,7 @@ class _DailyForecast extends StatelessWidget {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      '$sourceLabel · ${_updatedLabel(summary.updatedAt)}',
+                      '${context.tr(sourceLabel)} · ${_updatedLabel(context, summary.updatedAt)}',
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 10,
@@ -300,9 +321,11 @@ class _DailyForecast extends StatelessWidget {
             ],
           ),
         ),
-        const SectionHeader('Curve markers'),
+        SectionHeader(context.tr('Curve markers')),
         Text(
-          'These markers describe the formula’s curve. Their timing is not a validated prediction of focus, a crash, or recovery.',
+          context.tr(
+            'These markers describe the formula’s curve. Their timing is not a validated prediction of focus, a crash, or recovery.',
+          ),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
         const SizedBox(height: 10),
@@ -312,7 +335,7 @@ class _DailyForecast extends StatelessWidget {
             child: _ForecastWindowCard(window: window),
           ),
         ),
-        const SectionHeader('What shapes this curve'),
+        SectionHeader(context.tr('What shapes this curve')),
         TonyoCard(
           child: Column(
             children: [
@@ -385,7 +408,7 @@ class _ForecastWindowCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      style.title,
+                      context.tr(style.title),
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -393,7 +416,7 @@ class _ForecastWindowCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${formatHour(window.start)}–${formatHour(window.end)}',
+                      '${_time(context, window.start)}–${_time(context, window.end)}',
                       style: TextStyle(
                         color: style.color,
                         fontSize: 11,
@@ -425,7 +448,7 @@ class _ForecastWindowCard extends StatelessWidget {
           ),
           const SizedBox(height: 11),
           Text(
-            window.reason,
+            _windowReason(context, window),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 10,
@@ -445,7 +468,9 @@ class _ForecastWindowCard extends StatelessWidget {
                 SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    'No linked signal or check-in documents available.',
+                    context.tr(
+                      'No linked signal or check-in documents available.',
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 9,
@@ -456,7 +481,7 @@ class _ForecastWindowCard extends StatelessWidget {
             )
           else ...[
             Text(
-              'LINKED EVIDENCE',
+              context.tr('LINKED EVIDENCE'),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 9,
@@ -490,12 +515,20 @@ class _ForecastEvidenceRow extends StatelessWidget {
         ? Icons.mood_rounded
         : iconForSignal(evidence.signalType!);
     final kindLabel = isSignal ? 'Linked signal' : 'Linked check-in';
-    final source = switch (evidence.source) {
-      SignalSource.healthKit => 'HealthKit',
-      SignalSource.model => 'Model',
-      SignalSource.manual => 'Manual',
-      null => 'Manual',
-    };
+    final signal = AppScope.of(
+      context,
+    ).signals.where((row) => row.id == evidence.id).firstOrNull;
+    final isDemo =
+        EvidenceProvenance.hasDemoMarker([evidence.id]) ||
+        (signal != null && EvidenceProvenance.signalIsDemo(signal));
+    final source = isDemo
+        ? 'Demo / synthetic example'
+        : switch (evidence.source) {
+            SignalSource.healthKit => 'HealthKit',
+            SignalSource.model => 'Model',
+            SignalSource.manual => 'Manual',
+            null => 'Manual',
+          };
     return Row(
       key: Key('forecast-evidence-${evidence.kind.name}-${evidence.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +540,7 @@ class _ForecastEvidenceRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                evidence.label,
+                context.tr(evidence.label),
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
@@ -515,21 +548,28 @@ class _ForecastEvidenceRow extends StatelessWidget {
               ),
               const SizedBox(height: 1),
               Text(
-                evidence.detail,
+                context.tr(evidence.detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 9,
                 ),
               ),
               Text(
-                '$source · ${formatDate(evidence.timestamp)} at ${formatHour(evidence.timestamp)}',
+                context.tr(
+                  '{source} · {date} at {time}',
+                  args: {
+                    'source': context.tr(source),
+                    'date': _date(context, evidence.timestamp),
+                    'time': _time(context, evidence.timestamp),
+                  },
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 8,
                 ),
               ),
               const SizedBox(height: 4),
-              _evidenceTag(kindLabel),
+              _evidenceTag(context, kindLabel),
             ],
           ),
         ),
@@ -537,8 +577,11 @@ class _ForecastEvidenceRow extends StatelessWidget {
     );
   }
 
-  Widget _evidenceTag(String kindLabel) => Tooltip(
-    message: '$kindLabel document ${evidence.id}',
+  Widget _evidenceTag(BuildContext context, String kindLabel) => Tooltip(
+    message: context.tr(
+      '{kind} document {id}',
+      args: {'kind': context.tr(kindLabel), 'id': evidence.id},
+    ),
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
@@ -546,7 +589,7 @@ class _ForecastEvidenceRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        kindLabel,
+        context.tr(kindLabel),
         style: TextStyle(
           color: accent,
           fontSize: 7,
@@ -588,8 +631,13 @@ class _WeekForecast extends StatelessWidget {
             icon: Icons.calendar_view_week_rounded,
             color: TonyoPalette.of(context).warning,
             title: 'Partial weekly forecast',
-            detail:
-                '${summaries.length} of ${AppController.forecastDayCount} days are available. Refresh to fill the missing days.',
+            detail: context.tr(
+              '{available} of {total} days are available. Refresh to fill the missing days.',
+              args: {
+                'available': summaries.length,
+                'total': AppController.forecastDayCount,
+              },
+            ),
           ),
           const SizedBox(height: 10),
         ],
@@ -598,7 +646,7 @@ class _WeekForecast extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '7-DAY OUTLOOK',
+                context.tr('7-DAY OUTLOOK'),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -608,14 +656,24 @@ class _WeekForecast extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Average ${weeklyAverage.round()}',
+                context.tr(
+                  'Average {value}',
+                  args: {'value': weeklyAverage.round()},
+                ),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 4),
               Text(
                 lowConfidenceDays == 0
-                    ? 'All displayed bands are uncalibrated estimates.'
-                    : '$lowConfidenceDays ${lowConfidenceDays == 1 ? 'day has' : 'days have'} a wider uncalibrated band.',
+                    ? context.tr(
+                        'All displayed bands are uncalibrated estimates.',
+                      )
+                    : context.tr(
+                        lowConfidenceDays == 1
+                            ? '{days} day has a wider uncalibrated band.'
+                            : '{days} days have a wider uncalibrated band.',
+                        args: {'days': lowConfidenceDays},
+                      ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -626,7 +684,7 @@ class _WeekForecast extends StatelessWidget {
             ],
           ),
         ),
-        const SectionHeader('Daily summaries'),
+        SectionHeader(context.tr('Daily summaries')),
         ...summaries.map(
           (summary) => Padding(
             padding: const EdgeInsets.only(bottom: 9),
@@ -649,11 +707,11 @@ class _DaySummaryCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _shortDay(summary.day),
+          _shortDay(context, summary.day),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         Text(
-          formatDate(summary.day),
+          _date(context, summary.day),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 9),
         ),
       ],
@@ -662,13 +720,18 @@ class _DaySummaryCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Curve high ${summary.peakEnergy.round()} at ${formatHour(summary.peakTime)}',
+          context.tr(
+            'Curve high {value} at {time}',
+            args: {
+              'value': summary.peakEnergy.round(),
+              'time': _time(context, summary.peakTime),
+            },
+          ),
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
         Text(
-          '${summary.lowEnergy.round()}–${summary.peakEnergy.round()} range · '
-          '±${summary.averageUncertainty.round()}',
+          '${context.tr('{low}–{high} range', args: {'low': summary.lowEnergy.round(), 'high': summary.peakEnergy.round()})} · ±${summary.averageUncertainty.round()}',
           style: TextStyle(
             color: summary.isLowConfidence
                 ? TonyoPalette.of(context).warning
@@ -679,8 +742,11 @@ class _DaySummaryCard extends StatelessWidget {
       ],
     );
     final average = Semantics(
-      label: 'Average estimated Energy',
-      value: '${summary.averageEnergy.round()} out of 100',
+      label: context.tr('Average estimated Energy'),
+      value: context.tr(
+        '{value} out of 100',
+        args: {'value': summary.averageEnergy.round()},
+      ),
       excludeSemantics: true,
       child: Text(
         '${summary.averageEnergy.round()}',
@@ -750,13 +816,16 @@ class _WeekChart extends StatelessWidget {
                   child: Semantics(
                     container: true,
                     excludeSemantics: true,
-                    label:
-                        '${_shortDay(summary.day)}, '
-                        '${formatDate(summary.day)}, ${summary.day.year}. '
-                        'Average estimated Energy: '
-                        '${summary.averageEnergy.round()} out of 100. '
-                        'Uncalibrated display band: plus or minus '
-                        '${summary.averageUncertainty.round()} points; not a statistical confidence interval.',
+                    label: context.tr(
+                      '{date}. Average estimated Energy: {value} out of 100. Uncalibrated display band: plus or minus {points} points; not a statistical confidence interval.',
+                      args: {
+                        'date': MaterialLocalizations.of(
+                          context,
+                        ).formatFullDate(summary.day),
+                        'value': summary.averageEnergy.round(),
+                        'points': summary.averageUncertainty.round(),
+                      },
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -781,7 +850,9 @@ class _WeekChart extends StatelessWidget {
                         ),
                         const SizedBox(height: 7),
                         Text(
-                          _shortDay(summary.day).substring(0, 1),
+                          MaterialLocalizations.of(
+                            context,
+                          ).narrowWeekdays[summary.day.weekday % 7],
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
                             fontSize: 10,
@@ -804,7 +875,7 @@ class _WeekChart extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(top: 10),
               child: Text(
-                'Swipe to view more days.',
+                context.tr('Swipe to view more days.'),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -838,14 +909,18 @@ class _ForecastEmptyState extends StatelessWidget {
             ),
           const SizedBox(height: 14),
           Text(
-            loading ? 'Building your forecast…' : 'No forecast available',
+            context.tr(
+              loading ? 'Building your forecast…' : 'No forecast available',
+            ),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
           Text(
-            loading
-                ? 'Combining your recent signals and check-ins.'
-                : 'Not enough current information to estimate this range. An optional check-in can add an observation.',
+            context.tr(
+              loading
+                  ? 'Combining your recent signals and check-ins.'
+                  : 'Not enough current information to estimate this range. An optional check-in can add an observation.',
+            ),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
@@ -857,7 +932,7 @@ class _ForecastEmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Build forecast'),
+              label: Text(context.tr('Build forecast')),
             ),
           ],
         ],
@@ -897,12 +972,12 @@ class _StatusBanner extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
+                context.tr(title),
                 style: TextStyle(color: color, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
               Text(
-                detail,
+                context.tr(detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 10,
@@ -971,9 +1046,12 @@ class _ModelInputRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
             Text(
-              detail,
+              context.tr(title),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              context.tr(detail),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 9,
@@ -986,25 +1064,73 @@ class _ModelInputRow extends StatelessWidget {
   );
 }
 
-String _dayHeading(DateTime day) {
+String _dayHeading(BuildContext context, DateTime day) {
   final now = DateTime.now();
   final today = localDay(now);
   final target = localDay(day);
-  if (target == today) return 'TODAY · ${formatDate(day).toUpperCase()}';
-  if (target == localDay(today, 1)) {
-    return 'TOMORROW · ${formatDate(day).toUpperCase()}';
+  if (target == today) {
+    return '${context.tr('TODAY')} · ${_date(context, day).toUpperCase()}';
   }
-  return '${_shortDay(day).toUpperCase()} · ${formatDate(day).toUpperCase()}';
+  if (target == localDay(today, 1)) {
+    return '${context.tr('TOMORROW')} · ${_date(context, day).toUpperCase()}';
+  }
+  return '${_shortDay(context, day).toUpperCase()} · ${_date(context, day).toUpperCase()}';
 }
 
-String _shortDay(DateTime value) =>
-    const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][value.weekday - 1];
+String _shortDay(BuildContext context, DateTime value) => context.tr(
+  const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][value.weekday - 1],
+);
 
-String _updatedLabel(DateTime? updatedAt) {
-  if (updatedAt == null) return 'Update time unavailable';
+String _date(BuildContext context, DateTime value) =>
+    MaterialLocalizations.of(context).formatShortMonthDay(value.toLocal());
+
+String _time(BuildContext context, DateTime value) =>
+    MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(value.toLocal()),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+
+String _updatedLabel(BuildContext context, DateTime? updatedAt) {
+  if (updatedAt == null) return context.tr('Update time unavailable');
   final elapsed = DateTime.now().difference(updatedAt);
-  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'Updated just now';
-  if (elapsed.inMinutes < 60) return 'Updated ${elapsed.inMinutes}m ago';
-  if (elapsed.inHours < 24) return 'Updated ${elapsed.inHours}h ago';
-  return 'Updated ${elapsed.inDays}d ago';
+  if (elapsed.isNegative || elapsed.inMinutes < 1) {
+    return context.tr('Updated just now');
+  }
+  if (elapsed.inMinutes < 60) {
+    return context.tr(
+      'Updated {minutes}m ago',
+      args: {'minutes': elapsed.inMinutes},
+    );
+  }
+  if (elapsed.inHours < 24) {
+    return context.tr('Updated {hours}h ago', args: {'hours': elapsed.inHours});
+  }
+  return context.tr('Updated {days}d ago', args: {'days': elapsed.inDays});
+}
+
+String _windowReason(BuildContext context, ForecastWindow window) {
+  // Localize presentation only. Saved source data and deterministic rules keep
+  // their original values and calculation version.
+  if (window.evidence.isEmpty) return context.tr(window.reason);
+  final labels = window.evidence
+      .take(2)
+      .map((item) => context.tr(item.label).toLowerCase())
+      .toList();
+  final linked = labels.length == 1
+      ? labels.first
+      : context.tr(
+          '{first} and {second}',
+          args: {'first': labels[0], 'second': labels[1]},
+        );
+  return context.tr(
+    switch (window.type) {
+      ForecastWindowType.peak =>
+        'Experimental higher point in the curve, using {inputs}. Timing is unvalidated.',
+      ForecastWindowType.crash =>
+        'Experimental lower point in the curve, using {inputs}. A crash is not established.',
+      ForecastWindowType.recovery =>
+        'Experimental later rise in the curve, using {inputs}. Recovery is not established.',
+    },
+    args: {'inputs': linked},
+  );
 }

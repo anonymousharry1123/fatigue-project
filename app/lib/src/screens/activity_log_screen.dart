@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../activity_log_logic.dart';
 import '../app.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/translated_text.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -51,7 +53,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     final week = ActivityLogLogic.weekByCategory(logs);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Activity Log'),
+        title: const TranslatedText('Activity Log'),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -59,12 +61,12 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
           children: [
-            Text(
+            TranslatedText(
               _editingId == null ? 'Log today’s activity' : 'Edit activity',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 6),
-            Text(
+            TranslatedText(
               'Fill any categories you tracked. Zero means you recorded none. Leave a field blank when it is unknown. Saved manual exercise and hydration replace Apple Health totals for that day; clearing a category or deleting the manual log restores the imported fallback.',
               style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
@@ -126,13 +128,13 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                         if (_editingId != null) ...[
                           OutlinedButton(
                             onPressed: _saving ? null : _cancelEdit,
-                            child: const Text('Cancel'),
+                            child: const TranslatedText('Cancel'),
                           ),
                         ],
                         FilledButton.icon(
                           onPressed: _saving ? null : _save,
                           icon: const Icon(Icons.check_rounded),
-                          label: Text(
+                          label: TranslatedText(
                             _saving
                                 ? 'Saving…'
                                 : _editingId == null
@@ -149,7 +151,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             const SectionHeader('Last 7 days by category'),
             if (!week.any((series) => series.hasData))
               TonyoCard(
-                child: Text(
+                child: TranslatedText(
                   'No activity yet this week. Save a log to see daily category charts.',
                   style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
@@ -164,7 +166,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             SectionHeader('Recent entries', action: '${logs.length} saved'),
             if (logs.isEmpty)
               TonyoCard(
-                child: Text(
+                child: TranslatedText(
                   'No manual activity logs yet. Your first saved day will appear here.',
                   style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
@@ -206,7 +208,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       screenTimeHours: screenTime,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter at least one activity value.')),
+        const SnackBar(
+          content: TranslatedText('Enter at least one activity value.'),
+        ),
       );
       return;
     }
@@ -230,7 +234,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: TranslatedText(
             controller.cloudSyncError == null
                 ? 'Activity log saved.'
                 : 'Activity saved on this device. Cloud sync is pending.',
@@ -246,12 +250,12 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('$error')));
+      ).showSnackBar(SnackBar(content: TranslatedText('$error')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: TranslatedText(
             'Could not save activity. Your entries are still here; please try again.',
           ),
         ),
@@ -270,7 +274,9 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not delete activity. Please try again.'),
+          content: TranslatedText(
+            'Could not delete activity. Please try again.',
+          ),
         ),
       );
     } finally {
@@ -323,7 +329,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   double? _nullableParsed(TextEditingController controller) {
     final raw = controller.text.trim();
-    return raw.isEmpty ? null : double.parse(raw);
+    return raw.isEmpty ? null : double.parse(raw.replaceAll(',', '.'));
   }
 
   static String _number(double value) =>
@@ -364,12 +370,12 @@ class _NumberField extends StatelessWidget {
               child: Wrap(
                 spacing: 6,
                 children: [
-                  Text(
+                  TranslatedText(
                     label,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  Text(
-                    '($suffix)',
+                  TranslatedText(
+                    '(${context.tr(suffix)})',
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                 ],
@@ -380,7 +386,10 @@ class _NumberField extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       Semantics(
-        label: '$label in $suffix',
+        label: context.tr(
+          '{label} in {unit}',
+          args: {'label': context.tr(label), 'unit': context.tr(suffix)},
+        ),
         child: TextFormField(
           enabled: enabled,
           controller: controller,
@@ -389,18 +398,24 @@ class _NumberField extends StatelessWidget {
               ? TextInputAction.done
               : TextInputAction.next,
           inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+            TextInputFormatter.withFunction(
+              (previous, next) =>
+                  RegExp(r'^\d*([.,]\d{0,2})?$').hasMatch(next.text)
+                  ? next
+                  : previous,
+            ),
           ],
           decoration: InputDecoration(
-            hintText: 'Blank = not recorded',
+            hintText: context.tr('Blank = not recorded'),
             errorMaxLines: 4,
           ),
           validator: (raw) {
             final text = raw?.trim() ?? '';
             if (text.isEmpty) return null;
-            final value = double.tryParse(text);
-            if (value == null) return 'Enter a valid number.';
-            return ActivityLogEntry.validationMessage(type, value);
+            final value = double.tryParse(text.replaceAll(',', '.'));
+            if (value == null) return context.tr('Enter a valid number.');
+            final message = ActivityLogEntry.validationMessage(type, value);
+            return message == null ? null : context.tr(message);
           },
         ),
       ),
@@ -417,7 +432,14 @@ class _CategoryWeekCard extends StatelessWidget {
     final color = _color(series.type, context);
     final unit = ActivityLogLogic.categoryUnit(series.type);
     final peakLabel = series.hasData
-        ? 'Most on ${_weekday(series.peakDay)} · ${_format(series.peakValue)} $unit'
+        ? context.tr(
+            'Most on {day} · {value} {unit}',
+            args: {
+              'day': context.tr(_weekday(series.peakDay)),
+              'value': _format(series.peakValue),
+              'unit': context.tr(unit),
+            },
+          )
         : 'No data this week';
     return TonyoCard(
       child: Column(
@@ -429,11 +451,11 @@ class _CategoryWeekCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Icon(_icon(series.type), color: color, size: 18),
-              Text(
+              TranslatedText(
                 ActivityLogLogic.categoryTitle(series.type),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              Text(
+              TranslatedText(
                 peakLabel,
                 style: TextStyle(
                   color: color,
@@ -445,8 +467,19 @@ class _CategoryWeekCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Semantics(
-            label:
-                '${ActivityLogLogic.categoryTitle(series.type)} over the last seven days. ${List.generate(series.days.length, (index) => '${_weekday(series.days[index])}: ${series.isObserved(index) ? '${_format(series.values[index])} $unit' : 'not recorded'}').join('. ')}',
+            label: context.tr(
+              '{category} over the last seven days. {days}',
+              args: {
+                'category': context.tr(
+                  ActivityLogLogic.categoryTitle(series.type),
+                ),
+                'days': List.generate(
+                  series.days.length,
+                  (index) =>
+                      '${context.tr(_weekday(series.days[index]))}: ${series.isObserved(index) ? '${_format(series.values[index])} ${context.tr(unit)}' : context.tr('not recorded')}',
+                ).join('. '),
+              },
+            ),
             child: ExcludeSemantics(
               child: SizedBox(
                 height: 124 + (MediaQuery.textScalerOf(context).scale(14) - 14),
@@ -476,7 +509,7 @@ class _CategoryWeekCard extends StatelessWidget {
                                 context,
                               ).scale(14),
                               child: series.isObserved(entry.key)
-                                  ? Text(
+                                  ? TranslatedText(
                                       _format(entry.value),
                                       style: TextStyle(
                                         color: isPeak
@@ -486,7 +519,7 @@ class _CategoryWeekCard extends StatelessWidget {
                                         fontWeight: FontWeight.w700,
                                       ),
                                     )
-                                  : const Text(
+                                  : const TranslatedText(
                                       '—',
                                       style: TextStyle(fontSize: 8),
                                     ),
@@ -515,7 +548,7 @@ class _CategoryWeekCard extends StatelessWidget {
             children: series.days
                 .map(
                   (day) => Expanded(
-                    child: Text(
+                    child: TranslatedText(
                       _weekday(day),
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -578,18 +611,18 @@ class _ActivityHistoryCard extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
+              child: TranslatedText(
                 formatDate(log.timestamp),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
             IconButton(
-              tooltip: 'Edit activity',
+              tooltip: context.tr('Edit activity'),
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
             IconButton(
-              tooltip: 'Delete activity',
+              tooltip: context.tr('Delete activity'),
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline_rounded),
             ),
@@ -599,26 +632,30 @@ class _ActivityHistoryCard extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
-            _metric(
-              context,
-              Icons.water_drop_rounded,
-              '${_format(log.hydrationLiters)} L',
-            ),
-            _metric(
-              context,
-              Icons.menu_book_rounded,
-              '${_format(log.studyHours)} hr study',
-            ),
-            _metric(
-              context,
-              Icons.fitness_center_rounded,
-              '${_format(log.exerciseHours)} hr exercise',
-            ),
-            _metric(
-              context,
-              Icons.smartphone_rounded,
-              '${_format(log.screenTimeHours)} hr screen',
-            ),
+            if (log.hydrationLiters != null)
+              _metric(
+                context,
+                Icons.water_drop_rounded,
+                '${_format(log.hydrationLiters)} L',
+              ),
+            if (log.studyHours != null)
+              _metric(
+                context,
+                Icons.menu_book_rounded,
+                '${_format(log.studyHours)} hr study',
+              ),
+            if (log.exerciseHours != null)
+              _metric(
+                context,
+                Icons.fitness_center_rounded,
+                '${_format(log.exerciseHours)} hr exercise',
+              ),
+            if (log.screenTimeHours != null)
+              _metric(
+                context,
+                Icons.smartphone_rounded,
+                '${_format(log.screenTimeHours)} hr screen',
+              ),
           ],
         ),
       ],
@@ -638,7 +675,7 @@ class _ActivityHistoryCard extends StatelessWidget {
       Icon(icon, size: 15, color: TonyoPalette.of(context).muted),
       const SizedBox(width: 4),
       Flexible(
-        child: Text(
+        child: TranslatedText(
           text,
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
         ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/translated_text.dart';
 import '../models.dart';
 import '../sleep_sync_logic.dart';
 import '../theme.dart';
@@ -62,7 +64,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     final previewDuration = previewWake.difference(previewBedtime);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sleep Log'),
+        title: const TranslatedText('Sleep Log'),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -70,12 +72,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
           children: [
-            Text(
+            TranslatedText(
               _editingId == null ? 'How did you sleep?' : 'Edit sleep',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 6),
-            Text(
+            TranslatedText(
               'Keep main sleep and naps separate to preserve your nightly average.',
               style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
@@ -90,12 +92,12 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                     segments: const [
                       ButtonSegment(
                         value: SleepKind.mainSleep,
-                        label: Text('Main sleep'),
+                        label: TranslatedText('Main sleep'),
                         icon: Icon(Icons.bedtime_rounded),
                       ),
                       ButtonSegment(
                         value: SleepKind.nap,
-                        label: Text('Nap'),
+                        label: TranslatedText('Nap'),
                         icon: Icon(Icons.airline_seat_individual_suite_rounded),
                       ),
                     ],
@@ -105,7 +107,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         : (selection) => _selectKind(selection.single),
                   ),
                   const SizedBox(height: 10),
-                  Text(
+                  TranslatedText(
                     _kind == SleepKind.nap
                         ? 'Naps add daytime rest without changing your main-sleep average or bedtime consistency.'
                         : 'Your longest planned sleep, including daytime sleep for shift schedules.',
@@ -160,13 +162,13 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                   Row(
                     children: [
                       const Expanded(
-                        child: Text(
+                        child: TranslatedText(
                           'Sleep quality',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
+                      TranslatedText(
                         '${_quality.round()} / 5',
                         style: TextStyle(
                           color: TonyoPalette.of(context).primary,
@@ -177,7 +179,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                   ),
                   MergeSemantics(
                     child: Semantics(
-                      label: 'Sleep quality',
+                      label: context.tr('Sleep quality'),
                       child: Slider(
                         key: const Key('sleep-quality-slider'),
                         value: _quality,
@@ -185,8 +187,10 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         max: 5,
                         divisions: 4,
                         activeColor: TonyoPalette.of(context).primary,
-                        semanticFormatterCallback: (value) =>
-                            '${value.round()} out of 5',
+                        semanticFormatterCallback: (value) => context.tr(
+                          '{value} out of 5',
+                          args: {'value': value.round()},
+                        ),
                         onChanged: _saving
                             ? null
                             : (value) => setState(() => _quality = value),
@@ -202,7 +206,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
+                        child: TranslatedText(
                           'Calculated duration: ${_durationLabel(previewDuration)}',
                           key: const Key('sleep-duration-preview'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -217,7 +221,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: _saving ? null : _cancelEdit,
-                            child: const Text('Cancel'),
+                            child: const TranslatedText('Cancel'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -227,7 +231,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                         child: FilledButton.icon(
                           onPressed: _saving ? null : _save,
                           icon: const Icon(Icons.check_rounded),
-                          label: Text(
+                          label: TranslatedText(
                             _saving
                                 ? 'Saving…'
                                 : _editingId == null
@@ -258,7 +262,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        TranslatedText(
                           mainSleepLogs.length < 2
                               ? 'Add 2 main sleeps to calculate'
                               : '±${controller.bedtimeConsistencyMinutes.round()} min',
@@ -268,7 +272,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Text(
+                        TranslatedText(
                           'Average start-time variation across your 7 most recent main sleeps. Naps are excluded.',
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
@@ -295,11 +299,21 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${recentNaps.length} ${recentNaps.length == 1 ? 'nap' : 'naps'} · ${_durationLabel(Duration(minutes: napMinutes))} total',
+                        TranslatedText(
+                          context.tr(
+                            recentNaps.length == 1
+                                ? '{count} nap · {duration} total'
+                                : '{count} naps · {duration} total',
+                            args: {
+                              'count': recentNaps.length,
+                              'duration': _durationLabel(
+                                Duration(minutes: napMinutes),
+                              ),
+                            },
+                          ),
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        Text(
+                        TranslatedText(
                           'Tracked separately from main sleep.',
                           style: TextStyle(
                             color: TonyoPalette.of(context).muted,
@@ -315,7 +329,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
             SectionHeader('Recent sleep', action: '${logs.length} saved'),
             if (logs.isEmpty)
               TonyoCard(
-                child: Text(
+                child: TranslatedText(
                   'No sleep entries yet. Main sleep and naps will appear here.',
                   style: TextStyle(color: TonyoPalette.of(context).muted),
                 ),
@@ -382,7 +396,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     if (validation != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(validation)));
+      ).showSnackBar(SnackBar(content: TranslatedText(validation)));
       return;
     }
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -403,7 +417,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: TranslatedText(
             controller.cloudSyncError != null
                 ? '${savedNap ? 'Nap' : 'Sleep'} saved on this device. Cloud sync is pending.'
                 : savedNap
@@ -421,7 +435,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: TranslatedText(
             'Could not save sleep. Your times and quality rating are still here; please try again.',
           ),
         ),
@@ -440,7 +454,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not delete sleep. Please try again.'),
+          content: TranslatedText('Could not delete sleep. Please try again.'),
         ),
       );
     } finally {
@@ -533,12 +547,19 @@ class _TimeButton extends StatelessWidget {
           children: [
             Icon(icon, size: 16),
             const SizedBox(width: 5),
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 11))),
+            Expanded(
+              child: TranslatedText(
+                label,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 5),
-        Text(
-          formatHour(time),
+        TranslatedText(
+          MaterialLocalizations.of(
+            context,
+          ).formatTimeOfDay(TimeOfDay.fromDateTime(time)),
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ],
@@ -574,11 +595,11 @@ class _SleepHistoryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${log.isNap ? 'Nap' : 'Main sleep'} · ${_SleepLogScreenState._durationLabel(log.duration)}',
+              TranslatedText(
+                '${context.tr(log.isNap ? 'Nap' : 'Main sleep')} · ${_SleepLogScreenState._durationLabel(log.duration)}',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              Text(
+              TranslatedText(
                 '${formatDate(log.wakeTime)} · ${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · quality ${log.quality.round()}/5',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
@@ -589,12 +610,12 @@ class _SleepHistoryCard extends StatelessWidget {
           ),
         ),
         IconButton(
-          tooltip: log.isNap ? 'Edit nap' : 'Edit sleep',
+          tooltip: context.tr(log.isNap ? 'Edit nap' : 'Edit sleep'),
           onPressed: onEdit,
           icon: const Icon(Icons.edit_outlined),
         ),
         IconButton(
-          tooltip: log.isNap ? 'Delete nap' : 'Delete sleep',
+          tooltip: context.tr(log.isNap ? 'Delete nap' : 'Delete sleep'),
           onPressed: onDelete,
           icon: const Icon(Icons.delete_outline_rounded),
         ),

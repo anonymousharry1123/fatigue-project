@@ -2,41 +2,74 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../check_in_logic.dart';
+import '../check_in_measurement.dart';
+import '../l10n/app_localizations.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/self_report_card.dart';
+import '../widgets/translated_text.dart';
 import 'reaction_test_screen.dart';
 
 class DailyCheckInScreen extends StatefulWidget {
   const DailyCheckInScreen({super.key, this.initialCheckIn});
-
   final DailyCheckIn? initialCheckIn;
-
   @override
   State<DailyCheckInScreen> createState() => _DailyCheckInScreenState();
 }
 
 class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
-  double energy = 6;
-  double mood = 6;
-  double stress = 4;
+  final ratings = <String, double?>{
+    for (final item in CheckInMeasurement.items) item.id: null,
+  };
+  final skipped = <String>{};
   final noteController = TextEditingController();
+  CheckInPeriod? period;
+  Map<String, dynamic>? _snapshot;
+  String? _language;
   bool saving = false;
+  String? _validationError;
   String? _pendingCreateId;
   DateTime? _pendingCreateTimestamp;
+  bool get _legacy =>
+      widget.initialCheckIn != null &&
+      !widget.initialCheckIn!.isResearchCheckIn;
 
-  CheckInPeriod get period =>
-      CheckInLogic.periodFor(widget.initialCheckIn?.timestamp);
+  bool get _legacyEditable =>
+      widget.initialCheckIn?.originalLegacyRatings == null &&
+      ['energy', 'mood', 'stress'].every(
+        (id) =>
+            ratings[id] != null &&
+            ratings[id]!.isFinite &&
+            CheckInLogic.isValidRating(ratings[id]!),
+      );
 
   @override
   void initState() {
     super.initState();
     final initial = widget.initialCheckIn;
     if (initial != null) {
-      energy = initial.energy;
-      mood = initial.mood;
-      stress = initial.stress;
+      ratings.addAll(selfReportRatings(initial));
+      period = initial.period;
       noteController.text = initial.note;
+      if (initial.isResearchCheckIn) {
+        _snapshot = initial.questionnaireSnapshot;
+        _language = initial.questionnaireLanguage;
+        skipped.addAll(ratings.keys.where((id) => ratings[id] == null));
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_legacy && widget.initialCheckIn == null && _snapshot == null) {
+      final localization = AppLocalizations.of(context);
+      _language = localization.language;
+      _snapshot = CheckInMeasurement.snapshot(
+        language: _language!,
+        translate: localization.text,
+      );
     }
   }
 
@@ -50,10 +83,17 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final history = controller.recentCheckIns();
-    final period = this.period;
+    final snapshotItems =
+        (_snapshot?['items'] as List?)?.whereType<Map>().toList() ??
+        const <Map>[];
+    final supported =
+        (_legacy && _legacyEditable) ||
+        (!_legacy &&
+            _snapshot?['version'] == CheckInMeasurement.currentVersion &&
+            snapshotItems.length == 6);
     return Scaffold(
       appBar: AppBar(
-        title: Text(
+        title: TranslatedText(
           widget.initialCheckIn == null ? 'Daily Check-in' : 'Edit Check-in',
         ),
         backgroundColor: Colors.transparent,
@@ -68,14 +108,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
               minHeight: 52,
             ),
             child: FilledButton(
-              onPressed: saving ? null : _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: TonyoPalette.of(context).primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: Text(
+              key: const Key('save-checkin'),
+              onPressed: saving || !supported ? null : _save,
+              child: TranslatedText(
                 saving
                     ? 'Saving…'
                     : widget.initialCheckIn == null
@@ -88,148 +123,169 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                children: [
-                  Text(
-                    widget.initialCheckIn == null
-                        ? 'How are you feeling?'
-                        : 'Update your check-in',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    'Rate energy, mood, and stress on a 1–10 scale. This is logged as a ${period.label.toLowerCase()} check-in based on the time of day.',
-                    style: TextStyle(color: TonyoPalette.of(context).muted),
-                  ),
-                  const SizedBox(height: 18),
-                  _PeriodBanner(period: period),
-                  const SizedBox(height: 10),
-                  TonyoCard(
-                    key: const Key('checkin-outcome-status'),
-                    color:
-                        (controller.outcomeConsent
-                                ? TonyoPalette.of(context).success
-                                : TonyoPalette.of(context).secondary)
-                            .withValues(alpha: .07),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          controller.outcomeConsent
-                              ? Icons.fact_check_rounded
-                              : Icons.lock_outline_rounded,
-                          color: controller.outcomeConsent
-                              ? TonyoPalette.of(context).success
-                              : TonyoPalette.of(context).secondary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: Text(
-                            controller.outcomeConsent
-                                ? 'Outcome learning is on. This energy rating will also be linked as a private observed-energy outcome.'
-                                : 'Outcome learning is off. This check-in still supports today’s wellness estimates, but no training record is created.',
-                            style: TextStyle(
-                              color: TonyoPalette.of(context).muted,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _RatingCard(
-                    icon: Icons.bolt_rounded,
-                    color: TonyoPalette.of(context).secondary,
-                    title: 'Energy',
-                    value: energy,
-                    badge: CheckInLogic.energyBadge(energy),
-                    low: '1 · Drained',
-                    middle: '5 · OK',
-                    high: '10 · Charged',
-                    onChanged: saving
-                        ? null
-                        : (value) => setState(() => energy = value),
-                  ),
-                  const SizedBox(height: 12),
-                  _RatingCard(
-                    icon: Icons.sentiment_satisfied_alt_rounded,
-                    color: TonyoPalette.of(context).primary,
-                    title: 'Mood',
-                    value: mood,
-                    badge: CheckInLogic.moodBadge(mood),
-                    low: '1 · Low',
-                    middle: '5 · Steady',
-                    high: '10 · Great',
-                    onChanged: saving
-                        ? null
-                        : (value) => setState(() => mood = value),
-                  ),
-                  const SizedBox(height: 12),
-                  _RatingCard(
-                    icon: Icons.psychology_alt_rounded,
-                    color: TonyoPalette.of(context).secondary,
-                    title: 'Stress',
-                    value: stress,
-                    badge: CheckInLogic.stressBadge(stress),
-                    low: '1 · Calm',
-                    middle: '5 · Moderate',
-                    high: '10 · Maxed',
-                    onChanged: saving
-                        ? null
-                        : (value) => setState(() => stress = value),
-                  ),
-                  const SizedBox(height: 12),
-                  TonyoCard(
-                    child: TextField(
-                      controller: noteController,
-                      enabled: !saving,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        labelText: 'Optional note',
-                        hintStyle: TextStyle(
-                          color: TonyoPalette.of(context).muted,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SectionHeader('Cognitive tests · 30 sec'),
-                  _TestCard(
-                    icon: Icons.timer_outlined,
-                    color: TonyoPalette.of(context).primary,
-                    title: 'Reaction time',
-                    detail: 'Tap when it flashes',
-                    status: 'Try now',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ReactionTestScreen(),
-                      ),
-                    ),
-                  ),
-                  const SectionHeader('Check-in history'),
-                  if (history.isEmpty)
-                    TonyoCard(
-                      child: Text(
-                        'No check-ins saved yet. Your ratings will appear here.',
-                        style: TextStyle(color: TonyoPalette.of(context).muted),
-                      ),
-                    )
-                  else
-                    ...history.map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _HistoryCard(checkIn: item),
-                      ),
-                    ),
-                ],
+            TranslatedText(
+              _legacy ? 'Update your check-in' : 'How do you feel right now?',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 8),
+            if (_legacy && !_legacyEditable) ...[
+              const TranslatedText(
+                'This earlier record cannot be edited with the current scales. Its original answers are retained.',
+              ),
+              const SizedBox(height: 12),
+              SelfReportRecordCard(checkIn: widget.initialCheckIn!),
+              const SizedBox(height: 12),
+            ] else if (_legacy) ...[
+              const TranslatedText(
+                'Editing an earlier three-item check-in. Its original measurement version and period are preserved.',
+              ),
+              const SizedBox(height: 12),
+              Text(
+                context.tr(
+                  '{period} check-in',
+                  args: {'period': context.tr(period!.label)},
+                ),
+              ),
+              const SizedBox(height: 12),
+              TonyoCard(
+                key: const Key('checkin-outcome-status'),
+                child: TranslatedText(
+                  controller.outcomeConsent
+                      ? 'Outcome learning is on. This energy rating will also be linked as a private observed-energy outcome.'
+                      : 'Outcome learning is off. This check-in still supports today’s wellness estimates, but no training record is created.',
+                ),
+              ),
+              const SizedBox(height: 18),
+              for (final id in ['energy', 'mood', 'stress']) ...[
+                _LegacyRatingCard(
+                  icon: _iconFor(id),
+                  color: TonyoPalette.of(context).secondary,
+                  title: _labelFor(id),
+                  value: ratings[id]!,
+                  badge: switch (id) {
+                    'energy' => CheckInLogic.energyBadge(ratings[id]!),
+                    'mood' => CheckInLogic.moodBadge(ratings[id]!),
+                    _ => CheckInLogic.stressBadge(ratings[id]!),
+                  },
+                  low: switch (id) {
+                    'energy' => '1 · Drained',
+                    'mood' => '1 · Low',
+                    _ => '1 · Calm',
+                  },
+                  middle: switch (id) {
+                    'energy' => '5 · OK',
+                    'mood' => '5 · Steady',
+                    _ => '5 · Moderate',
+                  },
+                  high: switch (id) {
+                    'energy' => '10 · Charged',
+                    'mood' => '10 · Great',
+                    _ => '10 · Maxed',
+                  },
+                  onChanged: saving
+                      ? null
+                      : (value) => setState(() => ratings[id] = value),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ] else ...[
+              const TranslatedText(
+                CheckInMeasurement.disclosure,
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              const TranslatedText(
+                'These are draft custom self-report questions, not a validated questionnaire. Your answers stay separate from Tonyo’s experimental scores and are not used to train models.',
+              ),
+              const SizedBox(height: 8),
+              const TranslatedText(
+                'Choose a period and answer at least one item. Other items and notes are optional; unanswered items stay missing.',
+              ),
+              const SizedBox(height: 12),
+              _PeriodPicker(
+                value: period,
+                onChanged: saving
+                    ? null
+                    : (value) => setState(() => period = value),
+              ),
+              const SizedBox(height: 12),
+              if (_language != AppLocalizations.of(context).language) ...[
+                const TranslatedText(
+                  'The questions below remain in their originally recorded language so this measurement is not silently changed.',
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (!supported)
+                const TranslatedText(
+                  'This questionnaire version cannot be edited in this app version. Its saved answers are retained.',
+                ),
+              for (final item in snapshotItems) ...[
+                _ResearchRatingCard(
+                  item: item,
+                  value: ratings[item['id']],
+                  skipped: skipped.contains(item['id']),
+                  onChanged: saving || !supported
+                      ? null
+                      : (value) => setState(() {
+                          ratings[item['id'] as String] = value;
+                          if (value == null) {
+                            skipped.add(item['id'] as String);
+                          } else {
+                            skipped.remove(item['id']);
+                          }
+                        }),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+            if (_validationError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TranslatedText(
+                  _validationError!,
+                  key: const Key('checkin-validation'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            TonyoCard(
+              child: TextField(
+                key: const Key('checkin-note'),
+                controller: noteController,
+                enabled: !saving && supported,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  labelText: context.tr('Optional note'),
+                ),
               ),
             ),
+            const SectionHeader('Cognitive tests · 30 sec'),
+            _TestCard(
+              icon: Icons.timer_outlined,
+              color: TonyoPalette.of(context).primary,
+              title: 'Reaction time',
+              detail: 'Tap when it flashes',
+              status: 'Try now',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReactionTestScreen()),
+              ),
+            ),
+            const SectionHeader('Check-in history'),
+            if (history.isEmpty)
+              const TonyoCard(
+                child: TranslatedText(
+                  'No check-ins saved yet. Your ratings will appear here.',
+                ),
+              )
+            else
+              for (final item in history)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: SelfReportRecordCard(checkIn: item),
+                ),
           ],
         ),
       ),
@@ -239,30 +295,62 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   Future<void> _save() async {
     if (saving) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    setState(() => saving = true);
+    if (period == null || ratings.values.every((value) => value == null)) {
+      setState(
+        () => _validationError = period == null
+            ? 'Choose Morning or Evening before saving.'
+            : 'Select at least one rating before saving.',
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: TranslatedText(_validationError!)));
+      return;
+    }
+    setState(() {
+      saving = true;
+      _validationError = null;
+    });
+    final controller = AppScope.of(context);
     final initial = widget.initialCheckIn;
     final when =
-        initial?.timestamp ?? (_pendingCreateTimestamp ??= DateTime.now());
+        initial?.timestamp ??
+        (_pendingCreateTimestamp ??= controller.currentTime);
     final id =
         initial?.id ??
         (_pendingCreateId ??= 'checkin-${when.microsecondsSinceEpoch}');
-    final period = CheckInLogic.periodFor(when);
-    final controller = AppScope.of(context);
     try {
-      await controller.addCheckIn(
-        id: id,
-        energy: energy,
-        mood: mood,
-        stress: stress,
-        note: noteController.text.trim(),
-        timestamp: when,
-      );
+      if (_legacy) {
+        await controller.addCheckIn(
+          id: id,
+          energy: ratings['energy']!,
+          mood: ratings['mood']!,
+          stress: ratings['stress']!,
+          period: period,
+          note: noteController.text.trim(),
+          timestamp: when,
+        );
+      } else {
+        await controller.saveSelfReportCheckIn(
+          id: id,
+          period: period!,
+          energy: ratings['energy'],
+          fatigue: ratings['fatigue'],
+          sleepiness: ratings['sleepiness'],
+          focus: ratings['focus'],
+          mood: ratings['mood'],
+          stress: ratings['stress'],
+          note: noteController.text.trim(),
+          questionnaireSnapshot: _snapshot!,
+          questionnaireLanguage: _language!,
+          timestamp: when,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: TranslatedText(
             controller.cloudSyncError == null
-                ? '${period.label} check-in saved on a 1–10 scale.'
+                ? '${context.tr(period!.label)} check-in saved on a 1–10 scale.'
                 : 'Check-in saved on this device. Cloud sync is pending.',
           ),
         ),
@@ -272,7 +360,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
+          content: TranslatedText(
             'Could not save your check-in. Your ratings and note are still here; please try again.',
           ),
         ),
@@ -283,43 +371,130 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   }
 }
 
-class _PeriodBanner extends StatelessWidget {
-  const _PeriodBanner({required this.period});
-  final CheckInPeriod period;
+class _PeriodPicker extends StatelessWidget {
+  const _PeriodPicker({required this.value, required this.onChanged});
+  final CheckInPeriod? value;
+  final ValueChanged<CheckInPeriod>? onChanged;
+  @override
+  Widget build(BuildContext context) => TonyoCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TranslatedText(
+          'Check-in period',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            for (final period in CheckInPeriod.values)
+              ChoiceChip(
+                key: Key('checkin-period-${period.name}'),
+                label: TranslatedText(period.label),
+                selected: value == period,
+                onSelected: onChanged == null
+                    ? null
+                    : (_) => onChanged!(period),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const TranslatedText(
+          'Morning: after waking and beginning the day. Evening: near your usual evening time. The period you choose is kept even if you answer late.',
+        ),
+      ],
+    ),
+  );
+}
 
+class _ResearchRatingCard extends StatelessWidget {
+  const _ResearchRatingCard({
+    required this.item,
+    required this.value,
+    required this.skipped,
+    required this.onChanged,
+  });
+  final Map item;
+  final double? value;
+  final bool skipped;
+  final ValueChanged<double?>? onChanged;
   @override
   Widget build(BuildContext context) {
-    final isMorning = period == CheckInPeriod.morning;
-    final color = isMorning
-        ? TonyoPalette.of(context).secondary
-        : TonyoPalette.of(context).secondary;
-    final icon = isMorning
-        ? Icons.wb_sunny_outlined
-        : Icons.nights_stay_outlined;
+    final id = item['id'] as String;
+    final label = item['label'] as String;
+    final prompt = item['prompt'] as String;
+    final anchors = item['anchors'] as Map;
     return TonyoCard(
-      child: Row(
+      key: Key('rating-$id'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${period.label} check-in',
-                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isMorning
-                      ? 'Before 2:00 PM is logged as morning.'
-                      : 'From 2:00 PM onward is logged as evening.',
-                  style: TextStyle(
-                    color: TonyoPalette.of(context).muted,
-                    fontSize: 11,
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (prompt.isNotEmpty) ...[const SizedBox(height: 8), Text(prompt)],
+          const SizedBox(height: 8),
+          Text(
+            value == null
+                ? context.tr(skipped ? 'Skipped' : 'Not answered')
+                : context.tr(
+                    '{value} out of 10',
+                    args: {'value': value!.round()},
+                  ),
+            key: Key('rating-$id-value'),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var rating = 1; rating <= 10; rating++)
+                Semantics(
+                  label:
+                      '$label, ${context.tr('{value} out of 10', args: {'value': rating})}',
+                  button: true,
+                  selected: value == rating,
+                  child: ExcludeSemantics(
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: OutlinedButton(
+                        key: Key('rating-$id-$rating'),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: value == rating
+                              ? TonyoPalette.of(
+                                  context,
+                                ).primary.withValues(alpha: .15)
+                              : null,
+                        ),
+                        onPressed: onChanged == null
+                            ? null
+                            : () => onChanged!(rating.toDouble()),
+                        child: Text('$rating'),
+                      ),
+                    ),
                   ),
                 ),
-              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (final anchor in ['1', '5', '10'])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '$anchor · ${anchors[anchor]}',
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          TextButton(
+            key: Key('skip-$id'),
+            onPressed: onChanged == null ? null : () => onChanged!(null),
+            child: TranslatedText(
+              value == null ? 'Skip this item' : 'Clear and skip this item',
             ),
           ),
         ],
@@ -328,8 +503,16 @@ class _PeriodBanner extends StatelessWidget {
   }
 }
 
-class _RatingCard extends StatelessWidget {
-  const _RatingCard({
+String _labelFor(String id) =>
+    CheckInMeasurement.items.firstWhere((item) => item.id == id).label;
+IconData _iconFor(String id) => switch (id) {
+  'energy' => Icons.bolt_rounded,
+  'mood' => Icons.sentiment_satisfied_alt_rounded,
+  _ => Icons.psychology_alt_rounded,
+};
+
+class _LegacyRatingCard extends StatelessWidget {
+  const _LegacyRatingCard({
     required this.icon,
     required this.color,
     required this.title,
@@ -361,14 +544,17 @@ class _RatingCard extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Icon(icon, color: color, size: 19),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            TranslatedText(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: .15),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Text(
+              child: TranslatedText(
                 badge,
                 style: TextStyle(
                   color: color,
@@ -405,7 +591,7 @@ class _RatingCard extends StatelessWidget {
         ),
         MergeSemantics(
           child: Semantics(
-            label: title,
+            label: context.tr(title),
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 overlayShape: SliderComponentShape.noOverlay,
@@ -422,8 +608,10 @@ class _RatingCard extends StatelessWidget {
                 min: CheckInLogic.minRating,
                 max: CheckInLogic.maxRating,
                 divisions: 9,
-                semanticFormatterCallback: (rating) =>
-                    '${rating.round()} out of 10',
+                semanticFormatterCallback: (rating) => context.tr(
+                  '{value} out of 10',
+                  args: {'value': rating.round()},
+                ),
                 activeColor: color,
                 onChanged: onChanged,
               ),
@@ -435,7 +623,7 @@ class _RatingCard extends StatelessWidget {
           children: [
             for (final entry in [low, middle, high].indexed)
               Expanded(
-                child: Text(
+                child: TranslatedText(
                   entry.$2,
                   textAlign: entry.$1 == 0
                       ? TextAlign.start
@@ -456,87 +644,6 @@ class _RatingCard extends StatelessWidget {
   );
 
   static const _thumbRadius = 10.0;
-}
-
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({required this.checkIn});
-  final DailyCheckIn checkIn;
-
-  @override
-  Widget build(BuildContext context) {
-    final stamp = checkIn.timestamp;
-    final timeLabel =
-        '${stamp.month}/${stamp.day} · ${_clock(stamp)} · ${checkIn.period.label}';
-    return TonyoCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            timeLabel,
-            style: TextStyle(
-              color: TonyoPalette.of(context).muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _Chip(
-                'Energy ${checkIn.energy.round()}',
-                TonyoPalette.of(context).secondary,
-              ),
-              _Chip(
-                'Mood ${checkIn.mood.round()}',
-                TonyoPalette.of(context).primary,
-              ),
-              _Chip(
-                'Stress ${checkIn.stress.round()}',
-                TonyoPalette.of(context).secondary,
-              ),
-            ],
-          ),
-          if (checkIn.note.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              checkIn.note,
-              style: TextStyle(
-                color: TonyoPalette.of(context).muted,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _clock(DateTime value) {
-    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
-    return '$hour:${value.minute.toString().padLeft(2, '0')} ${value.hour >= 12 ? 'PM' : 'AM'}';
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip(this.label, this.color);
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .14),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
-    ),
-  );
 }
 
 class _TestCard extends StatelessWidget {
@@ -573,18 +680,18 @@ class _TestCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    TranslatedText(
                       title,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    Text(
+                    TranslatedText(
                       detail,
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 10,
                       ),
                     ),
-                    Text(
+                    TranslatedText(
                       status,
                       style: TextStyle(
                         color: color,

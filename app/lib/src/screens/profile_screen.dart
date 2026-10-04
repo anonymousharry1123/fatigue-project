@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../app.dart';
 import '../app_controller.dart';
 import '../device_backup_service.dart';
 import '../health_service.dart';
 import '../models.dart';
+import '../language_preference.dart';
+import '../widgets/language_picker.dart';
 import '../notification_logic.dart';
 import '../screen_time_service.dart';
 import '../schedule_logic.dart';
@@ -87,7 +91,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     Text(
-                      '${profile.role} · ${profile.ageRange}',
+                      context.tr(
+                        "{value0} · {value1}",
+                        args: {
+                          'value0': context.tr(profile.role),
+                          'value1': context.tr(profile.ageRange),
+                        },
+                      ),
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 11,
@@ -118,11 +128,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Text(
                         controller.isCloudAuthenticated
                             ? controller.cloudSyncConflict
-                                  ? '● Cloud sync needs review'
+                                  ? context.tr('● Cloud sync needs review')
                                   : syncNeedsAttention
-                                  ? '● Cloud sync pending'
-                                  : '● Private cloud sync active'
-                            : '● Local demo profile',
+                                  ? context.tr('● Cloud sync pending')
+                                  : context.tr('● Private cloud sync active')
+                            : context.tr('● Local demo profile'),
                         style: TextStyle(
                           color: syncNeedsAttention
                               ? TonyoPalette.of(context).warning
@@ -136,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               IconButton(
-                tooltip: 'Edit profile',
+                tooltip: context.tr('Edit profile'),
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: () => _editProfile(context, controller),
                 icon: const Icon(Icons.edit_outlined),
@@ -161,7 +171,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.logout_rounded),
-              label: Text(_isSigningOut ? 'Signing out…' : 'Sign out'),
+              label: Text(
+                _isSigningOut
+                    ? context.tr('Signing out…')
+                    : context.tr('Sign out'),
+              ),
             ),
           ],
           if (controller.isCloudAuthenticated) ...[
@@ -171,24 +185,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Cloud sync',
+                  Text(
+                    context.tr('Cloud sync'),
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Semantics(
                     liveRegion: true,
-                    child: Text(controller.cloudSyncStatusMessage),
+                    child: Text(context.tr(controller.cloudSyncStatusMessage)),
                   ),
                   Text(
-                    '${controller.pendingCloudRecordCount} pending changes',
+                    context.tr(
+                      "{value0} pending changes",
+                      args: {'value0': controller.pendingCloudRecordCount},
+                    ),
                     key: const Key('cloud-sync-pending-count'),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                   Text(
                     controller.lastCloudSyncAt == null
-                        ? 'No completed upload recorded on this device yet.'
-                        : 'Last upload: ${_cloudSyncTime(controller.lastCloudSyncAt!)}',
+                        ? context.tr(
+                            'No completed upload recorded on this device yet.',
+                          )
+                        : context.tr(
+                            "Last upload: {value0}",
+                            args: {
+                              'value0': _cloudSyncTime(
+                                controller.lastCloudSyncAt!,
+                              ),
+                            },
+                          ),
                     key: const Key('cloud-sync-last-success'),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
@@ -244,7 +270,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
           ),
-          const SectionHeader('Connected data sources'),
+          SectionHeader(context.tr('Connected data sources')),
           _SourceCard(
             key: const Key('health-source-card'),
             icon: Icons.health_and_safety_rounded,
@@ -286,13 +312,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 : 'Offline demo mode',
             status: controller.isCloudAuthenticated ? 'On' : 'Local',
           ),
-          const SectionHeader('Settings'),
+          SectionHeader(context.tr('Settings')),
+          _SettingTile(
+            key: const Key('language-preference-setting'),
+            icon: Icons.language_rounded,
+            title: 'Language',
+            subtitle: languageDisplayName(controller.effectiveLanguage),
+            onTap: () => showLanguagePreferenceDialog(context, controller),
+          ),
           _SettingTile(
             key: const Key('sleep-schedule-setting'),
             icon: Icons.bedtime_outlined,
             title: 'Wake and bed schedule',
-            subtitle:
-                '${_scheduleClock(profile.wakeHour)} wake · ${_scheduleClock(profile.bedHour)} bed',
+            subtitle: context.tr(
+              "{value0} wake · {value1} bed",
+              args: {
+                'value0': _scheduleClock(profile.wakeHour),
+                'value1': _scheduleClock(profile.bedHour),
+              },
+            ),
             onTap: () => _editSchedule(context, controller),
           ),
           _SettingTile(
@@ -313,11 +351,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: TonyoPalette.of(context).muted,
               ),
               title: Text(
-                _isSavingDeviceBackup ? 'Saving backup…' : 'Save device backup',
+                _isSavingDeviceBackup
+                    ? context.tr('Saving backup…')
+                    : context.tr('Save device backup'),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                'Save the data on this device, including unsynced changes, as JSON. Works offline.',
+                context.tr(
+                  'Save the data on this device, including unsynced changes, as JSON. Works offline.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -343,12 +385,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Icons.restore_rounded,
                 color: TonyoPalette.of(context).muted,
               ),
-              title: const Text(
-                'Restore from backup',
+              title: Text(
+                context.tr('Restore from backup'),
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                'Preview saved records and choose what to restore.',
+                context.tr('Preview saved records and choose what to restore.'),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -370,7 +412,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _SettingTile(
             icon: Icons.track_changes_rounded,
             title: 'Goals & schedule',
-            subtitle: '${profile.goal} · ${profile.coachPriority.label}',
+            subtitle: context.tr(
+              "{value0} · {value1}",
+              args: {
+                'value0': context.tr(profile.goal),
+                'value1': context.tr(profile.coachPriority.label),
+              },
+            ),
             onTap: () => _editProfile(context, controller),
           ),
           ListTile(
@@ -380,12 +428,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Icons.public_rounded,
               color: TonyoPalette.of(context).muted,
             ),
-            title: const Text(
-              'Automatic time zone',
+            title: Text(
+              context.tr('Automatic time zone'),
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
-              '${controller.deviceTimezoneLabel} · Follows your device for daily records and reminders.',
+              context.tr(
+                "{value0} · Follows your device for daily records and reminders.",
+                args: {'value0': controller.deviceTimezoneLabel},
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 10,
@@ -449,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'Tonyo provides wellness estimates, not medical advice.',
             ),
           ),
-          const SectionHeader('Developer'),
+          SectionHeader(context.tr('Developer')),
           _SettingTile(
             icon: Icons.science_outlined,
             title: 'Cohort Lab',
@@ -632,14 +683,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) => AlertDialog(
-          title: const Text('Wake and bed schedule'),
+          title: Text(context.tr('Wake and bed schedule')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Use local 24-hour times. Suggested blocks stay within your waking window. This is your chosen sleep opportunity, not a sleep recommendation or measured sleep.',
+                Text(
+                  context.tr(
+                    'Use local 24-hour times. Suggested blocks stay within your waking window. This is your chosen sleep opportunity, not a sleep recommendation or measured sleep.',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -647,8 +700,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   initialValue: wakeText,
                   onChanged: (value) => wakeText = value,
                   keyboardType: TextInputType.datetime,
-                  decoration: const InputDecoration(
-                    labelText: 'Wake time (HH:mm)',
+                  decoration: InputDecoration(
+                    labelText: context.tr('Wake time (HH:mm)'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -657,13 +710,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   initialValue: bedText,
                   onChanged: (value) => bedText = value,
                   keyboardType: TextInputType.datetime,
-                  decoration: const InputDecoration(
-                    labelText: 'Bed time (HH:mm)',
+                  decoration: InputDecoration(
+                    labelText: context.tr('Bed time (HH:mm)'),
                   ),
                 ),
                 if (error != null) ...[
                   const SizedBox(height: 12),
-                  Text(error!, key: const Key('schedule-validation-error')),
+                  Text(
+                    context.tr(error!),
+                    key: const Key('schedule-validation-error'),
+                  ),
                 ],
               ],
             ),
@@ -671,7 +727,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             FilledButton(
               key: const Key('schedule-save'),
@@ -698,7 +754,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
                 Navigator.pop(dialogContext, proposed);
               },
-              child: const Text('Save schedule'),
+              child: Text(context.tr('Save schedule')),
             ),
           ],
         ),
@@ -710,8 +766,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } on Object {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save the schedule. Please try again.'),
+          SnackBar(
+            content: Text(
+              context.tr('Could not save the schedule. Please try again.'),
+            ),
           ),
         );
       }
@@ -730,23 +788,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Edit profile'),
+          title: Text(context.tr('Edit profile')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'First name'),
+                  decoration: InputDecoration(
+                    labelText: context.tr('First name'),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Role'),
+                  decoration: InputDecoration(labelText: context.tr('Role')),
                   items: ['Student', 'Athlete', 'Student athlete']
                       .map(
-                        (value) =>
-                            DropdownMenuItem(value: value, child: Text(value)),
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(context.tr(value)),
+                        ),
                       )
                       .toList(),
                   onChanged: (value) => setState(() => role = value!),
@@ -754,7 +816,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: goal,
-                  decoration: const InputDecoration(labelText: 'Goal'),
+                  decoration: InputDecoration(labelText: context.tr('Goal')),
                   items:
                       [
                             'Improve focus',
@@ -764,7 +826,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           .map(
                             (value) => DropdownMenuItem(
                               value: value,
-                              child: Text(value),
+                              child: Text(context.tr(value)),
                             ),
                           )
                           .toList(),
@@ -774,14 +836,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 DropdownButtonFormField<CoachPriority>(
                   key: const Key('coach-priority-field'),
                   initialValue: coachPriority,
-                  decoration: const InputDecoration(
-                    labelText: 'AI Coach priority',
+                  decoration: InputDecoration(
+                    labelText: context.tr('AI Coach priority'),
                   ),
                   items: CoachPriority.values
                       .map(
                         (value) => DropdownMenuItem(
                           value: value,
-                          child: Text(value.label),
+                          child: Text(context.tr(value.label)),
                         ),
                       )
                       .toList(),
@@ -793,7 +855,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(
@@ -807,7 +869,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   coachPriority: coachPriority,
                 ),
               ),
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -821,12 +883,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Version 0.5 preview'),
-          content: Text(message),
+          title: Text(context.tr('Version 0.5 preview')),
+          content: Text(context.tr(message)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+              child: Text(context.tr('Close')),
             ),
           ],
         ),
@@ -865,9 +927,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await controller.signOut();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Signed out. Your saved data is kept on this device.',
+              context.tr('Signed out. Your saved data is kept on this device.'),
             ),
           ),
         );
@@ -875,8 +937,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } on Object {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not sign out. Please try again.'),
+          SnackBar(
+            content: Text(context.tr('Could not sign out. Please try again.')),
           ),
         );
       }
@@ -919,12 +981,12 @@ class _OutcomeLearningSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Outcome learning',
+                    context.tr('Outcome learning'),
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: context.tr('Close'),
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -932,7 +994,9 @@ class _OutcomeLearningSheet extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              'Optional outcome records can support an on-device Energy model. Training starts only when you separately choose Refresh Energy model.',
+              context.tr(
+                'Optional outcome records can support an on-device Energy model. Training starts only when you separately choose Refresh Energy model.',
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -961,12 +1025,14 @@ class _OutcomeLearningSheet extends StatelessWidget {
             SwitchListTile(
               key: const Key('outcome-consent-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text(
-                'Allow private outcome records',
+              title: Text(
+                context.tr('Allow private outcome records'),
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               subtitle: Text(
-                'Applies only to future check-ins, reaction tests, and optional Coach ratings.',
+                context.tr(
+                  'Applies only to future check-ins, reaction tests, and optional Coach ratings.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -995,8 +1061,16 @@ class _OutcomeLearningSheet extends StatelessWidget {
               ),
               child: Text(
                 controller.outcomeConsent
-                    ? '${controller.observedEnergyOutcomeCount} energy · ${controller.cognitiveOutcomeCount} cognitive outcomes active'
-                    : 'Outcome use is off. Previously saved cloud outcomes are excluded; reset or account deletion removes them.',
+                    ? context.tr(
+                        "{value0} energy · {value1} cognitive outcomes active",
+                        args: {
+                          'value0': controller.observedEnergyOutcomeCount,
+                          'value1': controller.cognitiveOutcomeCount,
+                        },
+                      )
+                    : context.tr(
+                        'Outcome use is off. Previously saved cloud outcomes are excluded; reset or account deletion removes them.',
+                      ),
                 key: const Key('outcome-consent-status'),
                 style: const TextStyle(fontSize: 11),
               ),
@@ -1004,7 +1078,7 @@ class _OutcomeLearningSheet extends StatelessWidget {
             if (controller.outcomeError case final error?) ...[
               const SizedBox(height: 8),
               Text(
-                error,
+                context.tr(error),
                 style: TextStyle(
                   color: TonyoPalette.of(context).error,
                   fontSize: 11,
@@ -1026,19 +1100,21 @@ class _OutcomeLearningSheet extends StatelessWidget {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Allow outcome learning?'),
-          content: const Text(
-            'Tonyo will create private training-eligible records from future energy check-ins, reaction tests, and optional completed-plan ratings. They stay under your user ID. Training is a separate action in Model preparation; this switch does not start training.',
+          title: Text(context.tr('Allow outcome learning?')),
+          content: Text(
+            context.tr(
+              'Tonyo will create private training-eligible records from future energy check-ins, reaction tests, and optional completed-plan ratings. They stay under your user ID. Training is a separate action in Model preparation; this switch does not start training.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Not now'),
+              child: Text(context.tr('Not now')),
             ),
             FilledButton(
               key: const Key('confirm-outcome-consent'),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Allow future records'),
+              child: Text(context.tr('Allow future records')),
             ),
           ],
         ),
@@ -1089,12 +1165,12 @@ class _NotificationSheetState extends State<_NotificationSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    'Notifications',
+                    context.tr('Notifications'),
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: context.tr('Close'),
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -1102,7 +1178,9 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Choose optional daily plan reminders. Open Tonyo each day to refresh them. Experimental forecasts are uncalibrated, so precise lower-energy and recovery alerts are disabled.',
+              context.tr(
+                'Choose optional daily plan reminders. Open Tonyo each day to refresh them. Experimental forecasts are uncalibrated, so precise lower-energy and recovery alerts are disabled.',
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -1126,7 +1204,9 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Wellness guidance only. Notification text never presents a diagnosis.',
+                      context.tr(
+                        'Wellness guidance only. Notification text never presents a diagnosis.',
+                      ),
                       style: TextStyle(fontSize: 11),
                     ),
                   ),
@@ -1137,11 +1217,15 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             SwitchListTile(
               key: const Key('notification-master-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Allow notifications'),
+              title: Text(context.tr('Allow notifications')),
               subtitle: Text(
                 controller.notificationSchedulingSupported
-                    ? 'Permission is requested only when you turn this on.'
-                    : 'Scheduled notifications are not supported on this platform.',
+                    ? context.tr(
+                        'Permission is requested only when you turn this on.',
+                      )
+                    : context.tr(
+                        'Scheduled notifications are not supported on this platform.',
+                      ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1160,9 +1244,11 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             SwitchListTile(
               key: const Key('notification-coach-plan-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Daily plan reminders'),
+              title: Text(context.tr('Daily plan reminders')),
               subtitle: Text(
-                'A notification when each upcoming AI Coach block starts.',
+                context.tr(
+                  'A notification when each upcoming AI Coach block starts.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1181,9 +1267,11 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             SwitchListTile(
               key: const Key('notification-crash-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Lower-energy heads-up'),
+              title: Text(context.tr('Lower-energy heads-up')),
               subtitle: Text(
-                'Unavailable: forecast timing has not been prospectively validated.',
+                context.tr(
+                  'Unavailable: forecast timing has not been prospectively validated.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1195,9 +1283,11 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             SwitchListTile(
               key: const Key('notification-recovery-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Recovery-window reminder'),
+              title: Text(context.tr('Recovery-window reminder')),
               subtitle: Text(
-                'Unavailable: forecast timing has not been prospectively validated.',
+                context.tr(
+                  'Unavailable: forecast timing has not been prospectively validated.',
+                ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1211,7 +1301,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
               Semantics(
                 liveRegion: true,
                 child: Text(
-                  _error!,
+                  context.tr(_error!),
                   key: const Key('notification-settings-error'),
                   style: TextStyle(color: TonyoPalette.of(context).error),
                 ),
@@ -1246,12 +1336,12 @@ class _ScreenTimeReportSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Private Screen Time report',
+                    context.tr('Private Screen Time report'),
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: context.tr('Close'),
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -1259,7 +1349,9 @@ class _ScreenTimeReportSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Manual screen time remains Tonyo’s dependable model input. The optional Apple report is a separate, view-only daily total.',
+              context.tr(
+                'Manual screen time remains Tonyo’s dependable model input. The optional Apple report is a separate, view-only daily total.',
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -1296,13 +1388,13 @@ class _ScreenTimeReportSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _screenTimeReportStatus(state),
+                    context.tr(_screenTimeReportStatus(state)),
                     key: const Key('screen-time-report-status'),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    _screenTimeReportMessage(state),
+                    context.tr(_screenTimeReportMessage(state)),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 11,
@@ -1310,7 +1402,15 @@ class _ScreenTimeReportSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${controller.manualScreenTimeSignalCount} manual screen-time ${controller.manualScreenTimeSignalCount == 1 ? 'signal' : 'signals'} saved',
+                    context.tr(
+                      "{value0} manual screen-time {value1} saved",
+                      args: {
+                        'value0': controller.manualScreenTimeSignalCount,
+                        'value1': controller.manualScreenTimeSignalCount == 1
+                            ? 'signal'
+                            : 'signals',
+                      },
+                    ),
                     style: const TextStyle(fontSize: 10),
                   ),
                 ],
@@ -1319,7 +1419,7 @@ class _ScreenTimeReportSheet extends StatelessWidget {
             if (controller.screenTimeError != null) ...[
               const SizedBox(height: 10),
               Text(
-                controller.screenTimeError!,
+                context.tr(controller.screenTimeError!),
                 style: TextStyle(
                   color: TonyoPalette.of(context).error,
                   fontSize: 11,
@@ -1358,12 +1458,12 @@ class _ScreenTimeReportSheet extends StatelessWidget {
                       ),
                 label: Text(
                   controller.isScreenTimeAuthorizing
-                      ? 'Requesting permission…'
+                      ? context.tr('Requesting permission…')
                       : canView
-                      ? 'View today’s private report'
+                      ? context.tr('View today’s private report')
                       : canAuthorize
-                      ? 'Allow private report'
-                      : 'Private report unavailable',
+                      ? context.tr('Allow private report')
+                      : context.tr('Private report unavailable'),
                 ),
               ),
             ),
@@ -1426,9 +1526,12 @@ class _ScreenTimePrivacyRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
               Text(
-                detail,
+                context.tr(title),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                context.tr(detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1459,12 +1562,12 @@ class _HealthPermissionSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Apple Health permissions',
+                    context.tr('Apple Health permissions'),
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: context.tr('Close'),
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -1472,7 +1575,9 @@ class _HealthPermissionSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Tonyo requests read access only. It never writes to Apple Health, and you choose each category in Apple’s permission sheet.',
+              context.tr(
+                'Tonyo requests read access only. It never writes to Apple Health, and you choose each category in Apple’s permission sheet.',
+              ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
                 fontSize: 12,
@@ -1499,7 +1604,9 @@ class _HealthPermissionSheet extends StatelessWidget {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'For privacy, Apple does not tell apps which read categories you approved, denied, or later revoked. Your choices remain manageable in Settings.',
+                      context.tr(
+                        'For privacy, Apple does not tell apps which read categories you approved, denied, or later revoked. Your choices remain manageable in Settings.',
+                      ),
                       style: TextStyle(fontSize: 11),
                     ),
                   ),
@@ -1523,7 +1630,9 @@ class _HealthPermissionSheet extends StatelessWidget {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Manual sleep and activity logging stays available. Tonyo uses recent sleep, reaction time, HRV, and resting heart rate to build private personal baselines. New physiology inputs affect estimates only after enough of your own history exists.',
+                      context.tr(
+                        'Manual sleep and activity logging stays available. Tonyo uses recent sleep, reaction time, HRV, and resting heart rate to build private personal baselines. New physiology inputs affect estimates only after enough of your own history exists.',
+                      ),
                       style: TextStyle(fontSize: 11),
                     ),
                   ),
@@ -1569,10 +1678,10 @@ class _HealthPermissionSheet extends StatelessWidget {
                       ),
                 label: Text(
                   controller.isSyncing
-                      ? 'Syncing health data…'
+                      ? context.tr('Syncing health data…')
                       : controller.healthAuthorized
-                      ? 'Sync health data'
-                      : 'Review permissions',
+                      ? context.tr('Sync health data')
+                      : context.tr('Review permissions'),
                 ),
               ),
             ),
@@ -1586,7 +1695,7 @@ class _HealthPermissionSheet extends StatelessWidget {
                   key: const Key('health-settings-button'),
                   onPressed: controller.openHealthSettings,
                   icon: const Icon(Icons.settings_outlined),
-                  label: const Text('Manage in Settings'),
+                  label: Text(context.tr('Manage in Settings')),
                 ),
               ),
             ],
@@ -1596,7 +1705,7 @@ class _HealthPermissionSheet extends StatelessWidget {
                 child: TextButton(
                   key: const Key('health-disconnect-button'),
                   onPressed: () => _disconnect(context, controller),
-                  child: const Text('Stop using Apple Health in Tonyo'),
+                  child: Text(context.tr('Stop using Apple Health in Tonyo')),
                 ),
               ),
             ],
@@ -1613,18 +1722,20 @@ class _HealthPermissionSheet extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Stop using Apple Health?'),
-        content: const Text(
-          'Tonyo will stop using Health data. Existing imported and manual entries stay saved. You can separately revoke categories in Settings.',
+        title: Text(context.tr('Stop using Apple Health?')),
+        content: Text(
+          context.tr(
+            'Tonyo will stop using Health data. Existing imported and manual entries stay saved. You can separately revoke categories in Settings.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Stop connection'),
+            child: Text(context.tr('Stop connection')),
           ),
         ],
       ),
@@ -1655,11 +1766,11 @@ class _HealthPermissionRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                permission.title,
+                context.tr(permission.title),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               Text(
-                permission.detail,
+                context.tr(permission.detail),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
@@ -1726,7 +1837,7 @@ class _HealthPermissionStatus extends StatelessWidget {
         color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Text(message, style: const TextStyle(fontSize: 11)),
+      child: Text(context.tr(message), style: const TextStyle(fontSize: 11)),
     );
   }
 }
@@ -1773,10 +1884,13 @@ class _ContinuousSyncStatus extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(status, style: const TextStyle(fontSize: 11)),
+                Text(context.tr(status), style: const TextStyle(fontSize: 11)),
                 const SizedBox(height: 3),
                 Text(
-                  '$delivery · scores update only when model inputs change.',
+                  context.tr(
+                    "{value0} · scores update only when model inputs change.",
+                    args: {'value0': context.tr(delivery)},
+                  ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
                     fontSize: 10,
@@ -1823,13 +1937,16 @@ class _HeartSyncStatus extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  controller.healthSyncSummary,
+                  context.tr(controller.healthSyncSummary),
                   style: const TextStyle(fontSize: 11),
                 ),
                 if (controller.lastSync != null && !controller.isSyncing) ...[
                   const SizedBox(height: 3),
                   Text(
-                    'Last checked ${_timestamp(controller.lastSync!)} · 30-day window',
+                    context.tr(
+                      "Last checked {value0} · 30-day window",
+                      args: {'value0': _timestamp(controller.lastSync!)},
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -1839,7 +1956,15 @@ class _HeartSyncStatus extends StatelessWidget {
                 if (controller.lastHealthRejectedCount > 0) ...[
                   const SizedBox(height: 3),
                   Text(
-                    '${controller.lastHealthRejectedCount} invalid ${controller.lastHealthRejectedCount == 1 ? 'sample was' : 'samples were'} ignored.',
+                    context.tr(
+                      "{value0} invalid {value1} ignored.",
+                      args: {
+                        'value0': controller.lastHealthRejectedCount,
+                        'value1': controller.lastHealthRejectedCount == 1
+                            ? 'sample was'
+                            : 'samples were',
+                      },
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -1894,13 +2019,21 @@ class _SleepSyncStatus extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  controller.sleepSyncSummary,
+                  context.tr(controller.sleepSyncSummary),
                   style: const TextStyle(fontSize: 11),
                 ),
                 if (controller.lastSleepRejectedCount > 0) ...[
                   const SizedBox(height: 3),
                   Text(
-                    '${controller.lastSleepRejectedCount} invalid sleep ${controller.lastSleepRejectedCount == 1 ? 'sample was' : 'samples were'} ignored.',
+                    context.tr(
+                      "{value0} invalid sleep {value1} ignored.",
+                      args: {
+                        'value0': controller.lastSleepRejectedCount,
+                        'value1': controller.lastSleepRejectedCount == 1
+                            ? 'sample was'
+                            : 'samples were',
+                      },
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -1948,13 +2081,21 @@ class _ActivitySyncStatus extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  controller.activitySyncSummary,
+                  context.tr(controller.activitySyncSummary),
                   style: const TextStyle(fontSize: 11),
                 ),
                 if (controller.lastActivityRejectedCount > 0) ...[
                   const SizedBox(height: 3),
                   Text(
-                    '${controller.lastActivityRejectedCount} invalid activity ${controller.lastActivityRejectedCount == 1 ? 'sample was' : 'samples were'} ignored.',
+                    context.tr(
+                      "{value0} invalid activity {value1} ignored.",
+                      args: {
+                        'value0': controller.lastActivityRejectedCount,
+                        'value1': controller.lastActivityRejectedCount == 1
+                            ? 'sample was'
+                            : 'samples were',
+                      },
+                    ),
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 10,
@@ -2008,7 +2149,12 @@ class _NotificationStatus extends StatelessWidget {
             size: 20,
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(detail, style: const TextStyle(fontSize: 11))),
+          Expanded(
+            child: Text(
+              context.tr(detail),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
         ],
       ),
     );
@@ -2093,22 +2239,24 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
         builder: (context) => AlertDialog(
           key: const Key('cloud-sync-replace-dialog'),
           scrollable: true,
-          title: const Text('Use cloud version?'),
-          content: const Text(
-            'This replaces unsynced profile, activity, sleep, and check-in edits '
-            'on this device with the version saved in your cloud account. '
-            'Save a device backup first if you want to keep a copy of these edits.',
+          title: Text(context.tr('Use cloud version?')),
+          content: Text(
+            context.tr(
+              'This replaces unsynced profile, activity, sleep, and check-in edits '
+              'on this device with the version saved in your cloud account. '
+              'Save a device backup first if you want to keep a copy of these edits.',
+            ),
           ),
           actions: [
             TextButton(
               key: const Key('cloud-sync-replace-cancel'),
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep my edits'),
+              child: Text(context.tr('Keep my edits')),
             ),
             FilledButton(
               key: const Key('cloud-sync-replace-confirm'),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Use cloud version'),
+              child: Text(context.tr('Use cloud version')),
             ),
           ],
         ),
@@ -2149,8 +2297,8 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             header: true,
             child: Text(
               conflict
-                  ? 'Cloud sync needs review'
-                  : 'Saved on this device · sync pending',
+                  ? context.tr('Cloud sync needs review')
+                  : context.tr('Saved on this device · sync pending'),
               style: TextStyle(
                 color: TonyoPalette.of(context).warning,
                 fontWeight: FontWeight.w700,
@@ -2160,10 +2308,14 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
           const SizedBox(height: 8),
           Text(
             conflict
-                ? 'Another device changed the same data. Your edits remain saved '
-                      'on this device. Review each conflict and choose which version to keep.'
-                : 'Your latest changes are saved on this device. Retry when you’re '
-                      'connected to sync them to your account.',
+                ? context.tr(
+                    'Another device changed the same data. Your edits remain saved '
+                    'on this device. Review each conflict and choose which version to keep.',
+                  )
+                : context.tr(
+                    'Your latest changes are saved on this device. Retry when you’re '
+                    'connected to sync them to your account.',
+                  ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -2174,15 +2326,17 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             Semantics(
               liveRegion: true,
               child: Text(
-                error,
+                context.tr(error),
                 style: TextStyle(color: TonyoPalette.of(context).warning),
               ),
             ),
           ],
           const SizedBox(height: 12),
           Text(
-            'Save a JSON backup of the data on this device, including unsynced '
-            'changes. No internet is needed.',
+            context.tr(
+              'Save a JSON backup of the data on this device, including unsynced '
+              'changes. No internet is needed.',
+            ),
             style: TextStyle(
               color: TonyoPalette.of(context).muted,
               fontSize: 11,
@@ -2195,7 +2349,9 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
             icon: const Icon(Icons.save_alt_rounded, size: 18),
             label: Text(
-              widget.savingBackup ? 'Saving backup…' : 'Save device backup',
+              widget.savingBackup
+                  ? context.tr('Saving backup…')
+                  : context.tr('Save device backup'),
             ),
           ),
           const SizedBox(height: 8),
@@ -2204,7 +2360,9 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             onPressed: busy ? null : _retry,
             style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
             icon: const Icon(Icons.sync_rounded, size: 18),
-            label: Text(busy ? 'Please wait…' : 'Retry sync'),
+            label: Text(
+              busy ? context.tr('Please wait…') : context.tr('Retry sync'),
+            ),
           ),
           if (conflict) ...[
             const SizedBox(height: 8),
@@ -2212,14 +2370,14 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
               key: const Key('cloud-sync-review-conflicts'),
               onPressed: busy ? null : _reviewConflicts,
               icon: const Icon(Icons.compare_arrows_rounded),
-              label: const Text('Review conflicts'),
+              label: Text(context.tr('Review conflicts')),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
               key: const Key('cloud-sync-use-cloud'),
               onPressed: busy ? null : _useCloud,
               style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-              child: const Text('Use cloud version'),
+              child: Text(context.tr('Use cloud version')),
             ),
           ],
         ],
@@ -2239,7 +2397,7 @@ class _ProfileStat extends StatelessWidget {
     child: Column(
       children: [
         Text(
-          value,
+          context.tr(value),
           style: TextStyle(
             color: color,
             fontSize: 22,
@@ -2247,7 +2405,7 @@ class _ProfileStat extends StatelessWidget {
           ),
         ),
         Text(
-          label,
+          context.tr(label),
           textAlign: TextAlign.center,
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 9),
         ),
@@ -2276,7 +2434,7 @@ class _SourceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final large = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     final statusLabel = Text(
-      '● $status',
+      context.tr("● {value0}", args: {'value0': context.tr(status)}),
       style: TextStyle(
         color: status == 'On' || status == 'Managed'
             ? TonyoPalette.of(context).success
@@ -2302,11 +2460,11 @@ class _SourceCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      context.tr(title),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
-                      detail,
+                      context.tr(detail),
                       style: TextStyle(
                         color: TonyoPalette.of(context).muted,
                         fontSize: 10,
@@ -2341,9 +2499,12 @@ class _SettingTile extends StatelessWidget {
   Widget build(BuildContext context) => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 2),
     leading: Icon(icon, color: TonyoPalette.of(context).muted),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+    title: Text(
+      context.tr(title),
+      style: const TextStyle(fontWeight: FontWeight.w600),
+    ),
     subtitle: Text(
-      subtitle,
+      context.tr(subtitle),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),

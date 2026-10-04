@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../check_in_measurement.dart';
+import '../widgets/self_report_card.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/translated_text.dart';
 import '../daily_history_logic.dart';
 import '../models.dart';
 import '../local_day.dart';
@@ -18,7 +22,7 @@ class DailyHistoryScreen extends StatelessWidget {
     final history = AppScope.of(context).dailyHistory;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daily History'),
+        title: const TranslatedText('Daily History'),
         backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
@@ -28,12 +32,12 @@ class DailyHistoryScreen extends StatelessWidget {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
                 children: [
-                  Text(
+                  TranslatedText(
                     'Your daily record',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 6),
-                  Text(
+                  TranslatedText(
                     'Review saved signals by date and fill the gaps in your daily model.',
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
@@ -78,18 +82,21 @@ class DailyHistoryScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete history entry?'),
-        content: Text(
-          '${_title(item)} will be permanently removed from this device.',
+        title: const TranslatedText('Delete history entry?'),
+        content: TranslatedText(
+          context.tr(
+            '{item} will be permanently removed from this device.',
+            args: {'item': context.tr(_title(item))},
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: const TranslatedText('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: const TranslatedText('Delete'),
           ),
         ],
       ),
@@ -127,12 +134,12 @@ class _EmptyHistory extends StatelessWidget {
           size: 64,
         ),
         const SizedBox(height: 18),
-        Text(
+        TranslatedText(
           'No history yet',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 6),
-        Text(
+        TranslatedText(
           'Save an activity, sleep, check-in, or reaction entry to start your daily history.',
           textAlign: TextAlign.center,
           style: TextStyle(color: TonyoPalette.of(context).muted),
@@ -163,7 +170,7 @@ class _HistorySummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   '${history.length} days recorded',
                   style: const TextStyle(
                     fontSize: 16,
@@ -171,7 +178,7 @@ class _HistorySummary extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
+                TranslatedText(
                   '$completeDays complete · Activity, Sleep, Check-in, and Reaction',
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
@@ -213,7 +220,7 @@ class _HistoryDayCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: TranslatedText(
                   _dayLabel(day.date),
                   style: const TextStyle(
                     fontSize: 16,
@@ -228,7 +235,7 @@ class _HistoryDayCard extends StatelessWidget {
                   color: statusColor.withValues(alpha: .14),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Text(
+                child: TranslatedText(
                   day.isComplete
                       ? 'Complete'
                       : '${day.completionCount} of ${day.completionTotal}',
@@ -324,7 +331,7 @@ class _CompletionChip extends StatelessWidget {
               : TonyoPalette.of(context).muted,
         ),
         const SizedBox(width: 3),
-        Text(
+        TranslatedText(
           category.label,
           style: TextStyle(
             color: completed
@@ -361,35 +368,47 @@ class _HistoryItemRow extends StatelessWidget {
           MetricIcon(icon: _icon(item), color: color, size: 36),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _title(item),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  _detail(item),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: TonyoPalette.of(context).muted,
-                    fontSize: 10,
+            child: item.checkIn != null
+                ? SelfReportRecordCard(
+                    checkIn: item.checkIn!,
+                    embedded: true,
+                    showNote: false,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TranslatedText(
+                        _title(item),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      TranslatedText(
+                        _detail(item).split(' · ').map(context.tr).join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: TonyoPalette.of(context).muted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
           if (item.canEdit)
             IconButton(
-              tooltip: 'Edit ${_title(item)}',
+              tooltip: context.tr(
+                'Edit {item}',
+                args: {'item': context.tr(_title(item))},
+              ),
               onPressed: onEdit,
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.edit_outlined, size: 19),
             ),
           if (item.canDelete)
             IconButton(
-              tooltip: 'Delete ${_title(item)}',
+              tooltip: context.tr(
+                'Delete {item}',
+                args: {'item': context.tr(_title(item))},
+              ),
               onPressed: onDelete,
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.delete_outline_rounded, size: 19),
@@ -411,24 +430,35 @@ String _detail(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => _activityDetail(item.activity!),
   DailyHistoryItemKind.sleep =>
     '${formatHour(item.sleep!.bedtime)}–${formatHour(item.sleep!.wakeTime)} · ${_duration(item.sleep!.duration)} · quality ${item.sleep!.quality.round()}/5',
-  DailyHistoryItemKind.checkIn =>
-    'Energy ${item.checkIn!.energy.round()} · Mood ${item.checkIn!.mood.round()} · Stress ${item.checkIn!.stress.round()}',
+  DailyHistoryItemKind.checkIn => _checkInDetail(item.checkIn!),
   DailyHistoryItemKind.signal =>
     '${_number(item.signal!.value)} ${item.signal!.type.unit} · ${_source(item.signal!.source)}',
 };
 
+String _checkInDetail(DailyCheckIn item) {
+  final ratings = rawSelfReportRatings(item);
+  final maximum = selfReportScaleMaximum(item);
+  final ids = item.isResearchCheckIn
+      ? ratings.keys
+      : ['energy', 'mood', 'stress'];
+  return [
+    for (final id in ids)
+      '${CheckInMeasurement.items.firstWhere((definition) => definition.id == id).label} ${ratings[id]?.round() ?? '—'}/$maximum',
+  ].join(' · ');
+}
+
 String _activityDetail(ActivityLogEntry log) {
   final values = <String>[];
-  if ((log.hydrationLiters ?? 0) > 0) {
+  if (log.hydrationLiters != null) {
     values.add('${_number(log.hydrationLiters!)} L water');
   }
-  if ((log.studyHours ?? 0) > 0) {
+  if (log.studyHours != null) {
     values.add('${_number(log.studyHours!)} hr study');
   }
-  if ((log.exerciseHours ?? 0) > 0) {
+  if (log.exerciseHours != null) {
     values.add('${_number(log.exerciseHours!)} hr exercise');
   }
-  if ((log.screenTimeHours ?? 0) > 0) {
+  if (log.screenTimeHours != null) {
     values.add('${_number(log.screenTimeHours!)} hr screen');
   }
   return values.join(' · ');

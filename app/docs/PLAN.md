@@ -46,7 +46,16 @@ Do **not** wait until merge to invent history. Append as work happens.
 
 ### Biology Phase 1 — implemented locally (2026-10-03)
 
-Current safety changes supersede retired sleep/nap/exposure rewards and forecast notifications in the historical versions below. See [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md) for implementation, migration, tests and remaining release checks. Phases 2–5 are deferred.
+Current safety changes supersede retired sleep/nap/exposure rewards and forecast notifications in the historical versions below. See [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md) for implementation, migration, tests and remaining release checks. Original model-upgrade Phases 2–5 remain deferred; the separate measurement scope below was subsequently requested by the user.
+
+### Roadmap v2 — Phase 2A measurement foundation (2026-10-04)
+
+- [x] Steps 1–3: six distinct draft self-report measures, initially unanswered UI, explicit period, versioned raw persistence and missingness.
+- [x] Separate self-report display, retained legacy values, local/cloud/backup compatibility and exclusion from legacy model inputs.
+- [ ] Steps 4–7: personal references, independent trends, research-specific export and an approved-instrument framework.
+- [ ] Complete relevant physical-device/release acceptance and research review; future AI stages remain planning only.
+
+See [measurement implementation and boundaries](PHASE2A_MEASUREMENT.md) and the [verification record](BIOLOGY_UPGRADE_PROGRESS.md). Technical measurement versioning is not research-protocol approval.
 
 ### Version 0.1 — Basic Structure ✅
 

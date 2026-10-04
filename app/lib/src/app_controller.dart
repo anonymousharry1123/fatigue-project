@@ -24,6 +24,8 @@ import 'energy_model_summary.dart';
 import 'health_service.dart';
 import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
+import 'language_preference.dart';
+import 'check_in_measurement.dart';
 import 'ml_prep_models.dart';
 import 'ml_prep_builder.dart';
 import 'ml_prep_service.dart';
@@ -471,6 +473,23 @@ class AppController extends ChangeNotifier {
   NotificationPermissionState notificationPermission =
       NotificationPermissionState.unknown;
   UserProfile profile = const UserProfile();
+  String? _onboardingLanguagePreference;
+  Future<void>? _languageWriteQueue;
+  Future<void>? _localWriteQueue;
+  String get effectiveLanguage => normalizeLanguagePreference(
+    onboardingComplete && !isSignedOut
+        ? profile.preferredLanguage
+        : _onboardingLanguagePreference ?? defaultLanguagePreference,
+  );
+
+  /// The signup preview changes presentation before an account exists. The
+  /// selected value is persisted only with the normally consented profile.
+  void previewOnboardingLanguage(String value) {
+    if (onboardingComplete && !isSignedOut) return;
+    _onboardingLanguagePreference = normalizeLanguagePreference(value);
+    notifyListeners();
+  }
+
   List<SignalReading> signals = [];
   List<DailyCheckIn> checkIns = [];
   List<OutcomeRecord> _outcomes = [];
@@ -1137,7 +1156,10 @@ class AppController extends ChangeNotifier {
   bool _eligibleForecast(List<ForecastPoint> points) {
     final at = _now();
     final signalIds = signals.map((item) => item.id).toSet();
-    final checkInIds = checkIns.map((item) => item.id).toSet();
+    final checkInIds = checkIns
+        .where((item) => !item.isResearchCheckIn)
+        .map((item) => item.id)
+        .toSet();
     if (!score.canEstimateEnergy ||
         points.isEmpty ||
         !points.every(
@@ -1162,6 +1184,7 @@ class AppController extends ChangeNotifier {
         ) ||
         checkIns.any(
           (item) =>
+              !item.isResearchCheckIn &&
               item.timestamp.isAfter(generatedAt) &&
               !item.timestamp.isAfter(at),
         )) {
@@ -2493,6 +2516,58 @@ class AppController extends ChangeNotifier {
     ensureCurrent();
   }
 
+  Future<void> setPreferredLanguage(String value) async {
+    final ensureCurrent = _beginMutation();
+    // SharedPreferences can finish overlapping platform writes out of order.
+    // Serialize choices so a slower earlier save cannot replace the latest one.
+    Future<void> save() async {
+      ensureCurrent();
+      final previous = profile;
+      final changed = profile.copyWith(preferredLanguage: value);
+      if (changed.preferredLanguage == previous.preferredLanguage) return;
+      profile = changed;
+      notifyListeners();
+      try {
+        await _writeLocal();
+      } on Object {
+        ensureCurrent();
+        if (profile.preferredLanguage == changed.preferredLanguage) {
+          profile = profile.copyWith(
+            preferredLanguage: previous.preferredLanguage,
+          );
+        }
+        // SharedPreferences updates its memory cache before confirming a write.
+        // A failed preference change must not look saved to the next reader.
+        try {
+          await (await SharedPreferences.getInstance()).reload();
+        } on Object {
+          // Preserve the last confirmed in-memory choice even if reload fails.
+        }
+        notifyListeners();
+        rethrow;
+      }
+      ensureCurrent();
+      await _pushCloud();
+      ensureCurrent();
+      // Language is a presentation preference. It does not invalidate scores,
+      // training preparation or the user's protected-sleep schedule.
+      notifyListeners();
+    }
+
+    final previousWrite = _languageWriteQueue;
+    final pending = previousWrite == null
+        ? save()
+        : previousWrite.then((_) => save());
+    // A failed choice is reported to its caller without blocking the next save.
+    final tail = pending.catchError((Object _) {});
+    _languageWriteQueue = tail;
+    try {
+      await pending;
+    } finally {
+      if (identical(_languageWriteQueue, tail)) _languageWriteQueue = null;
+    }
+  }
+
   Future<void> addSignal(SignalType type, double value, {String? note}) async {
     final ensureCurrent = _beginMutation();
     final now = _now();
@@ -2661,6 +2736,7 @@ class AppController extends ChangeNotifier {
     required double stress,
     String note = '',
     DateTime? timestamp,
+    CheckInPeriod? period,
   }) async {
     final ensureCurrent = _beginMutation();
     if (!CheckInLogic.isValidRating(energy) ||
@@ -2673,7 +2749,18 @@ class AppController extends ChangeNotifier {
     }
     final when = timestamp ?? _now();
     final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
-    if (checkIns.any((item) => item.id == checkInId)) {
+    final existing = checkIns.where((item) => item.id == checkInId).firstOrNull;
+    if (existing?.isResearchCheckIn ?? false) {
+      throw ArgumentError(
+        'A versioned self-report cannot become a legacy check-in.',
+      );
+    }
+    if (existing?.originalLegacyRatings != null) {
+      throw ArgumentError(
+        'Original legacy-scale responses are read-only. Create a new check-in.',
+      );
+    }
+    if (existing != null) {
       await _discardPersonalizedModel();
       ensureCurrent();
     }
@@ -2684,8 +2771,9 @@ class AppController extends ChangeNotifier {
       energy: CheckInLogic.clampRating(energy),
       mood: CheckInLogic.clampRating(mood),
       stress: CheckInLogic.clampRating(stress),
-      // Period always follows the check-in timestamp (morning < 14:00).
-      period: CheckInLogic.periodFor(when),
+      // Retain the historical default only for legacy callers. Editing an
+      // existing response must not reclassify its period after travel.
+      period: period ?? existing?.period ?? CheckInLogic.periodFor(when),
       note: note,
     );
     checkIns.removeWhere((item) => item.id == checkInId);
@@ -2697,7 +2785,7 @@ class AppController extends ChangeNotifier {
         OutcomeRecord(
           id: 'energy-checkin-$checkInId',
           type: OutcomeType.observedEnergy,
-          value: checkIn.energy,
+          value: checkIn.energy!,
           observedAt: checkIn.timestamp,
           recordedAt: _now(),
           source: OutcomeSource.checkIn,
@@ -2705,6 +2793,81 @@ class AppController extends ChangeNotifier {
         ),
       );
     }
+  }
+
+  /// Stores a custom draft measurement independently of legacy model inputs.
+  /// The explicit period is the respondent's choice, not inferred from time.
+  Future<void> saveSelfReportCheckIn({
+    String? id,
+    required CheckInPeriod period,
+    double? energy,
+    double? fatigue,
+    double? sleepiness,
+    double? focus,
+    double? mood,
+    double? stress,
+    String note = '',
+    required Map<String, dynamic> questionnaireSnapshot,
+    required String questionnaireLanguage,
+    DateTime? timestamp,
+  }) async {
+    final ensureCurrent = _beginMutation();
+    final when = timestamp ?? _now();
+    final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
+    if (checkInId.isEmpty || checkInId.contains('/')) {
+      throw ArgumentError('Invalid check-in identifier.');
+    }
+    final existing = checkIns.where((item) => item.id == checkInId).firstOrNull;
+    if (existing != null &&
+        existing.questionnaireVersion != CheckInMeasurement.currentVersion) {
+      throw ArgumentError(
+        'Keep this response in its original measurement format.',
+      );
+    }
+    final observedAt = existing?.timestamp ?? when;
+    final local = _deviceTimezoneService.localTime(observedAt);
+    String two(int value) => value.toString().padLeft(2, '0');
+    final checkIn = DailyCheckIn(
+      id: checkInId,
+      timestamp: observedAt,
+      recordedAt: _now(),
+      period: period,
+      energy: energy,
+      fatigue: fatigue,
+      sleepiness: sleepiness,
+      focus: focus,
+      mood: mood,
+      stress: stress,
+      note: note,
+      localDate:
+          existing?.localDate ??
+          '${local.year}-${two(local.month)}-${two(local.day)}',
+      timezone: existing == null ? deviceTimezoneIdentifier : existing.timezone,
+      utcOffsetMinutes:
+          existing?.utcOffsetMinutes ?? local.timeZoneOffset.inMinutes,
+      questionnaireVersion: CheckInMeasurement.currentVersion,
+      questionnaireLanguage:
+          existing?.questionnaireLanguage ?? questionnaireLanguage,
+      source: 'selfReport',
+      questionnaireSnapshot:
+          (jsonDecode(
+                    jsonEncode(
+                      existing?.questionnaireSnapshot ?? questionnaireSnapshot,
+                    ),
+                  )
+                  as Map)
+              .cast<String, dynamic>(),
+    );
+    final validation = checkIn.researchValidationMessage;
+    if (validation != null) throw ArgumentError(validation);
+    checkIns.removeWhere((item) => item.id == checkInId);
+    checkIns.insert(0, checkIn);
+    // Raw preparation caches become stale, but score coefficients, fitted
+    // artifacts, training-attempt safeguards and reminders are unchanged.
+    await _commit();
+    ensureCurrent();
+    // Deliberately no legacy observed-energy outcome: this wording/version has
+    // no approved compatibility contract with that model's target.
   }
 
   Future<void> addReactionResult(
@@ -2841,10 +3004,16 @@ class AppController extends ChangeNotifier {
 
   Future<void> deleteCheckIn(String id) async {
     final ensureCurrent = _beginMutation();
-    await _discardPersonalizedModel();
+    final researchOnly =
+        checkIns
+            .where((item) => item.id == id)
+            .firstOrNull
+            ?.isResearchCheckIn ??
+        false;
+    if (!researchOnly) await _discardPersonalizedModel();
     ensureCurrent();
     checkIns.removeWhere((item) => item.id == id);
-    await _commit(energyInputsChanged: true);
+    await _commit(energyInputsChanged: !researchOnly);
     ensureCurrent();
     await _deleteOutcome('energy-checkin-$id');
   }
@@ -3923,6 +4092,10 @@ class AppController extends ChangeNotifier {
     cloudSyncFailureKind = null;
     cloudSyncError = null;
     _sessionRevision++;
+    // A preference platform write already in progress cannot be canceled.
+    // Invalidate its session, then drain it before removing the account cache,
+    // so a completed deletion cannot be undone by a late language save.
+    await _localWriteQueue;
     _scoreRefreshGeneration++;
     isForecastLoading = false;
     isGuidanceLoading = false;
@@ -4169,16 +4342,39 @@ class AppController extends ChangeNotifier {
   Future<void> _writeLocal() async {
     if (deletionPending || isDeletingAccount) return;
     final revision = _sessionRevision;
-    final preferences = await SharedPreferences.getInstance();
-    if (revision != _sessionRevision || deletionPending || isDeletingAccount) {
-      return;
+    // Language, observations and background refresh share one state document.
+    // Preserve request order, and capture current state only when its write can
+    // start, so a late preference snapshot cannot erase a newer observation.
+    Future<void> write() async {
+      final preferences = await SharedPreferences.getInstance();
+      if (revision != _sessionRevision ||
+          deletionPending ||
+          isDeletingAccount) {
+        return;
+      }
+      if (!await preferences.setString(_storageKey, jsonEncode(_json()))) {
+        throw StateError(
+          'Could not save to this device. Keep this screen open and retry.',
+        );
+      }
+      if (revision == _sessionRevision &&
+          !deletionPending &&
+          !isDeletingAccount) {
+        scheduleCloudRetry();
+      }
     }
-    if (!await preferences.setString(_storageKey, jsonEncode(_json()))) {
-      throw StateError(
-        'Could not save to this device. Keep this screen open and retry.',
-      );
+
+    final previousWrite = _localWriteQueue;
+    final pending = previousWrite == null
+        ? write()
+        : previousWrite.then((_) => write());
+    final tail = pending.catchError((Object _) {});
+    _localWriteQueue = tail;
+    try {
+      await pending;
+    } finally {
+      if (identical(_localWriteQueue, tail)) _localWriteQueue = null;
     }
-    scheduleCloudRetry();
   }
 
   Future<void> _hydrateOrMigrateCloud({bool Function()? isCurrent}) async {

@@ -6,6 +6,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node run.mjs",
+    "test:app": "node run_app_integration.mjs",
     "test:running": "node --test --test-concurrency=1 firestore.rules.test.mjs"
   },
   "devDependencies": {

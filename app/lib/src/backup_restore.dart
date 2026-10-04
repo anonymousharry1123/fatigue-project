@@ -163,12 +163,20 @@ extension DeviceBackupRestoration on AppController {
         _backupId(data['id']);
         _backupDate(data['timestamp']);
         if (data['recordedAt'] != null) _backupDate(data['recordedAt']);
-        for (final key in ['energy', 'mood', 'stress']) {
-          final rating = data[key];
-          if (rating is! num || !rating.isFinite || rating < 1 || rating > 10) {
-            throw const FormatException('A check-in has an invalid rating.');
+        if (!DailyCheckIn.researchFields.any(data.containsKey)) {
+          for (final key in ['energy', 'mood', 'stress']) {
+            final rating = data[key];
+            if (rating != null &&
+                (rating is! num ||
+                    !rating.isFinite ||
+                    rating < 1 ||
+                    rating > 10)) {
+              throw const FormatException('A check-in has an invalid rating.');
+            }
           }
         }
+        // Versioned responses validate all six optional integer ratings and
+        // their captured questionnaire metadata; skipped answers stay null.
         return DailyCheckIn.fromJson(data);
       }, (item) => item.id);
       OutcomeRecord parseOutcome(Map<String, dynamic> data) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../evidence_provenance.dart';
 import '../models.dart';
 import '../privacy_consent.dart';
@@ -44,99 +46,125 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            sleep.containsDemoEvidence
-                ? sleep.containsRecordedEvidence
-                      ? 'Recorded and demo sleep'
-                      : 'Demo sleep'
-                : 'Recorded sleep',
+            context.tr(
+              sleep.containsDemoEvidence
+                  ? sleep.containsRecordedEvidence
+                        ? 'Recorded and demo sleep'
+                        : 'Demo sleep'
+                  : 'Recorded sleep',
+            ),
             style: Theme.of(context).textTheme.titleMedium,
           ),
           if (sleep.containsDemoEvidence) ...[
             const SizedBox(height: 8),
-            const Text(
-              'These summaries include demo/synthetic examples, not imported or measured sleep. '
-              'Totals, recent patterns and timing variation do not establish your personal sleep history.',
+            Text(
+              context.tr(
+                'These summaries include demo/synthetic examples, not imported or measured sleep. '
+                'Totals, recent patterns and timing variation do not establish your personal sleep history.',
+              ),
               key: Key('sleep-demo-provenance'),
             ),
           ],
           const SizedBox(height: 8),
           Text(
-            latest == null
-                ? 'No completed main sleep recorded.'
-                : 'Latest main sleep: ${_hours(latest.value)} h · '
-                      '${_stamp(latest.timestamp)} · ${EvidenceProvenance.signalIsDemo(latest)
-                          ? 'Demo / synthetic example'
-                          : latest.source == SignalSource.healthKit
-                          ? 'Apple Health estimate'
-                          : 'Manual entry'}',
+            context.tr(
+              latest == null
+                  ? 'No completed main sleep recorded.'
+                  : 'Latest main sleep: ${_hours(latest.value)} h · '
+                        '${_stamp(latest.timestamp)} · ${EvidenceProvenance.signalIsDemo(latest)
+                            ? context.tr('Demo / synthetic example')
+                            : latest.source == SignalSource.healthKit
+                            ? context.tr('Apple Health estimate')
+                            : context.tr('Manual entry')}',
+            ),
           ),
           if (latest?.source == SignalSource.manual)
-            const Text(
-              'Entered bed/wake times estimate sleep; they do not measure time asleep.',
+            Text(
+              context.tr(
+                'Entered bed/wake times estimate sleep; they do not measure time asleep.',
+              ),
             ),
           const SizedBox(height: 8),
           Text(
-            '24-hour window: ${_stamp(sleep.windowStart)} → '
-            '${_stamp(sleep.windowEnd)} (local time)',
+            context.tr(
+              '24-hour window: ${_stamp(sleep.windowStart)} → '
+              '${_stamp(sleep.windowEnd)} (local time)',
+            ),
           ),
           Text(
-            '${sleep.containsDemoEvidence ? 'Displayed sleep total' : 'Estimated recorded sleep'}: ${_hours(sleep.totalHours)} h, '
-            'including ${_hours(sleep.napHours)} h in ${sleep.napCount} naps.',
+            context.tr(
+              '${context.tr(sleep.containsDemoEvidence ? 'Displayed sleep total' : 'Estimated recorded sleep')}: ${_hours(sleep.totalHours)} h, '
+              'including ${_hours(sleep.napHours)} h in ${sleep.napCount} naps.',
+            ),
           ),
-          const Text(
-            'Overlaps are counted once. Naps are logged separately; '
-            'their restorative effect is not treated as equivalent to main sleep.',
+          Text(
+            context.tr(
+              'Overlaps are counted once. Naps are logged separately; '
+              'their restorative effect is not treated as equivalent to main sleep.',
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            '${sleep.mainObservationCount}/7 recent dates have a main-sleep '
-            'record; ${7 - sleep.mainObservationCount} dates are missing.',
+            context.tr(
+              '${sleep.mainObservationCount}/7 recent dates have a main-sleep '
+              'record; ${7 - sleep.mainObservationCount} dates are missing.',
+            ),
           ),
           if (sleep.usualMainHours case final usual?)
             Text(
-              sleep.containsDemoEvidence
-                  ? 'Average in displayed records: ${_hours(usual)} h of main sleep.'
-                  : 'Usual in these records: ${_hours(usual)} h of main sleep. '
-                        'A personal pattern is not an age recommendation.',
+              context.tr(
+                sleep.containsDemoEvidence
+                    ? 'Average in displayed records: ${_hours(usual)} h of main sleep.'
+                    : 'Usual in these records: ${_hours(usual)} h of main sleep. '
+                          'A personal pattern is not an age recommendation.',
+              ),
             ),
           Text(
-            'Clock-time variation (${sleep.bedtimeObservationCount} paired bedtimes, ${sleep.mainObservationCount} wakes): '
-            'bedtime ${_variation(sleep.bedtimeVariationMinutes)}; '
-            'wake ${_variation(sleep.wakeVariationMinutes)}. '
-            'Mean distance from usual clock time, not a health rating.',
+            context.tr(
+              'Clock-time variation (${sleep.bedtimeObservationCount} paired bedtimes, ${sleep.mainObservationCount} wakes): '
+              'bedtime ${context.tr(_variation(sleep.bedtimeVariationMinutes))}; '
+              'wake ${context.tr(_variation(sleep.wakeVariationMinutes))}. '
+              'Mean distance from usual clock time, not a health rating.',
+            ),
           ),
           ExpansionTile(
             key: const PageStorageKey('sleep-recent-observations'),
             tilePadding: EdgeInsets.zero,
-            title: const Text('Recent observations'),
+            title: Text(context.tr('Recent observations')),
             children: [
               for (final day in sleep.days)
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  title: Text('${day.day.month}/${day.day.day}'),
+                  title: Text(context.tr('${day.day.month}/${day.day.day}')),
                   subtitle: Text(
-                    'Main sleep: ${day.mainHours == null ? 'not recorded' : '${_hours(day.mainHours!)} h'} · '
-                    'Naps: ${day.napHours == null ? 'not recorded' : '${_hours(day.napHours!)} h (${day.naps})'}',
+                    context.tr(
+                      'Main sleep: ${day.mainHours == null ? context.tr('not recorded') : '${_hours(day.mainHours!)} h'} · '
+                      'Naps: ${day.napHours == null ? context.tr('not recorded') : '${_hours(day.napHours!)} h (${day.naps})'}',
+                    ),
                   ),
                 ),
             ],
           ),
           if (sleep.supportsTeenGuidance) ...[
-            const Text(
-              'AASM teen recommendation: 8–10 hours of sleep per '
-              '24 hours. This is separate from the experimental score.',
+            Text(
+              context.tr(
+                'AASM teen recommendation: 8–10 hours of sleep per '
+                '24 hours. This is separate from the experimental score.',
+              ),
             ),
             CheckboxListTile(
               key: const Key('sleep-coverage-confirmation'),
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
-              title: const Text(
-                'I have recorded all sleep in this 24-hour window.',
+              title: Text(
+                context.tr('I have recorded all sleep in this 24-hour window.'),
               ),
-              subtitle: const Text(
-                'This confirmation lasts only for this window '
-                'and these records; it is not device-verified coverage.',
+              subtitle: Text(
+                context.tr(
+                  'This confirmation lasts only for this window '
+                  'and these records; it is not device-verified coverage.',
+                ),
               ),
               value: confirmed,
               onChanged:
@@ -149,23 +177,28 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
                           : null,
                     ),
             ),
-            Text(switch (comparison) {
-              SleepRangeComparison.unavailable =>
-                sleep.containsDemoEvidence
-                    ? 'Comparison unavailable: demo/synthetic examples cannot confirm your sleep coverage.'
-                    : sleep.boundaryUncertain
-                    ? 'Comparison unavailable: sleep timing at the window boundary is incomplete.'
-                    : 'Comparison unavailable until complete sleep coverage is confirmed.',
-              SleepRangeComparison.below =>
-                'The confirmed recorded total is below the teen range.',
-              SleepRangeComparison.within =>
-                'The confirmed recorded total is within the teen range. This does not establish recovery or readiness.',
-              SleepRangeComparison.above =>
-                'The confirmed recorded total is above the teen range. More hours do not earn more score points.',
-            }, key: const Key('sleep-guideline-comparison')),
+            Text(
+              context.tr(switch (comparison) {
+                SleepRangeComparison.unavailable =>
+                  sleep.containsDemoEvidence
+                      ? 'Comparison unavailable: demo/synthetic examples cannot confirm your sleep coverage.'
+                      : sleep.boundaryUncertain
+                      ? 'Comparison unavailable: sleep timing at the window boundary is incomplete.'
+                      : 'Comparison unavailable until complete sleep coverage is confirmed.',
+                SleepRangeComparison.below =>
+                  'The confirmed recorded total is below the teen range.',
+                SleepRangeComparison.within =>
+                  'The confirmed recorded total is within the teen range. This does not establish recovery or readiness.',
+                SleepRangeComparison.above =>
+                  'The confirmed recorded total is above the teen range. More hours do not earn more score points.',
+              }),
+              key: const Key('sleep-guideline-comparison'),
+            ),
           ] else
-            const Text(
-              'No age-specific comparison is available for this age band.',
+            Text(
+              context.tr(
+                'No age-specific comparison is available for this age band.',
+              ),
             ),
         ],
       ),

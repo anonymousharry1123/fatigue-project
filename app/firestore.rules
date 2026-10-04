@@ -22,10 +22,8 @@ service cloud.firestore {
 
     function validPrivacyConsent(consent) {
       return consent is map
-        && consent.keys().hasAll(['policyVersion', 'ageBand', 'region',
-          'acceptedAt', 'wellnessAcknowledged'])
-        && consent.keys().hasOnly(['policyVersion', 'ageBand', 'region',
-          'acceptedAt', 'wellnessAcknowledged'])
+        // Every required key is accessed below; exact size also rejects extras.
+        && consent.size() == 5
         && consent.policyVersion == 1
         && consent.ageBand in ['under13', '13to15', '16to17', '18plus']
         && consent.region in ['us', 'other', 'unknown']
@@ -45,7 +43,7 @@ service cloud.firestore {
     }
 
     function deletionPending(data) {
-      return data.keys().hasAny(['privacyDeletion']);
+      return 'privacyDeletion' in data;
     }
 
     function ownerDataWritable(uid) {
@@ -173,6 +171,109 @@ service cloud.firestore {
         && modelFraction(coverage.recoveryDeviation);
     }
 
+    function optionalResearchRating(value) {
+      return value == null || (value is int && value >= 1 && value <= 10);
+    }
+
+    function questionnaireItem(item, id) {
+      let anchors = item.anchors;
+      // String.matches also rejects non-strings. Combining type, length and
+      // nonempty checks avoids exceeding the rules expression budget across
+      // six items; (?s) preserves the original allowance for line breaks.
+      // Accessing each required key below plus exact size also rejects missing
+      // and extra keys, without repeatedly constructing allowlists per item.
+      return item.size() == 5
+        && item.id == id && item.label.matches('(?s)^.{1,100}$')
+        && item.prompt.matches('(?s)^.{0,500}$')
+        && item.optional == true
+        && anchors.size() == 3
+        && anchors['1'].matches('(?s)^.{1,300}$')
+        && anchors['5'].matches('(?s)^.{1,300}$')
+        && anchors['10'].matches('(?s)^.{1,300}$');
+    }
+
+    function questionnaireSnapshot(data) {
+      let snapshot = data.questionnaireSnapshot;
+      let items = snapshot.items;
+      return snapshot.size() == 7
+        && snapshot.version == data.questionnaireVersion
+        && snapshot.language == data.questionnaireLanguage
+        && snapshot.kind == 'customSelfReport'
+        && snapshot.status == 'draftNotClinicallyValidated'
+        && snapshot.recallPeriod == 'right now'
+        && snapshot.recallPeriodText.matches('(?s)^.{1,100}$')
+        && items is list && items.size() == 6
+        && questionnaireItem(items[0], 'energy')
+        && questionnaireItem(items[1], 'fatigue')
+        && questionnaireItem(items[2], 'sleepiness')
+        && questionnaireItem(items[3], 'focus')
+        && questionnaireItem(items[4], 'mood')
+        && questionnaireItem(items[5], 'stress');
+    }
+
+    function researchAnswerCount(data) {
+      // removeAll preserves repeated answered values; a set would undercount.
+      return [data.get('energy', null), data.get('fatigue', null),
+        data.get('sleepiness', null), data.get('focus', null),
+        data.get('mood', null), data.get('stress', null)].removeAll([null]).size();
+    }
+
+    function hasResearchFields(data) {
+      return data.keys().hasAny(['fatigue', 'sleepiness', 'focus', 'localDate',
+        'timezone', 'utcOffsetMinutes', 'questionnaireVersion',
+        'questionnaireLanguage', 'questionnaireSnapshot', 'source',
+        'completionStatus', 'answeredItemCount']);
+    }
+
+    function validResearchCheckIn(data) {
+      let count = researchAnswerCount(data);
+      return data.keys().hasOnly(['energy', 'fatigue', 'sleepiness', 'focus',
+          'mood', 'stress', 'period', 'note', 'timestamp', 'recordedAt',
+          'localDate', 'timezone', 'utcOffsetMinutes', 'questionnaireVersion',
+          'questionnaireLanguage', 'questionnaireSnapshot', 'source',
+          'completionStatus', 'answeredItemCount', 'schemaVersion'])
+        && optionalResearchRating(data.get('energy', null))
+        && optionalResearchRating(data.get('fatigue', null))
+        && optionalResearchRating(data.get('sleepiness', null))
+        && optionalResearchRating(data.get('focus', null))
+        && optionalResearchRating(data.get('mood', null))
+        && optionalResearchRating(data.get('stress', null))
+        && count > 0 && data.answeredItemCount == count
+        && data.completionStatus == (count == 6 ? 'complete' : 'partial')
+        && data.period in ['morning', 'evening']
+        && data.timestamp is timestamp && data.recordedAt is timestamp
+        && data.recordedAt >= data.timestamp
+        && data.localDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.utcOffsetMinutes is int
+        && data.utcOffsetMinutes >= -840 && data.utcOffsetMinutes <= 840
+        && (data.get('timezone', null) == null || data.timezone.matches('(?s)^.{1,100}$'))
+        && data.questionnaireVersion.matches('(?s)^.{1,100}$')
+        && data.questionnaireLanguage in ['en', 'es', 'zh-Hans', 'zh-Hant']
+        && data.source == 'selfReport'
+        && data.note is string && data.note.size() <= 10000
+        && data.schemaVersion is int && data.schemaVersion >= 16
+        && questionnaireSnapshot(data);
+    }
+
+    function validCheckInWrite(data) {
+      // Old clients/records retain their prior policy. Adding any new-format
+      // field opts into the complete bounded contract; missing answers remain
+      // absent/null. No new training consent or collection is introduced.
+      return data.get('questionnaireVersion', null) != null
+        ? validResearchCheckIn(data)
+        : !hasResearchFields(data);
+    }
+
+    function retainsCheckInDefinition(before, after) {
+      return before.get('questionnaireVersion', null) != null
+        ? !after.diff(before).affectedKeys().hasAny([
+            'timestamp', 'localDate', 'timezone', 'utcOffsetMinutes',
+            'questionnaireVersion', 'questionnaireLanguage',
+            'questionnaireSnapshot', 'source'])
+          && after.recordedAt >= before.recordedAt
+        : !hasResearchFields(before) && !hasResearchFields(after);
+    }
+
     match /users/{uid} {
       allow get: if isOwner(uid);
       allow list: if false;
@@ -221,7 +322,11 @@ service cloud.firestore {
             'forecastPoints', 'recommendations', 'riskAlerts'];
         allow create, update: if collection in ['signals', 'checkIns',
             'scoreSnapshots', 'forecastPoints', 'recommendations', 'riskAlerts']
-          && ownerDataWritable(uid);
+          && ownerDataWritable(uid)
+          && (collection != 'checkIns'
+            || (validCheckInWrite(request.resource.data)
+              && (request.method == 'create'
+                || retainsCheckInDefinition(resource.data, request.resource.data))));
       }
     }
 

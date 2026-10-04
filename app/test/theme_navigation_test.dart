@@ -34,6 +34,12 @@ void main() {
       200,
       scrollable: activeVerticalScrollable(),
     );
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('appearance-setting'))),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('appearance-setting')));
     await tester.pumpAndSettle();
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));

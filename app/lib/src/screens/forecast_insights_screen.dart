@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../theme.dart';
 import 'forecast_screen.dart';
 import 'insights_screen.dart';
@@ -24,16 +26,16 @@ class _ForecastInsightsScreenState extends State<ForecastInsightsScreen> {
           child: SizedBox(
             width: double.infinity,
             child: SegmentedButton<int>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: 0,
                   icon: Icon(Icons.show_chart_rounded),
-                  label: Text('Forecast'),
+                  label: Text(context.tr('Forecast')),
                 ),
                 ButtonSegment(
                   value: 1,
                   icon: Icon(Icons.insights_rounded),
-                  label: Text('Insights'),
+                  label: Text(context.tr('Insights')),
                 ),
               ],
               selected: {_section},
