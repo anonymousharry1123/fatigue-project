@@ -379,3 +379,9 @@ to enable Firebase. Runtime values remain outside tracked source files.
 ## Biology Phase 1
 
 Sleep observations and supported teen guidance are separate from experimental scores. Removed exposure rewards, conservative optional plans, explicit missing/zero values, versioned caches and model compatibility are documented in [BIOLOGY_UPGRADE_PROGRESS.md](docs/BIOLOGY_UPGRADE_PROGRESS.md). Forecast bands are uncalibrated and precise forecast alerts are disabled.
+
+## Phase 2A measurement tools
+
+**Today → Today's self-report → Recent personal averages** compares each raw measure with compatible prior reports. **Forecast → Insights → Self-report trends** shows independent ratings, missing dates and descriptive preceding-sleep pairs, with separate Morning/Evening and language controls.
+
+**Profile → Research export** prepares a private saved-device response table: save its JSON dictionary/definitions/provenance bundle or explicitly copy CSV/JSON. **Profile → Questionnaire library** shows the empty instrument catalog and review requirements. No published instrument or new model training is enabled. See [measurement behavior and remaining acceptance](docs/PHASE2A_MEASUREMENT.md).

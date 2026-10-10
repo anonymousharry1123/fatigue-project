@@ -222,9 +222,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('7-day overview'), findsOneWidget);
-    expect(find.text('Avg main sleep'), findsOneWidget);
     expect(find.textContaining('no cohort comparisons'), findsOneWidget);
+    expect(find.byKey(const Key('self-report-trends')), findsOneWidget);
+    await _scrollMainListTo(tester, find.text('7-day overview'), 220);
+    expect(find.text('7-day overview'), findsOneWidget);
+    await _scrollMainListTo(tester, find.text('Avg main sleep'), 220);
+    expect(find.text('Avg main sleep'), findsOneWidget);
     await _scrollMainListTo(
       tester,
       find.byKey(const Key('insights-daily-trend')),

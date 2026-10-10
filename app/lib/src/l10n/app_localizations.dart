@@ -7,6 +7,9 @@ import 'core_translations.dart';
 import 'forecast_translations.dart';
 import 'logging_translations.dart';
 import 'measurement_translations.dart';
+import 'research_tools_translations.dart';
+import 'self_report_reference_translations.dart';
+import 'self_report_trends_translations.dart';
 
 Locale localeForLanguage(String code) => switch (normalizeLanguagePreference(
   code,
@@ -38,6 +41,9 @@ class AppLocalizations {
     ...forecastTranslations,
     ...loggingTranslations,
     ...measurementTranslations,
+    ...researchToolsTranslations,
+    ...selfReportReferenceTranslations,
+    ...selfReportTrendsTranslations,
   });
 
   // Only known, authored templates are recognized. Observations and account

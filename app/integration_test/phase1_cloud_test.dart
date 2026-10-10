@@ -17,14 +17,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'phase2a_measurement_fixtures.dart';
+import 'phase2a_measurement_ui.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const verifyRestart = bool.fromEnvironment('TONYO_VERIFY_PROCESS_RESTART');
 
   testWidgets(
     verifyRestart
-        ? 'native process restart preserves Phase 1 cloud state'
-        : 'native Auth/Firestore Phase 1 persistence and policy',
+        ? 'native restart preserves measurements and research tools'
+        : 'native measurement entry, persistence and cloud policy',
     (tester) async {
       if (!TonyoFirebaseEmulatorOptions.enabled) {
         throw StateError(
@@ -142,6 +145,21 @@ void main() {
         observedAt.toUtc(),
       );
       expect(current.outcomes, isEmpty);
+      await exerciseMeasurementEntryUi(tester, current);
+      await seedMeasurementHistory(current);
+      expectMeasurementHistory(current.checkIns, current.signals);
+      expectUiMeasurementState(current.checkIns);
+      verifyMeasurementReadModels(current);
+      // A test-only manifest preserves exact pre-restart values in a separate
+      // native-preferences key before later cloud hydration. No credentials.
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        await preferences.setString(
+          _measurementManifestKey,
+          jsonEncode(_measurementSnapshot(current.checkIns, current.signals)),
+        ),
+        isTrue,
+      );
       final zeroDocument = await user
           .collection('signals')
           .doc('$group-exercise')
@@ -294,6 +312,9 @@ Future<void> _verifyProcessRestart(
   expect(state.profile.bedHour, 22);
   expect(state.profile.preferredLanguage, 'es');
   _expectMeasurements(state.checkIns);
+  expectMeasurementHistory(state.checkIns, state.signals);
+  expectUiMeasurementState(state.checkIns);
+  await _expectMeasurementSnapshot(state.checkIns, state.signals);
   expect(
     state.signals
         .singleWhere((row) => row.id == 'activity-phase1-restart-zero-exercise')
@@ -344,6 +365,11 @@ Future<void> _verifyProcessRestart(
   expect(current.outcomeConsent, isFalse);
   expect(current.healthAuthorized, isFalse);
   _expectMeasurements(current.checkIns);
+  expectMeasurementHistory(current.checkIns, current.signals);
+  expectUiMeasurementState(current.checkIns);
+  await _expectMeasurementSnapshot(current.checkIns, current.signals);
+  verifyMeasurementReadModels(current);
+  await exerciseMeasurementReviewUi(tester, current);
   await tester.pumpWidget(const SizedBox.shrink());
   current.dispose();
   // Normal owner lifecycle APIs delete only this synthetic account and data.
@@ -365,11 +391,11 @@ Future<void> _expectPersistentState() async {
   final raw = preferences.getString('tonyo_state_v1');
   expect(raw, isNotNull, reason: 'The native app cache must survive restart.');
   final saved = jsonDecode(raw!) as Map<String, dynamic>;
-  _expectMeasurements(
-    (saved['checkIns'] as List)
-        .map((value) => DailyCheckIn.fromJson(value as Map<String, dynamic>))
-        .toList(),
-  );
+  final checkIns = (saved['checkIns'] as List)
+      .map((value) => DailyCheckIn.fromJson(value as Map<String, dynamic>))
+      .toList();
+  _expectMeasurements(checkIns);
+  expectUiMeasurementState(checkIns);
   final profile = UserProfile.fromJson(
     saved['profile'] as Map<String, dynamic>,
   );
@@ -379,6 +405,8 @@ Future<void> _expectPersistentState() async {
   final signals = (saved['signals'] as List)
       .map((value) => SignalReading.fromJson(value as Map<String, dynamic>))
       .toList();
+  expectMeasurementHistory(checkIns, signals);
+  await _expectMeasurementSnapshot(checkIns, signals);
   expect(
     signals
         .singleWhere((row) => row.id == 'activity-phase1-restart-zero-exercise')
@@ -390,6 +418,40 @@ Future<void> _expectPersistentState() async {
         .where((row) => row.groupId == 'activity-phase1-explicit-zero')
         .map((row) => row.type),
     [SignalType.study],
+  );
+}
+
+const _measurementManifestKey = 'tonyo_acceptance_measurement_manifest_v1';
+
+Map<String, Object?> _measurementSnapshot(
+  List<DailyCheckIn> checkIns,
+  List<SignalReading> signals,
+) {
+  final responses = checkIns.where((row) => row.isResearchCheckIn).toList()
+    ..sort((a, b) => a.id.compareTo(b.id));
+  final sleeps =
+      signals
+          .where((row) => row.groupId?.startsWith('acceptance-sleep-') ?? false)
+          .toList()
+        ..sort((a, b) => a.id.compareTo(b.id));
+  return {
+    'checkIns': responses.map((row) => row.toJson()).toList(),
+    'signals': sleeps.map((row) => row.toJson()).toList(),
+  };
+}
+
+Future<void> _expectMeasurementSnapshot(
+  List<DailyCheckIn> checkIns,
+  List<SignalReading> signals,
+) async {
+  final preferences = await SharedPreferences.getInstance();
+  final manifest = preferences.getString(_measurementManifestKey);
+  expect(manifest, isNotNull, reason: 'Initial native manifest must exist.');
+  expect(
+    _measurementSnapshot(checkIns, signals),
+    jsonDecode(manifest!),
+    reason:
+        'Raw values, nulls, notes, exact times and definitions must survive.',
   );
 }
 

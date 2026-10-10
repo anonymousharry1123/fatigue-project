@@ -52,7 +52,11 @@ Current safety changes supersede retired sleep/nap/exposure rewards and forecast
 
 - [x] Steps 1–3: six distinct draft self-report measures, initially unanswered UI, explicit period, versioned raw persistence and missingness.
 - [x] Separate self-report display, retained legacy values, local/cloud/backup compatibility and exclusion from legacy model inputs.
-- [ ] Steps 4–7: personal references, independent trends, research-specific export and an approved-instrument framework.
+- [x] Step 4: separate morning/evening personal self-report averages with per-measure day counts, missingness and an explicit 7-of-28-day product display rule (2026-10-10).
+- [x] Step 5: separate raw-rating trends and descriptive preceding-main-sleep pairs, with period/language controls, missingness, provenance and accessible exact records (2026-10-10).
+- [x] Step 6: explicit private device research export with a versioned JSON dictionary/definitions/provenance and copyable CSV response table (2026-10-10).
+- [x] Step 7: generic versioned instrument/response framework, review/permissions/age/scoring checks and read-only empty questionnaire library (2026-10-10). No published instrument or collection enabled.
+- [x] Native simulator acceptance: ordinary form entry/edit/clear, exact raw-data persistence across a real process restart and server reload, references/trends, confirmed JSON/CSV clipboard export and empty library; both isolated emulator scenarios passed (2026-10-10).
 - [ ] Complete relevant physical-device/release acceptance and research review; future AI stages remain planning only.
 
 See [measurement implementation and boundaries](PHASE2A_MEASUREMENT.md) and the [verification record](BIOLOGY_UPGRADE_PROGRESS.md). Technical measurement versioning is not research-protocol approval.

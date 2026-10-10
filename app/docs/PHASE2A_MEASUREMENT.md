@@ -1,6 +1,6 @@
 # Phase 2A measurement foundation
 
-Implemented October 4, 2026 after the user requested the next step in [roadmap v2](../TONYO_BIOLOGY_AND_AI_ROADMAP_v2.md). This completes the first usable slice of Sections 16 steps 1–3: definitions, check-in UI, and raw storage, plus a separate self-report display. It does **not** complete every Phase 2A acceptance criterion or approve a research protocol. The user-authored roadmap and its undecided research fields are unchanged.
+Implemented October 4, 2026 after the user requested the next step in [roadmap v2](../TONYO_BIOLOGY_AND_AI_ROADMAP_v2.md). The initial slice completed Section 16 steps 1–3: definitions, check-in UI, and raw storage, plus a separate self-report display. Steps 4–7 were added October 10, 2026: personal references, independent trends, private research export and an empty approved-instrument framework. This does **not** complete physical-device/release acceptance or approve a research protocol. The user-authored roadmap and its undecided research fields are unchanged.
 
 ## What the app now does
 
@@ -57,15 +57,35 @@ The first emulator runs exposed Firestore's 1,000-expression ceiling for rich va
 
 Actual commands/results, native integration and remaining device limits are recorded in [the progress record](BIOLOGY_UPGRADE_PROGRESS.md). Key regressions: [schema](../test/research_check_in_schema_test.dart), [persistence/backup](../test/self_report_persistence_test.dart), [widgets](../test/check_in_measurement_widget_test.dart), [model separation](../test/phase2a_consumer_separation_test.dart), [real security emulator](../tool/security_rules/firestore.rules.test.mjs), [native restart](../integration_test/phase1_cloud_test.dart).
 
+## Personal self-report references — Step 4
+
+Open **Today → Today's self-report → Recent personal averages** beneath either recorded period. Energy, Fatigue, Sleepiness, Focus, Mood and Stress each show a separate average and answered-day count, alongside the unchanged current answer. A missing current answer has no comparison. References describe the person's reports; they are not a healthy/normal range, predicted outcome or composite score.
+
+The product display policy requires **at least seven distinct answered days within the preceding 28 captured local dates**, separately for Morning and Evening and each measure. Below that threshold, the card shows “Not enough history” and the available count. These defaults control display only; they do not fill any research-protocol or future AI minimum-history setting. The window dates, minimum and selection rule are disclosed in the expanded card.
+
+- Only valid, non-synthetic `tonyo-self-report-draft-v1` responses with the same period, language and exact stored questionnaire definition can contribute. Structural comparison ignores map key order while preserving question order, wording and anchors. Legacy records and unknown formats are retained but excluded.
+- The current captured date and later dates are excluded, as are observations at/after the current report and records whose observation/save time is after the viewing time. The 28-date window uses captured calendar dates, independent of later travel or daylight-saving changes.
+- Duplicate IDs resolve to their latest revision before eligibility is checked. Within each compatible historical date/period, only the latest submission is used, before inspecting its answers. A later missing answer never falls back to an older answered submission. Each measure counts only its own answered dates; no value is imputed.
+- These are current descriptive references recomputed from saved records. An edit, clearing, deletion or restore can change an average. They are not a reconstruction of what a model knew at an earlier prediction cutoff, and they are never fed into scores, forecasts, Coach, learning outcomes or training.
+- Existing local/cloud hydration already supplies the needed records. No new queries, stored derived values, schema/rules changes or cache/model migration are required. All four existing interface languages include the reference copy.
+
+Sources: [reference calculation](../lib/src/self_report_reference_logic.dart), [reference card](../lib/src/widgets/self_report_reference_card.dart), [logic regressions](../test/self_report_reference_logic_test.dart), [display and persistence checks](../test/self_report_reference_widget_test.dart). Verification results appear in [the progress record](BIOLOGY_UPGRADE_PROGRESS.md).
+
 ## Remaining roadmap and acceptance work
 
-Phase 2A steps 4–7 remain: separately defined personal references with sample counts, independent trends, a research-specific export, and an approved-instrument questionnaire framework. Raw backups/exports already carry these new responses; they are not yet the proposed analysis table. No research baseline minimum, window, participant protocol, prediction target, outcome matching rule, instrument, study threshold or future AI setting has been invented or approved.
+Software implementation for Phase 2A steps 1–7 is complete locally. The display defaults and retrospective export do not approve a research baseline minimum/window or a study matching rule. Participant protocol, prediction target, validated instrument, study threshold and future AI settings remain undecided. Step 8/future AI work remains deferred until the measurement/prediction contract and real-outcome review are agreed. Optional unusual-day/illness/travel markers are not implemented.
 
 Existing Phase 1 physical-device/notification acceptance gaps remain documented in [the device checklist](PHASE1_DEVICE_ACCEPTANCE.md). Native simulator integration is separate from physical-device and screen-reader acceptance. No normal installation, real Health record or production account was used. Before any future release, review backward-client behavior against schema 16 and the proposed rules; do not silently deploy them.
 
 Passing software tests does not establish biological, clinical, psychometric, or fatigue-prediction accuracy.
 
-### Manual measurement acceptance — Not run
+### Measurement acceptance — simulator coverage and remaining manual checks
+
+The expanded local-only native harness passed **two scenarios on October 10, 2026**, including an actual process stop/restart. It now taps the ordinary Spanish check-in form, checks all six initially unanswered displays, exercises period/answer validation, saves Focus = 6, adds then clears Energy through history, and preserves the exact saved data in native preferences and fresh Firestore server reads. It opens an English response under Spanish presentation, verifies original wording, changes a control and cancels without changing the stored response. Complete six-value reports and eight historical report/sleep pairs are created through normal controller APIs, not taps on all six controls.
+
+After restart, native UI checks verify the 5.5 Energy average from eight historical days, raw-rating and sleep charts, sparse/missing records, measure/period/language filters, explicit export preparation, canceled/confirmed native JSON/CSV clipboard copying, and the empty questionnaire library. Read-only navigation/export leaves raw records unchanged. Full raw values, missingness, definitions and timestamp precision are compared against a separate pre-restart test manifest. See [the execution record and command](PHASE1_EMULATOR_INTEGRATION.md#phase-2a-measurement-acceptance--2026-10-10).
+
+The procedure below remains useful for manual/physical acceptance. Automated simulator coverage now supplies evidence for items 1–2 and the persistence portion of item 3; it does not complete all of items 3–6. System file-picker saving, VoiceOver/TalkBack, physical devices, all-language native review, legacy-format UI walkthroughs and OS timezone/travel changes remain **Not run** in this follow-up. The simulator clipboard calls use the real native platform channel; host clipboard sharing was not assessed.
 
 Use an expressly isolated test installation, local emulator routing and synthetic records under normal adult consent. Never select a normal installation, production account or real Health import. For native emulator prerequisites and the existing automatic restart command, see [the integration guide](PHASE1_EMULATOR_INTEGRATION.md). A physical target needs a separately reviewed local test setup; the current automatic harness creates only an iOS simulator.
 
@@ -75,3 +95,46 @@ Use an expressly isolated test installation, local emulator routing and syntheti
 4. Change the interface language, then edit the existing response. Verify its original wording/language is retained while a new response uses the new language. Review Spanish and both Chinese scripts at enlarged text sizes with VoiceOver/TalkBack; these assistive-technology checks are Not run.
 5. With synthetic historical fixtures via supported import, confirm original 1–5 data is labeled `/5` and read-only, ordinary three-item data keeps its old editor, and export/deletion remain available. No synthetic entry should become a genuine Today report.
 6. Change the isolated test timezone across a date boundary and inspect the saved response in history. Its captured local date/offset must remain unchanged. Unit timezone tests cover this logic; an OS timezone/travel walkthrough is Not run.
+
+## Independent trends — Step 5
+
+Open **Forecast → Insights → Self-report trends**. Select one of the six measures, Morning/Evening and the recorded questionnaire language. The view uses **28 captured dates including today**, separate from the personal-reference panel's preceding-28-date window. It displays the latest compatible submission per date/period before evaluating missing answers. The latest valid current-format report in the chosen window/language defines exact wording compatibility. Older incompatible definitions, invalid/legacy/synthetic records and future observation/save times do not contribute. Gaps stay missing; no zero or midpoint is inserted.
+
+The raw-rating chart fixes its vertical scale at 1–10 and connects only adjacent answered dates. With fewer than eight answered dates, exact dated values replace the chart. The sleep scatter uses raw rating versus preceding recorded main-sleep hours; fewer than eight pairs or an unvarying axis uses exact paired records instead. Eight is a visual-density rule, not statistical power or a validity threshold. Counts disclose answered, missing, paired and unpaired dates. An expandable list retains all 28 dates, values, sleep sources and unpaired reasons. Screen-reader summaries supplement the same accessible records.
+
+### Descriptive sleep matching
+
+The shared matcher uses genuine manual/Health main-sleep summaries ending at/before the report within the previous **24 elapsed hours**. It excludes naps (including imported nap groups), invalid durations/quality, model/demo evidence, future evidence and records unavailable at viewing time. Raw duration is retained; a bedtime is never fabricated by subtracting sleep duration from wake time. Only an actual saved bedtime can establish that another session ended before the latest session began.
+
+Ambiguous competing summaries are withheld. The existing 50%-detailed-stage/80%-manual-duration Health preference is reused only for a provably overlapping manual/Health session, with genuine available stages and bounded totals; it is not a new clinical rule. Grouping uses actual instants rather than the device's present timezone. Captured report dates survive travel/DST.
+
+These are **retrospective descriptions using saved records available now**. A sleep entry or correction made after the report may contribute. Unknown availability stays unknown. Neither the pairing nor a scatter establishes causation, significance or predictive performance. The matcher reports availability of all records needed to choose a pair separately from the selected sleep record's own availability. It does not change input/model/preparation versions, query Firestore, schedule alerts or fit anything.
+
+Sources: [trend and matching logic](../lib/src/self_report_trends_logic.dart), [native chart and exact records](../lib/src/widgets/self_report_trends_card.dart), [logic regressions](../test/self_report_trends_logic_test.dart), [UI/visual QA](../test/self_report_trends_widget_test.dart).
+
+## Private research export — Step 6
+
+Open **Profile → Research export**. Enter a pseudonymous study code (1–32 characters, starting with a letter; letters/numbers/underscore/hyphen only) and choose **Prepare research export**. Opening the screen produces no export. The prepared summary shows row, partial, paired and excluded counts. Later data edits do not silently alter that prepared snapshot; prepare again to include them.
+
+- **Save research JSON** uses the existing JSON system file picker on iOS/Android/macOS. It contains `tonyo-measurement-export-v1`, generation/scope/policy metadata, response and sleep data dictionaries, exact questionnaire definitions, selected raw sleep records and response rows. Native channel changes were unnecessary.
+- **Copy research CSV** provides the response table with a header and CRLF line endings; missing values are empty fields. **Copy research JSON** is also available. Clipboard use requires an explicit in-app confirmation. Cancellation and failure never report a saved file, and pending clipboard confirmation cannot cross an account/session change.
+- Each valid current-format submission contributes a row, including partial answers and repeated dates. Unlike a trend plot, the export does not collapse independent submissions into one row per day. Duplicate IDs resolve by latest revision; contradictory equal-time copies are excluded. Counts identify duplicate, invalid, synthetic, legacy, future/unavailable and unsupported-version exclusions. Raw backups remain available for retained rows outside this research table.
+- Responses retain original raw six-item values, missingness/completeness, selected period, observation/save UTC instants, captured local date/zone/offset, source, version, language and definition reference. JSON keeps exact wording/anchors; CSV references those definitions. Values are not normalized into experimental scores.
+- Sleep rows retain raw duration/end/source/quality and actual save/import timestamps. Response rows separately include `sleep_pair_available_at_utc` and `sleep_pair_availability_known`, because deciding a match may require extra records whose availability differs from the selected raw sleep. Unpaired rows retain explicit reasons and null values.
+- Export-local response/sleep/definition references replace original record IDs. Names, emails, account IDs, free-text notes and unrelated profile/model/health data are excluded. Dates and wellness observations still make this sensitive **pseudonymized**, not anonymous, data. Keep any identity linkage separately. Study codes are not generated from account identifiers.
+
+The export uses only the current owner's saved device records, including pending edits, under the existing device-export ownership/session gate. It does not perform a fresh cloud fetch, upload anything, change sync acknowledgements/consent, or generate prediction events. Its retrospective sleep pairing policy and unapproved-protocol status are explicit. This is a measurement analysis table, **not** the future prespecified prediction-event dataset or an approved study join.
+
+Sources: [builder and dictionaries](../lib/src/research_export.dart), [export screen](../lib/src/screens/research_export_screen.dart), [data tests](../test/research_export_test.dart), [availability regressions](../test/research_export_pairing_test.dart), [save/copy/session UI checks](../test/research_export_screen_test.dart).
+
+## Generic questionnaire framework — Step 7
+
+**Profile → Questionnaire library** shows the actual empty installed catalog and review requirements. No published questionnaire, copyrighted question set, scoring formula, clinician endorsement or research approval was invented. There is no installation, collection, approval or storage action on this read-only screen.
+
+The separate pure-Dart framework supplies immutable, versioned definitions, original choice IDs/numeric values, required/optional items, age/language/recall/source/permission metadata, distinct biological/youth/software/permissions reviews, and a registry that rejects duplicate identities. Intake validates exact trusted definitions, supported ages, review/permission timing, UTC observation/save times, choices and nonempty partial responses. Under-13 instruments are rejected. JSON responses cannot install or approve their own embedded definition.
+
+Raw responses are never automatically summed, rescaled or filled. Optional total/subscale scores require a separately reviewed external scoring-method identifier/version, finite values, scoring time and all required answers. Scoring is not executed by this framework. Response `recordedAt` describes raw-response availability; any later external score has its own `scoredAt` and must not be used before that instant. Codecs retain the exact definition snapshot and honest completion metadata.
+
+These metadata checks are necessary software safeguards, not authentication of a human reviewer or authority to collect participant data. No questionnaire persistence collection, cloud schema, backup migration or live intake was added while no instrument is approved. Future activation requires reviewed instrument content/permissions/scoring, applicable consent/research approvals and a separate storage/export/deletion migration. The existing custom draft six-item check-in remains unchanged.
+
+Sources: [framework and empty catalog](../lib/src/questionnaire_framework.dart), [library screen](../lib/src/screens/questionnaire_library_screen.dart), [framework regressions](../test/questionnaire_framework_test.dart), [library UI checks](../test/questionnaire_library_screen_test.dart).

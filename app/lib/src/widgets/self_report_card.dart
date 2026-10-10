@@ -7,6 +7,7 @@ import '../local_day.dart';
 import '../models.dart';
 import '../theme.dart';
 import 'common_widgets.dart';
+import 'self_report_reference_card.dart';
 
 Map<String, double?> selfReportRatings(DailyCheckIn item) => {
   'energy': item.energy,
@@ -53,12 +54,20 @@ class TodaySelfReportCard extends StatelessWidget {
               (item) =>
                   !selfReportIsSynthetic(item) &&
                   !item.timestamp.isAfter(now) &&
+                  !(item.recordedAt?.isAfter(now) ?? false) &&
                   (item.isResearchCheckIn
                       ? item.localDate == day
                       : sameLocalDay(item.timestamp, now)),
             )
             .toList()
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          ..sort((a, b) {
+            final observed = b.timestamp.compareTo(a.timestamp);
+            if (observed != 0) return observed;
+            final recorded = (b.recordedAt ?? b.timestamp).compareTo(
+              a.recordedAt ?? a.timestamp,
+            );
+            return recorded != 0 ? recorded : b.id.compareTo(a.id);
+          });
     final latest = <CheckInPeriod, DailyCheckIn>{};
     for (final item in reports) {
       latest.putIfAbsent(item.period, () => item);
@@ -93,6 +102,11 @@ class TodaySelfReportCard extends StatelessWidget {
                   checkIn: item,
                   embedded: true,
                   showNote: false,
+                ),
+                SelfReportReferenceCard(
+                  current: item,
+                  checkIns: checkIns,
+                  now: now,
                 ),
               ],
         ],

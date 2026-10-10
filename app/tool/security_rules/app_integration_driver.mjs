@@ -30,6 +30,7 @@ if (!type) throw new Error('An iPhone simulator type is required.');
 const simulator = await run('xcrun', ['simctl', 'create', 'Tonyo Local Integration',
   type.identifier, runtime.identifier], { capture: true });
 await writeFile(new URL('.runtime/app-integration-simulator-id', import.meta.url), simulator);
+console.log(`Created isolated simulator: ${type.name} / ${runtime.name} (${simulator}).`);
 try {
   await run('xcrun', ['simctl', 'boot', simulator]);
   await run('xcrun', ['simctl', 'bootstatus', simulator, '-b']);

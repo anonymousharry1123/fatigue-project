@@ -1,5 +1,7 @@
 # Biology upgrade — Phase 1
 
+Latest follow-up: [Phase 2A native acceptance](#phase-2a-native-acceptance-2026-10-10) passed both isolated simulator/emulator scenarios, covering entry/editing, exact restart persistence and the new measurement screens/export. Software steps 1–7 are complete; existing physical-device/release acceptance and research-contract review remain open. Future AI work remains deferred.
+
 Implemented locally on 2026-10-03 against the repository's [biology plan](../../TONYO_BIOLOGY_UPGRADE_PLAN.md). This is a software safety and interpretation change, not clinical validation. Phases 2–5 remain deferred.
 
 ## Implemented behavior
@@ -310,3 +312,86 @@ The former **28 timezone cases were included in 903**, not added to it. That ove
 - Consumer separation: `fatigue_engine.dart`, `ml_prep_builder.dart`; no formula or fitted/preparation version change.
 - Policy/tests: `firestore.rules`, existing Node suite and README; four new measurement test files, expanded codec tests, existing UI/schema helpers and `integration_test/phase1_cloud_test.dart`.
 - Documentation: this record, development log, plan, measurement guide, integration guide and language guide. Earlier Phase 1/language edits remain present and uncommitted; not every Git change belongs to this slice.
+
+## Phase 2A Step 4: personal self-report references — 2026-10-10
+
+The user requested “complete the next step”. Following the completed measurement steps 1–3, implemented roadmap v2 Section 16 Step 4. In **Today → Today's self-report → Recent personal averages**, each morning/evening report now exposes separate Energy, Fatigue, Sleepiness, Focus, Mood and Stress references. Each average shows its answered-day count; the current raw answer is unchanged. Missing answers have no comparison, and insufficient history has no average.
+
+### Display policy and compatibility
+
+Use at least seven distinct answered days within the preceding 28 captured local dates, independently for each measure and period. The panel discloses this window, dates, minimum and selection policy. These are product display defaults only, not reviewed research settings, clinical thresholds or model eligibility gates. Personal averages do not describe a healthy or normal range.
+
+Only valid genuine current draft-format responses with matching version, language and exact stored questionnaire definitions contribute. Map ordering does not affect compatibility. Legacy/synthetic/unknown formats, current-day and later observations, and records not yet available at viewing time are excluded. Duplicate revisions resolve before filtering; each date contributes its latest matching submission before per-item missingness. Clearing an answer does not resurrect an older submission. Calendar arithmetic preserves captured dates through travel/DST.
+
+References are derived in memory from existing owner-scoped check-ins, with no extra query, new saved derived field, schema/rules change, migration or training. Edits, clearing, deletion and reload update the display naturally. These current descriptive averages are not historical prediction snapshots or inputs to existing estimates. No source measurements, consent flags, model artifacts, deployment settings or research-decision blanks were modified. The user-authored roadmap remains unchanged.
+
+All four supported interface languages have reference copy. Expanded cards fit 320-pixel displays at 2× text in widget tests. Review identified a rounding mismatch where a mean of 6.0476 displayed as 6.0 beside a current 6 yet said “Lower”; averages now show up to two decimals, with regression cases in both directions. Today also excludes future recording times and resolves same-time displayed submissions deterministically.
+
+### Verification performed
+
+Commands ran in `app/` using `/Users/harrygao/Downloads/flutter/bin/flutter` and the cached Dart SDK executable. The first full-suite invocation stopped before tests because the installed SDK cache was outside the writable sandbox; the approved SDK-cache escalation allowed the full run. No dependency change or installation was needed.
+
+| Check | Result |
+| --- | --- |
+| `flutter analyze --no-pub` | No issues found, exit 0 after final code changes. |
+| `flutter test --no-pub --reporter expanded` | **1,025 passed**, exit 0. Includes all 28 new tests: 17 logic and 11 widget/persistence cases. |
+| Initial focused widget, measurement persistence and consumer-separation run | **40 passed**, before the two additional rounding regressions. Overlaps the full suite; not an additional unique total. |
+| Agent's focused `self_report_reference_logic_test.dart` run | **17 passed**, also included in the full suite. |
+| Changed-Dart-only `dart format --output=none --set-exit-if-changed` | Seven files checked, zero changed. |
+| `git diff --check` | Passed. |
+
+New checks cover per-measure availability, six-to-seven-day gating, repeat submissions, exact window bounds, versions/languages/wording, map order, raw preservation, invalid/synthetic/legacy exclusions, future save times, travel/DST, local persistence and recomputation after clearing/deletion, consumer separation, rounding and all four languages at enlarged text. Existing whole-app accessibility and regression checks also passed.
+
+This is software verification, not psychometric or clinical validation. No new native simulator/physical-device, VoiceOver/TalkBack or cloud-emulator run was performed for this read-only derived display. Existing release/physical-device gaps remain open. Phase 2A **Steps 5–7 remain**: independent trends, research export and the approved-instrument framework. No commit, push or deployment was performed.
+
+## Phase 2A Steps 5–7: trends, research export and questionnaire framework — 2026-10-10
+
+The user requested continued step-by-step work following the plan with high quality. Preserved the prior uncommitted Step 4 changes and implemented the remaining authorized measurement scope. The user-authored roadmap/research blanks, model versions and future AI stages remain unchanged. The detailed behavior, data dictionaries and boundaries are in [PHASE2A_MEASUREMENT.md](PHASE2A_MEASUREMENT.md).
+
+### Implemented outcome
+
+| Step | App location and behavior |
+| --- | --- |
+| 5 — Independent trends | **Forecast → Insights → Self-report trends** selects six raw measures independently by period and questionnaire language. Shows 28 captured dates, exact-definition filtering, missing gaps, counts and fixed 1–10 axes. Sparse/unvarying data uses exact records. Descriptive sleep pairs preserve sources/availability, exclude naps/demo/invalid/future evidence and withhold ambiguous matches; actual saved bedtimes are required when disambiguating sessions. No correlation coefficient, causal conclusion, prediction or composite score is manufactured. |
+| 6 — Research export | **Profile → Research export** prepares an explicit device snapshot after a user-entered study code. Saves a versioned JSON analysis bundle through the existing system picker or copies its response CSV/JSON after confirmation. Raw partial answers, timestamps, definitions, sources, missingness, exclusion counts and separate raw/pair availability are retained. Names, account IDs, emails, notes and original record IDs are excluded. Account/session checks protect pending actions. No export is triggered by opening the screen. |
+| 7 — Questionnaire framework | **Profile → Questionnaire library** exposes the actual empty catalog and review requirements. Separate immutable definition/response codecs, a trusted registry, distinct review/permission/population/time gates and optional reviewed external score metadata prepare for a future instrument. No published questions, scoring formula, reviewer identity, approval, collection UI or persistent questionnaire collection were added. |
+
+All new screens support English, Spanish, Simplified Chinese and Traditional Chinese. Current draft wording and saved definitions are unchanged. Step 5's visual-density threshold and retrospective 24-hour pairing are product display choices, not approved research matching or statistical adequacy. The research export explicitly states that it is a retrospective saved-device table, not the future prediction-event dataset. Derived views and exports do not alter raw observations, scores, Coach, outcomes, model fitting, consent or sync acknowledgements.
+
+### Review findings and fixes
+
+- A shared sleep record can participate in matches whose selection depends on different availability evidence. Keying the sleep table only by record ID originally reused the first match's availability for later reports. The sleep table now contains raw-record availability; each response separately records pair availability. A regression covers a known-time morning pair and unknown-dependency later pair pointing to the same raw sleep.
+- A duplicate record lacking `recordedAt` could tie a valid record whose save time equaled observation time. Omitting the actual nullable save time from the conflict key made output depend on iteration order. The key now retains it, and contradictory equal-time copies are excluded consistently in both orders.
+- Chart QA first rendered Flutter's Ahem test glyphs, which could not establish readable typography. Capture-only QA now loads the bundled font and a local macOS CJK fallback. Readable full-card and 320px/2× chart captures were inspected. Axis tick positions and compact endpoint labels were adjusted for enlarged fonts; full ISO date bounds remain visible above the chart.
+- Initial widget development exposed a semantics-handle cleanup failure and test-only fake-async/ambiguous-scroll issues. Those helpers were corrected without weakening assertions. The first complete run passed 1,104 tests and failed one existing Insights test that assumed the weekly overview was above the new raw-trends section. It now scrolls to that section, retains the original assertions, and additionally checks the new trends card exists. Its focused rerun passed before the final full run.
+
+### Final verification
+
+Commands used the existing installed SDK in `app/`; SDK-cache writes required approved execution-tool escalation. No dependency/native bridge/schema/rules or lockfile changes were needed.
+
+| Executed check | Result |
+| --- | --- |
+| `flutter analyze --no-pub` | No issues found, exit 0. |
+| Cached SDK `dart analyze` after the final navigation-test adjustment | No issues found, exit 0. |
+| `flutter test --no-pub --dart-define=CAPTURE_TRENDS_QA=true '--dart-define=TRENDS_CJK_FONT=/System/Library/Fonts/STHeiti Light.ttc' --reporter expanded` | **1,105 passed**, zero failures/skips, exit 0. This is 1,025 from the Step 4 handoff plus 80 new checks. |
+| Focused suites during implementation | Trend logic 24; trend widget/translation/visual QA 15; export data/UI 16; export availability regressions 3; questionnaire framework/library 20; Profile route checks 2. All pass and overlap the final whole-suite total. |
+| Changed/new Dart format verification | **26 files, zero changed**, exit 0. Includes preserved Step 4 files. |
+| `git diff --check` and changed-document relative-link checks | Passed. |
+
+The full suite includes existing measurement persistence, consumer/model separation, privacy, source/scoring, backup/recovery, localization and whole-screen accessibility regressions. Synthetic visual QA files were written only to temporary storage: `/private/tmp/self-report-trends-full-390.png`, `/private/tmp/self-report-trends-rating-320-large.png` and `/private/tmp/self-report-trends-sleep-320-large.png`. The CJK font is a local test-render fallback, not a redistributed dependency. Normal tests may omit the capture defines; the screenshot-only case is then explicitly skipped.
+
+Native simulator, physical-device, VoiceOver/TalkBack, cloud-emulator and real file-picker runs were **not** added in this follow-up. Existing physical/release acceptance remains open, and new native flows should be checked in an isolated test installation before release. Software correctness and readable synthetic charts do not establish clinical, psychometric or prospective prediction validity. No live account/data access, new cloud collection, training, deployment, commit or push occurred.
+
+**Next boundary:** measurement/prediction-contract and instrument review, alongside remaining device/release acceptance. The roadmap's AI stages remain planning-only; the empty approved-instrument catalog cannot be activated by serialized response metadata or this implementation record.
+
+## Phase 2A native acceptance (2026-10-10)
+
+Prompt: “continue with next step”. Extended the existing isolated Auth/Firestore simulator harness to cover the completed measurement tools, preserving the uncommitted application changes. This follow-up changes test helpers, driver logging and documentation only.
+
+The final full pair passed **2 native scenarios, zero failures/skips, exit 0** on a newly created **iPhone 17 / iOS 26.5 Simulator**. The first uses the real Spanish form to save/edit/clear a partial response, checks original English wording and canceled edits, and creates eight historical report/sleep pairs through normal APIs. The independent second process compares exact raw records in native preferences before hydration, fresh server reads and the reconstructed controller. It also checks personal references, trend charts/filters/missing records, confirmed/canceled native JSON/CSV clipboard exports and the empty questionnaire library. Read-only views do not alter raw inputs. Existing Phase 1 privacy/ownership/zero/schedule checks remain passing.
+
+Xcode builds were **39.4s/31.1s**; scenarios completed in approximately **36s/21s**. Final `flutter analyze --no-pub` was clean, integration formatting checked **3 files with zero changes**, and the Node driver passed syntax checking. Earlier failures were test timing/localized-navigation/scrolling/visibility assumptions, corrected without changing production behavior. The existing **1,105-test** unit/widget result and **35-case** Node rules result remain the prior verified baseline; they were not rerun or combined with this native count.
+
+Normal owner deletion of the disposable account/data and emulator/simulator shutdown completed. The Firebase rules hash is unchanged. No normal installation, production account, real Health data, model training, approved questionnaire, dependency upgrade, deployment, commit or push was involved.
+
+The [native integration guide](PHASE1_EMULATOR_INTEGRATION.md#phase-2a-measurement-acceptance--2026-10-10) records exact scope, command and limits; the [measurement guide](PHASE2A_MEASUREMENT.md) distinguishes accepted simulator flows from remaining manual checks. Native file-picker saving, physical-device and screen-reader acceptance, OS travel/timezone behavior and the unresolved measurement/prediction contract remain open. Future AI implementation still requires the roadmap's research decisions.

@@ -9,6 +9,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
+import '../widgets/self_report_trends_card.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -74,6 +75,12 @@ class _InsightsScreenState extends State<InsightsScreen> {
             const SizedBox(height: 10),
             _InsightsNotice(message: error),
           ],
+          const SizedBox(height: 14),
+          SelfReportTrendsCard(
+            checkIns: controller.checkIns,
+            signals: controller.signals,
+            now: controller.currentTime,
+          ),
           const SectionHeader('7-day overview'),
           if (insights.hasCurrentData)
             _WeeklyOverview(insights: insights)

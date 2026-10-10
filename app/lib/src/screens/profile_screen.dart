@@ -24,6 +24,8 @@ import 'sync_conflict_screen.dart';
 import 'ml_prep_screen.dart';
 import 'model_transparency_screen.dart';
 import 'privacy_center_screen.dart';
+import 'research_export_screen.dart';
+import 'questionnaire_library_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -490,6 +492,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: 'Privacy center',
             subtitle: 'Data choices, youth protections, export & deletion',
             onTap: () => _privacy(context, controller),
+          ),
+          _SettingTile(
+            key: const Key('research-export-setting'),
+            icon: Icons.table_view_outlined,
+            title: 'Research export',
+            subtitle: 'Private response table and data dictionary',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ResearchExportScreen(
+                  controller: controller,
+                  service: widget.backupService,
+                ),
+              ),
+            ),
+          ),
+          _SettingTile(
+            key: const Key('questionnaire-library-setting'),
+            icon: Icons.assignment_outlined,
+            title: 'Questionnaire library',
+            subtitle: 'Instrument availability and review requirements',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const QuestionnaireLibraryScreen(),
+              ),
+            ),
           ),
           _SettingTile(
             icon: Icons.help_outline_rounded,
