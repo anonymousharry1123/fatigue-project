@@ -17,6 +17,7 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'account_sign_in_dialog.dart';
 import 'appearance_screen.dart';
+import 'change_password_dialog.dart';
 import 'admin/admin_cohort_screen.dart';
 import 'device_backup_flow.dart';
 import 'backup_restore_screen.dart';
@@ -178,6 +179,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ? context.tr('Signing out…')
                     : context.tr('Sign out'),
               ),
+            ),
+          ],
+          if (controller.isCloudAuthenticated && !controller.isSignedOut) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('profile-change-password-button'),
+              onPressed:
+                  _isSigningOut ||
+                      _isSavingDeviceBackup ||
+                      _isRestoringDeviceBackup
+                  ? null
+                  : () => _changePassword(context, controller),
+              icon: const Icon(Icons.lock_reset_rounded),
+              label: Text(context.tr('Change password')),
             ),
           ],
           if (controller.isCloudAuthenticated) ...[
@@ -927,6 +942,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         barrierDismissible: false,
         builder: (_) => AccountSignInDialog(controller: controller),
       );
+
+  static Future<void> _changePassword(
+    BuildContext context,
+    AppController controller,
+  ) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ChangePasswordDialog(controller: controller),
+    );
+    if (changed != true || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('Password updated.'))),
+    );
+  }
 
   Future<void> _saveDeviceBackup(AppController controller) async {
     if (_isSavingDeviceBackup ||

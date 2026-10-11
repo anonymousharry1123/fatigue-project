@@ -75,6 +75,21 @@ offline launch. **Review conflicts** lets you choose phone or cloud values for
 each conflict while preserving unrelated edits. See
 [sync and backup details](docs/PRODUCTION_POLISH.md).
 
+## Password reset
+
+Forgot your password? Tap **Forgot password?** on either sign-in screen
+(onboarding or **Profile → Cloud account**) and enter your email. Firebase
+sends a reset email; Tonyo always shows the same confirmation, so it never
+reveals whether an account exists. Press and hold the link in the email, choose
+Copy, paste it into Tonyo, then choose and confirm a new password. You return to
+sign-in with your email filled in. Tapping the link instead resets the password
+on Firebase's web page; then sign in with the new one.
+
+Signed in already? Use **Profile → Change password**. Enter your current
+password, then the new one twice; Tonyo shows **Password updated.** when it is
+saved. See [Firebase setup](docs/FIREBASE_SETUP.md#password-reset) for email
+template limits and emulator testing.
+
 ## Version 0.35 — Production polish
 
 Main screens and forms support narrow displays and larger text, with named

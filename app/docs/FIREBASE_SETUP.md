@@ -113,6 +113,53 @@ reset while preserving unrelated app notifications.
   permanently delete all six subcollections, the user document, the Firebase
   Auth account, and the local cache.
 
+## Password reset
+
+### How it works
+
+- **Forgot password?** on either sign-in screen asks Firebase Authentication
+  to send its standard password reset email.
+- The user copies the link (or just its code) from that email and pastes it
+  into Tonyo, then chooses a new password in the app. No deep links, Dynamic
+  Links, or hosted action pages are needed; the app reads the `oobCode` from
+  the pasted link.
+- After requesting a reset, Tonyo always shows the same neutral "if an
+  account exists, an email was sent" message, so it never reveals whether an
+  email address has an account.
+- **Profile → Change password** is for signed-in users. It asks for the
+  current password, reauthenticates with Firebase, then updates the password.
+  A wrong current password shows "Current password is incorrect." and changes
+  nothing.
+
+### Email template
+
+No template changes are required. Firebase's default password reset email
+("Follow this link to reset your password…") contains the full `%LINK%`, and
+Tonyo extracts the reset code from it. The app itself tells users to press and
+hold the link, choose Copy, and paste it into Tonyo. Tapping the link instead
+opens Firebase's default action page, which also resets the password; the user
+then signs in to Tonyo with the new one.
+
+Firebase currently blocks edits to Auth email templates on many projects
+("Email template updates are currently unavailable for this project"). If a
+custom message is needed, either ask Firebase Support to apply the change, or
+send reset emails yourself from a backend: generate the link with the Admin
+SDK's `generatePasswordResetLink` and deliver it through your own email
+provider (requires the Blaze plan).
+
+Email enumeration protection (**Authentication → Settings → User actions**)
+is compatible with this flow and can stay enabled, because the app already
+shows the same message whether or not the account exists.
+
+### Local emulator testing
+
+The Auth emulator does not send real email. After requesting a reset, the
+reset link is printed in the terminal running the emulators ("To reset the
+password for …, follow this link"). Pending codes are also listed at
+`http://127.0.0.1:9099/emulator/v1/projects/<project-id>/oobCodes`. Copy the
+link and paste it into Tonyo to continue the flow. Change password works against the emulator unchanged, since
+it only needs the current password.
+
 ## Query helpers
 
 `CloudRepository` exposes helpers for:

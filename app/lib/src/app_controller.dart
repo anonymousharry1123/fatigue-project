@@ -2421,6 +2421,53 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Password recovery never touches local data or the current session.
+  void _requirePasswordAccountAccess() {
+    if (isPrivacyBusy) {
+      throw StateError('Finish pending privacy operations first.');
+    }
+    if (!cloudEnabled) throw StateError('Firebase is not configured.');
+  }
+
+  Future<void> sendPasswordReset({required String email}) async {
+    _requirePasswordAccountAccess();
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty) {
+      throw ArgumentError('Enter your account email.');
+    }
+    await _accountAuth.sendPasswordReset(email: normalizedEmail);
+  }
+
+  Future<String> verifyPasswordResetCode(String code) async {
+    _requirePasswordAccountAccess();
+    return _accountAuth.verifyPasswordResetCode(code.trim());
+  }
+
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) async {
+    _requirePasswordAccountAccess();
+    await _accountAuth.confirmPasswordReset(
+      code: code.trim(),
+      newPassword: newPassword,
+    );
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    _requirePasswordAccountAccess();
+    if (!isCloudAuthenticated) {
+      throw StateError('Sign in before changing the password.');
+    }
+    await _accountAuth.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
   Future<void> _setSignedOut(bool value) async {
     await _writeSignedOutPreference(value);
     isSignedOut = value;

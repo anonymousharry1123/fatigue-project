@@ -40,6 +40,22 @@ abstract interface class AccountAuth {
   Future<void> reauthenticate({required String password});
   Future<void> refreshPrivacyClaims();
   Future<void> deleteCurrentAccount();
+
+  /// Callers must not reveal whether an account exists for [email].
+  Future<void> sendPasswordReset({required String email});
+
+  /// Returns the account email the reset code belongs to.
+  Future<String> verifyPasswordResetCode(String code);
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  });
+
+  /// Verifies [currentPassword] for the signed-in account before updating it.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
 }
 
 /// Used when Firebase environment values have not been supplied.
@@ -76,6 +92,26 @@ class LocalOnlyAccountAuth implements AccountAuth {
 
   @override
   Future<void> deleteCurrentAccount() async {}
+
+  @override
+  Future<void> sendPasswordReset({required String email}) async =>
+      throw StateError('Firebase is not configured.');
+
+  @override
+  Future<String> verifyPasswordResetCode(String code) async =>
+      throw StateError('Firebase is not configured.');
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) async => throw StateError('Firebase is not configured.');
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async => throw StateError('Firebase is not configured.');
 }
 
 class MemoryAccountAuth implements AccountAuth {
@@ -83,13 +119,23 @@ class MemoryAccountAuth implements AccountAuth {
     this.session,
     this.configured = true,
     this.expectedPassword,
+    this.lastPasswordResetEmail,
+    this.issuedResetCode,
   });
+
+  static const testResetCode = 'test-reset-code';
 
   AccountSession? session;
   final bool configured;
 
   /// Optional deterministic credential check for tests; never persisted.
   String? expectedPassword;
+
+  /// Account email that [issuedResetCode] resets.
+  String? lastPasswordResetEmail;
+
+  /// The only code accepted for reset; cleared once it is used.
+  String? issuedResetCode;
 
   @override
   bool get isConfigured => configured;
@@ -139,6 +185,54 @@ class MemoryAccountAuth implements AccountAuth {
   @override
   Future<void> deleteCurrentAccount() async {
     session = null;
+  }
+
+  @override
+  Future<void> sendPasswordReset({required String email}) async {
+    if (!configured) throw StateError('Firebase is not configured.');
+    lastPasswordResetEmail = email.trim().toLowerCase();
+    issuedResetCode = testResetCode;
+  }
+
+  @override
+  Future<String> verifyPasswordResetCode(String code) async {
+    final email = lastPasswordResetEmail;
+    if (!configured ||
+        issuedResetCode == null ||
+        code.trim() != issuedResetCode ||
+        email == null) {
+      throw StateError('The reset code is invalid or has expired.');
+    }
+    return email;
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) async {
+    await verifyPasswordResetCode(code);
+    if (newPassword.length < 6) {
+      throw StateError('The new password is too weak.');
+    }
+    expectedPassword = newPassword;
+    issuedResetCode = null;
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final uid = session?.uid;
+    await reauthenticate(password: currentPassword);
+    if (session?.uid != uid) {
+      throw StateError('Account changed while changing the password.');
+    }
+    if (newPassword.length < 6) {
+      throw StateError('The new password is too weak.');
+    }
+    expectedPassword = newPassword;
   }
 }
 

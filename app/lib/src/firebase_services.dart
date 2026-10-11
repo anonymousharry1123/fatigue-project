@@ -196,6 +196,34 @@ class FirebaseAccountAuth implements AccountAuth {
     await user.delete();
   }
 
+  @override
+  Future<void> sendPasswordReset({required String email}) =>
+      _auth.sendPasswordResetEmail(email: email.trim().toLowerCase());
+
+  @override
+  Future<String> verifyPasswordResetCode(String code) =>
+      _auth.verifyPasswordResetCode(code.trim());
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) => _auth.confirmPasswordReset(code: code.trim(), newPassword: newPassword);
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    await reauthenticate(password: currentPassword);
+    final user = _auth.currentUser;
+    if (user == null || user.uid != uid) {
+      throw StateError('Account changed while changing the password.');
+    }
+    await user.updatePassword(newPassword);
+  }
+
   static AccountSession _session(User? user) {
     final email = user?.email;
     if (user == null || email == null) {

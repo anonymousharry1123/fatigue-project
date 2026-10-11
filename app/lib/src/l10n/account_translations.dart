@@ -2101,4 +2101,144 @@ const accountTranslations = <String, Map<String, String>>{
   "Clay": {"es": "Arcilla", "zh-Hans": "陶土", "zh-Hant": "陶土"},
   "Plum": {"es": "Ciruela", "zh-Hans": "梅紫", "zh-Hant": "梅紫"},
   "Sunset": {"es": "Atardecer", "zh-Hans": "日落", "zh-Hant": "日落"},
+  // Password reset
+  "Forgot password?": {
+    "es": "¿Olvidaste tu contraseña?",
+    "zh-Hans": "忘记密码？",
+    "zh-Hant": "忘記密碼？",
+  },
+  "Reset your password": {
+    "es": "Restablece tu contraseña",
+    "zh-Hans": "重置密码",
+    "zh-Hant": "重置密碼",
+  },
+  "Enter your account email. We will send you a link to reset your password.": {
+    "es":
+        "Introduce el correo de tu cuenta. Te enviaremos un enlace para restablecer la contraseña.",
+    "zh-Hans": "请输入账户电子邮箱。我们会向你发送重置密码的链接。",
+    "zh-Hant": "請輸入賬戶電子郵箱。我們會向你發送重置密碼的鏈接。",
+  },
+  "Send reset email": {
+    "es": "Enviar correo de restablecimiento",
+    "zh-Hans": "发送重置邮件",
+    "zh-Hant": "發送重置郵件",
+  },
+  "I already have a code": {
+    "es": "Ya tengo un código",
+    "zh-Hans": "我已有重置码",
+    "zh-Hant": "我已有重置碼",
+  },
+  "If an account exists for {email}, we sent a password reset email. Press and hold the link in the email, choose Copy, and paste it here.": {
+    "es":
+        "Si existe una cuenta para {email}, te enviamos un correo para restablecer la contraseña. Mantén pulsado el enlace del correo, elige Copiar y pégalo aquí.",
+    "zh-Hans": "如果 {email} 已注册账户，我们已发送密码重置邮件。请长按邮件中的链接，选择“复制”，然后粘贴到这里。",
+    "zh-Hant": "如果 {email} 已註冊賬戶，我們已發送密碼重置郵件。請長按郵件中的鏈接，選擇「複製」，然後粘貼到這裡。",
+  },
+  "Reset link or code": {
+    "es": "Enlace o código de restablecimiento",
+    "zh-Hans": "重置链接或重置码",
+    "zh-Hant": "重置鏈接或重置碼",
+  },
+  "You can paste the whole link from the email.": {
+    "es": "Puedes pegar el enlace completo del correo.",
+    "zh-Hans": "可以粘贴邮件中的完整链接。",
+    "zh-Hant": "可以粘貼郵件中的完整鏈接。",
+  },
+  "Paste the reset link or code from the email.": {
+    "es": "Pega el enlace o el código de restablecimiento del correo.",
+    "zh-Hans": "请粘贴邮件中的重置链接或重置码。",
+    "zh-Hant": "請粘貼郵件中的重置鏈接或重置碼。",
+  },
+  "Continue": {"es": "Continuar", "zh-Hans": "继续", "zh-Hant": "繼續"},
+  "Request a new email": {
+    "es": "Solicitar un correo nuevo",
+    "zh-Hans": "重新申请邮件",
+    "zh-Hant": "重新申請郵件",
+  },
+  "Choose a new password for {email}.": {
+    "es": "Elige una contraseña nueva para {email}.",
+    "zh-Hans": "请为 {email} 设置新密码。",
+    "zh-Hant": "請為 {email} 設置新密碼。",
+  },
+  "New password": {
+    "es": "Contraseña nueva",
+    "zh-Hans": "新密码",
+    "zh-Hant": "新密碼",
+  },
+  "Confirm new password": {
+    "es": "Confirmar contraseña nueva",
+    "zh-Hans": "确认新密码",
+    "zh-Hant": "確認新密碼",
+  },
+  "Show password": {
+    "es": "Mostrar contraseña",
+    "zh-Hans": "显示密码",
+    "zh-Hant": "顯示密碼",
+  },
+  "Hide password": {
+    "es": "Ocultar contraseña",
+    "zh-Hans": "隐藏密码",
+    "zh-Hant": "隱藏密碼",
+  },
+  "Reset password": {
+    "es": "Restablecer contraseña",
+    "zh-Hans": "重置密码",
+    "zh-Hant": "重置密碼",
+  },
+  "Enter a new password.": {
+    "es": "Introduce una contraseña nueva.",
+    "zh-Hans": "请输入新密码。",
+    "zh-Hant": "請輸入新密碼。",
+  },
+  "This reset code is invalid or has expired. Request a new email.": {
+    "es": "Este código no es válido o ha caducado. Solicita un correo nuevo.",
+    "zh-Hans": "此重置码无效或已过期，请重新申请邮件。",
+    "zh-Hant": "此重置碼無效或已過期，請重新申請郵件。",
+  },
+  "The password could not be reset. Please try again.": {
+    "es": "No se pudo restablecer la contraseña. Inténtalo de nuevo.",
+    "zh-Hans": "无法重置密码，请重试。",
+    "zh-Hant": "無法重置密碼，請重試。",
+  },
+  "Password updated. Sign in with your new password.": {
+    "es": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
+    "zh-Hans": "密码已更新。请使用新密码登录。",
+    "zh-Hant": "密碼已更新。請使用新密碼登錄。",
+  },
+  // Change password
+  "Change password": {
+    "es": "Cambiar contraseña",
+    "zh-Hans": "更改密码",
+    "zh-Hant": "更改密碼",
+  },
+  "Enter your current password.": {
+    "es": "Introduce tu contraseña actual.",
+    "zh-Hans": "请输入当前密码。",
+    "zh-Hant": "請輸入當前密碼。",
+  },
+  "Choose a password different from your current one.": {
+    "es": "Elige una contraseña distinta de la actual.",
+    "zh-Hans": "请选择与当前密码不同的密码。",
+    "zh-Hant": "請選擇與當前密碼不同的密碼。",
+  },
+  "Update password": {
+    "es": "Actualizar contraseña",
+    "zh-Hans": "更新密码",
+    "zh-Hant": "更新密碼",
+  },
+  "Password updated.": {
+    "es": "Contraseña actualizada.",
+    "zh-Hans": "密码已更新。",
+    "zh-Hant": "密碼已更新。",
+  },
+  "Current password is incorrect.": {
+    "es": "La contraseña actual es incorrecta.",
+    "zh-Hans": "当前密码不正确。",
+    "zh-Hant": "當前密碼不正確。",
+  },
+  "The password could not be changed. Please try again.": {
+    "es": "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
+    "zh-Hans": "无法更改密码，请重试。",
+    "zh-Hant": "無法更改密碼，請重試。",
+  },
 };
