@@ -10,6 +10,7 @@ import '../widgets/language_picker.dart';
 import '../privacy_consent.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'password_reset_dialog.dart';
 import 'privacy_center_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -349,6 +350,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             return null;
           },
         ),
+        if (_signInExisting && AppScope.of(context).cloudEnabled)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const Key('onboarding-forgot-password'),
+              onPressed: _isSubmitting ? null : _forgotPassword,
+              child: Text(context.tr('Forgot password?')),
+            ),
+          ),
         if (!_signInExisting) ...[
           const SizedBox(height: 14),
           TextFormField(
@@ -989,6 +999,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await _pageController.previousPage(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _forgotPassword() async {
+    if (_isSubmitting) return;
+    final initialEmail = _emailController.text.trim();
+    final email = await PasswordResetDialog.show(
+      context,
+      controller: AppScope.of(context),
+      initialEmail: initialEmail.isEmpty ? null : initialEmail,
+    );
+    if (!mounted || email == null) return;
+    setState(() {
+      _emailController.text = email;
+      _passwordController.clear();
+      _accountError = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr('Password updated. Sign in with your new password.'),
+        ),
+      ),
     );
   }
 

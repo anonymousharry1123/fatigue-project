@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../account_error.dart';
 import '../app_controller.dart';
 import '../theme.dart';
+import 'password_reset_dialog.dart';
 
 /// Keeps account entry visible until Firebase has accepted the credentials.
 class AccountSignInDialog extends StatefulWidget {
@@ -24,6 +25,7 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
   final _password = TextEditingController();
   bool _isSubmitting = false;
   String? _error;
+  String? _info;
 
   @override
   void dispose() {
@@ -32,12 +34,30 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
     super.dispose();
   }
 
+  Future<void> _forgotPassword() async {
+    if (_isSubmitting) return;
+    final initialEmail = _email.text.trim();
+    final email = await PasswordResetDialog.show(
+      context,
+      controller: widget.controller,
+      initialEmail: initialEmail.isEmpty ? null : initialEmail,
+    );
+    if (!mounted || email == null) return;
+    setState(() {
+      _email.text = email;
+      _password.clear();
+      _error = null;
+      _info = 'Password updated. Sign in with your new password.';
+    });
+  }
+
   Future<void> _signIn() async {
     if (_isSubmitting || !_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _isSubmitting = true;
       _error = null;
+      _info = null;
     });
     try {
       await widget.controller.signIn(
@@ -114,6 +134,26 @@ class _AccountSignInDialogState extends State<AccountSignInDialog> {
                       : null,
                   onFieldSubmitted: (_) => _signIn(),
                 ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: const Key('profile-sign-in-forgot-password'),
+                    onPressed: _isSubmitting ? null : _forgotPassword,
+                    child: Text(context.tr('Forgot password?')),
+                  ),
+                ),
+                if (_info != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      context.tr(_info!),
+                      key: const Key('profile-sign-in-info'),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Semantics(
