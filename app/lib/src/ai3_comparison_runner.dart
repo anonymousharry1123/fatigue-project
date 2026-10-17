@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'ai1_dataset_builder.dart';
 import 'ai1_protocol.dart';
 import 'ai1_records.dart';
+import 'ai_experiment_evidence.dart';
 
 /// Fixed software-fixture choices, not an approved real-data experiment.
 /// Boundaries select opportunities by their morning UTC cutoff, not row order.
@@ -133,9 +134,9 @@ abstract final class Ai3ComparisonRunner {
     for (final day in ordered) {
       final opportunity = day.opportunity;
       if (opportunity.cutoff.isBefore(manifest.evaluationStart)) continue;
-      final execution = _executionStatus(day);
+      final execution = AiExperimentEvidence.executionStatus(day);
       final finalRow = finalRows[opportunity.id]!;
-      final target = _target(day, finalRow);
+      final target = AiExperimentEvidence.target(day, finalRow);
 
       // This separate as-of build is essential: a revision made tomorrow must
       // not retrospectively change which label was available this morning.
@@ -155,7 +156,10 @@ abstract final class Ai3ComparisonRunner {
           history.rows
               .where(
                 (prior) =>
-                    _target(byId[prior.opportunity.id]!, prior).status ==
+                    AiExperimentEvidence.target(
+                      byId[prior.opportunity.id]!,
+                      prior,
+                    ).status ==
                     'matched',
               )
               .toList()
@@ -164,7 +168,10 @@ abstract final class Ai3ComparisonRunner {
           .where(
             (prior) =>
                 prior.hasPair &&
-                _executionStatus(byId[prior.opportunity.id]!) == 'executed',
+                AiExperimentEvidence.executionStatus(
+                      byId[prior.opportunity.id]!,
+                    ) ==
+                    'executed',
           )
           .toList();
       final methods = <String, _Prediction>{};
@@ -323,39 +330,6 @@ class Ai3ComparisonReport {
 }
 
 const _candidateIds = ['B0', 'B1', 'M1'];
-
-String _executionStatus(Ai1FixtureDay day) {
-  if (day.withdrawn) return 'withdrawn';
-  final issued = day.issuedAt;
-  if (issued == null) return 'not_executed';
-  final opportunity = day.opportunity;
-  bool inWindow(DateTime time) =>
-      !time.isBefore(opportunity.cutoff) &&
-      time.isBefore(opportunity.issuanceDeadline);
-  if (!inWindow(issued)) return 'missed_window';
-  final durable = day.durableAt;
-  if (durable == null || durable.isBefore(issued)) return 'save_not_proven';
-  if (!inWindow(durable)) return 'missed_window';
-  if (day.timezoneChanges.any((time) => !time.isAfter(durable))) {
-    return 'timezone_changed_before_execution';
-  }
-  return 'executed';
-}
-
-({String status, int? energy}) _target(Ai1FixtureDay day, Ai1DatasetRow row) {
-  if (row.outcomeStatus != 'matched') {
-    return (status: row.outcomeStatus, energy: null);
-  }
-  // AI-1's travel exclusion is conditional on sleep issuance. Baselines can
-  // execute without sleep. A known departure from the fixed plan also makes
-  // their target/history unavailable, including a departure before execution.
-  if (day.timezoneChanges.any(
-    (time) => !time.isAfter(row.outcome!.observedAt),
-  )) {
-    return (status: 'timezone_changed', energy: null);
-  }
-  return (status: 'matched', energy: row.energy);
-}
 
 _Prediction _regression(Ai1SleepRevision? feature, List<Ai1DatasetRow> pairs) {
   if (feature == null) return _Prediction.absent('no_sleep_feature');
