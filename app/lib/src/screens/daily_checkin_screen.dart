@@ -342,6 +342,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
           note: noteController.text.trim(),
           questionnaireSnapshot: _snapshot!,
           questionnaireLanguage: _language!,
+          sharedHeading: context.tr('How do you feel right now?'),
           timestamp: when,
         );
       }

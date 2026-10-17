@@ -985,6 +985,89 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "可选结果学习",
     "zh-Hant": "可選結果學習",
   },
+  "Local study history": {
+    "es": "Historial local del estudio",
+    "zh-Hans": "本地研究历史记录",
+    "zh-Hant": "本地研究歷史記錄",
+  },
+  "Save new manual sleep logs and check-in revisions on this device, including earlier answers after edits. This history is not used for model training or uploaded to the cloud.": {
+    "es":
+        "Guarda en este dispositivo los nuevos registros manuales de sueño y las versiones de los registros de estado, incluidas las respuestas anteriores a las ediciones. Este historial no se usa para entrenar modelos ni se sube a la nube.",
+    "zh-Hans": "在此设备上保存新的手动睡眠记录和状态记录的各个版本，包括编辑前的答案。此历史记录不会用于模型训练，也不会上传到云端。",
+    "zh-Hant": "在此裝置上儲存新的手動睡眠記錄和狀態記錄的各個版本，包括編輯前的答案。此歷史記錄不會用於模型訓練，也不會上傳到雲端。",
+  },
+  "Keep local study history": {
+    "es": "Guardar historial local del estudio",
+    "zh-Hans": "保留本地研究历史记录",
+    "zh-Hant": "保留本地研究歷史記錄",
+  },
+  "Available in the iPhone app.": {
+    "es": "Disponible en la app para iPhone.",
+    "zh-Hans": "可在 iPhone 应用中使用。",
+    "zh-Hant": "可在 iPhone App 中使用。",
+  },
+  "Updating study history…": {
+    "es": "Actualizando el historial del estudio…",
+    "zh-Hans": "正在更新研究历史记录…",
+    "zh-Hant": "正在更新研究歷史記錄…",
+  },
+  "On · starts with new records only.": {
+    "es": "Activado · solo comienza con registros nuevos.",
+    "zh-Hans": "已开启 · 仅从新记录开始保存。",
+    "zh-Hant": "已開啟 · 僅從新記錄開始儲存。",
+  },
+  "Off · no study history is being saved.": {
+    "es": "Desactivado · no se guarda historial del estudio.",
+    "zh-Hans": "已关闭 · 未保存研究历史记录。",
+    "zh-Hant": "已關閉 · 未儲存研究歷史記錄。",
+  },
+  "Saved revisions: {count}": {
+    "es": "Versiones guardadas: {count}",
+    "zh-Hans": "已保存的版本数：{count}",
+    "zh-Hant": "已儲存的版本數：{count}",
+  },
+  "Turning this off clears this study history. Your ordinary sleep logs and check-ins stay. Apple Health imports are not included in this history yet. Study history is excluded from backups and exports.": {
+    "es":
+        "Al desactivar esta opción se borra este historial del estudio. Tus registros habituales de sueño y de estado se conservan. Las importaciones de Salud de Apple aún no se incluyen en este historial. El historial del estudio no se incluye en las copias de seguridad ni en las exportaciones.",
+    "zh-Hans":
+        "关闭后会清除此研究历史记录。你的普通睡眠记录和状态记录会保留。此历史记录目前不包含从 Apple 健康导入的数据。备份和导出不包含研究历史记录。",
+    "zh-Hant":
+        "關閉後會清除此研究歷史記錄。你的普通睡眠記錄和狀態記錄會保留。此歷史記錄目前不包含從 Apple 健康匯入的資料。備份和匯出不包含研究歷史記錄。",
+  },
+  "Could not update local study history. Please try again.": {
+    "es":
+        "No se pudo actualizar el historial local del estudio. Inténtalo de nuevo.",
+    "zh-Hans": "无法更新本地研究历史记录。请重试。",
+    "zh-Hant": "無法更新本地研究歷史記錄。請重試。",
+  },
+  "Clear local history": {
+    "es": "Borrar historial local",
+    "zh-Hans": "清除本地历史记录",
+    "zh-Hant": "清除本地歷史記錄",
+  },
+  "Local history could not be read. Clear it before starting again.": {
+    "es":
+        "No se pudo leer el historial local. Bórralo antes de volver a empezar.",
+    "zh-Hans": "无法读取本地历史记录。请清除后再重新开始。",
+    "zh-Hant": "無法讀取本地歷史記錄。請清除後再重新開始。",
+  },
+  "Local history could not be cleared. Retry clearing it.": {
+    "es": "No se pudo borrar el historial local. Intenta borrarlo de nuevo.",
+    "zh-Hans": "无法清除本地历史记录。请重试。",
+    "zh-Hant": "無法清除本地歷史記錄。請重試。",
+  },
+  "Local history was interrupted. Clear it before starting again.": {
+    "es":
+        "Se interrumpió el historial local. Bórralo antes de volver a empezar.",
+    "zh-Hans": "本地历史记录已中断。请清除后再重新开始。",
+    "zh-Hant": "本地歷史記錄已中斷。請清除後再重新開始。",
+  },
+  "Local history is full. Clear it to start a new capture.": {
+    "es":
+        "El historial local está lleno. Bórralo para empezar a guardar de nuevo.",
+    "zh-Hans": "本地历史记录已满。请清除后再开始保存新记录。",
+    "zh-Hant": "本地歷史記錄已滿。請清除後再開始儲存新記錄。",
+  },
   "Link future check-ins, reaction tests, and optional Coach ratings to private outcome records. Energy personalization uses eligible records only after a separate model refresh.": {
     "es":
         "Vincula futuros registros, pruebas de reacción y valoraciones opcionales del entrenador con resultados privados. La personalización de energía usa registros aptos solo tras una actualización independiente del modelo.",
@@ -1688,6 +1771,12 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "为保护隐私，Apple 不会告知应用你批准、拒绝或后来撤销了哪些读取类别。你仍可在设置中管理这些选择。",
     "zh-Hant": "為保護隱私，Apple 不會告知應用你批准、拒絕或後來撤銷了哪些讀取類別。你仍可在設置中管理這些選擇。",
   },
+  "After you allow read access, available Health data syncs automatically. Manual logging stays available.": {
+    "es":
+        "Tras permitir el acceso de lectura, los datos de Salud disponibles se sincronizan automáticamente. El registro manual sigue disponible.",
+    "zh-Hans": "允许读取后，可读取的健康数据会自动同步。你仍可手动记录。",
+    "zh-Hant": "允許讀取後，可讀取的健康資料會自動同步。你仍可手動記錄。",
+  },
   "Manual sleep and activity logging stays available. Tonyo uses recent sleep, reaction time, HRV, and resting heart rate to build private personal baselines. New physiology inputs affect estimates only after enough of your own history exists.": {
     "es":
         "El registro manual de sueño y actividad sigue disponible. Tonyo usa sueño reciente, tiempo de reacción, VFC y frecuencia cardíaca en reposo para crear referencias personales privadas. Los nuevos datos fisiológicos solo afectan las estimaciones cuando existe suficiente historial propio.",
@@ -1701,11 +1790,7 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "正在同步健康数据…",
     "zh-Hant": "正在同步健康數據…",
   },
-  "Sync health data": {
-    "es": "Sincronizar datos de salud",
-    "zh-Hans": "同步健康数据",
-    "zh-Hant": "同步健康數據",
-  },
+  "Sync now": {"es": "Sincronizar ahora", "zh-Hans": "立即同步", "zh-Hant": "立即同步"},
   "Review permissions": {
     "es": "Revisar permisos",
     "zh-Hans": "查看权限",

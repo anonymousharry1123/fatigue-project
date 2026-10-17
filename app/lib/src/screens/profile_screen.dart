@@ -1640,6 +1640,16 @@ class _HealthPermissionSheet extends StatelessWidget {
                 fontSize: 12,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              context.tr(
+                'After you allow read access, available Health data syncs automatically. Manual logging stays available.',
+              ),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 12,
+              ),
+            ),
             const SizedBox(height: 14),
             for (final permission in healthPermissions)
               _HealthPermissionRow(permission: permission),
@@ -1737,7 +1747,7 @@ class _HealthPermissionSheet extends StatelessWidget {
                   controller.isSyncing
                       ? context.tr('Syncing health data…')
                       : controller.healthAuthorized
-                      ? context.tr('Sync health data')
+                      ? context.tr('Sync now')
                       : context.tr('Review permissions'),
                 ),
               ),

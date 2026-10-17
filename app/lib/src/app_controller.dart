@@ -8,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_log_logic.dart';
 import 'activity_sync_logic.dart';
+import 'ai1_capture.dart';
+import 'ai1_capture_store.dart';
+import 'ai1_protocol.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
@@ -25,6 +28,7 @@ import 'health_service.dart';
 import 'heart_sync_logic.dart';
 import 'insights_logic.dart';
 import 'language_preference.dart';
+import 'l10n/app_localizations.dart';
 import 'check_in_measurement.dart';
 import 'ml_prep_models.dart';
 import 'ml_prep_builder.dart';
@@ -56,6 +60,7 @@ class AppController extends ChangeNotifier {
     DateTime Function()? clock,
     PrepDataSource? prepDataSource,
     EnergyModelStore? energyModelStore,
+    Ai1CaptureStore? captureStore,
     this.energyModelMetadataWriter,
     this.cloudRepository,
     PrivacyConsent? initialPrivacyConsent,
@@ -68,6 +73,7 @@ class AppController extends ChangeNotifier {
        _now = clock ?? DateTime.now,
        _energyModelStore =
            energyModelStore ?? SharedPreferencesEnergyModelStore(),
+       _ai1CaptureStore = captureStore ?? const MethodChannelAi1CaptureStore(),
        _mlPrepService = prepDataSource == null
            ? null
            : MlPrepService(
@@ -101,6 +107,225 @@ class AppController extends ChangeNotifier {
   final CloudRepository? cloudRepository;
   final MlPrepService? _mlPrepService;
   final EnergyModelStore _energyModelStore;
+  final Ai1CaptureStore _ai1CaptureStore;
+  late final _ai1Capture = Ai1CaptureJournal(
+    store: _ai1CaptureStore,
+    clock: _now,
+  );
+  int _ai1CaptureGeneration = 0;
+  String get _ai1Owner => cloudUid == null ? 'local' : 'cloud:$cloudUid';
+  bool get ai1CaptureAvailable => _ai1Capture.available;
+  bool get ai1CaptureEnabled =>
+      _canProcessData && _ai1Capture.owner == _ai1Owner && _ai1Capture.enabled;
+  bool get ai1CaptureBusy => _ai1Capture.busy;
+  String? get ai1CaptureError => _ai1Capture.error;
+  int get ai1CapturedRevisionCount =>
+      _canProcessData && _ai1Capture.owner == _ai1Owner
+      ? _ai1Capture.revisionCount
+      : 0;
+
+  /// Optional device history only. This never enables model training.
+  Future<void> setAi1CaptureEnabled(bool value) async {
+    final void Function() ensureCurrent;
+    if (value) {
+      ensureCurrent = _beginMutation();
+    } else {
+      // Erasure remains available when collection awaits privacy review.
+      final revision = _sessionRevision;
+      final uid = cloudUid;
+      void checkSession() {
+        if (isSignedOut ||
+            _isSigningOut ||
+            isDeletingAccount ||
+            (cloudEnabled && !isCloudAuthenticated) ||
+            revision != _sessionRevision ||
+            uid != cloudUid) {
+          throw StateError('Sign in and finish the account operation first.');
+        }
+      }
+
+      checkSession();
+      ensureCurrent = checkSession;
+    }
+    final owner = _ai1Owner;
+    _ai1CaptureGeneration++;
+    final task = value
+        ? _ai1Capture.start(owner)
+        : _ai1Capture.stopAndClear(owner);
+    notifyListeners();
+    try {
+      await task;
+      ensureCurrent();
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadAi1Capture() async {
+    if (!_canProcessData) return;
+    final revision = _sessionRevision;
+    final generation = _ai1CaptureGeneration;
+    final owner = _ai1Owner;
+    if (_ai1Capture.owner != owner) await _ai1Capture.load(owner);
+    if (revision != _sessionRevision ||
+        owner != _ai1Owner ||
+        !_canProcessData) {
+      // A later sign-in may already be loading another owner's journal.
+      if (generation == _ai1CaptureGeneration) _unloadAi1Capture();
+      return;
+    }
+    await _reconcileAi1Capture(_json());
+  }
+
+  void _unloadAi1Capture() {
+    _ai1CaptureGeneration++;
+    _ai1Capture.unload();
+  }
+
+  _Ai1CaptureIntent? _captureIntent(
+    Ai1CaptureObservation Function() createObservation,
+    int? generation,
+  ) {
+    if (generation == null ||
+        generation != _ai1CaptureGeneration ||
+        !ai1CaptureEnabled) {
+      return null;
+    }
+    try {
+      final observation = createObservation();
+      return _Ai1CaptureIntent(
+        observation: observation,
+        generation: generation,
+        sourceSnapshot: _ai1SourceSnapshot(_json(), observation),
+      );
+    } on FormatException {
+      _ai1CaptureGeneration++;
+      _ai1Capture.pauseAfterCaptureFailure();
+      return null;
+    }
+  }
+
+  String _ai1SourceSnapshot(
+    Map<String, Object?> state,
+    Ai1CaptureObservation observation,
+  ) => ai1CanonicalJson(
+    (state[observation.collection == 'checkIns' ? 'checkIns' : 'signals']
+            as List)
+        .whereType<Map>()
+        .where(
+          (row) => observation.collection == 'checkIns'
+              ? row['id'] == observation.sourceId
+              : row['groupId'] == observation.sourceId,
+        )
+        .toList(),
+  );
+
+  Future<void> _purgeAi1Source(String collection, String sourceId) async {
+    _ai1CaptureGeneration++;
+    if (_ai1Capture.owner != _ai1Owner) return;
+    await _ai1Capture.deleteSource(
+      owner: _ai1Owner,
+      collection: collection,
+      sourceId: sourceId,
+    );
+  }
+
+  /// Reconciliation never creates history for cloud, backups or legacy rows.
+  Future<void> _reconcileAi1Capture(Map<String, Object?> state) async {
+    if (!_canProcessData || _ai1Capture.owner != _ai1Owner) return;
+    final tracked = <String, Ai1CaptureEntry>{};
+    for (final entry in _ai1Capture.entries) {
+      final key = Ai1CaptureObservation.sourceKey(
+        entry.collection,
+        entry.sourceId,
+      );
+      if ((tracked[key]?.revision ?? 0) < entry.revision) tracked[key] = entry;
+    }
+    if (tracked.isEmpty) return;
+    Ai1CaptureObservation? validObservation(
+      Ai1CaptureObservation Function() create,
+    ) {
+      try {
+        return create();
+      } on FormatException {
+        // A changed, malformed remote row has no matching captured evidence.
+        // Its history is purged below without blocking the ordinary row save.
+        return null;
+      }
+    }
+
+    final fingerprints = <String, String>{};
+    final currentSignals = (state['signals'] as List)
+        .whereType<Map>()
+        .map((row) => SignalReading.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+    final currentCheckIns = (state['checkIns'] as List)
+        .whereType<Map>()
+        .map((row) => DailyCheckIn.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+    for (final trackedEntry in tracked.entries) {
+      final entry = trackedEntry.value;
+      Ai1CaptureObservation? observation;
+      if (entry.collection == 'checkIns') {
+        final matching = currentCheckIns.where(
+          (row) => row.id == entry.sourceId && row.isValidResearchResponse,
+        );
+        final heading = entry.data['sharedHeading'];
+        if (matching.length == 1 && heading is String) {
+          observation = validObservation(
+            () => Ai1CaptureObservation.selfReport(
+              checkIn: matching.single,
+              sharedHeading: heading,
+              originalLocal: false,
+            ),
+          );
+        }
+      } else if (entry.collection == 'sleepLogs') {
+        final group = currentSignals.where(
+          (row) =>
+              row.groupId == entry.sourceId &&
+              row.source == SignalSource.manual,
+        );
+        final durations = group.where(
+          (row) => row.type == SignalType.sleep || row.type == SignalType.nap,
+        );
+        if (durations.length == 1) {
+          final duration = durations.single;
+          final isNap = duration.type == SignalType.nap;
+          final starts = group.where((row) => row.type == SignalType.bedtime);
+          DateTime? start = starts.length == 1 ? starts.single.timestamp : null;
+          // Naps lack an independent start signal. Reuse the retained actual
+          // start for comparison only when the saved end and duration agree.
+          if (isNap &&
+              entry.data['endedAt'] ==
+                  duration.timestamp.toUtc().toIso8601String() &&
+              entry.data['durationHours'] == duration.value) {
+            start = DateTime.tryParse(entry.data['startedAt'] as String? ?? '');
+          }
+          if (start != null) {
+            observation = validObservation(
+              () => Ai1CaptureObservation.manualSleep(
+                sourceId: entry.sourceId,
+                startedAt: start!,
+                endedAt: duration.timestamp,
+                durationHours: duration.value,
+                isNap: isNap,
+                originalLocal: false,
+              ),
+            );
+          }
+        }
+      }
+      if (observation != null) {
+        fingerprints[trackedEntry.key] = observation.fingerprint;
+      }
+    }
+    await _ai1Capture.reconcile(
+      owner: _ai1Owner,
+      currentFingerprints: fingerprints,
+    );
+  }
+
   final EnergyModelMetadataWriter? energyModelMetadataWriter;
   late final _energyModelService = EnergyModelService(
     store: _energyModelStore,
@@ -250,11 +475,13 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _unloadAi1Capture();
     _disposed = true;
     _cloudSyncActivities.clear();
     isCloudSyncing = false;
     _appInForeground = false;
     _sessionRevision++;
+    _invalidateHealthWork();
     _cloudRetryTimer?.cancel();
     super.dispose();
   }
@@ -403,6 +630,7 @@ class AppController extends ChangeNotifier {
       outcomeConsentUpdatedAt = saved.acceptedAt;
       await _discardPersonalizedModel();
       await _writeLocal();
+      await _loadAi1Capture();
     } on Object {
       privacyOperationError =
           'Privacy choices were not saved. Check your connection and retry.';
@@ -442,6 +670,12 @@ class AppController extends ChangeNotifier {
   HealthSyncStatus healthSyncStatus = HealthSyncStatus.idle;
   HealthRefreshReason? lastHealthRefreshReason;
   bool healthBackgroundRefreshEnabled = false;
+  int _healthConnectionGeneration = 0;
+  (int, int, String?)? _healthSyncContext;
+  Future<HeartSyncMergeResult?>? _pendingHealthSync;
+  bool _healthRefreshRequested = false;
+  Future<void>? _healthObserverQueue;
+  Future<void>? _pendingHealthObserverSetup;
   int lastHealthImportCount = 0;
   int lastHealthDuplicateCount = 0;
   int lastHealthRejectedCount = 0;
@@ -2043,6 +2277,7 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await _loadAi1Capture();
     if (hasPendingCloudChanges) await _pushCloud();
     if (hasPendingCoachChanges) await _retryCoachSync();
     await refreshHealthAuthorization(notify: false);
@@ -2154,8 +2389,10 @@ class AppController extends ChangeNotifier {
     }
     if (!current()) return;
     if (!_canProcessData) {
+      _unloadAi1Capture();
+      _invalidateHealthWork();
       await _invalidateModelPreparation();
-      await _healthService.disableBackgroundUpdates();
+      await _disableContinuousHealthUpdates();
       healthBackgroundRefreshEnabled = false;
       _energyModelService.unload();
       try {
@@ -2166,6 +2403,8 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await _loadAi1Capture();
+    if (!current()) return;
     final hadPendingInputs = hasPendingCloudChanges;
     if (hadPendingInputs) {
       await _pushCloud();
@@ -2359,6 +2598,7 @@ class AppController extends ChangeNotifier {
     }
     await _setSignedOut(false);
     await _commit(energyInputsChanged: true);
+    await _loadAi1Capture();
   }
 
   Future<void> signIn({required String email, required String password}) async {
@@ -2369,7 +2609,9 @@ class AppController extends ChangeNotifier {
     final wasSignedOut = isSignedOut;
     // A rejected password must not change local account state or prep caches.
     await _accountAuth.signIn(email: email, password: password);
+    _unloadAi1Capture();
     _sessionRevision++;
+    _invalidateHealthWork();
     _cloudPrivacyVerified = false;
     try {
       await _accountAuth.refreshPrivacyClaims();
@@ -2399,6 +2641,7 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await _loadAi1Capture();
     if (hasPendingCloudChanges) await _pushCloud();
     if (hasPendingCoachChanges) await _retryCoachSync();
     if (!outcomeConsent) await _discardPersonalizedModel();
@@ -2487,6 +2730,7 @@ class AppController extends ChangeNotifier {
       throw StateError('No signed-out local profile is available.');
     }
     await _setSignedOut(false);
+    await _loadAi1Capture();
     await refreshScores(notify: false);
     await refreshForecasts(notify: false);
     await refreshGuidance(notify: false);
@@ -2510,6 +2754,8 @@ class AppController extends ChangeNotifier {
     _cloudRetryTimer?.cancel();
     _cloudRetryTimer = null;
     _sessionRevision += 1;
+    _unloadAi1Capture();
+    _invalidateHealthWork();
     isForecastLoading = false;
     isGuidanceLoading = false;
     isInsightsLoading = false;
@@ -2522,7 +2768,7 @@ class AppController extends ChangeNotifier {
     try {
       await _clearModelPreparationWindow();
       await _invalidateModelPreparation();
-      await _healthService.disableBackgroundUpdates();
+      await _disableContinuousHealthUpdates();
       healthBackgroundRefreshEnabled = false;
       try {
         await _notificationService.cancelGuidance();
@@ -2720,6 +2966,7 @@ class AppController extends ChangeNotifier {
     SleepKind kind = SleepKind.mainSleep,
   }) async {
     final ensureCurrent = _beginMutation();
+    final captureGeneration = ai1CaptureEnabled ? _ai1CaptureGeneration : null;
     final normalized = SleepLogEntry.normalizeOvernightPair(
       bedtime: bedtime,
       wakeTime: wakeTime,
@@ -2737,7 +2984,8 @@ class AppController extends ChangeNotifier {
     final recordedAt = _now();
     final groupId =
         id ?? 'sleep-${recordedAt.microsecondsSinceEpoch}-${signals.length}';
-    if (signals.any((item) => item.groupId == groupId)) {
+    final existing = signals.any((item) => item.groupId == groupId);
+    if (existing) {
       await _discardPersonalizedModel();
       ensureCurrent();
     }
@@ -2763,12 +3011,27 @@ class AppController extends ChangeNotifier {
           recordedAt: recordedAt,
         ),
     ]);
-    await _commit(energyInputsChanged: true);
+    await _commit(
+      energyInputsChanged: true,
+      ai1Capture: _captureIntent(
+        () => Ai1CaptureObservation.manualSleep(
+          sourceId: groupId,
+          startedAt: start,
+          endedAt: end,
+          durationHours: hours,
+          isNap: kind == SleepKind.nap,
+          originalLocal: !existing,
+        ),
+        captureGeneration,
+      ),
+    );
     ensureCurrent();
   }
 
   Future<void> deleteSleepLog(String id) async {
     final ensureCurrent = _beginMutation();
+    await _purgeAi1Source('sleepLogs', id);
+    ensureCurrent();
     await _discardPersonalizedModel();
     ensureCurrent();
     signals.removeWhere((item) => item.groupId == id);
@@ -2786,6 +3049,8 @@ class AppController extends ChangeNotifier {
     CheckInPeriod? period,
   }) async {
     final ensureCurrent = _beginMutation();
+    final linkOutcome = outcomeConsent;
+    final consentAt = outcomeConsentUpdatedAt;
     if (!CheckInLogic.isValidRating(energy) ||
         !CheckInLogic.isValidRating(mood) ||
         !CheckInLogic.isValidRating(stress)) {
@@ -2827,7 +3092,11 @@ class AppController extends ChangeNotifier {
     checkIns.insert(0, checkIn);
     await _commit(energyInputsChanged: true);
     ensureCurrent();
-    if (outcomeConsent) {
+    // A slow save must retain its original consent receipt. Enabling learning
+    // during that save does not authorize a previously collected response.
+    if (linkOutcome &&
+        outcomeConsent &&
+        _sameOutcomeConsentAt(consentAt, outcomeConsentUpdatedAt)) {
       await _saveOutcome(
         OutcomeRecord(
           id: 'energy-checkin-$checkInId',
@@ -2837,6 +3106,11 @@ class AppController extends ChangeNotifier {
           recordedAt: _now(),
           source: OutcomeSource.checkIn,
           sourceId: checkInId,
+        ),
+        sourceIsCurrent: () => checkIns.any(
+          (item) =>
+              item.id == checkIn.id &&
+              jsonEncode(item.toJson()) == jsonEncode(checkIn.toJson()),
         ),
       );
     }
@@ -2856,9 +3130,11 @@ class AppController extends ChangeNotifier {
     String note = '',
     required Map<String, dynamic> questionnaireSnapshot,
     required String questionnaireLanguage,
+    String? sharedHeading,
     DateTime? timestamp,
   }) async {
     final ensureCurrent = _beginMutation();
+    final captureGeneration = ai1CaptureEnabled ? _ai1CaptureGeneration : null;
     final when = timestamp ?? _now();
     final checkInId = id ?? 'checkin-${when.microsecondsSinceEpoch}';
     if (checkInId.isEmpty || checkInId.contains('/')) {
@@ -2911,7 +3187,20 @@ class AppController extends ChangeNotifier {
     checkIns.insert(0, checkIn);
     // Raw preparation caches become stale, but score coefficients, fitted
     // artifacts, training-attempt safeguards and reminders are unchanged.
-    await _commit();
+    await _commit(
+      ai1Capture: _captureIntent(
+        () => Ai1CaptureObservation.selfReport(
+          checkIn: checkIn,
+          sharedHeading:
+              sharedHeading ??
+              AppLocalizations(
+                questionnaireLanguage,
+              ).text('How do you feel right now?'),
+          originalLocal: existing == null,
+        ),
+        captureGeneration,
+      ),
+    );
     ensureCurrent();
     // Deliberately no legacy observed-energy outcome: this wording/version has
     // no approved compatibility contract with that model's target.
@@ -2924,8 +3213,9 @@ class AppController extends ChangeNotifier {
     DateTime? observedAt,
   }) async {
     final ensureCurrent = _beginMutation();
-    if (!averageMs.isFinite ||
-        !ReactionTestLogic.isValidReaction(averageMs.round())) {
+    final linkOutcome = outcomeConsent;
+    final consentAt = outcomeConsentUpdatedAt;
+    if (!ReactionTestLogic.isValidReaction(averageMs)) {
       throw ArgumentError(
         'Reaction average must be between '
         '${ReactionTestLogic.minValidMs} and ${ReactionTestLogic.maxValidMs} ms',
@@ -2938,21 +3228,21 @@ class AppController extends ChangeNotifier {
     if (signalId.contains('/') || signalId.isEmpty || !averageMs.isFinite) {
       throw ArgumentError('Invalid reaction result.');
     }
-    signals.removeWhere((item) => item.id == signalId);
-    signals.insert(
-      0,
-      SignalReading(
-        id: signalId,
-        type: SignalType.reactionTime,
-        value: averageMs,
-        timestamp: observedAt,
-        recordedAt: _now(),
-        note: note ?? 'Three-round reaction test',
-      ),
+    final signal = SignalReading(
+      id: signalId,
+      type: SignalType.reactionTime,
+      value: averageMs,
+      timestamp: observedAt,
+      recordedAt: _now(),
+      note: note ?? 'Three-round reaction test',
     );
+    signals.removeWhere((item) => item.id == signalId);
+    signals.insert(0, signal);
     await _commit(energyInputsChanged: true);
     ensureCurrent();
-    if (outcomeConsent) {
+    if (linkOutcome &&
+        outcomeConsent &&
+        _sameOutcomeConsentAt(consentAt, outcomeConsentUpdatedAt)) {
       await _saveOutcome(
         OutcomeRecord(
           id: 'reaction-$signalId',
@@ -2962,6 +3252,11 @@ class AppController extends ChangeNotifier {
           recordedAt: _now(),
           source: OutcomeSource.reactionSignal,
           sourceId: signalId,
+        ),
+        sourceIsCurrent: () => signals.any(
+          (item) =>
+              item.id == signal.id &&
+              jsonEncode(item.toJson()) == jsonEncode(signal.toJson()),
         ),
       );
     }
@@ -3003,7 +3298,10 @@ class AppController extends ChangeNotifier {
     );
   }
 
-  Future<void> _saveOutcome(OutcomeRecord outcome) async {
+  Future<void> _saveOutcome(
+    OutcomeRecord outcome, {
+    bool Function()? sourceIsCurrent,
+  }) async {
     final ensureCurrent = _beginMutation();
     final consentAt = outcomeConsentUpdatedAt;
     void ensureConsent() {
@@ -3019,12 +3317,16 @@ class AppController extends ChangeNotifier {
     if (!outcomeConsent) {
       throw StateError('Outcome learning requires explicit consent.');
     }
+    if (sourceIsCurrent != null && !sourceIsCurrent()) return;
     await _invalidateModelPreparation();
     ensureConsent();
     if (_outcomes.any((item) => item.id == outcome.id)) {
       await _discardPersonalizedModel();
       ensureConsent();
     }
+    // Edits and deletions can complete while the source save or model-cache
+    // work is pending. Never restore an obsolete label or an orphaned outcome.
+    if (sourceIsCurrent != null && !sourceIsCurrent()) return;
     _queueOutcomeWrite(outcome.id, outcome);
     _outcomes.removeWhere((item) => item.id == outcome.id);
     _outcomes.insert(0, outcome);
@@ -3041,6 +3343,11 @@ class AppController extends ChangeNotifier {
 
   Future<void> deleteSignal(String id) async {
     final ensureCurrent = _beginMutation();
+    final source = signals.where((item) => item.id == id).firstOrNull;
+    if (source?.groupId != null) {
+      await _purgeAi1Source('sleepLogs', source!.groupId!);
+      ensureCurrent();
+    }
     await _discardPersonalizedModel();
     ensureCurrent();
     signals.removeWhere((item) => item.id == id);
@@ -3051,6 +3358,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> deleteCheckIn(String id) async {
     final ensureCurrent = _beginMutation();
+    await _purgeAi1Source('checkIns', id);
+    ensureCurrent();
     final researchOnly =
         checkIns
             .where((item) => item.id == id)
@@ -3340,11 +3649,10 @@ class AppController extends ChangeNotifier {
 
   Future<bool> connectHealth() async {
     _requirePrivacy();
-    final revision = _sessionRevision;
-    final uid = cloudUid;
-    bool current() =>
-        revision == _sessionRevision && uid == cloudUid && _canProcessData;
-    if (!healthAvailable) return false;
+    if (!healthAvailable || isHealthAuthorizing || _disposed) return false;
+    _invalidateHealthWork();
+    final context = _healthContext;
+    bool current() => _healthContextCurrent(context);
     isHealthAuthorizing = true;
     healthError = null;
     healthSyncError = null;
@@ -3374,23 +3682,26 @@ class AppController extends ChangeNotifier {
       healthAuthorized = false;
       healthError = 'Apple Health permissions could not be requested.';
     } finally {
-      isHealthAuthorizing = false;
+      if (current()) isHealthAuthorizing = false;
     }
+    if (!current()) return false;
     await _commit();
+    if (!current()) return false;
     if (healthAuthorized) {
       await _ensureContinuousHealthUpdates();
+      if (!current()) return false;
       await syncHealth(reason: HealthRefreshReason.initial);
     }
-    return healthAuthorized;
+    return current() && healthAuthorized;
   }
 
   Future<HealthAuthorizationState> refreshHealthAuthorization({
     bool notify = true,
   }) async {
-    final revision = _sessionRevision;
+    final context = _healthContext;
     final previous = healthAuthorization;
     final status = await _healthService.authorizationStatus();
-    if (revision != _sessionRevision || deletionPending || isSignedOut) {
+    if (!_healthContextCurrent(context)) {
       return healthAuthorization;
     }
     healthAvailable = status != HealthAuthorizationState.unavailable;
@@ -3404,11 +3715,14 @@ class AppController extends ChangeNotifier {
     } else {
       healthAuthorization = status;
       if (status != HealthAuthorizationState.authorized) {
+        final hadObservers =
+            healthBackgroundRefreshEnabled ||
+            _pendingHealthObserverSetup != null;
         healthAuthorized = false;
-        if (healthBackgroundRefreshEnabled) {
-          await _healthService.disableBackgroundUpdates();
-          healthBackgroundRefreshEnabled = false;
+        _invalidateHealthWork();
+        if (hadObservers) {
           healthSyncStatus = HealthSyncStatus.disabled;
+          await _disableContinuousHealthUpdates();
         }
       }
     }
@@ -3417,7 +3731,9 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> disconnectHealth() async {
-    await _healthService.disableBackgroundUpdates();
+    // Stop accepting callbacks/results before waiting on the native channel.
+    _invalidateHealthWork();
+    final context = _healthContext;
     healthAuthorized = false;
     healthBackgroundRefreshEnabled = false;
     healthSyncStatus = HealthSyncStatus.disabled;
@@ -3428,6 +3744,11 @@ class AppController extends ChangeNotifier {
     healthSyncError = null;
     sleepSyncError = null;
     activitySyncError = null;
+    notifyListeners();
+    // Persist the local opt-out even if privacy/network checks currently pause
+    // cloud processing. Native observer removal must also run if saving fails.
+    await Future.wait([_writeLocal(), _disableContinuousHealthUpdates()]);
+    if (!_healthContextCurrent(context)) return;
     await _commit();
   }
 
@@ -3505,13 +3826,15 @@ class AppController extends ChangeNotifier {
     HealthRefreshReason reason = HealthRefreshReason.foreground,
     bool notify = true,
   }) async {
-    if (!_canProcessData) return;
-    if (isSignedOut) return;
+    if (_disposed || !_canProcessData || !healthAuthorized) return;
     final now = _now();
-    if (!ContinuousRefreshLogic.shouldRefresh(
-      now: now,
-      lastAttempt: lastHealthSyncAttempt,
-    )) {
+    // A HealthKit notification is evidence of changed data, not a foreground
+    // poll. Never acknowledge it while silently discarding it in the throttle.
+    if (reason != HealthRefreshReason.background &&
+        !ContinuousRefreshLogic.shouldRefresh(
+          now: now,
+          lastAttempt: lastHealthSyncAttempt,
+        )) {
       if (notify) notifyListeners();
       return;
     }
@@ -3521,25 +3844,67 @@ class AppController extends ChangeNotifier {
   Future<HeartSyncMergeResult?> syncHealth({
     HealthRefreshReason reason = HealthRefreshReason.manual,
     bool notify = true,
-  }) async {
-    if (!_canProcessData || !healthAuthorized || isSyncing) {
-      return null;
+  }) {
+    if (_disposed || !_canProcessData || !healthAuthorized) {
+      return Future.value(null);
     }
-    final sessionRevision = _sessionRevision;
-    bool sessionEnded() {
-      if (!isSignedOut &&
-          _canProcessData &&
-          sessionRevision == _sessionRevision) {
-        return false;
+    final context = _healthContext;
+    final pending = _pendingHealthSync;
+    if (pending != null && _healthSyncContext == context) {
+      // Several categories may notify together. Keep one trailing read so a
+      // change after a category was read still arrives without a button press.
+      if (reason == HealthRefreshReason.background) {
+        _healthRefreshRequested = true;
       }
-      isSyncing = false;
-      if (notify) notifyListeners();
-      return true;
+      return pending;
     }
+    final completion = Completer<HeartSyncMergeResult?>();
+    final operation = completion.future;
+    _pendingHealthSync = operation;
+    _healthSyncContext = context;
+    _healthRefreshRequested = false;
+    isSyncing = true;
+    bool current() => _healthContextCurrent(context) && healthAuthorized;
+    unawaited(() async {
+      try {
+        var nextReason = reason;
+        HeartSyncMergeResult? result;
+        do {
+          _healthRefreshRequested = false;
+          result = await _syncHealthOnce(
+            reason: nextReason,
+            notify: notify,
+            current: current,
+          );
+          nextReason = HealthRefreshReason.background;
+        } while (current() && _healthRefreshRequested);
+        completion.complete(current() ? result : null);
+      } on Object catch (error, stack) {
+        completion.completeError(error, stack);
+      } finally {
+        // An old connection must never clear a newer connection's busy state.
+        if (identical(_pendingHealthSync, operation)) {
+          _pendingHealthSync = null;
+          _healthSyncContext = null;
+          _healthRefreshRequested = false;
+          isSyncing = false;
+          if (notify) notifyListeners();
+        }
+      }
+    }());
+    return operation;
+  }
+
+  Future<HeartSyncMergeResult?> _syncHealthOnce({
+    required HealthRefreshReason reason,
+    required bool notify,
+    required bool Function() current,
+  }) async {
+    bool sessionEnded() => !current();
+    if (sessionEnded()) return null;
 
     final attemptTime = _now();
     final before = List<SignalReading>.of(signals);
-    isSyncing = true;
     healthSyncStatus = HealthSyncStatus.syncing;
     lastHealthSyncAttempt = attemptTime;
     lastHealthRefreshReason = reason;
@@ -3563,8 +3928,10 @@ class AppController extends ChangeNotifier {
       lastHealthDuplicateCount = heartResult.duplicateCount;
       lastHealthRejectedCount = heartResult.rejectedCount;
     } on HealthSyncException catch (error) {
+      if (sessionEnded()) return null;
       healthSyncError = error.message;
     } on Object {
+      if (sessionEnded()) return null;
       healthSyncError = 'Apple Health heart data could not be imported.';
     }
 
@@ -3584,8 +3951,10 @@ class AppController extends ChangeNotifier {
       lastSleepNightCount = sleepResult.importedNightCount;
       lastSleepManualPreferenceCount = sleepResult.skippedManualNightCount;
     } on HealthSyncException catch (error) {
+      if (sessionEnded()) return null;
       sleepSyncError = error.message;
     } on Object {
+      if (sessionEnded()) return null;
       sleepSyncError = 'Apple Health sleep data could not be imported.';
     }
 
@@ -3603,8 +3972,10 @@ class AppController extends ChangeNotifier {
       lastActivityDuplicateCount = activityResult.duplicateCount;
       lastActivityRejectedCount = activityResult.rejectedCount;
     } on HealthSyncException catch (error) {
+      if (sessionEnded()) return null;
       activitySyncError = error.message;
     } on Object {
+      if (sessionEnded()) return null;
       activitySyncError =
           'Apple Health workout, step, and hydration data could not be imported.';
     }
@@ -3628,7 +3999,6 @@ class AppController extends ChangeNotifier {
         : importedCount > 0
         ? HealthSyncStatus.updated
         : HealthSyncStatus.upToDate;
-    isSyncing = false;
     if (notify) notifyListeners();
 
     final meaningfulChange = ContinuousRefreshLogic.hasMeaningfulModelChange(
@@ -3641,21 +4011,72 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _ensureContinuousHealthUpdates() async {
-    if (!_canProcessData) return;
-    if (isSignedOut ||
-        _isSigningOut ||
+    if (_disposed ||
+        !_canProcessData ||
         !healthAuthorized ||
         healthBackgroundRefreshEnabled) {
       return;
     }
-    final sessionRevision = _sessionRevision;
-    healthBackgroundRefreshEnabled = await _healthService
-        .enableBackgroundUpdates(
-          () => refreshHealthIfDue(reason: HealthRefreshReason.background),
-        );
-    if (isSignedOut || _isSigningOut || sessionRevision != _sessionRevision) {
-      await _healthService.disableBackgroundUpdates();
-      healthBackgroundRefreshEnabled = false;
+    final pending = _pendingHealthObserverSetup;
+    if (pending != null) return pending;
+    final context = _healthContext;
+    bool current() => _healthContextCurrent(context) && healthAuthorized;
+    final setup = _queueHealthObserverOperation(() async {
+      if (!current()) return;
+      final enabled = await _healthService.enableBackgroundUpdates(() async {
+        if (!current()) return;
+        await refreshHealthIfDue(reason: HealthRefreshReason.background);
+      });
+      if (current()) {
+        healthBackgroundRefreshEnabled = enabled;
+      } else {
+        // Cleanup is serialized before the next connection's registration.
+        await _healthService.disableBackgroundUpdates();
+      }
+    });
+    _pendingHealthObserverSetup = setup;
+    try {
+      await setup;
+    } finally {
+      if (identical(_pendingHealthObserverSetup, setup)) {
+        _pendingHealthObserverSetup = null;
+      }
+    }
+  }
+
+  (int, int, String?) get _healthContext =>
+      (_healthConnectionGeneration, _sessionRevision, cloudUid);
+
+  bool _healthContextCurrent((int, int, String?) context) =>
+      !_disposed && _canProcessData && context == _healthContext;
+
+  void _invalidateHealthWork() {
+    _healthConnectionGeneration++;
+    _healthSyncContext = null;
+    _pendingHealthSync = null;
+    _pendingHealthObserverSetup = null;
+    _healthRefreshRequested = false;
+    healthBackgroundRefreshEnabled = false;
+    isHealthAuthorizing = false;
+    isSyncing = false;
+  }
+
+  Future<void> _disableContinuousHealthUpdates() =>
+      _queueHealthObserverOperation(_healthService.disableBackgroundUpdates);
+
+  Future<void> _queueHealthObserverOperation(
+    Future<void> Function() operation,
+  ) async {
+    final previous = _healthObserverQueue;
+    final pending = previous == null
+        ? operation()
+        : previous.then((_) => operation());
+    final tail = pending.catchError((Object _) {});
+    _healthObserverQueue = tail;
+    try {
+      await pending;
+    } finally {
+      if (identical(_healthObserverQueue, tail)) _healthObserverQueue = null;
     }
   }
 
@@ -3771,6 +4192,7 @@ class AppController extends ChangeNotifier {
           'Authentication credentials',
           'Original Apple Health store',
           'Derived model and preparation caches',
+          'Device experiment history',
         ],
       },
     });
@@ -3905,6 +4327,7 @@ class AppController extends ChangeNotifier {
           'pointInTimeSnapshot': false,
           'excludes': [
             'Original Apple Health store',
+            'Device experiment history',
             'Other devices and previous exports',
             'Authentication credentials',
             'Administrator-created unknown or nested collections',
@@ -3925,6 +4348,9 @@ class AppController extends ChangeNotifier {
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
     final ensureCurrent = _beginMutation();
+    _ai1CaptureGeneration++;
+    await _ai1Capture.stopAndClear(_ai1Owner);
+    ensureCurrent();
     // Finish an already-issued outcome upload before clearing its collection;
     // otherwise a late success could recreate data after the clear completes.
     while (_pendingOutcomePush != null) {
@@ -4033,10 +4459,12 @@ class AppController extends ChangeNotifier {
         await _saveDeletionJournal(uid ?? 'local', 'requested');
       }
       _sessionRevision++;
+      _unloadAi1Capture();
+      _invalidateHealthWork();
       _scoreRefreshGeneration++;
       _energyModelService.unload();
       await _invalidateModelPreparation();
-      await _healthService.disableBackgroundUpdates();
+      await _disableContinuousHealthUpdates();
       healthBackgroundRefreshEnabled = false;
       try {
         await _notificationService.cancelGuidance();
@@ -4115,6 +4543,8 @@ class AppController extends ChangeNotifier {
     isDeletingAccount = true;
     try {
       _sessionRevision++;
+      _unloadAi1Capture();
+      _invalidateHealthWork();
       await reset();
       final prefs = await SharedPreferences.getInstance();
       if (!await prefs.remove(_deletionKey)) {
@@ -4139,10 +4569,13 @@ class AppController extends ChangeNotifier {
     cloudSyncFailureKind = null;
     cloudSyncError = null;
     _sessionRevision++;
+    _unloadAi1Capture();
+    _invalidateHealthWork();
     // A preference platform write already in progress cannot be canceled.
     // Invalidate its session, then drain it before removing the account cache,
     // so a completed deletion cannot be undone by a late language save.
     await _localWriteQueue;
+    await _ai1Capture.clearAll();
     _scoreRefreshGeneration++;
     isForecastLoading = false;
     isGuidanceLoading = false;
@@ -4157,7 +4590,7 @@ class AppController extends ChangeNotifier {
     await _clearModelPreparationWindow();
     await _invalidateModelPreparation();
     await SharedPreferencesPrepCache().clear();
-    await _healthService.disableBackgroundUpdates();
+    await _disableContinuousHealthUpdates();
     try {
       await _notificationService.cancelGuidance();
     } on Object {
@@ -4336,6 +4769,7 @@ class AppController extends ChangeNotifier {
   Future<void> _commit({
     bool energyInputsChanged = false,
     bool forecastInputsChanged = false,
+    _Ai1CaptureIntent? ai1Capture,
   }) async {
     if (!_canProcessData) return;
     final revision = _sessionRevision;
@@ -4367,7 +4801,7 @@ class AppController extends ChangeNotifier {
     await _invalidateModelPreparation();
     if (!current()) return;
     notifyListeners();
-    await _writeLocal();
+    await _writeLocal(ai1Capture: ai1Capture);
     if (!current()) return;
     await _pushCloud();
     if (!current()) return;
@@ -4386,7 +4820,7 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _writeLocal() async {
+  Future<void> _writeLocal({_Ai1CaptureIntent? ai1Capture}) async {
     if (deletionPending || isDeletingAccount) return;
     final revision = _sessionRevision;
     // Language, observations and background refresh share one state document.
@@ -4399,7 +4833,9 @@ class AppController extends ChangeNotifier {
           isDeletingAccount) {
         return;
       }
-      if (!await preferences.setString(_storageKey, jsonEncode(_json()))) {
+      final encoded = jsonEncode(_json());
+      final savedState = Map<String, Object?>.from(jsonDecode(encoded) as Map);
+      if (!await preferences.setString(_storageKey, encoded)) {
         throw StateError(
           'Could not save to this device. Keep this screen open and retry.',
         );
@@ -4407,6 +4843,30 @@ class AppController extends ChangeNotifier {
       if (revision == _sessionRevision &&
           !deletionPending &&
           !isDeletingAccount) {
+        final previousCaptureCount = ai1CapturedRevisionCount;
+        final previousCaptureError = ai1CaptureError;
+        final previousCaptureEnabled = ai1CaptureEnabled;
+        if (ai1Capture != null &&
+            ai1Capture.generation == _ai1CaptureGeneration &&
+            ai1CaptureEnabled &&
+            _ai1SourceSnapshot(savedState, ai1Capture.observation) ==
+                ai1Capture.sourceSnapshot) {
+          await _ai1Capture.capture(
+            owner: _ai1Owner,
+            observation: ai1Capture.observation,
+          );
+        }
+        if (revision != _sessionRevision ||
+            deletionPending ||
+            isDeletingAccount) {
+          return;
+        }
+        await _reconcileAi1Capture(savedState);
+        if (previousCaptureCount != ai1CapturedRevisionCount ||
+            previousCaptureError != ai1CaptureError ||
+            previousCaptureEnabled != ai1CaptureEnabled) {
+          notifyListeners();
+        }
         scheduleCloudRetry();
       }
     }
@@ -5118,4 +5578,16 @@ class AppController extends ChangeNotifier {
   }
 
   static String _dayKey(DateTime day) => localDayKey(day);
+}
+
+class _Ai1CaptureIntent {
+  const _Ai1CaptureIntent({
+    required this.observation,
+    required this.generation,
+    required this.sourceSnapshot,
+  });
+
+  final Ai1CaptureObservation observation;
+  final int generation;
+  final String sourceSnapshot;
 }

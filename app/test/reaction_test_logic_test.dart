@@ -9,6 +9,11 @@ void main() {
       expect(ReactionTestLogic.isValidReaction(100), isTrue);
       expect(ReactionTestLogic.isValidReaction(1500), isTrue);
       expect(ReactionTestLogic.isValidReaction(1501), isFalse);
+      expect(ReactionTestLogic.isValidReaction(99.6), isFalse);
+      expect(ReactionTestLogic.isValidReaction(1500.4), isFalse);
+      expect(ReactionTestLogic.isValidReaction(250.5), isTrue);
+      expect(ReactionTestLogic.isValidReaction(double.nan), isFalse);
+      expect(ReactionTestLogic.isValidReaction(double.infinity), isFalse);
     });
 
     test('averages three valid rounds for a daily benchmark', () {
@@ -69,5 +74,30 @@ void main() {
       );
       expect(ReactionTestLogic.comparisonLabel(285, 280), 'Near your baseline');
     });
+
+    test(
+      'baseline ignores invalid values and uses the latest observations',
+      () {
+        final now = DateTime(2026, 10, 1);
+        final signals = <SignalReading>[
+          for (var day = 0; day < 15; day++)
+            SignalReading(
+              id: 'r-$day',
+              type: SignalType.reactionTime,
+              value: day == 0 ? 1000 : 250,
+              timestamp: now.add(Duration(days: day)),
+            ),
+          for (final invalid in [double.nan, double.infinity, 99.6, 1500.4])
+            SignalReading(
+              id: 'invalid-$invalid',
+              type: SignalType.reactionTime,
+              value: invalid,
+              timestamp: now.add(const Duration(days: 16)),
+            ),
+        ];
+        expect(ReactionTestLogic.baselineMs(signals), 250);
+        expect(signals.first.id, 'r-0');
+      },
+    );
   });
 }

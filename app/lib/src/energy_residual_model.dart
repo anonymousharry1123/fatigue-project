@@ -599,7 +599,9 @@ bool _historicalFeatures(
     var maximumAge = 0.0;
     for (final key in sources) {
       final raw = evidence[key];
-      if (raw == null || raw['id'] == excludedId || !_genuine(raw)) {
+      if (raw == null ||
+          key.startsWith('checkIns/') && raw['id'] == excludedId ||
+          !_genuine(raw)) {
         return false;
       }
       final observed = window.parseTime(raw['timestamp']);

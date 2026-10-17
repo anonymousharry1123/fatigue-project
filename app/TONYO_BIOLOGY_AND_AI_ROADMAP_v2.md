@@ -4,10 +4,13 @@
 **Updated:** October 4, 2026  
 **Document status:** An editable roadmap, not evidence of implementation or approval.
 
+**October 11, 2026 scope update:** The user selected fixed 10:00 prediction / 18:00–22:00 evening rating times, their own data first, English, and manual sleep by default with Apple Health selectable. [Contract `v0.3-draft`](docs/PREDICTION_CONTRACT.md) records those decisions and remaining operational/construct proposals. The user then authorized the next step: AI-1 now includes offline synthetic protocol/calendar rules, immutable records and dataset validation, plus default-off device-local revision capture for future manual sleep and check-in saves. Health ingestion lineage, prediction events, real-data adapters and model training remain future work.
+
 ## Read This First
 
-**Work now:** the biology measurement upgrade using surveys, questionnaires, and separate 1–10 self-report scales.  
-**Plan for later:** AI redesign, model comparisons, real-outcome evaluation, and integration. No new AI training or deployment is authorized by this document.
+**Work now:** measurement acceptance and the user-authorized local AI-1 implementation, verified with synthetic fixtures while remaining AI-0 review continues.
+
+**Plan for later:** prospective data collection, model comparisons, real-outcome evaluation, and integration. No new AI training or deployment is authorized by this document.
 
 The original measurement plan is retained below, including Sections 1–18. Sections 19–32 are new proposals with decision fields for Harry, Dr. Sun, Dr. Lin, and any additional reviewer. The original custom questions remain drafts; their inclusion is not a claim of clinical validation.
 
@@ -538,7 +541,7 @@ Fatigue, Sleepiness, and Focus should be collected as separate secondary outcome
 
 ## 19. Future AI Redesign: Status and Ground Rules
 
-**Status: PLANNING ONLY.** The active work remains the Phase 2A biology measurement upgrade above. The future stages below are proposals, not instructions to start training, collect research participants, change the deployed model, or publish.
+**Status: AI-1 LOCAL SYNTHETIC DEVELOPMENT STARTED, October 11, 2026.** The user authorized the first offline protocol/records/dataset slice after selecting timing, population, source defaults and English. See [the review draft](docs/PREDICTION_CONTRACT.md). Remaining AI-0 operational/construct review continues; the real prospective dataset and later modeling are not implemented by this slice.
 
 The first AI goal should remain narrow:
 
@@ -551,6 +554,7 @@ This predicts a person's report, not an objectively measured quantity of biologi
 - **From the current measurement plan:** separate 1–10 ratings, morning/evening check-ins, questionnaire support, original-response storage, and no immediate model redesign.
 - **From Dr. Sun's discussion:** compare measurement approaches; start prediction with sleep; later investigate exercise/workload and Coach effectiveness; use mock data for pipeline development.
 - **From the earlier source audit:** an Energy residual model exists, while synthetic records support software testing. This is historical audit context, not an inspection of the newest implementation. [P1]
+- **User decisions, October 11:** 10:00 prediction, 18:00–22:00 evening rating, own data first, manual sleep default with selectable Apple Health, and English. Source isolation/versioning and remaining operational rules are documented proposals for the synthetic slice.
 - **New proposals below:** the exact prediction contract, dataset design, comparisons, evaluation procedures, deployment gates, and adjustable settings. Neither mentor has approved these choices through this document.
 
 ### Adjustable versus essential
@@ -563,7 +567,7 @@ This predicts a person's report, not an objectively measured quantity of biologi
 | Training schedule and improvement threshold | Privacy, consent, applicable research review, and withdrawal/deletion safeguards |
 | Deployment architecture and display design | No diagnosis, unsupported health claims, or causal claims from prediction alone |
 
-A proposal becomes approved only after its decision record is completed. Approval of one stage does not activate later stages.
+A proposal becomes approved only after its decision record is completed. The explicit instruction to continue authorizes the first reversible synthetic AI-1 implementation while contract review continues; it does not activate real-data collection, training or release.
 
 ---
 
@@ -615,8 +619,11 @@ For the future analysis, preserve the approved instrument's original response op
 |---|---|---|
 | Primary outcome | Evening self-reported Energy, 1–10 | ______________________________ |
 | Primary wording and anchors | Review the existing custom draft | ______________________________ |
-| Prediction timing | Morning of day D | ______________________________ |
-| Outcome window | Fixed or individually scheduled evening window | ______________________________ |
+| Prediction timing | Morning of day D | User-selected 10:00 local time; issuance tolerance proposed |
+| Outcome window | Fixed or individually scheduled evening window | User-selected 18:00–22:00; exact endpoint/timezone rules proposed |
+| Initial population | Personal feasibility | User's own data first |
+| Sleep source | Explicit source per experiment | Manual default; Apple Health selectable. Isolation/versioning rules proposed |
+| Language | Freeze one language and definition | English selected; wording/construct review pending |
 | Maximum allowed late response | Not yet selected | ______________________________ |
 | Multiple-response selection rule | Prespecify one rule, independent of score values | ______________________________ |
 | Questionnaire and recall period | Not yet selected | ______________________________ |
@@ -632,6 +639,8 @@ For the future analysis, preserve the approved instrument's original response op
 ## 21. AI-1: Build a Trustworthy Analysis Dataset
 
 **Purpose:** Make every training example traceable to an earlier information set and a later real report.
+
+**Initial slice, October 11:** local, offline, synthetic-only Dart [protocol/calendar rules](lib/src/ai1_protocol.dart), [immutable records](lib/src/ai1_records.dart), [dataset validation](lib/src/ai1_dataset_builder.dart) and [acceptance fixtures](test/ai1_dataset_builder_test.dart). It exercises cutoff availability, frozen snapshots, source isolation and explicit outcome missingness. Manual is the default source; Apple Health is selectable in a separately versioned experiment. The draft policy permits no automatic fallback/merging and treats competing main episodes within the selected source as ambiguous. The follow-up now wires an optional device-only revision journal to manual sleep and check-in saves, with native storage receipts and privacy lifecycle controls. It defaults off and excludes existing/imported records, notes, cloud sync and exports. Health lineage, real-data adapters, prediction events and training remain unbuilt.
 
 ### A. Create two linked tables
 
@@ -1071,8 +1080,8 @@ Use readiness milestones instead of promising that the model will be validated b
 | Stage | Deliverable | Suggested discussion | Owner | Target date | Status |
 |---|---|---|---|---|---|
 | Phase 2A, current | Survey/check-in implementation and tests | Both mentors as available | ______ | ______ | ______ |
-| AI-0 | Approved prediction contract | Dr. Lin: constructs; Dr. Sun: implementation | ______ | ______ | Deferred |
-| AI-1 | Dataset and timing checks | Technical review plus research review | ______ | ______ | Deferred |
+| AI-0 | Approved prediction contract | Dr. Lin: constructs; Dr. Sun: implementation | ______ | ______ | Timing/population/source defaults/English selected 2026-10-11; remaining review pending |
+| AI-1 | Dataset and timing checks | Technical review plus research review | ______ | ______ | Synthetic checks and optional local revision capture implemented 2026-10-11; prospective prediction dataset unbuilt |
 | AI-2 | Measurement/data readiness report | Both mentors; statistical advice as needed | ______ | ______ | Deferred |
 | AI-3 | Baseline and candidate comparisons | Dr. Sun and statistical adviser | ______ | ______ | Deferred |
 | AI-4 | Frozen evaluation report | Both mentors | ______ | ______ | Deferred |

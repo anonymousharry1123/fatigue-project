@@ -189,7 +189,9 @@ abstract final class MlPrepBuilder {
       'checkIns': snapshot.checkIns,
     }.entries) {
       records[collection.key] = {};
+      final conflictingIds = _conflictingIds(collection.value);
       for (final raw in collection.value) {
+        if (conflictingIds.contains(raw['id'])) continue;
         try {
           final origin = _provenance(raw, collection.key);
           if (origin != 'genuine') continue;
@@ -239,6 +241,7 @@ abstract final class MlPrepBuilder {
     for (final collection in collections.entries) {
       final counts = {'genuine': 0, 'synthetic': 0, 'uncertain': 0};
       final parsed = <String, _Record>{};
+      final conflictingIds = _conflictingIds(collection.value);
       final orderedRows = [...collection.value]
         ..sort((a, b) => canonicalPrepJson(a).compareTo(canonicalPrepJson(b)));
       for (final raw in orderedRows) {
@@ -255,6 +258,10 @@ abstract final class MlPrepBuilder {
           reject('foreign_account');
           continue;
         }
+        if (conflictingIds.contains(id)) {
+          reject('conflicting_duplicate_document_id');
+          continue;
+        }
         if (parsed.containsKey(id)) {
           reject('duplicate_document_id');
           continue;
@@ -269,6 +276,9 @@ abstract final class MlPrepBuilder {
           final record = _parse(snapshot.window, raw, collection.key, origin);
           if (!snapshot.window.contains(record.at)) {
             reject('outside_window');
+          } else if (record.at.isAfter(snapshot.fetchedAt) ||
+              record.availableAt?.isAfter(snapshot.fetchedAt) == true) {
+            reject('future_or_unavailable');
           } else {
             parsed[id] = record;
             if (origin != 'genuine') reject('${origin}_provenance');
@@ -458,6 +468,22 @@ abstract final class MlPrepBuilder {
     );
   }
 
+  // Neither preparation nor serving has an authoritative revision history.
+  // Conflicting copies must not select arbitrary values or availability.
+  static Set<String> _conflictingIds(Iterable<Map<String, dynamic>> rows) {
+    final payloadsById = <String, Set<String>>{};
+    for (final raw in rows) {
+      final id = raw['id'];
+      if (id is String) {
+        payloadsById.putIfAbsent(id, () => {}).add(canonicalPrepJson(raw));
+      }
+    }
+    return payloadsById.entries
+        .where((entry) => entry.value.length > 1)
+        .map((entry) => entry.key)
+        .toSet();
+  }
+
   static String? _sourceProblem(
     OutcomeRecord outcome,
     Map<String, Map<String, _Record>> records,
@@ -499,9 +525,12 @@ abstract final class MlPrepBuilder {
     final window = snapshot.window;
     final now = _wall(window, outcome.observedAt);
     final start = DateTime(now.year, now.month, now.day);
+    final sourceCollection = outcome.source == OutcomeSource.checkIn
+        ? 'checkIns'
+        : 'signals';
     bool usable(_Record row) =>
         row.provenance == 'genuine' &&
-        row.id != outcome.sourceId &&
+        !(row.collection == sourceCollection && row.id == outcome.sourceId) &&
         !row.at.isAfter(outcome.observedAt) &&
         (row.availableAt == null ||
             !row.availableAt!.isAfter(outcome.observedAt));
@@ -522,7 +551,8 @@ abstract final class MlPrepBuilder {
         .toList();
     final baseline = PersonalBaselineLogic.build(signals: signals, asOf: now);
     final evidenceById = {
-      for (final row in [...signalRows, ...checkRows]) row.id: row,
+      for (final row in [...signalRows, ...checkRows])
+        '${row.collection}/${row.id}': row,
     };
     List<SignalReading> ofType(SignalType type) =>
         today.where((row) => row.type == type).toList();
@@ -542,7 +572,7 @@ abstract final class MlPrepBuilder {
         ? null
         : rows.fold<double>(0, (sum, row) => sum + row.value);
     Iterable<String> ids(Iterable<SignalReading> rows) =>
-        rows.map((row) => row.id);
+        rows.map((row) => 'signals/${row.id}');
     // Phase 1 retires sleep/exposure-to-readiness mappings. Keep the eight
     // artifact slots stable for metadata, but these slots have no value or
     // freshness and can never contribute to fitting or live corrections.
@@ -596,12 +626,12 @@ abstract final class MlPrepBuilder {
     features['mood'] = feature(
       'mood',
       checkIn == null ? null : (checkIn.mood! - 5.5) / 4.5,
-      checkIn == null ? [] : [checkIn.id],
+      checkIn == null ? [] : ['checkIns/${checkIn.id}'],
     );
     features['stress'] = feature(
       'stress',
       checkIn == null ? null : (checkIn.stress! - 5.5) / 4.5,
-      checkIn == null ? [] : [checkIn.id],
+      checkIn == null ? [] : ['checkIns/${checkIn.id}'],
     );
     double? heartDifference(PersonalBaselineType type) =>
         PersonalBaselineLogic.differencePercent(
@@ -647,7 +677,7 @@ abstract final class MlPrepBuilder {
                 row.type == SignalType.restingHeartRate,
           ),
         ),
-        if (checkIn != null) checkIn.id,
+        if (checkIn != null) 'checkIns/${checkIn.id}',
       },
     };
     final used = <_Record>{

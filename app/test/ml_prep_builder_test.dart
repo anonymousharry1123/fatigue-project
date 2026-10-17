@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:app/src/ml_prep_builder.dart';
 import 'package:app/src/ml_prep_models.dart';
+import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -369,6 +370,176 @@ void main() {
     },
   );
 
+  test('conflicting copies cannot supply a label or feature in any order', () {
+    final check = _checkIn(10, 20);
+    final conflictingCheck = {...check, 'energy': 2};
+    final outcome = _energy(check);
+    final study = _signal(10, 9, 'study', 2);
+    final conflictingStudy = {...study, 'value': 8};
+    final screen = _signal(10, 9, 'screenTime', 2);
+    for (final reversed in [false, true]) {
+      List<Map<String, dynamic>> order(List<Map<String, dynamic>> rows) =>
+          reversed ? rows.reversed.toList() : rows;
+      final sourceConflict = MlPrepBuilder.build(
+        _snapshot(
+          checkIns: order([check, conflictingCheck]),
+          outcomes: [outcome],
+        ),
+      );
+      expect(sourceConflict.examples, isEmpty);
+      expect(
+        _rejected(sourceConflict),
+        containsAll(['conflicting_duplicate_document_id', 'missing_source']),
+      );
+      final labelConflict = MlPrepBuilder.build(
+        _snapshot(
+          checkIns: [check],
+          outcomes: order([
+            outcome,
+            {...outcome, 'value': 2},
+          ]),
+        ),
+      );
+      expect(labelConflict.examples, isEmpty);
+      final featureConflict = MlPrepBuilder.build(
+        _snapshot(
+          checkIns: [check],
+          outcomes: [outcome],
+          signals: order([study, conflictingStudy, screen]),
+        ),
+      );
+      expect(
+        featureConflict.examples.single.features['studyScreenLoad'],
+        isNull,
+      );
+      expect(
+        featureConflict.examples.single.featureSources['studyScreenLoad'],
+        isEmpty,
+      );
+    }
+  });
+
+  test('live features abstain from conflicting copies in either order', () {
+    // Choose the actual host zone for this live-input test. The production
+    // guard independently rejects incompatible replay zones.
+    final at = DateTime(2026, 7, 10, 20);
+    final offset = at.timeZoneOffset;
+    final timezone = offset == Duration.zero
+        ? 'UTC'
+        : offset == const Duration(hours: -7)
+        ? 'America/Los_Angeles'
+        : null;
+    if (timezone == null) return;
+    final study = SignalReading(
+      id: 'manual-${at.microsecondsSinceEpoch}-study',
+      type: SignalType.study,
+      value: 2,
+      timestamp: at.subtract(const Duration(hours: 10)),
+      recordedAt: at.subtract(const Duration(hours: 10)),
+    );
+    final conflict = SignalReading(
+      id: study.id,
+      type: study.type,
+      value: 8,
+      timestamp: study.timestamp,
+      recordedAt: study.recordedAt,
+    );
+    final screen = SignalReading(
+      id: 'manual-${at.microsecondsSinceEpoch}-screen',
+      type: SignalType.screenTime,
+      value: 2,
+      timestamp: study.timestamp,
+      recordedAt: study.recordedAt,
+    );
+    for (final signals in [
+      [study, conflict, screen],
+      [conflict, study, screen],
+    ]) {
+      final row = MlPrepBuilder.energyInput(
+        signals: signals,
+        checkIns: [],
+        at: at,
+        timezone: timezone,
+      );
+      expect(row, isNotNull);
+      expect(row!.features['studyScreenLoad'], isNull);
+      expect(row.featureSources['studyScreenLoad'], isEmpty);
+    }
+  });
+
+  test('snapshot cutoff rejects future observations, labels and revisions', () {
+    final check = _checkIn(10, 20);
+    final later = _checkIn(11, 20);
+    final fetchedAt = DateTime.utc(2026, 7, 10, 21);
+    final futureObservation = MlPrepBuilder.build(
+      _snapshot(
+        checkIns: [check, later],
+        outcomes: [_energy(check), _energy(later)],
+        fetchedAt: fetchedAt,
+      ),
+    );
+    expect(futureObservation.examples.map((row) => row.outcomeId), [
+      _energy(check)['id'],
+    ]);
+    expect(_rejected(futureObservation), contains('future_or_unavailable'));
+    for (final field in ['recordedAt', 'createdAt', 'updatedAt', 'syncedAt']) {
+      final unavailableLabel = MlPrepBuilder.build(
+        _snapshot(
+          checkIns: [check],
+          outcomes: [
+            {..._energy(check), field: _time(11, 8)},
+          ],
+          fetchedAt: fetchedAt,
+        ),
+      );
+      expect(unavailableLabel.examples, isEmpty, reason: field);
+      expect(_rejected(unavailableLabel), contains('future_or_unavailable'));
+    }
+    final unavailableSource = MlPrepBuilder.build(
+      _snapshot(
+        checkIns: [
+          {...check, 'updatedAt': _time(11, 8)},
+        ],
+        outcomes: [_energy(check)],
+        fetchedAt: fetchedAt,
+      ),
+    );
+    expect(unavailableSource.examples, isEmpty);
+  });
+
+  test('feature provenance and label exclusion use collection-scoped IDs', () {
+    final check = _checkIn(10, 20);
+    final context = _checkIn(10, 8);
+    final study = {
+      ..._signal(10, 9, 'study', 2),
+      'id': context['id'],
+      'provenance': 'observed',
+    }..remove('createdAt');
+    final screen = {
+      ..._signal(10, 9, 'screenTime', 2),
+      'id': check['id'],
+      'provenance': 'observed',
+    };
+    final report = MlPrepBuilder.build(
+      _snapshot(
+        checkIns: [context, check],
+        signals: [study, screen],
+        outcomes: [_energy(check)],
+      ),
+    );
+    final row = report.examples.single;
+    expect(row.features['studyScreenLoad'], .25);
+    expect(
+      row.featureSources['studyScreenLoad'],
+      unorderedEquals([
+        'signals/${study['id']}:manual',
+        'signals/${screen['id']}:manual',
+      ]),
+    );
+    expect(row.featureSources['mood'], ['checkIns/${context['id']}:manual']);
+    expect(row.warnings, contains('historical_availability_unknown'));
+  });
+
   test('hitting any document cap produces no examples', () {
     final check = _checkIn(10, 20);
     final report = MlPrepBuilder.build(
@@ -555,11 +726,12 @@ PrepSnapshot _snapshot({
   List<Map<String, dynamic>> outcomes = const [],
   bool consent = true,
   PrepWindow? window,
+  DateTime? fetchedAt,
 }) => PrepSnapshot(
   uid: 'private-account',
   window: window ?? PrepWindow.endingOn(DateTime(2026, 7, 31), timezone: 'UTC'),
   consent: PrepConsent(collection: consent, trainingUse: consent, version: 1),
-  fetchedAt: DateTime.utc(2026, 8, 1),
+  fetchedAt: fetchedAt ?? DateTime.utc(2026, 8, 1),
   schemaVersion: 11,
   signals: signals,
   checkIns: checkIns,

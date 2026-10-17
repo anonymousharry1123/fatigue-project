@@ -5,10 +5,25 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/notification_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'privacy_test_support.dart';
+
+class _GatedNotificationService extends LocalNotificationService {
+  Completer<void>? cancelGate;
+  Completer<void>? cancelStarted;
+
+  @override
+  Future<void> cancelGuidance() async {
+    final gate = cancelGate;
+    cancelGate = null;
+    cancelStarted?.complete();
+    cancelStarted = null;
+    if (gate != null) await gate.future;
+  }
+}
 
 class _OutcomeRepository extends MemoryCloudRepository {
   _OutcomeRepository() : super(signedInUid: 'owner');
@@ -61,6 +76,7 @@ void main() {
   final receipt = DateTime.utc(2026, 9, 1, 12);
   late _OutcomeRepository repository;
   late MemoryAccountAuth auth;
+  late _GatedNotificationService notifications;
 
   CloudUserState state({String email = 'owner@example.com'}) => CloudUserState(
     privacyConsent: testAdultPrivacyConsent,
@@ -81,6 +97,7 @@ void main() {
     final controller = AppController(
       accountAuth: auth,
       cloudRepository: repository,
+      notificationService: notifications,
       clock: () => now,
     );
     addTearDown(controller.dispose);
@@ -98,10 +115,87 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     repository = _OutcomeRepository()..seed('owner', state());
+    notifications = _GatedNotificationService();
     auth = MemoryAccountAuth(
       session: const AccountSession(uid: 'owner', email: 'owner@example.com'),
     );
   });
+
+  for (final reaction in [false, true]) {
+    final source = reaction ? 'reaction' : 'check-in';
+    Future<void> save(AppController controller, double value) => reaction
+        ? controller.addReactionResult(
+            value,
+            resultId: 'source',
+            observedAt: now,
+          )
+        : controller.addCheckIn(
+            id: 'source',
+            energy: value,
+            mood: 5,
+            stress: 5,
+            timestamp: now,
+          );
+
+    for (final renewConsent in [false, true]) {
+      test(
+        '$source save does not link an outcome under later ${renewConsent ? 'renewed' : 'new'} consent',
+        () async {
+          final controller = await load();
+          if (!renewConsent) await controller.setOutcomeConsent(false);
+          final gate = notifications.cancelGate = Completer<void>();
+          final started = notifications.cancelStarted = Completer<void>();
+          final pending = save(controller, reaction ? 250 : 7);
+          await started.future;
+          if (renewConsent) await controller.setOutcomeConsent(false);
+          await controller.setOutcomeConsent(true);
+          gate.complete();
+          await pending;
+
+          expect(
+            reaction ? controller.signals : controller.checkIns,
+            hasLength(1),
+          );
+          expect(controller.outcomes, isEmpty);
+          expect(await remote(), isEmpty);
+        },
+      );
+    }
+
+    test('a delayed $source save cannot overwrite a newer outcome', () async {
+      final controller = await load();
+      final gate = notifications.cancelGate = Completer<void>();
+      final started = notifications.cancelStarted = Completer<void>();
+      final first = save(controller, reaction ? 300 : 4);
+      await started.future;
+      final latest = reaction ? 250.0 : 8.0;
+      await save(controller, latest);
+      gate.complete();
+      await first;
+
+      expect(controller.outcomes.single.value, latest);
+      expect((await remote()).single.value, latest);
+    });
+
+    test('a delayed $source save cannot restore a deleted outcome', () async {
+      final controller = await load();
+      final gate = notifications.cancelGate = Completer<void>();
+      final started = notifications.cancelStarted = Completer<void>();
+      final pending = save(controller, reaction ? 250 : 7);
+      await started.future;
+      if (reaction) {
+        await controller.deleteSignal('source');
+      } else {
+        await controller.deleteCheckIn('source');
+      }
+      gate.complete();
+      await pending;
+
+      expect(reaction ? controller.signals : controller.checkIns, isEmpty);
+      expect(controller.outcomes, isEmpty);
+      expect(await remote(), isEmpty);
+    });
+  }
 
   test(
     'pending uploads survive readable cloud refresh and process restart',

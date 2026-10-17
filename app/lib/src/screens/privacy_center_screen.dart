@@ -39,6 +39,9 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
   bool _working = false;
   bool _savingBackup = false;
   bool _retryingConnection = false;
+  bool _changingCapture = false;
+  String? _captureError;
+  int? _captureErrorRevision;
   String? _connectionError;
   String? _error;
   String? _export;
@@ -51,6 +54,8 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
       _working ||
       _savingBackup ||
       _retryingConnection ||
+      _changingCapture ||
+      _controller.ai1CaptureBusy ||
       _controller.isPrivacyBusy;
 
   @override
@@ -329,6 +334,8 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
                 ),
                 const SizedBox(height: 16),
                 _optionalLearning(),
+                const SizedBox(height: 16),
+                _localStudyHistory(),
                 const SizedBox(height: 22),
                 _heading(context, 'Take your data with you'),
                 const SizedBox(height: 8),
@@ -705,6 +712,119 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
         acknowledged: _acknowledged,
       ),
     );
+  }
+
+  Widget _localStudyHistory() {
+    final available = _controller.ai1CaptureAvailable;
+    final enabled = _controller.ai1CaptureEnabled;
+    final error =
+        (_captureErrorRevision == _controller.sessionRevision
+            ? _captureError
+            : null) ??
+        _controller.ai1CaptureError;
+    return TonyoCard(
+      key: const Key('privacy-local-study-history'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _heading(context, 'Local study history'),
+          const SizedBox(height: 8),
+          Text(
+            context.tr(
+              'Save new manual sleep logs and check-in revisions on this '
+              'device, including earlier answers after edits. This history '
+              'is not used for model training or uploaded to the cloud.',
+            ),
+            style: TextStyle(color: TonyoPalette.of(context).muted),
+          ),
+          Material(
+            color: Colors.transparent,
+            child: SwitchListTile(
+              key: const Key('privacy-study-history-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Keep local study history')),
+              subtitle: Text(
+                !available
+                    ? context.tr('Available in the iPhone app.')
+                    : _changingCapture || _controller.ai1CaptureBusy
+                    ? context.tr('Updating study history…')
+                    : enabled
+                    ? context.tr('On · starts with new records only.')
+                    : context.tr('Off · no study history is being saved.'),
+              ),
+              value: enabled,
+              onChanged:
+                  !available ||
+                      _busy ||
+                      (!_controller.privacyFeaturesAllowed && !enabled)
+                  ? null
+                  : _setAi1CaptureEnabled,
+            ),
+          ),
+          if (available) ...[
+            Text(
+              context.tr(
+                'Saved revisions: {count}',
+                args: {'count': _controller.ai1CapturedRevisionCount},
+              ),
+              key: const Key('privacy-study-history-count'),
+            ),
+            const SizedBox(height: 8),
+          ],
+          Text(
+            context.tr(
+              'Turning this off clears this study history. Your ordinary '
+              'sleep logs and check-ins stay. Apple Health imports are not '
+              'included in this history yet. Study history is excluded from '
+              'backups and exports.',
+            ),
+            style: TextStyle(color: TonyoPalette.of(context).muted),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                context.tr(error),
+                key: const Key('privacy-study-history-error'),
+                style: TextStyle(color: TonyoPalette.of(context).error),
+              ),
+            ),
+          ],
+          if (available &&
+              (error != null || !_controller.privacyFeaturesAllowed))
+            TextButton.icon(
+              key: const Key('privacy-clear-study-history'),
+              onPressed: _busy ? null : () => _setAi1CaptureEnabled(false),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: Text(context.tr('Clear local history')),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _setAi1CaptureEnabled(bool value) async {
+    if (_busy || !_controller.ai1CaptureAvailable) return;
+    final revision = _controller.sessionRevision;
+    setState(() {
+      _changingCapture = true;
+      _captureError = null;
+      _captureErrorRevision = revision;
+    });
+    try {
+      await _controller.setAi1CaptureEnabled(value);
+    } on Object {
+      if (mounted && revision == _controller.sessionRevision) {
+        setState(() {
+          _captureError =
+              _controller.ai1CaptureError ??
+              'Could not update local study history. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _changingCapture = false);
+    }
   }
 
   Future<void> _setOutcomeConsent(bool value) async {

@@ -188,15 +188,21 @@ void main() {
   }
 
   Future<void> reach(WidgetTester tester, Key key) async {
+    final scrollable = find
+        .descendant(
+          of: find.byKey(const Key('privacy-center-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    // A later action may target an earlier, now-disposed list child. Start
+    // from the top so a downward search can find either direction reliably.
+    final position = tester.state<ScrollableState>(scrollable).position;
+    position.jumpTo(position.minScrollExtent);
+    await tester.pump();
     await tester.scrollUntilVisible(
       find.byKey(key),
       450,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const Key('privacy-center-scroll')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+      scrollable: scrollable,
     );
     await tester.pumpAndSettle();
   }

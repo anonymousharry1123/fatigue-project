@@ -57,9 +57,27 @@ Current safety changes supersede retired sleep/nap/exposure rewards and forecast
 - [x] Step 6: explicit private device research export with a versioned JSON dictionary/definitions/provenance and copyable CSV response table (2026-10-10).
 - [x] Step 7: generic versioned instrument/response framework, review/permissions/age/scoring checks and read-only empty questionnaire library (2026-10-10). No published instrument or collection enabled.
 - [x] Native simulator acceptance: ordinary form entry/edit/clear, exact raw-data persistence across a real process restart and server reload, references/trends, confirmed JSON/CSV clipboard export and empty library; both isolated emulator scenarios passed (2026-10-10).
-- [ ] Complete relevant physical-device/release acceptance and research review; future AI stages remain planning only.
+- [x] Pre-ML bug audit: harden snapshot cutoffs/identity, model persistence/cooldowns, consent/source-save races, reaction validation and research sleep-pair availability (2026-10-11). See [audit and verification](BIOLOGY_UPGRADE_PROGRESS.md#pre-ml-bug-audit-2026-10-11).
+- [ ] Complete relevant physical-device/release acceptance and research review; real-data collection and model training remain future work.
 
 See [measurement implementation and boundaries](PHASE2A_MEASUREMENT.md) and the [verification record](BIOLOGY_UPGRADE_PROGRESS.md). Technical measurement versioning is not research-protocol approval.
+
+### AI-0 — prediction contract (started 2026-10-11)
+
+- [x] Draft [PREDICTION_CONTRACT.md](PREDICTION_CONTRACT.md) from current measurement definitions and roadmap Section 20, including timing, allowed inputs, outcome matching, revisions/missingness and worked examples.
+- [x] Record user timing/population choices: fixed 10:00 prediction, 18:00–22:00 evening rating, and the user's own data first (2026-10-11).
+- [x] Record manual sleep as default, Apple Health as a selectable source, and English (`v0.3-draft`, 2026-10-11). The manual default supersedes the earlier Apple Health default preference.
+- [ ] Review target wording/construct meaning, exact timing/matching and source isolation/versioning policies, then accept the remaining contract. The proposed 15-minute issuance tolerance is separate from the selected prediction time.
+
+### AI-1 — dataset foundation and optional local capture (started 2026-10-11)
+
+- [x] Start the user-authorized first slice: offline, synthetic-only Dart [protocol/calendar rules](../lib/src/ai1_protocol.dart), [immutable records](../lib/src/ai1_records.dart) and [dataset validation](../lib/src/ai1_dataset_builder.dart), with [acceptance fixtures](../test/ai1_dataset_builder_test.dart).
+- [x] Validate the first slice: 38 focused tests, clean analysis across `lib`, `test` and `tool`, and both source variants of the [synthetic audit](../tool/ai1_synthetic_audit.dart).
+- [x] Add default-off, device-only revision history for new manual sleep saves and versioned check-ins, with protected iOS storage, post-write receipts, edit/delete/owner lifecycle handling and Privacy Center controls. No backfill or training.
+- [x] Validate local capture: 1,249 full-suite tests passed (one optional screenshot skip), clean analysis, successful iOS Simulator build and synthetic native storage checks (2026-10-11). Physical-device storage/backup behavior remains unverified.
+- [ ] Complete Apple Health ingestion lineage, frozen prediction opportunities/events, real-data adapters and a reviewed private dataset export.
+
+The first slice exercises cutoff rules, outcome missingness and one fixed source per versioned experiment: manual by default, selectable Apple Health, with no automatic fallback or merging. Operational rules remain draft choices that can be tested locally while review continues. The optional history setting starts future local capture only after the person enables it; backups, exports and cloud sync exclude that journal. Training remains disabled for these records; the prospective prediction dataset is still unbuilt.
 
 ### Version 0.1 — Basic Structure ✅
 
@@ -281,6 +299,8 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 ### Version 0.26 — Continuous Refresh ✅
 
 - Refresh HealthKit data as iOS permits and upsert into Firestore
+- Apple Health can be connected from Sleep Log. After the one-time permission flow, import readable data automatically on connection, due launch/resume, and native data-change notifications; keep “Sync now” as an optional retry (2026-10-11).
+- Native data-change notifications bypass the foreground polling interval and coalesce during an active import. Disconnect/account changes invalidate pending work; serialized observer cleanup and a durable local opt-out prevent stale reconnection (2026-10-11).
 - Track source, freshness, and sync status on `users/{uid}` and signal docs
 - Recalculate scores/forecasts only when meaningful Firebase inputs change
 

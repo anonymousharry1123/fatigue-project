@@ -7,8 +7,10 @@ abstract final class ReactionTestLogic {
   static const maxValidMs = 1500;
   static const minBaselineSamples = 2;
 
-  static bool isValidReaction(int milliseconds) =>
-      milliseconds >= minValidMs && milliseconds <= maxValidMs;
+  static bool isValidReaction(num milliseconds) =>
+      milliseconds.isFinite &&
+      milliseconds >= minValidMs &&
+      milliseconds <= maxValidMs;
 
   static double averageMs(List<int> results) {
     if (results.isEmpty) {
@@ -23,16 +25,17 @@ abstract final class ReactionTestLogic {
     int minSamples = minBaselineSamples,
     SignalReading? exclude,
   }) {
-    final values = signals
-        .where(
-          (item) =>
-              item.type == SignalType.reactionTime &&
-              (exclude == null || item.id != exclude.id),
-        )
-        .map((item) => item.value)
-        .where((value) => isValidReaction(value.round()))
-        .take(14)
-        .toList();
+    final validSignals =
+        signals
+            .where(
+              (item) =>
+                  item.type == SignalType.reactionTime &&
+                  (exclude == null || item.id != exclude.id) &&
+                  isValidReaction(item.value),
+            )
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final values = validSignals.map((item) => item.value).take(14).toList();
     if (values.length < minSamples) return null;
     return values.reduce((a, b) => a + b) / values.length;
   }

@@ -60,6 +60,23 @@ const loggingTranslations = <String, Map<String, String>>{
     'zh-Hans': "睡眠记录",
     'zh-Hant': "睡眠記錄",
   },
+  "Connect Apple Health": {
+    'es': "Conectar Apple Salud",
+    'zh-Hans': "连接 Apple 健康",
+    'zh-Hant': "連接 Apple 健康",
+  },
+  "Connect once to automatically sync available Health data. Manual sleep logging stays available.": {
+    'es':
+        "Conecta una vez para sincronizar automáticamente los datos de Salud disponibles. El registro manual de sueño sigue disponible.",
+    'zh-Hans': "连接一次，即可自动同步可读取的健康数据。你仍可手动记录睡眠。",
+    'zh-Hant': "連接一次，即可自動同步可讀取的健康資料。你仍可手動記錄睡眠。",
+  },
+  "Available Health data syncs automatically. Manual sleep logging stays available.": {
+    'es':
+        "Los datos de Salud disponibles se sincronizan automáticamente. El registro manual de sueño sigue disponible.",
+    'zh-Hans': "可读取的健康数据会自动同步。你仍可手动记录睡眠。",
+    'zh-Hant': "可讀取的健康資料會自動同步。你仍可手動記錄睡眠。",
+  },
   "Main sleep, naps, quality, and bedtime consistency": {
     'es': "Sueño principal, siestas, calidad y regularidad al acostarse",
     'zh-Hans': "主要睡眠、小睡、质量和就寝规律",

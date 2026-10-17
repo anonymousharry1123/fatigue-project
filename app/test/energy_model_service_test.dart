@@ -315,6 +315,89 @@ void main() {
     },
   );
 
+  test('same-owner reload does not reuse a canceled in-flight load', () async {
+    final harness = _Harness();
+    await harness.create().refresh(ready);
+    final pause = harness.store.pauseNextRead();
+    final service = harness.create();
+    final canceled = service.load();
+    await pause.started.future;
+    service.unload();
+    final reloaded = service.load();
+    pause.release.complete();
+    await Future.wait([canceled, reloaded]);
+    expect(service.model, isNotNull);
+    expect(harness.writer.writes, 1);
+  });
+
+  test(
+    'oversized envelope repairs the ledger before allowing refresh',
+    () async {
+      final harness = _Harness();
+      harness.store.values['isolated-benchmark'] = 'x' * 17000;
+      final service = harness.create();
+      await service.refresh(ready);
+      expect(service.model, isNull);
+      expect(service.status, contains('once per 24 hours'));
+      expect(harness.store.writes, 1);
+      expect(harness.writer.writes, 0);
+    },
+  );
+
+  test(
+    'discard validates a corrupt unloaded ledger before saving it',
+    () async {
+      final harness = _Harness();
+      harness.store.values['isolated-benchmark'] = jsonEncode({
+        'schemaVersion': 1,
+        'ownerKey': prepFingerprint({'uid': 'isolated-benchmark'}),
+        'model': null,
+        'lastAttemptAt': 'not-a-date',
+        'eligibleOutcomeKeys': [],
+      });
+      final service = harness.create();
+      await service.discard();
+      await service.refresh(ready);
+      expect(service.model, isNull);
+      expect(service.status, contains('once per 24 hours'));
+      expect(harness.writer.writes, 0);
+    },
+  );
+
+  test(
+    'candidate stays inactive until its local persistence succeeds',
+    () async {
+      final harness = _Harness();
+      final pause = harness.store.pauseWrite(2);
+      final service = harness.create();
+      final pending = service.refresh(ready);
+      await pause.started.future;
+      expect(service.model, isNull);
+      pause.release.complete();
+      await pending;
+      expect(service.model, isNotNull);
+    },
+  );
+
+  test(
+    'failed candidate persistence preserves the prior accepted model',
+    () async {
+      final harness = _Harness();
+      final service = harness.create();
+      await service.refresh(ready);
+      final previous = service.model;
+      harness.at = harness.at.add(const Duration(days: 1));
+      harness.store.failWrite(4);
+      await expectLater(service.refresh(moreOutcomes), throwsStateError);
+      expect(service.model, same(previous));
+      expect(harness.writer.writes, 1);
+      expect(service.busy, isFalse);
+      final restored = harness.create();
+      await restored.load();
+      expect(restored.model!.fingerprint, previous!.fingerprint);
+    },
+  );
+
   test(
     'discard removes weights while preserving the daily ledger across restart',
     () async {
@@ -520,9 +603,11 @@ class _CountingStore extends MemoryEnergyModelStore {
   int writes = 0;
   _Pause? _readPause;
   final _writePauses = <int, _Pause>{};
+  final _failedWrites = <int>{};
 
   _Pause pauseNextRead() => _readPause = _Pause();
   _Pause pauseWrite(int writeNumber) => _writePauses[writeNumber] = _Pause();
+  void failWrite(int writeNumber) => _failedWrites.add(writeNumber);
 
   @override
   Future<String?> read(String uid) async {
@@ -539,6 +624,7 @@ class _CountingStore extends MemoryEnergyModelStore {
   @override
   Future<void> write(String uid, String value) async {
     writes++;
+    if (_failedWrites.remove(writes)) throw StateError('Local storage failed');
     final pause = _writePauses.remove(writes);
     if (pause != null) {
       pause.started.complete();
