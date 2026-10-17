@@ -42,6 +42,7 @@ app.*.map.json
 
 # Local Firebase runtime values (commit the example only)
 **/config/firebase_options.json
+**/firebase_secrets.dart
 
 # Android
 **/android/.gradle/

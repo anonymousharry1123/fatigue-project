@@ -20,7 +20,7 @@ abstract final class TonyoFirebaseEmulatorOptions {
     }
     if (hasFirebaseConfiguration) {
       throw StateError(
-        'Local Firebase emulators cannot be combined with FIREBASE_* settings.',
+        'Local Firebase emulators require empty firebase_secrets.dart values.',
       );
     }
   }

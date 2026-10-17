@@ -1,23 +1,21 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
-/// Environment-safe Firebase configuration.
+import 'firebase_secrets.dart' as secrets;
+
+/// Local Firebase configuration compiled into ordinary Flutter/Xcode builds.
 ///
-/// Run with:
-/// flutter run --dart-define-from-file=config/firebase_options.json
+/// Copy firebase_secrets.example.dart to firebase_secrets.dart before the first
+/// build. Empty constants keep Firebase offline; the filled file stays ignored.
 abstract final class TonyoFirebaseOptions {
-  static const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const webAppId = String.fromEnvironment('FIREBASE_APP_ID');
-  static const iosAppId = String.fromEnvironment('FIREBASE_IOS_APP_ID');
-  static const messagingSenderId = String.fromEnvironment(
-    'FIREBASE_MESSAGING_SENDER_ID',
-  );
-  static const projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
-  static const authDomain = String.fromEnvironment('FIREBASE_AUTH_DOMAIN');
-  static const storageBucket = String.fromEnvironment(
-    'FIREBASE_STORAGE_BUCKET',
-  );
-  static const iosBundleId = String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID');
+  static const apiKey = secrets.apiKey;
+  static const webAppId = secrets.webAppId;
+  static const iosAppId = secrets.iosAppId;
+  static const messagingSenderId = secrets.messagingSenderId;
+  static const projectId = secrets.projectId;
+  static const authDomain = secrets.authDomain;
+  static const storageBucket = secrets.storageBucket;
+  static const iosBundleId = secrets.iosBundleId;
 
   static bool get hasAnySuppliedValue => [
     apiKey,
@@ -49,7 +47,7 @@ abstract final class TonyoFirebaseOptions {
       projectId.isNotEmpty;
 
   /// Keeps the web and iOS Firebase registrations separate while retaining
-  /// FIREBASE_APP_ID as the existing web/default value for other platforms.
+  /// webAppId as the existing web/default value for other platforms.
   static String selectAppId({
     required bool isWeb,
     required TargetPlatform platform,
@@ -75,8 +73,8 @@ abstract final class TonyoFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (!isConfigured) {
       throw StateError(
-        'Firebase configuration is missing. Supply config/firebase_options.json '
-        'with --dart-define-from-file.',
+        'Firebase configuration is missing or invalid. Fill the local '
+        'lib/src/firebase_secrets.dart file and rebuild.',
       );
     }
     return FirebaseOptions(
