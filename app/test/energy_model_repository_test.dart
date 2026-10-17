@@ -97,14 +97,22 @@ void main() {
   );
 
   test(
-    'corrupt stored type and oversized device records fall back to absent',
+    'corrupt stored type and oversized records report corruption for ledger repair',
     () async {
       final key =
           'tonyo_energy_model_v1_${base64Url.encode(utf8.encode('owner'))}';
       SharedPreferences.setMockInitialValues({key: 42});
-      expect(await SharedPreferencesEnergyModelStore().read('owner'), isNull);
+      await expectLater(
+        SharedPreferencesEnergyModelStore().read('owner'),
+        throwsFormatException,
+      );
       SharedPreferences.setMockInitialValues({key: 'x' * 17000});
-      expect(await SharedPreferencesEnergyModelStore().read('owner'), isNull);
+      await expectLater(
+        SharedPreferencesEnergyModelStore().read('owner'),
+        throwsFormatException,
+      );
+      final memory = MemoryEnergyModelStore()..values['owner'] = 'x' * 17000;
+      await expectLater(memory.read('owner'), throwsFormatException);
     },
   );
 

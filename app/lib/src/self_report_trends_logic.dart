@@ -234,7 +234,10 @@ abstract final class SelfReportTrendsLogic {
           detailedHours / health.value >= 0.5 &&
           health.value >= manual.value * 0.8;
       chosen = preferHealth ? health : manual;
-      if (preferHealth) dependencies.addAll(stages);
+      // Both durations and all considered stages determine the preference.
+      // A late duplicate/overfull stage can switch Health back to manual;
+      // recording only the chosen row would backdate that changed decision.
+      dependencies.addAll([manual, health, ...stages]);
     }
     dependencies.add(chosen);
     final availabilityKnown = dependencies.every(

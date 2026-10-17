@@ -550,8 +550,8 @@ void main() {
   test(
     'Health preference uses available compatible stage coverage and duration',
     () {
-      final manual = _sleep('manual', hours: 8);
       final available = DateTime.utc(2026, 10, 10, 8);
+      final manual = _sleep('manual', hours: 8, recordedAt: available);
       final stagedAt = DateTime.utc(2026, 10, 10, 14);
       final health = _sleep(
         'health',
@@ -585,6 +585,59 @@ void main() {
       expect(_match([manual, shortHealth, stage]).source, SignalSource.manual);
     },
   );
+
+  test('late stage evidence cannot backdate a changed sleep preference', () {
+    final saved = DateTime.utc(2026, 10, 10, 8);
+    final revised = DateTime.utc(2026, 10, 10, 14);
+    final manual = _sleep('manual', recordedAt: saved);
+    final health = _sleep(
+      'health',
+      source: SignalSource.healthKit,
+      hours: 7,
+      groupId: 'healthkit-sleep-2026-10-10',
+      syncedAt: saved,
+    );
+    final stage = _sleep(
+      'core-one',
+      source: SignalSource.healthKit,
+      type: SignalType.sleepCore,
+      hours: 4,
+      groupId: health.groupId,
+      syncedAt: saved,
+    );
+    final rows = [
+      manual,
+      health,
+      stage,
+      stage.copyWith(id: 'core-two', syncedAt: revised),
+    ];
+    expect(
+      _match(rows, asOf: DateTime.utc(2026, 10, 10, 12)).source,
+      SignalSource.healthKit,
+    );
+    for (final order in [rows, rows.reversed]) {
+      final result = _match(order);
+      expect(result.source, SignalSource.manual);
+      expect(result.reading!.recordedAt, saved);
+      expect(result.availabilityKnown, isTrue);
+      expect(result.availableAt, revised);
+    }
+  });
+
+  test('unknown competing sleep availability remains unknown for the pair', () {
+    final saved = DateTime.utc(2026, 10, 10, 8);
+    final manual = _sleep('manual', recordedAt: saved);
+    final health = _sleep(
+      'health',
+      source: SignalSource.healthKit,
+      hours: 7,
+      groupId: 'healthkit-sleep-2026-10-10',
+    );
+    final result = _match([manual, health]);
+    expect(result.source, SignalSource.manual);
+    expect(result.availabilityKnown, isFalse);
+    expect(result.availableAt, isNull);
+  });
 
   test(
     'duplicated or impossible stage totals cannot promote Health summary',

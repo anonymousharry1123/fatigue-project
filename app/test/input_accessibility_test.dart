@@ -374,6 +374,7 @@ class _FailingSaveController extends AppController {
     String note = '',
     required Map<String, dynamic> questionnaireSnapshot,
     required String questionnaireLanguage,
+    String? sharedHeading,
     DateTime? timestamp,
   }) async {
     checkInAttempts++;
@@ -392,6 +393,7 @@ class _FailingSaveController extends AppController {
         note: note,
         questionnaireSnapshot: questionnaireSnapshot,
         questionnaireLanguage: questionnaireLanguage,
+        sharedHeading: sharedHeading,
         timestamp: timestamp,
       ),
     ]);

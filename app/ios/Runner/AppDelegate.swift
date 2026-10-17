@@ -1,4 +1,6 @@
 import Flutter
+import CryptoKit
+import Darwin
 import FamilyControls
 import HealthKit
 import SwiftUI
@@ -13,7 +15,9 @@ import UserNotifications
   private var screenTimeChannel: FlutterMethodChannel?
   private var timezoneChannel: FlutterMethodChannel?
   private var backupChannel: FlutterMethodChannel?
+  private var ai1CaptureChannel: FlutterMethodChannel?
   private let backupExporter = DeviceBackupExporter()
+  private let ai1CaptureStore = Ai1CaptureFileStore()
   private var healthObserverQueries: [HKObserverQuery] = []
 
   override func application(
@@ -77,6 +81,19 @@ import UserNotifications
       }
     }
     self.backupChannel = backupChannel
+
+    let ai1CaptureChannel = FlutterMethodChannel(
+      name: "tonyo/ai1_capture",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    ai1CaptureChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterError(code: "capture_unavailable", message: "Capture storage is unavailable.", details: nil))
+        return
+      }
+      self.ai1CaptureStore.handle(call, result: result)
+    }
+    self.ai1CaptureChannel = ai1CaptureChannel
   }
 
   private func handleScreenTimeCall(
@@ -836,5 +853,198 @@ private final class DeviceBackupExporter: NSObject, UIDocumentPickerDelegate,
     activePicker = nil
     openingBackup = false
     result?(value)
+  }
+}
+
+/// A private, device-local journal. All operations share one serial queue;
+/// account/capture generations and two-phase receipts are owned by Dart.
+private final class Ai1CaptureFileStore {
+  private static let maximumBytes = 4 * 1024 * 1024
+  private let queue = DispatchQueue(label: "tonyo.ai1.capture.storage")
+  private let files = FileManager.default
+
+  private enum StoreError: Error {
+    case invalidArguments, tooLarge, invalidData, persistence
+
+    var flutterError: FlutterError {
+      switch self {
+      case .invalidArguments:
+        return FlutterError(code: "capture_invalid_arguments", message: "Invalid capture storage request.", details: nil)
+      case .tooLarge:
+        return FlutterError(code: "capture_too_large", message: "Capture history exceeds the storage limit.", details: nil)
+      case .invalidData:
+        return FlutterError(code: "capture_invalid_data", message: "Capture history is not a valid JSON object.", details: nil)
+      case .persistence:
+        return FlutterError(code: "capture_storage_failed", message: "Capture history could not be saved or read. Please retry.", details: nil)
+      }
+    }
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard ["available", "read", "write", "clear", "clearAll"].contains(call.method) else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+    queue.async {
+      let response: Any?
+      do {
+        response = try self.perform(call)
+      } catch let error as StoreError {
+        response = error.flutterError
+      } catch {
+        // Do not expose private paths, owner identifiers or journal contents.
+        response = StoreError.persistence.flutterError
+      }
+      DispatchQueue.main.async { result(response) }
+    }
+  }
+
+  private func perform(_ call: FlutterMethodCall) throws -> Any? {
+    if call.method == "available" { return true }
+    if call.method == "clearAll" {
+      let directory = try directoryURL(create: false)
+      if files.fileExists(atPath: directory.path) {
+        try files.removeItem(at: directory)
+      }
+      // A previous attempt may have removed the directory but failed its
+      // flush. A retry must still make that deletion durable before success.
+      let parent = directory.deletingLastPathComponent()
+      if files.fileExists(atPath: parent.path) {
+        try flushDirectory(parent)
+      }
+      return nil
+    }
+    guard let arguments = call.arguments as? [String: Any],
+          let owner = arguments["owner"] as? String,
+          !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          owner.utf16.count <= 200
+    else { throw StoreError.invalidArguments }
+    let filename = SHA256.hash(data: Data(owner.utf8))
+      .map { String(format: "%02x", $0) }.joined() + ".json"
+    let directory = try directoryURL(create: call.method == "write")
+    let destination = directory.appendingPathComponent(filename, isDirectory: false)
+
+    switch call.method {
+    case "read":
+      guard files.fileExists(atPath: destination.path) else { return nil }
+      let data = try readBounded(destination)
+      try validate(data)
+      guard let value = String(data: data, encoding: .utf8) else { throw StoreError.invalidData }
+      return value
+    case "write":
+      guard let value = arguments["value"] as? String else { throw StoreError.invalidArguments }
+      // Check UTF-8 length before allocating a second copy of the payload.
+      guard value.utf8.count <= Self.maximumBytes else { throw StoreError.tooLarge }
+      let data = Data(value.utf8)
+      try validate(data)
+      // A crash may leave an unfinished temporary snapshot. Its owner-specific
+      // prefix lets disablement/deletion remove it without reading its payload.
+      _ = try removePendingFiles(directory: directory, filename: filename)
+      let temporary = directory.appendingPathComponent("\(filename).pending-\(UUID().uuidString).tmp")
+      defer { try? files.removeItem(at: temporary) }
+      try data.write(to: temporary, options: [.withoutOverwriting, .completeFileProtectionUntilFirstUserAuthentication])
+      let file = try FileHandle(forWritingTo: temporary)
+      do {
+        try file.synchronize()
+        try file.close()
+      } catch {
+        try? file.close()
+        throw error
+      }
+      // POSIX rename replaces the old journal atomically in this directory.
+      guard Darwin.rename(temporary.path, destination.path) == 0 else { throw StoreError.persistence }
+      try flushDirectory(directory)
+      let completedAt = Date()
+      // The channel receipt has millisecond resolution. Round upward so a
+      // sub-millisecond save after a cutoff cannot appear to precede it.
+      let receiptAt = Date(timeIntervalSince1970: ceil(completedAt.timeIntervalSince1970 * 1000) / 1000)
+      let formatter = ISO8601DateFormatter()
+      formatter.timeZone = TimeZone(secondsFromGMT: 0)
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      return formatter.string(from: receiptAt)
+    case "clear":
+      _ = try removePendingFiles(directory: directory, filename: filename)
+      if files.fileExists(atPath: destination.path) {
+        try files.removeItem(at: destination)
+      }
+      // Retry the flush even when an earlier removal already succeeded. If
+      // clearAll removed this directory, flush its parent for the same reason.
+      if files.fileExists(atPath: directory.path) {
+        try flushDirectory(directory)
+      } else {
+        let parent = directory.deletingLastPathComponent()
+        if files.fileExists(atPath: parent.path) {
+          try flushDirectory(parent)
+        }
+      }
+      return nil
+    default:
+      throw StoreError.invalidArguments
+    }
+  }
+
+  private func directoryURL(create: Bool) throws -> URL {
+    guard let support = files.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+      throw StoreError.persistence
+    }
+    var directory = support.appendingPathComponent("tonyo-ai1-history", isDirectory: true)
+    if create {
+      try files.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true,
+        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+      )
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try directory.setResourceValues(values)
+      try flushDirectory(directory.deletingLastPathComponent())
+      // Application Support may also have been created on first use. Flush
+      // Library even on retries after a prior ancestor flush failed.
+      let supportParent = support.deletingLastPathComponent()
+      if files.fileExists(atPath: supportParent.path) {
+        try flushDirectory(supportParent)
+      }
+    }
+    return directory
+  }
+
+  private func readBounded(_ url: URL) throws -> Data {
+    if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+       size > Self.maximumBytes { throw StoreError.tooLarge }
+    let file = try FileHandle(forReadingFrom: url)
+    defer { try? file.close() }
+    var data = Data()
+    while let chunk = try file.read(upToCount: min(64 * 1024, Self.maximumBytes - data.count + 1)),
+          !chunk.isEmpty {
+      guard data.count + chunk.count <= Self.maximumBytes else { throw StoreError.tooLarge }
+      data.append(chunk)
+    }
+    return data
+  }
+
+  private func removePendingFiles(directory: URL, filename: String) throws -> Bool {
+    guard files.fileExists(atPath: directory.path) else { return false }
+    var changed = false
+    for candidate in try files.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+      if candidate.lastPathComponent.hasPrefix(filename + ".pending-"),
+         candidate.pathExtension == "tmp" {
+        try files.removeItem(at: candidate)
+        changed = true
+      }
+    }
+    return changed
+  }
+
+  private func validate(_ data: Data) throws {
+    guard data.count <= Self.maximumBytes else { throw StoreError.tooLarge }
+    guard let object = try? JSONSerialization.jsonObject(with: data),
+          object is [String: Any] else { throw StoreError.invalidData }
+  }
+
+  private func flushDirectory(_ url: URL) throws {
+    let descriptor = Darwin.open(url.path, O_RDONLY)
+    guard descriptor >= 0 else { throw StoreError.persistence }
+    defer { Darwin.close(descriptor) }
+    guard Darwin.fsync(descriptor) == 0 else { throw StoreError.persistence }
   }
 }

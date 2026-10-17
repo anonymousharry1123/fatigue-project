@@ -82,6 +82,10 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
               style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
             const SizedBox(height: 18),
+            if (controller.healthAvailable) ...[
+              const _SleepHealthConnection(),
+              const SizedBox(height: 12),
+            ],
             TonyoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -516,6 +520,90 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
     return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+  }
+}
+
+class _SleepHealthConnection extends StatelessWidget {
+  const _SleepHealthConnection();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    final connected = controller.healthAuthorized;
+    final busy = controller.isHealthAuthorizing || controller.isSyncing;
+    final error = controller.healthError ?? controller.sleepSyncError;
+    return TonyoCard(
+      key: const Key('sleep-health-connection'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.health_and_safety_outlined,
+                color: TonyoPalette.of(context).primary,
+                size: 21,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: TranslatedText(
+                  'Apple Health',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TranslatedText(
+            connected
+                ? 'Available Health data syncs automatically. Manual sleep logging stays available.'
+                : 'Connect once to automatically sync available Health data. Manual sleep logging stays available.',
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 12,
+            ),
+          ),
+          if (connected || error != null) ...[
+            const SizedBox(height: 6),
+            TranslatedText(
+              error ?? controller.sleepSyncSummary,
+              key: const Key('sleep-health-sync-status'),
+              style: TextStyle(
+                color: error != null
+                    ? TonyoPalette.of(context).warning
+                    : TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: const Key('sleep-health-action'),
+              onPressed: busy
+                  ? null
+                  : connected
+                  ? controller.syncHealth
+                  : controller.connectHealth,
+              icon: busy
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(connected ? Icons.sync_rounded : Icons.link_rounded),
+              label: TranslatedText(
+                controller.isSyncing
+                    ? 'Syncing health data…'
+                    : connected
+                    ? 'Sync now'
+                    : 'Connect Apple Health',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

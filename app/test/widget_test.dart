@@ -281,6 +281,10 @@ void main() {
     expect(find.text('Workouts'), findsOneWidget);
     expect(find.text('Hydration'), findsOneWidget);
     expect(find.textContaining('read access only'), findsOneWidget);
+    expect(
+      find.textContaining('Health data syncs automatically'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Manual sleep and activity'), findsOneWidget);
 
     await tester.scrollUntilVisible(
@@ -294,6 +298,7 @@ void main() {
     expect(health.permissionRequests, 1);
     expect(controller.healthAuthorized, isTrue);
     expect(find.textContaining('choices are saved'), findsOneWidget);
+    expect(find.text('Sync now'), findsOneWidget);
   });
 
   testWidgets('Version 0.28 presents the sandboxed Screen Time report flow', (

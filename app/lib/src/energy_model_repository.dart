@@ -9,6 +9,8 @@ import 'ml_prep_models.dart';
 
 /// Private on-device model/throttle envelopes, never part of cloud app state.
 abstract interface class EnergyModelStore {
+  /// Null means absent; corrupt storage must throw so the service can preserve
+  /// the training cooldown instead of treating it as a first-ever attempt.
   Future<String?> read(String uid);
   Future<void> write(String uid, String value);
   Future<void> clear();
@@ -36,10 +38,8 @@ class MemoryEnergyModelStore implements EnergyModelStore {
   Future<String?> read(String uid) async {
     _ownerKey(uid);
     final value = values[uid];
-    if (value == null ||
-        utf8.encode(value).length > energyModelEnvelopeMaximumBytes) {
-      return null;
-    }
+    if (value == null) return null;
+    _checkEnvelope(value);
     return value;
   }
 
@@ -64,10 +64,11 @@ class SharedPreferencesEnergyModelStore implements EnergyModelStore {
   Future<String?> read(String uid) async {
     final key = '$_prefix${_ownerKey(uid)}';
     final value = (await SharedPreferences.getInstance()).get(key);
-    if (value is! String ||
-        utf8.encode(value).length > energyModelEnvelopeMaximumBytes) {
-      return null;
+    if (value == null) return null;
+    if (value is! String) {
+      throw const FormatException('Invalid local Energy model storage.');
     }
+    _checkEnvelope(value);
     return value;
   }
 

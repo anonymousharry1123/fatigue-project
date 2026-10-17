@@ -1190,6 +1190,15 @@ void main() {
 
     expect(() => controller.addReactionResult(50), throwsArgumentError);
     expect(() => controller.addReactionResult(2000), throwsArgumentError);
+    for (final invalid in [99.6, 1500.4, double.nan, double.infinity]) {
+      await expectLater(
+        controller.addReactionResult(invalid),
+        throwsArgumentError,
+      );
+    }
+    expect(controller.signals, isEmpty);
+    await controller.addReactionResult(250.5);
+    expect(controller.signals.single.value, 250.5);
   });
 
   test(

@@ -104,6 +104,31 @@ void main() {
     expect(second.model!.fingerprint, isNot(first.model!.fingerprint));
   });
 
+  test('signal IDs sharing a target check-in ID remain valid evidence', () {
+    final source = benchmarkSnapshot();
+    final original = fit(source).model!;
+    final sharedId = source.outcomes.first['sourceId'] as String;
+    final renamed = changed(
+      source,
+      signals: [
+        for (final row in source.signals)
+          if (row['id'] == 'observed-0-study')
+            {...row, 'id': sharedId}
+          else
+            row,
+      ],
+    );
+    final report = MlPrepBuilder.build(renamed);
+    expect(
+      report.examples.first.featureSources['studyScreenLoad'],
+      contains('signals/$sharedId:manual'),
+    );
+    final trained = fit(renamed, report: report);
+    expect(trained.reason, 'accepted');
+    expect(trained.model!.weights, original.weights);
+    expect(trained.model!.intercept, original.intercept);
+  });
+
   test(
     'retired exposure changes cannot affect fitted or served corrections',
     () {

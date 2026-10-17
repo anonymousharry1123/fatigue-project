@@ -44,7 +44,12 @@ class EnergyModelService {
     return value;
   }
 
-  void cancelPending() => _generation++;
+  void cancelPending() {
+    _generation++;
+    // A new load must not join a canceled read, even for the same account.
+    _loading = null;
+    _loadingUid = null;
+  }
 
   void unload() {
     cancelPending();
@@ -87,17 +92,9 @@ class EnergyModelService {
       _loadedUid = uid;
       if (raw == null) return;
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      if (json['schemaVersion'] != 1 ||
-          json['ownerKey'] != prepFingerprint({'uid': uid})) {
-        throw const FormatException('Incompatible model state.');
-      }
-      final attempt = json['lastAttemptAt'];
-      _lastAttempt = attempt == null ? null : DateTime.parse(attempt as String);
-      final keys = (json['eligibleOutcomeKeys'] as List).cast<String>();
-      if (keys.length > 100 || keys.any((key) => key.length > 80)) {
-        throw const FormatException('Invalid training ledger.');
-      }
-      _previousOutcomes = keys.toSet();
+      final ledger = _readLedger(json, uid);
+      _lastAttempt = ledger.attempt;
+      _previousOutcomes = ledger.keys;
       if (json['model'] != null) {
         try {
           final candidate = EnergyResidualModel.fromJson(
@@ -116,7 +113,7 @@ class EnergyModelService {
           status =
               'Saved model unavailable under current rules. Using deterministic scoring; training safeguards are unchanged.';
           try {
-            await store.write(uid, _envelope(uid));
+            await store.write(uid, _envelope(uid, model: null));
           } on Object {
             /* Incompatible weights remain unusable even if cleanup fails. */
           }
@@ -134,7 +131,7 @@ class EnergyModelService {
       // Repair only local storage; otherwise each restart of a corrupt ledger
       // would restart the cooldown and make recovery impossible.
       try {
-        await store.write(uid, _envelope(uid));
+        await store.write(uid, _envelope(uid, model: null));
       } on Object {
         /* Keep fallback. */
       }
@@ -144,13 +141,42 @@ class EnergyModelService {
   bool _current(String uid, int generation) =>
       currentUid() == uid && consentAllowed() && generation == _generation;
 
-  String _envelope(String uid) => jsonEncode({
-    'schemaVersion': 1,
-    'ownerKey': prepFingerprint({'uid': uid}),
-    'model': _model?.toJson(),
-    'lastAttemptAt': _lastAttempt?.toUtc().toIso8601String(),
-    'eligibleOutcomeKeys': _previousOutcomes.toList()..sort(),
-  });
+  String _envelope(String uid, {required EnergyResidualModel? model}) =>
+      jsonEncode({
+        'schemaVersion': 1,
+        'ownerKey': prepFingerprint({'uid': uid}),
+        'model': model?.toJson(),
+        'lastAttemptAt': _lastAttempt?.toUtc().toIso8601String(),
+        'eligibleOutcomeKeys': _previousOutcomes.toList()..sort(),
+      });
+
+  ({DateTime? attempt, Set<String> keys}) _readLedger(
+    Map<String, dynamic> json,
+    String uid,
+  ) {
+    if (json['schemaVersion'] is! int ||
+        json['schemaVersion'] != 1 ||
+        json['ownerKey'] != prepFingerprint({'uid': uid})) {
+      throw const FormatException('Incompatible model state.');
+    }
+    final value = json['lastAttemptAt'];
+    final attempt = value is String ? DateTime.tryParse(value) : null;
+    final keys = json['eligibleOutcomeKeys'];
+    final checksum = RegExp(r'^[0-9a-f]{16}-[0-9]{1,9}$');
+    if (!json.containsKey('lastAttemptAt') ||
+        value != null &&
+            (attempt == null ||
+                !attempt.isUtc ||
+                attempt.toIso8601String() != value) ||
+        keys is! List ||
+        keys.length > 100 ||
+        keys.any((key) => key is! String || !checksum.hasMatch(key)) ||
+        keys.toSet().length != keys.length ||
+        attempt == null && (keys.isNotEmpty || json['model'] != null)) {
+      throw const FormatException('Invalid training ledger.');
+    }
+    return (attempt: attempt, keys: keys.cast<String>().toSet());
+  }
 
   /// Revocation/deletion erases weights, but keeps the rate-limit ledger.
   Future<void> discard() async {
@@ -172,23 +198,20 @@ class EnergyModelService {
         final raw = await store.read(uid);
         if (raw != null) {
           final json = jsonDecode(raw) as Map<String, dynamic>;
-          if (json['ownerKey'] == prepFingerprint({'uid': uid})) {
-            attempt = DateTime.tryParse(json['lastAttemptAt'] as String? ?? '');
-            keys = (json['eligibleOutcomeKeys'] as List)
-                .cast<String>()
-                .take(100)
-                .toSet();
-          }
+          final ledger = _readLedger(json, uid);
+          attempt = ledger.attempt;
+          keys = ledger.keys;
         }
       } on Object {
         attempt = now();
+        keys = {};
       }
     }
     if (currentUid() == uid && _generation == generation) {
       _lastAttempt = attempt;
       _previousOutcomes = keys;
       _loadedUid = uid;
-      await store.write(uid, _envelope(uid));
+      await store.write(uid, _envelope(uid, model: null));
     }
   }
 
@@ -247,7 +270,7 @@ class EnergyModelService {
       _previousOutcomes = keys;
       // Record attempts before fitting so even rejection, process interruption,
       // or an unavailable metadata write cannot cause repeated daily training.
-      await store.write(uid, _envelope(uid));
+      await store.write(uid, _envelope(uid, model: _model));
       if (!_current(uid, generation)) return;
       final fit = EnergyResidualTrainer.train(
         snapshot: run.snapshot,
@@ -256,8 +279,7 @@ class EnergyModelService {
       );
       if (!_current(uid, generation)) return;
       final previous = _model;
-      _model = fit.model;
-      final acceptedEnvelope = _envelope(uid);
+      final acceptedEnvelope = _envelope(uid, model: fit.model);
       final canceledEnvelope = jsonEncode({
         ...jsonDecode(acceptedEnvelope) as Map<String, dynamic>,
         'model': null,
@@ -269,6 +291,9 @@ class EnergyModelService {
         await store.write(uid, canceledEnvelope);
         return;
       }
+      // Publish only after durable persistence. A failed save must not activate
+      // new weights or replace the last successfully saved model in memory.
+      _model = fit.model;
       if (_model == null) {
         status =
             'Candidate not promoted (${fit.reason}). Using deterministic Energy scoring.';

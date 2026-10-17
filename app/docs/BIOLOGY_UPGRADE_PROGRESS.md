@@ -1,6 +1,8 @@
 # Biology upgrade — Phase 1
 
-Latest follow-up: [Phase 2A native acceptance](#phase-2a-native-acceptance-2026-10-10) passed both isolated simulator/emulator scenarios, covering entry/editing, exact restart persistence and the new measurement screens/export. Software steps 1–7 are complete; existing physical-device/release acceptance and research-contract review remain open. Future AI work remains deferred.
+Latest app update, October 11: **automatic Apple Health import is hardened and discoverable from Sleep Log.** A person connects once and chooses read access; new-data callbacks bypass foreground throttling and trigger a coalesced follow-up import if one is already running. Disconnect and account changes invalidate pending work. Manual logging and the ML experiment's manual source default remain available. The final focused run passed **98 tests**, with clean analysis; see [the development record](DEVELOPMENT_LOG.md#october-11-2026--automatic-apple-health-sync).
+
+Latest follow-up: **AI-1 synthetic validation and optional local revision capture are implemented.** The [prediction contract `v0.3-draft`](PREDICTION_CONTRACT.md) records fixed 10:00 prediction, 18:00–22:00 evening rating, the user's own data first, manual sleep by default with Apple Health selectable, and English. Remaining operational/construct review is pending. The offline Dart slice covers protocol/calendar rules, immutable snapshots and dataset validation. An optional iOS history setting now captures future manual sleep/check-in revisions locally; Health lineage, prediction events, real-data adapters and training remain unbuilt. Measurement software steps 1–7 and the [pre-ML bug audit](#pre-ml-bug-audit-2026-10-11) are complete; physical-device/release acceptance remains open.
 
 Implemented locally on 2026-10-03 against the repository's [biology plan](../../TONYO_BIOLOGY_UPGRADE_PLAN.md). This is a software safety and interpretation change, not clinical validation. Phases 2–5 remain deferred.
 
@@ -58,12 +60,12 @@ Focused suites cover empty/stale evidence, retired reward invariance, immature h
 
 The initial implementation run did not execute the Firestore suite: Node and pnpm were absent from that shell's PATH, and the system Java launcher found no runtime. That lookup did not establish that Node/pnpm were uninstalled. The follow-up below resolves these environment blockers and records actual emulator enforcement tests separately from Dart serialization/source-shape tests.
 
-## Deferred work and next task
+## Deferred Phase 1 work and acceptance
 
 - Phase 2 constrained conversational Coach, Phase 3 future-outcome model/validation, Phase 4 replacement attention protocol, and Phase 5 participant experiments are not implemented.
 - A new school timetable/fixed-commitment model, clinician approval, biological coefficient estimation, forecast calibration, immediate server token revocation and production guardian workflow remain outside this change.
 - Physical-device review remains necessary for Health imports, schedule edits across travel/DST, notification delivery/cancellation and voice-over behavior; automated tests do not demonstrate those.
-- **Remaining acceptance:** complete the device checks marked Not run or Blocked in [PHASE1_DEVICE_ACCEPTANCE.md](PHASE1_DEVICE_ACCEPTANCE.md), particularly physical notification delivery/cancellation, background/resume, cold restart and isolated signed-in cloud flows. The local Firestore harness has now passed. Do not start a later phase or deploy as part of this task.
+- **Remaining acceptance:** complete the device checks marked Not run or Blocked in [PHASE1_DEVICE_ACCEPTANCE.md](PHASE1_DEVICE_ACCEPTANCE.md), particularly physical notification delivery/cancellation, background/resume, cold restart and isolated signed-in cloud flows. The local Firestore harness has now passed. The separately authorized measurement and local AI-1 work is recorded below; deployment remains outside scope.
 
 ## Phase 1 verification follow-up — 2026-10-03
 
@@ -395,3 +397,53 @@ Xcode builds were **39.4s/31.1s**; scenarios completed in approximately **36s/21
 Normal owner deletion of the disposable account/data and emulator/simulator shutdown completed. The Firebase rules hash is unchanged. No normal installation, production account, real Health data, model training, approved questionnaire, dependency upgrade, deployment, commit or push was involved.
 
 The [native integration guide](PHASE1_EMULATOR_INTEGRATION.md#phase-2a-measurement-acceptance--2026-10-10) records exact scope, command and limits; the [measurement guide](PHASE2A_MEASUREMENT.md) distinguishes accepted simulator flows from remaining manual checks. Native file-picker saving, physical-device and screen-reader acceptance, OS travel/timezone behavior and the unresolved measurement/prediction contract remain open. Future AI implementation still requires the roadmap's research decisions.
+
+## Pre-ML bug audit (2026-10-11)
+
+Prompt: “Check for bugs and fixes,to be ready to start on the ML model”. Fixed concrete bugs in the existing measurement and optional model infrastructure:
+
+- Preparation rejects conflicting duplicate records and observations/revisions unavailable at the snapshot cutoff. Live learned inputs also abstain on conflicting copies. Collection-scoped provenance distinguishes equal IDs in `signals` and `checkIns`, including exclusion of the label's own source.
+- Model reloads recover correctly after cancellation. Corrupt storage and discard paths retain a conservative training cooldown. New weights activate only after persistence succeeds; a failed save preserves the prior accepted model.
+- Delayed source saves retain their original optional-consent receipt and cannot overwrite newer linked outcomes or recreate outcomes after source deletion. Reaction validation uses the exact finite value; its baseline uses the latest 14 valid records.
+- Retrospective sleep preferences retain the availability of both competing summaries and all considered stage evidence. Late evidence that changes a preference cannot backdate the resulting research-export pair; unknown dependency availability remains unknown.
+
+Regression tests reproduce the source/consent races, persistence failures, identity collisions, future evidence and late-stage preference change. Raw storage, schema, model form, rules and dependencies are unchanged. Cached preparation reports rebuild from raw snapshots, so no cache migration is required.
+
+**Final verification:** `flutter analyze --no-pub` is clean. The complete `flutter test --no-pub --reporter expanded` run passed **1,125 tests**, zero failures, with the one opt-in trends screenshot-capture test skipped. The executable Firestore rules suite separately passed **35 cases**, zero failures/skips. The unchanged isolated native harness passed **2 scenarios**, zero failures/skips, overall exit 0, on a newly created iPhone 17 / iOS 26.5 Simulator. Entry/editing, native preferences before hydration, fresh server reads, an independent process restart, references/trends, research clipboard exports and the empty questionnaire library all passed. Xcode builds took **79.9s/62.8s**; scenarios ran for **38s/21s**. Disposable account deletion and simulator/emulator shutdown completed normally. These are separate suites; focused regression counts are not added to them. Changed-Dart formatting checked **15 files with zero changes** and `git diff --check` passed.
+
+The existing installed runtimes and dependencies were reused. Local logs: `/private/tmp/tonyo-readiness-analyze.log`, `/private/tmp/tonyo-readiness-full.log`, `/private/tmp/tonyo-readiness-rules.log`, and `/private/tmp/tonyo-readiness-native.log`. No production account/data access, deployment, commit or push occurred.
+
+**Next ML step:** complete AI-0 in [roadmap v2](../TONYO_BIOLOGY_AND_AI_ROADMAP_v2.md#20-ai-0-agree-on-the-measurement-and-prediction-contract): target/wording, prediction cutoff, outcome window, late-response handling and repeat-submission selection. Then build the AI-1 prediction-event dataset and prespecify the evaluation split. The current export is retrospective; new draft responses intentionally remain excluded from the legacy residual model. Passing these software checks does not establish real-data readiness or predictive accuracy. Physical-device/research/release checks remain open.
+
+## AI-0 prediction contract draft (2026-10-11)
+
+Prompt: “start the next step,i believe it is AI 0?” Started the roadmap's AI-0 documentation step and created [PREDICTION_CONTRACT.md](PREDICTION_CONTRACT.md). Its concrete proposal uses morning-available main sleep to predict the first qualifying evening raw Energy report, with a fixed 10:00 cutoff, issuance before 10:15 and an 18:00–22:00 outcome window. At draft creation, the times and policies were proposals and the timing/population questions were pending; the subsequent choices are recorded below.
+
+The draft captures the actual Energy label, blank standalone prompt, anchors, recall period, language/version and optional-answer behavior. It defines missingness before value-based selection, late/local-save versus late-upload handling, revision/withdrawal rules, same-date sleep eligibility, frozen timezone/cutoff evidence, per-device availability, and separate opportunity/issuance/response counts. Worked synthetic examples make the proposed boundaries reviewable.
+
+Independent read-only reviews checked current implementation facts and internal consistency. They identified additional AI-1 needs: initial durable-save/revision evidence, full prompt context, stable prediction-event identity, a prespecified opportunity calendar, dataset as-of versions and sleep ingestion/reconciliation lineage. Existing mutable records and retrospective exports cannot supply these guarantees by relabeling old rows. The approved questionnaire catalog remains empty; reviewer decisions and any applicable research/data-use authorization are unrecorded.
+
+Only documentation changed in this step. Prior uncommitted bug fixes are preserved. App tests were not rerun for this documentation-only change; the prior audit's **1,125 Flutter passes, one opt-in screenshot skip, 35 rules passes and two native passes** remain that earlier verification, not new AI-0 results. AI-0 is **draft prepared, acceptance pending**; AI-1 implementation, new training, participant collection and deployment have not started.
+
+**User decisions, October 11:** The user selected “Fixed times: predict at 10 am; evening rating 6–10 pm (Recommended)” and “My own data first (Recommended)”. Contract `v0.2-draft` records these as `AI0-D001` and `AI0-D002`. The 15-minute issuance tolerance, exact endpoint/timezone rules, measurement/language and source/matching policies remain proposals. These two preferences do not authorize collection/training or establish reviewer approval. The next contract review concerns those remaining choices, not re-confirmation of the selected times or population.
+
+## AI-1 local synthetic foundation (2026-10-11)
+
+The user selected English and both sleep-source options, then explicitly changed the default to **manual**, with Apple Health selectable, and requested continuation to the next step. Contract `v0.3-draft` records source choice as `AI0-D003` and language as `AI0-D004`. The proposed source policy fixes one source per versioned experiment before cutoff, without automatic fallback or merging; competing main episodes within that source remain ambiguous. A source change requires a new protocol ID/versioned experiment.
+
+AI-1 has started with offline, synthetic-only Dart [protocol/calendar rules](../lib/src/ai1_protocol.dart), [immutable records](../lib/src/ai1_records.dart) and [dataset validation](../lib/src/ai1_dataset_builder.dart), plus [synthetic acceptance fixtures](../test/ai1_dataset_builder_test.dart). The slice addresses cutoff availability, immutable snapshots, source isolation and explicit outcome missingness. App wiring, durable storage, real-data adapters and training are outside this slice; the prospective real-data dataset remains unbuilt.
+
+Remaining AI-0 operational rules and construct meaning are still draft decisions. That review does not block the authorized reversible synthetic software work. Existing uncommitted work is preserved.
+
+**Validation:** 38 focused AI-1 tests passed; full `dart analyze lib test tool` reported no issues. Both manual/default and Apple Health variants of the [runnable synthetic audit](../tool/ai1_synthetic_audit.dart) passed JSON/coverage checks: four opportunities, two simulated issuances, two valid outcomes, one fixture pair and zero training-eligible rows. Independent review found and fixed a deletion edge case that could otherwise promote another sleep record after a tombstone changed the original record's date or kind. Tests cover late imports/edits, deletion/withdrawal, first-response missingness, full wording snapshots, retries/conflicts, durability, source isolation and DST/invalid calendar boundaries. These are new checks for the first AI-1 slice; the earlier full app/rules/native results remain separate. No app wiring or training was activated.
+
+
+## AI-1 optional local revision history (2026-10-11)
+
+The user authorized the next implementation step. Added **Privacy center → Keep local study history**, off by default, for future manual sleep and versioned self-report saves. It records immutable revisions with the complete questionnaire snapshot, actual shared heading and native completion receipts. Notes are excluded. An initial edit of an uncaptured record remains incomplete provenance; existing rows, Health imports, cloud hydration and ordinary backups never become original prospective submissions.
+
+The iOS journal uses a protected, backup-excluded application-support directory, owner-specific files, bounded JSON, serialized atomic replacement and flushes. A payload write precedes its native timestamp, rounded conservatively upward to millisecond resolution; a second write saves the receipt. Interrupted writes and clock rollback pause capture. Source deletion purges every payload revision and retains only its opaque identity. History disablement and tracking clear erase the active journal; account/device deletion clears device journals. Sign-out and owner changes invalidate pending work. Non-iOS surfaces report unavailable without blocking ordinary saves or deletion. Current cloud sync, backups and exports exclude the journal.
+
+This is local app infrastructure, not a running prediction experiment. Every journal is marked `trainingEligible: false`; the check-in disclosure remains unchanged. Health ingestion lineage, prediction opportunities/events, real-data adapters, reviewed export and training remain open. No real participant data was read or exported during implementation, and no history setting was enabled on the user's device.
+
+**Validation:** The final full Flutter run passed **1,249 tests**, zero failures, with one optional screenshot test skipped; all 67 new capture tests are included. Full Dart analysis is clean, the final iOS Simulator build passed, and temporary synthetic Swift checks passed storage, deletion retry and timestamp-boundary cases. Formatting, local documentation links and diff whitespace checks passed. See the [development record](DEVELOPMENT_LOG.md#october-11-2026--ai-1-optional-local-revision-capture) for logs, initial-run fixes and physical-device limitations. The earlier rules/cloud-native runs were not repeated or counted as new results.
