@@ -1,8 +1,8 @@
 import 'ai1_protocol.dart';
 import 'ai1_records.dart';
 
-/// First AI-1 slice: deterministic checks on invented, local fixtures only.
-/// There is deliberately no adapter from app records or training entry point.
+/// Shared temporal checks. Captured records use a separate entry point; neither
+/// path authorizes training or claims that a numeric prediction was made.
 abstract final class Ai1DatasetBuilder {
   static Ai1DatasetReport buildSynthetic({
     required Ai1Protocol protocol,
@@ -10,14 +10,32 @@ abstract final class Ai1DatasetBuilder {
     required DateTime asOf,
     required String datasetVersion,
   }) {
+    return _build(protocol: protocol, days: days, asOf: asOf,
+        datasetVersion: datasetVersion, synthetic: true);
+  }
+
+  static Ai1DatasetReport buildCaptured({
+    required Ai1Protocol protocol,
+    required Iterable<Ai1FixtureDay> days,
+    required DateTime asOf,
+    required String datasetVersion,
+  }) => _build(protocol: protocol, days: days, asOf: asOf,
+      datasetVersion: datasetVersion, synthetic: false);
+
+  static ({String status, Ai1SleepRevision? record}) selectSleep(
+      Ai1Protocol protocol, Ai1FixtureDay day) => _selectSleep(protocol, day);
+
+  static Ai1DatasetReport _build({required Ai1Protocol protocol,
+      required Iterable<Ai1FixtureDay> days, required DateTime asOf,
+      required String datasetVersion, required bool synthetic}) {
     final freeze = asOf.toUtc();
     if (datasetVersion.trim().isEmpty) {
       throw ArgumentError.value(datasetVersion, 'datasetVersion');
     }
     final uniqueDays = <String, Ai1FixtureDay>{};
     for (final day in days) {
-      if (!day.synthetic) {
-        throw ArgumentError('AI-1 currently accepts synthetic fixtures only.');
+      if (day.synthetic != synthetic) {
+        throw ArgumentError('Synthetic and captured records cannot be mixed.');
       }
       if (day.opportunity.protocolId != protocol.id) {
         throw ArgumentError('Each opportunity must use the supplied protocol.');
@@ -38,6 +56,7 @@ abstract final class Ai1DatasetBuilder {
       ..sort((a, b) => a.opportunity.id.compareTo(b.opportunity.id));
     return Ai1DatasetReport._(
       protocol: protocol,
+      synthetic: synthetic,
       datasetVersion: datasetVersion,
       asOf: freeze,
       rows: [for (final day in ordered) _buildDay(protocol, day, freeze)],
@@ -396,12 +415,14 @@ class Ai1DatasetRow {
 class Ai1DatasetReport {
   Ai1DatasetReport._({
     required this.protocol,
+    required this.synthetic,
     required this.datasetVersion,
     required this.asOf,
     required List<Ai1DatasetRow> rows,
   }) : rows = List.unmodifiable(rows);
 
   final Ai1Protocol protocol;
+  final bool synthetic;
   final String datasetVersion;
   final DateTime asOf;
   final List<Ai1DatasetRow> rows;
@@ -410,10 +431,10 @@ class Ai1DatasetReport {
   int get trainingEligibleCount => 0;
 
   Map<String, Object?> toJson() => {
-    'schemaVersion': 'ai1-synthetic-audit-v1',
+    'schemaVersion': synthetic ? 'ai1-synthetic-audit-v1' : 'ai1-captured-audit-v1',
     'datasetVersion': datasetVersion,
     'asOf': asOf.toIso8601String(),
-    'synthetic': true,
+    'synthetic': synthetic,
     'protocolId': protocol.id,
     'measurement': protocol.measurement,
     'coverage': {

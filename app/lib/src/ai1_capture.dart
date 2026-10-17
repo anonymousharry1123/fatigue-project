@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'ai1_capture_store.dart';
 import 'ai1_protocol.dart';
+import 'ai1_study_schema.dart';
 import 'models.dart';
 
 /// Whitelisted observation content. Notes, account IDs and model scores never
@@ -65,6 +66,13 @@ class Ai1CaptureObservation {
       },
     );
   }
+
+  factory Ai1CaptureObservation.study({
+    required String sourceId,
+    required Map<String, Object?> data,
+  }) => Ai1CaptureObservation._(
+    collection: 'study', sourceId: sourceId, data: data, originalLocal: true,
+  );
 
   final String collection;
   final String sourceId;
@@ -187,6 +195,9 @@ class Ai1CaptureJournal {
   bool get busy => _operations > 0;
   String? get error => _error;
   String? get owner => _owner;
+  String? get captureId => _captureId;
+  DateTime? get startedAt => _startedAt;
+  Set<String> get tombstones => Set.unmodifiable(_tombstones);
   int get revisionCount =>
       _entries.where((entry) => entry.acknowledgedAt != null).length;
   List<Ai1CaptureEntry> get entries => List.unmodifiable(_entries);
@@ -411,7 +422,8 @@ class Ai1CaptureJournal {
         latest[entry.key] = entry;
       }
       return latest.entries
-          .where((entry) => fingerprints[entry.key] != entry.value.fingerprint)
+          .where((entry) => entry.value.collection != 'study' &&
+              fingerprints[entry.key] != entry.value.fingerprint)
           .map((entry) => entry.key)
           .toSet();
     }, clearUnreadable: false);
@@ -442,6 +454,10 @@ class Ai1CaptureJournal {
       final presentKeys = _entries.map((entry) => entry.key).toSet();
       final relevant = keys.intersection(presentKeys);
       if (relevant.isEmpty) return;
+      // Derived snapshots must not survive source erasure. Conservatively
+      // invalidate all event payloads; the plan still accounts for missed days.
+      relevant.addAll(_entries.where((entry) => entry.collection == 'study' &&
+          entry.data['kind'] == 'event').map((entry) => entry.key));
       final kept = _entries
           .where((entry) => !relevant.contains(entry.key))
           .toList();
@@ -626,7 +642,7 @@ void _validateOwner(String owner) {
 }
 
 void _validateSource(String collection, String sourceId) {
-  if (!const {'sleepLogs', 'checkIns'}.contains(collection) ||
+  if (!const {'sleepLogs', 'checkIns', 'study'}.contains(collection) ||
       sourceId.isEmpty ||
       sourceId.length > 200 ||
       sourceId.contains('/')) {
@@ -635,6 +651,10 @@ void _validateSource(String collection, String sourceId) {
 }
 
 void _validateData(String collection, Map<String, Object?> data) {
+  if (collection == 'study') {
+    validateAi1StudyData(data);
+    return;
+  }
   if (collection == 'sleepLogs') {
     _keys(data, const {
       'startedAt',

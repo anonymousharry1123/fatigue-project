@@ -40,6 +40,36 @@ class SleepSyncLogic {
     SignalType.sleepRem,
   };
 
+  /// Study-only candidates, before manual preference or longest-night selection.
+  /// Every >=30-minute reconciled episode remains a competing candidate; Health
+  /// has no authoritative main-sleep/nap flag. Invalid evidence fails closed.
+  static List<({DateTime start, DateTime end, double hours})> studyEpisodes(
+    Iterable<SignalReading> readings,
+  ) {
+    final intervals = <_SleepInterval>[];
+    for (final row in readings) {
+      if (row.source != SignalSource.healthKit) {
+        throw const FormatException('Study Health evidence has the wrong source.');
+      }
+      final interval = _SleepInterval.tryParse(row);
+      if (interval == null) throw const FormatException('Invalid study sleep interval.');
+      intervals.add(interval);
+    }
+    final result = <({DateTime start, DateTime end, double hours})>[];
+    for (final cluster in _cluster(intervals)) {
+      final episode = _reconcile(cluster);
+      if (episode == null) continue;
+      if (episode.end.difference(episode.bedtime) > _maximumSessionSpan) {
+        throw const FormatException('Study sleep episode exceeds supported span.');
+      }
+      if (episode.totalSleep >= _minimumSleep) {
+        result.add((start: episode.bedtime.toUtc(), end: episode.end.toUtc(),
+            hours: _hours(episode.totalSleep)));
+      }
+    }
+    return result;
+  }
+
   static SleepSyncMergeResult merge({
     required Iterable<SignalReading> existing,
     required Iterable<SignalReading> imported,
