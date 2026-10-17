@@ -1,0 +1,3180 @@
+{
+  "schemaVersion": "tonyo-pre-data-rehearsal-v1",
+  "evidenceKind": "synthetic_software_fixture",
+  "realDataUsed": false,
+  "realDataTrainingAllowed": false,
+  "appModelActivationAllowed": false,
+  "frozenEvaluation": {
+    "artifacts": {
+      "invented-person-a": {
+        "B0": {
+          "appModelActivationAllowed": false,
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+          "candidateId": "B0",
+          "coefficients": {
+            "constantPrediction": 5.2
+          },
+          "dataCutoff": "2026-10-06T10:00:00.000Z",
+          "dataGeneration": 0,
+          "evidenceKind": "synthetic_software_fixture",
+          "featureSchema": [],
+          "fittedAt": "2026-10-06T10:00:00.000Z",
+          "historyPolicy": "frozen_personal_fit_no_inference_updates",
+          "measurement": {
+            "items": [
+              {
+                "anchors": {
+                  "1": "extremely low energy",
+                  "10": "extremely high energy",
+                  "5": "about average"
+                },
+                "id": "energy",
+                "label": "Energy",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "not fatigued at all",
+                  "10": "extremely fatigued",
+                  "5": "moderately fatigued"
+                },
+                "id": "fatigue",
+                "label": "Fatigue",
+                "optional": true,
+                "prompt": "How fatigued or drained do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "fully alert",
+                  "10": "extremely sleepy",
+                  "5": "moderately sleepy"
+                },
+                "id": "sleepiness",
+                "label": "Sleepiness",
+                "optional": true,
+                "prompt": "How sleepy do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "extremely difficult to focus",
+                  "10": "extremely easy to focus",
+                  "5": "average"
+                },
+                "id": "focus",
+                "label": "Focus",
+                "optional": true,
+                "prompt": "How easy is it for you to focus right now?"
+              },
+              {
+                "anchors": {
+                  "1": "Low",
+                  "10": "Great",
+                  "5": "Steady"
+                },
+                "id": "mood",
+                "label": "Mood",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "Calm",
+                  "10": "Maxed",
+                  "5": "Moderate"
+                },
+                "id": "stress",
+                "label": "Stress",
+                "optional": true,
+                "prompt": ""
+              }
+            ],
+            "kind": "customSelfReport",
+            "language": "en",
+            "recallPeriod": "right now",
+            "recallPeriodText": "right now",
+            "sharedHeading": "How do you feel right now?",
+            "status": "draftNotClinicallyValidated",
+            "version": "tonyo-self-report-draft-v1"
+          },
+          "outputRule": {
+            "maximum": 10,
+            "minimum": 1,
+            "rounding": "none"
+          },
+          "ownerScope": "synthetic-ai4-frozen-evaluation",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+          "realDataTrainingAllowed": false,
+          "schemaVersion": "tonyo-synthetic-personal-model-v1",
+          "sleepSource": "appleHealth",
+          "synthetic": true,
+          "targetSchema": {
+            "maximum": 10,
+            "minimum": 1,
+            "name": "evening_energy",
+            "unit": "rating_1_10"
+          },
+          "timezone": "Etc/UTC",
+          "trainingCount": 5,
+          "trainingOpportunityIds": [
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+          ]
+        },
+        "B1": {
+          "appModelActivationAllowed": false,
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+          "candidateId": "B1",
+          "coefficients": {
+            "constantPrediction": 5.0
+          },
+          "dataCutoff": "2026-10-06T10:00:00.000Z",
+          "dataGeneration": 0,
+          "evidenceKind": "synthetic_software_fixture",
+          "featureSchema": [],
+          "fittedAt": "2026-10-06T10:00:00.000Z",
+          "historyPolicy": "frozen_personal_fit_no_inference_updates",
+          "measurement": {
+            "items": [
+              {
+                "anchors": {
+                  "1": "extremely low energy",
+                  "10": "extremely high energy",
+                  "5": "about average"
+                },
+                "id": "energy",
+                "label": "Energy",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "not fatigued at all",
+                  "10": "extremely fatigued",
+                  "5": "moderately fatigued"
+                },
+                "id": "fatigue",
+                "label": "Fatigue",
+                "optional": true,
+                "prompt": "How fatigued or drained do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "fully alert",
+                  "10": "extremely sleepy",
+                  "5": "moderately sleepy"
+                },
+                "id": "sleepiness",
+                "label": "Sleepiness",
+                "optional": true,
+                "prompt": "How sleepy do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "extremely difficult to focus",
+                  "10": "extremely easy to focus",
+                  "5": "average"
+                },
+                "id": "focus",
+                "label": "Focus",
+                "optional": true,
+                "prompt": "How easy is it for you to focus right now?"
+              },
+              {
+                "anchors": {
+                  "1": "Low",
+                  "10": "Great",
+                  "5": "Steady"
+                },
+                "id": "mood",
+                "label": "Mood",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "Calm",
+                  "10": "Maxed",
+                  "5": "Moderate"
+                },
+                "id": "stress",
+                "label": "Stress",
+                "optional": true,
+                "prompt": ""
+              }
+            ],
+            "kind": "customSelfReport",
+            "language": "en",
+            "recallPeriod": "right now",
+            "recallPeriodText": "right now",
+            "sharedHeading": "How do you feel right now?",
+            "status": "draftNotClinicallyValidated",
+            "version": "tonyo-self-report-draft-v1"
+          },
+          "outputRule": {
+            "maximum": 10,
+            "minimum": 1,
+            "rounding": "none"
+          },
+          "ownerScope": "synthetic-ai4-frozen-evaluation",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+          "realDataTrainingAllowed": false,
+          "schemaVersion": "tonyo-synthetic-personal-model-v1",
+          "sleepSource": "appleHealth",
+          "synthetic": true,
+          "targetSchema": {
+            "maximum": 10,
+            "minimum": 1,
+            "name": "evening_energy",
+            "unit": "rating_1_10"
+          },
+          "timezone": "Etc/UTC",
+          "trainingCount": 1,
+          "trainingOpportunityIds": [
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+          ]
+        },
+        "M1": {
+          "appModelActivationAllowed": false,
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+          "candidateId": "M1",
+          "coefficients": {
+            "intercept": -6.186046511627906,
+            "slope": 1.6744186046511627
+          },
+          "dataCutoff": "2026-10-06T10:00:00.000Z",
+          "dataGeneration": 0,
+          "evidenceKind": "synthetic_software_fixture",
+          "featureSchema": [
+            {
+              "name": "main_sleep_duration_hours",
+              "unit": "hours"
+            }
+          ],
+          "fittedAt": "2026-10-06T10:00:00.000Z",
+          "historyPolicy": "frozen_personal_fit_no_inference_updates",
+          "measurement": {
+            "items": [
+              {
+                "anchors": {
+                  "1": "extremely low energy",
+                  "10": "extremely high energy",
+                  "5": "about average"
+                },
+                "id": "energy",
+                "label": "Energy",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "not fatigued at all",
+                  "10": "extremely fatigued",
+                  "5": "moderately fatigued"
+                },
+                "id": "fatigue",
+                "label": "Fatigue",
+                "optional": true,
+                "prompt": "How fatigued or drained do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "fully alert",
+                  "10": "extremely sleepy",
+                  "5": "moderately sleepy"
+                },
+                "id": "sleepiness",
+                "label": "Sleepiness",
+                "optional": true,
+                "prompt": "How sleepy do you feel right now?"
+              },
+              {
+                "anchors": {
+                  "1": "extremely difficult to focus",
+                  "10": "extremely easy to focus",
+                  "5": "average"
+                },
+                "id": "focus",
+                "label": "Focus",
+                "optional": true,
+                "prompt": "How easy is it for you to focus right now?"
+              },
+              {
+                "anchors": {
+                  "1": "Low",
+                  "10": "Great",
+                  "5": "Steady"
+                },
+                "id": "mood",
+                "label": "Mood",
+                "optional": true,
+                "prompt": ""
+              },
+              {
+                "anchors": {
+                  "1": "Calm",
+                  "10": "Maxed",
+                  "5": "Moderate"
+                },
+                "id": "stress",
+                "label": "Stress",
+                "optional": true,
+                "prompt": ""
+              }
+            ],
+            "kind": "customSelfReport",
+            "language": "en",
+            "recallPeriod": "right now",
+            "recallPeriodText": "right now",
+            "sharedHeading": "How do you feel right now?",
+            "status": "draftNotClinicallyValidated",
+            "version": "tonyo-self-report-draft-v1"
+          },
+          "outputRule": {
+            "maximum": 10,
+            "minimum": 1,
+            "rounding": "none"
+          },
+          "ownerScope": "synthetic-ai4-frozen-evaluation",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+          "realDataTrainingAllowed": false,
+          "schemaVersion": "tonyo-synthetic-personal-model-v1",
+          "sleepSource": "appleHealth",
+          "synthetic": true,
+          "targetSchema": {
+            "maximum": 10,
+            "minimum": 1,
+            "name": "evening_energy",
+            "unit": "rating_1_10"
+          },
+          "timezone": "Etc/UTC",
+          "trainingCount": 5,
+          "trainingOpportunityIds": [
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+            "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+          ]
+        }
+      }
+    },
+    "decision": "blocked_no_empirical_evidence",
+    "development": {
+      "asOf": "2026-10-09T10:00:00.000Z",
+      "coverage": {
+        "activeOpportunities": 6,
+        "executionStatuses": {
+          "executed": 6
+        },
+        "outcomeStatuses": {
+          "matched": 5,
+          "missing_energy": 1
+        },
+        "participants": 2,
+        "suppliedOpportunities": 6,
+        "withdrawnOpportunities": 0
+      },
+      "evidenceKind": "synthetic_software_fixture",
+      "inputEvidence": {
+        "asOf": "2026-10-09T10:00:00.000Z",
+        "coverage": {
+          "fixturePairs": 4,
+          "issuanceStatuses": {
+            "issued": 5,
+            "no_eligible_sleep": 1
+          },
+          "issued": 5,
+          "opportunities": 6,
+          "outcomeComplete": 5,
+          "outcomeStatuses": {
+            "matched": 5,
+            "missing_energy": 1
+          },
+          "sleepEligible": 5,
+          "sleepStatuses": {
+            "eligible": 5,
+            "no_eligible_sleep": 1
+          },
+          "trainingEligible": 0
+        },
+        "datasetVersion": "invented-twelve-day-history-v1",
+        "measurement": "{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"}",
+        "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+        "rows": [
+          {
+            "cutoff": "2026-10-06T10:00:00.000Z",
+            "dayStart": "2026-10-06T00:00:00.000Z",
+            "durableAt": "2026-10-06T10:03:01.000Z",
+            "energy": 7,
+            "feature": {
+              "availableAt": "2026-10-06T08:00:00.000Z",
+              "endedAt": "2026-10-06T07:00:00.000Z",
+              "main_sleep_duration_hours": 6.5,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-06T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-6\"]",
+              "startedAt": "2026-10-06T00:30:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-06T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-06T10:03:00.000Z",
+            "localDate": "2026-10-06",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-06\"]",
+            "outcomeAvailableAt": "2026-10-06T19:00:01.000Z",
+            "outcomeEnd": "2026-10-06T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-06T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-06T19:00:00.000Z",
+            "outcomeStart": "2026-10-06T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-6-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-07T10:00:00.000Z",
+            "dayStart": "2026-10-07T00:00:00.000Z",
+            "durableAt": null,
+            "energy": 6,
+            "feature": null,
+            "fixturePair": false,
+            "issuanceDeadline": "2026-10-07T10:15:00.000Z",
+            "issuanceStatus": "no_eligible_sleep",
+            "issuedAt": null,
+            "localDate": "2026-10-07",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-07\"]",
+            "outcomeAvailableAt": "2026-10-07T19:00:01.000Z",
+            "outcomeEnd": "2026-10-07T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-07T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-07T19:00:00.000Z",
+            "outcomeStart": "2026-10-07T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-7-first",
+            "sleepStatus": "no_eligible_sleep",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-08T10:00:00.000Z",
+            "dayStart": "2026-10-08T00:00:00.000Z",
+            "durableAt": "2026-10-08T10:03:01.000Z",
+            "energy": null,
+            "feature": {
+              "availableAt": "2026-10-08T08:00:00.000Z",
+              "endedAt": "2026-10-08T07:00:00.000Z",
+              "main_sleep_duration_hours": 5.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-08T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-8\"]",
+              "startedAt": "2026-10-08T02:00:00.000Z"
+            },
+            "fixturePair": false,
+            "issuanceDeadline": "2026-10-08T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-08T10:03:00.000Z",
+            "localDate": "2026-10-08",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-08\"]",
+            "outcomeAvailableAt": null,
+            "outcomeEnd": "2026-10-08T22:00:00.000Z",
+            "outcomeInitialSavedAt": null,
+            "outcomeObservedAt": null,
+            "outcomeStart": "2026-10-08T18:00:00.000Z",
+            "outcomeStatus": "missing_energy",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-8-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-06T10:00:00.000Z",
+            "dayStart": "2026-10-06T00:00:00.000Z",
+            "durableAt": "2026-10-06T10:03:01.000Z",
+            "energy": 8,
+            "feature": {
+              "availableAt": "2026-10-06T08:00:00.000Z",
+              "endedAt": "2026-10-06T07:00:00.000Z",
+              "main_sleep_duration_hours": 6.5,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-06T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-6\"]",
+              "startedAt": "2026-10-06T00:30:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-06T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-06T10:03:00.000Z",
+            "localDate": "2026-10-06",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-06\"]",
+            "outcomeAvailableAt": "2026-10-06T19:00:01.000Z",
+            "outcomeEnd": "2026-10-06T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-06T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-06T19:00:00.000Z",
+            "outcomeStart": "2026-10-06T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-6-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-07T10:00:00.000Z",
+            "dayStart": "2026-10-07T00:00:00.000Z",
+            "durableAt": "2026-10-07T10:03:01.000Z",
+            "energy": 5,
+            "feature": {
+              "availableAt": "2026-10-07T08:00:00.000Z",
+              "endedAt": "2026-10-07T07:00:00.000Z",
+              "main_sleep_duration_hours": 7.5,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-07T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-7\"]",
+              "startedAt": "2026-10-06T23:30:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-07T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-07T10:03:00.000Z",
+            "localDate": "2026-10-07",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-07\"]",
+            "outcomeAvailableAt": "2026-10-07T19:00:01.000Z",
+            "outcomeEnd": "2026-10-07T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-07T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-07T19:00:00.000Z",
+            "outcomeStart": "2026-10-07T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-7-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-08T10:00:00.000Z",
+            "dayStart": "2026-10-08T00:00:00.000Z",
+            "durableAt": "2026-10-08T10:03:01.000Z",
+            "energy": 7,
+            "feature": {
+              "availableAt": "2026-10-08T08:00:00.000Z",
+              "endedAt": "2026-10-08T07:00:00.000Z",
+              "main_sleep_duration_hours": 5.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-08T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-8\"]",
+              "startedAt": "2026-10-08T02:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-08T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-08T10:03:00.000Z",
+            "localDate": "2026-10-08",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-08\"]",
+            "outcomeAvailableAt": "2026-10-08T19:00:01.000Z",
+            "outcomeEnd": "2026-10-08T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-08T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-08T19:00:00.000Z",
+            "outcomeStart": "2026-10-08T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-8-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          }
+        ],
+        "schemaVersion": "ai1-synthetic-audit-v1",
+        "synthetic": true
+      },
+      "interpretation": [
+        "Both personal baselines and the regression are frozen at the fit cutoff.",
+        "No development or final labels update any model or baseline.",
+        "Missing predictions and missing targets have separate coverage counts.",
+        "The denominator contains supplied opportunities; no omitted days are invented.",
+        "Common-set point errors describe fixtures only; no statistical or clinical conclusion follows."
+      ],
+      "methods": {
+        "B0": {
+          "coverage": 0.5,
+          "macroParticipantMae": 1.2999999999999998,
+          "mae": 1.2999999999999998,
+          "meanSignedError": -1.2999999999999998,
+          "opportunities": 6,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 1.0,
+              "mae": 1.2999999999999998,
+              "meanSignedError": -1.2999999999999998,
+              "opportunities": 3,
+              "participantKey": "invented-person-a",
+              "predicted": 3,
+              "scored": 2,
+              "scoredCoverage": 0.6666666666666666,
+              "statuses": {
+                "predicted": 3
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 3,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 3
+              }
+            }
+          ],
+          "predicted": 3,
+          "scored": 2,
+          "scoredCoverage": 0.3333333333333333,
+          "statuses": {
+            "no_frozen_model": 3,
+            "predicted": 3
+          }
+        },
+        "B1": {
+          "coverage": 0.5,
+          "macroParticipantMae": 1.5,
+          "mae": 1.5,
+          "meanSignedError": -1.5,
+          "opportunities": 6,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 1.0,
+              "mae": 1.5,
+              "meanSignedError": -1.5,
+              "opportunities": 3,
+              "participantKey": "invented-person-a",
+              "predicted": 3,
+              "scored": 2,
+              "scoredCoverage": 0.6666666666666666,
+              "statuses": {
+                "predicted": 3
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 3,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 3
+              }
+            }
+          ],
+          "predicted": 3,
+          "scored": 2,
+          "scoredCoverage": 0.3333333333333333,
+          "statuses": {
+            "no_frozen_model": 3,
+            "predicted": 3
+          }
+        },
+        "M1": {
+          "coverage": 0.3333333333333333,
+          "macroParticipantMae": 2.3023255813953485,
+          "mae": 2.3023255813953485,
+          "meanSignedError": -2.3023255813953485,
+          "opportunities": 6,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 0.6666666666666666,
+              "mae": 2.3023255813953485,
+              "meanSignedError": -2.3023255813953485,
+              "opportunities": 3,
+              "participantKey": "invented-person-a",
+              "predicted": 2,
+              "scored": 1,
+              "scoredCoverage": 0.3333333333333333,
+              "statuses": {
+                "missing_sleep": 1,
+                "predicted": 2
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 3,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 3
+              }
+            }
+          ],
+          "predicted": 2,
+          "scored": 1,
+          "scoredCoverage": 0.16666666666666666,
+          "statuses": {
+            "missing_sleep": 1,
+            "no_frozen_model": 3,
+            "predicted": 2
+          }
+        }
+      },
+      "opportunityIds": [
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-06\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-06\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-07\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-07\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-08\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-08\"]"
+      ],
+      "partition": "development",
+      "rows": [
+        {
+          "cutoff": "2026-10-06T10:00:00.000Z",
+          "durableAt": "2026-10-06T10:03:01.000Z",
+          "energy": 7,
+          "executedAt": "2026-10-06T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-06",
+          "methods": {
+            "B0": {
+              "absoluteError": 1.7999999999999998,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": true,
+              "signedError": -1.7999999999999998,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": 2.0,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": true,
+              "signedError": -2.0,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": 2.3023255813953485,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 4.6976744186046515,
+              "rawPrediction": 4.6976744186046515,
+              "scored": true,
+              "signedError": -2.3023255813953485,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-06\"]",
+          "outcomeAvailableAt": "2026-10-06T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-06T10:00:00.000Z",
+          "durableAt": "2026-10-06T10:03:01.000Z",
+          "energy": 8,
+          "executedAt": "2026-10-06T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-06",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-06\"]",
+          "outcomeAvailableAt": "2026-10-06T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        },
+        {
+          "cutoff": "2026-10-07T10:00:00.000Z",
+          "durableAt": "2026-10-07T10:03:01.000Z",
+          "energy": 6,
+          "executedAt": "2026-10-07T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-07",
+          "methods": {
+            "B0": {
+              "absoluteError": 0.7999999999999998,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": true,
+              "signedError": -0.7999999999999998,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": 1.0,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": true,
+              "signedError": -1.0,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "missing_sleep",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-07\"]",
+          "outcomeAvailableAt": "2026-10-07T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-07T10:00:00.000Z",
+          "durableAt": "2026-10-07T10:03:01.000Z",
+          "energy": 5,
+          "executedAt": "2026-10-07T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-07",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-07\"]",
+          "outcomeAvailableAt": "2026-10-07T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        },
+        {
+          "cutoff": "2026-10-08T10:00:00.000Z",
+          "durableAt": "2026-10-08T10:03:01.000Z",
+          "energy": null,
+          "executedAt": "2026-10-08T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-08",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": false,
+              "signedError": null,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": false,
+              "signedError": null,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 2.1860465116279064,
+              "rawPrediction": 2.1860465116279064,
+              "scored": false,
+              "signedError": null,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-08\"]",
+          "outcomeAvailableAt": null,
+          "outcomeStatus": "missing_energy",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-08T10:00:00.000Z",
+          "durableAt": "2026-10-08T10:03:01.000Z",
+          "energy": 7,
+          "executedAt": "2026-10-08T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-08",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-08\"]",
+          "outcomeAvailableAt": "2026-10-08T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        }
+      ],
+      "selectedComparison": {
+        "candidate": {
+          "coverage": 1.0,
+          "mae": 2.3023255813953485,
+          "meanSignedError": -2.3023255813953485,
+          "opportunities": 1,
+          "predicted": 1,
+          "scored": 1,
+          "scoredCoverage": 1.0,
+          "statuses": {
+            "predicted": 1
+          }
+        },
+        "candidateId": "M1",
+        "commonScored": 1,
+        "comparator": {
+          "coverage": 1.0,
+          "mae": 1.7999999999999998,
+          "meanSignedError": -1.7999999999999998,
+          "opportunities": 1,
+          "predicted": 1,
+          "scored": 1,
+          "scoredCoverage": 1.0,
+          "statuses": {
+            "predicted": 1
+          }
+        },
+        "comparatorId": "B0",
+        "differenceDirection": "candidate_minus_comparator_negative_favors_candidate",
+        "maeDifference": 0.5023255813953487,
+        "pairedErrorSeries": [
+          {
+            "candidateAbsoluteError": 2.3023255813953485,
+            "comparatorAbsoluteError": 1.7999999999999998,
+            "cutoff": "2026-10-06T10:00:00.000Z",
+            "localDate": "2026-10-06",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-06\"]",
+            "participantKey": "invented-person-a"
+          }
+        ]
+      }
+    },
+    "evidenceKind": "synthetic_software_fixture",
+    "final": {
+      "asOf": "2026-10-13T23:00:00.000Z",
+      "coverage": {
+        "activeOpportunities": 8,
+        "executionStatuses": {
+          "executed": 7,
+          "not_executed": 1
+        },
+        "outcomeStatuses": {
+          "matched": 8
+        },
+        "participants": 2,
+        "suppliedOpportunities": 8,
+        "withdrawnOpportunities": 0
+      },
+      "evidenceKind": "synthetic_software_fixture",
+      "inputEvidence": {
+        "asOf": "2026-10-13T23:00:00.000Z",
+        "coverage": {
+          "fixturePairs": 7,
+          "issuanceStatuses": {
+            "issued": 7,
+            "not_issued": 1
+          },
+          "issued": 7,
+          "opportunities": 8,
+          "outcomeComplete": 8,
+          "outcomeStatuses": {
+            "matched": 8
+          },
+          "sleepEligible": 8,
+          "sleepStatuses": {
+            "eligible": 8
+          },
+          "trainingEligible": 0
+        },
+        "datasetVersion": "invented-twelve-day-history-v1",
+        "measurement": "{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"}",
+        "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+        "rows": [
+          {
+            "cutoff": "2026-10-09T10:00:00.000Z",
+            "dayStart": "2026-10-09T00:00:00.000Z",
+            "durableAt": null,
+            "energy": 5,
+            "feature": null,
+            "fixturePair": false,
+            "issuanceDeadline": "2026-10-09T10:15:00.000Z",
+            "issuanceStatus": "not_issued",
+            "issuedAt": null,
+            "localDate": "2026-10-09",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-09\"]",
+            "outcomeAvailableAt": "2026-10-09T19:00:01.000Z",
+            "outcomeEnd": "2026-10-09T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-09T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-09T19:00:00.000Z",
+            "outcomeStart": "2026-10-09T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-9-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-10T10:00:00.000Z",
+            "dayStart": "2026-10-10T00:00:00.000Z",
+            "durableAt": "2026-10-10T10:03:01.000Z",
+            "energy": 2,
+            "feature": {
+              "availableAt": "2026-10-10T08:00:00.000Z",
+              "endedAt": "2026-10-10T07:00:00.000Z",
+              "main_sleep_duration_hours": 6.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-10T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-10\"]",
+              "startedAt": "2026-10-10T01:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-10T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-10T10:03:00.000Z",
+            "localDate": "2026-10-10",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+            "outcomeAvailableAt": "2026-10-10T19:00:01.000Z",
+            "outcomeEnd": "2026-10-10T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-10T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-10T19:00:00.000Z",
+            "outcomeStart": "2026-10-10T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-10-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-11T10:00:00.000Z",
+            "dayStart": "2026-10-11T00:00:00.000Z",
+            "durableAt": "2026-10-11T10:03:01.000Z",
+            "energy": 9,
+            "feature": {
+              "availableAt": "2026-10-11T08:00:00.000Z",
+              "endedAt": "2026-10-11T07:00:00.000Z",
+              "main_sleep_duration_hours": 8.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-11T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-11\"]",
+              "startedAt": "2026-10-10T23:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-11T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-11T10:03:00.000Z",
+            "localDate": "2026-10-11",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+            "outcomeAvailableAt": "2026-10-11T19:00:01.000Z",
+            "outcomeEnd": "2026-10-11T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-11T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-11T19:00:00.000Z",
+            "outcomeStart": "2026-10-11T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-11-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-12T10:00:00.000Z",
+            "dayStart": "2026-10-12T00:00:00.000Z",
+            "durableAt": "2026-10-12T10:03:01.000Z",
+            "energy": 6,
+            "feature": {
+              "availableAt": "2026-10-12T08:00:00.000Z",
+              "endedAt": "2026-10-12T07:00:00.000Z",
+              "main_sleep_duration_hours": 7.5,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-12T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-12\"]",
+              "startedAt": "2026-10-11T23:30:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-12T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-12T10:03:00.000Z",
+            "localDate": "2026-10-12",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+            "outcomeAvailableAt": "2026-10-12T19:00:01.000Z",
+            "outcomeEnd": "2026-10-12T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-12T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-12T19:00:00.000Z",
+            "outcomeStart": "2026-10-12T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-a",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-a-response-12-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-09T10:00:00.000Z",
+            "dayStart": "2026-10-09T00:00:00.000Z",
+            "durableAt": "2026-10-09T10:03:01.000Z",
+            "energy": 4,
+            "feature": {
+              "availableAt": "2026-10-09T08:00:00.000Z",
+              "endedAt": "2026-10-09T07:00:00.000Z",
+              "main_sleep_duration_hours": 8.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-09T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-9\"]",
+              "startedAt": "2026-10-08T23:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-09T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-09T10:03:00.000Z",
+            "localDate": "2026-10-09",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-09\"]",
+            "outcomeAvailableAt": "2026-10-09T19:00:01.000Z",
+            "outcomeEnd": "2026-10-09T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-09T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-09T19:00:00.000Z",
+            "outcomeStart": "2026-10-09T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-9-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-10T10:00:00.000Z",
+            "dayStart": "2026-10-10T00:00:00.000Z",
+            "durableAt": "2026-10-10T10:03:01.000Z",
+            "energy": 6,
+            "feature": {
+              "availableAt": "2026-10-10T08:00:00.000Z",
+              "endedAt": "2026-10-10T07:00:00.000Z",
+              "main_sleep_duration_hours": 6.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-10T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-10\"]",
+              "startedAt": "2026-10-10T01:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-10T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-10T10:03:00.000Z",
+            "localDate": "2026-10-10",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-10\"]",
+            "outcomeAvailableAt": "2026-10-10T19:00:01.000Z",
+            "outcomeEnd": "2026-10-10T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-10T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-10T19:00:00.000Z",
+            "outcomeStart": "2026-10-10T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-10-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-11T10:00:00.000Z",
+            "dayStart": "2026-10-11T00:00:00.000Z",
+            "durableAt": "2026-10-11T10:03:01.000Z",
+            "energy": 3,
+            "feature": {
+              "availableAt": "2026-10-11T08:00:00.000Z",
+              "endedAt": "2026-10-11T07:00:00.000Z",
+              "main_sleep_duration_hours": 7.0,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-11T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-11\"]",
+              "startedAt": "2026-10-11T00:00:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-11T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-11T10:03:00.000Z",
+            "localDate": "2026-10-11",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-11\"]",
+            "outcomeAvailableAt": "2026-10-11T19:00:01.000Z",
+            "outcomeEnd": "2026-10-11T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-11T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-11T19:00:00.000Z",
+            "outcomeStart": "2026-10-11T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-11-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          },
+          {
+            "cutoff": "2026-10-12T10:00:00.000Z",
+            "dayStart": "2026-10-12T00:00:00.000Z",
+            "durableAt": "2026-10-12T10:03:01.000Z",
+            "energy": 7,
+            "feature": {
+              "availableAt": "2026-10-12T08:00:00.000Z",
+              "endedAt": "2026-10-12T07:00:00.000Z",
+              "main_sleep_duration_hours": 8.5,
+              "revision": 1,
+              "selectionDependencies": [
+                "2026-10-12T08:00:00.000Z"
+              ],
+              "source": "appleHealth",
+              "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-b-sleep-12\"]",
+              "startedAt": "2026-10-11T22:30:00.000Z"
+            },
+            "fixturePair": true,
+            "issuanceDeadline": "2026-10-12T10:15:00.000Z",
+            "issuanceStatus": "issued",
+            "issuedAt": "2026-10-12T10:03:00.000Z",
+            "localDate": "2026-10-12",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-12\"]",
+            "outcomeAvailableAt": "2026-10-12T19:00:01.000Z",
+            "outcomeEnd": "2026-10-12T22:00:00.000Z",
+            "outcomeInitialSavedAt": "2026-10-12T19:00:01.000Z",
+            "outcomeObservedAt": "2026-10-12T19:00:00.000Z",
+            "outcomeStart": "2026-10-12T18:00:00.000Z",
+            "outcomeStatus": "matched",
+            "participantKey": "invented-person-b",
+            "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+            "responseId": "invented-person-b-response-12-first",
+            "sleepStatus": "eligible",
+            "timezone": "Etc/UTC",
+            "trainingEligible": false
+          }
+        ],
+        "schemaVersion": "ai1-synthetic-audit-v1",
+        "synthetic": true
+      },
+      "interpretation": [
+        "Both personal baselines and the regression are frozen at the fit cutoff.",
+        "No development or final labels update any model or baseline.",
+        "Missing predictions and missing targets have separate coverage counts.",
+        "The denominator contains supplied opportunities; no omitted days are invented.",
+        "Common-set point errors describe fixtures only; no statistical or clinical conclusion follows."
+      ],
+      "methods": {
+        "B0": {
+          "coverage": 0.375,
+          "macroParticipantMae": 2.6,
+          "mae": 2.6,
+          "meanSignedError": -0.46666666666666645,
+          "opportunities": 8,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 0.75,
+              "mae": 2.6,
+              "meanSignedError": -0.46666666666666645,
+              "opportunities": 4,
+              "participantKey": "invented-person-a",
+              "predicted": 3,
+              "scored": 3,
+              "scoredCoverage": 0.75,
+              "statuses": {
+                "no_execution": 1,
+                "predicted": 3
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 4,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 4
+              }
+            }
+          ],
+          "predicted": 3,
+          "scored": 3,
+          "scoredCoverage": 0.375,
+          "statuses": {
+            "no_execution": 1,
+            "no_frozen_model": 4,
+            "predicted": 3
+          }
+        },
+        "B1": {
+          "coverage": 0.375,
+          "macroParticipantMae": 2.6666666666666665,
+          "mae": 2.6666666666666665,
+          "meanSignedError": -0.6666666666666666,
+          "opportunities": 8,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 0.75,
+              "mae": 2.6666666666666665,
+              "meanSignedError": -0.6666666666666666,
+              "opportunities": 4,
+              "participantKey": "invented-person-a",
+              "predicted": 3,
+              "scored": 3,
+              "scoredCoverage": 0.75,
+              "statuses": {
+                "no_execution": 1,
+                "predicted": 3
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 4,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 4
+              }
+            }
+          ],
+          "predicted": 3,
+          "scored": 3,
+          "scoredCoverage": 0.375,
+          "statuses": {
+            "no_execution": 1,
+            "no_frozen_model": 4,
+            "predicted": 3
+          }
+        },
+        "M1": {
+          "coverage": 0.375,
+          "macroParticipantMae": 1.3410852713178298,
+          "mae": 1.3410852713178298,
+          "meanSignedError": 0.14728682170542634,
+          "opportunities": 8,
+          "participantsScored": 1,
+          "perParticipant": [
+            {
+              "coverage": 0.75,
+              "mae": 1.3410852713178298,
+              "meanSignedError": 0.14728682170542634,
+              "opportunities": 4,
+              "participantKey": "invented-person-a",
+              "predicted": 3,
+              "scored": 3,
+              "scoredCoverage": 0.75,
+              "statuses": {
+                "no_execution": 1,
+                "predicted": 3
+              }
+            },
+            {
+              "coverage": 0.0,
+              "mae": null,
+              "meanSignedError": null,
+              "opportunities": 4,
+              "participantKey": "invented-person-b",
+              "predicted": 0,
+              "scored": 0,
+              "scoredCoverage": 0.0,
+              "statuses": {
+                "no_frozen_model": 4
+              }
+            }
+          ],
+          "predicted": 3,
+          "scored": 3,
+          "scoredCoverage": 0.375,
+          "statuses": {
+            "no_execution": 1,
+            "no_frozen_model": 4,
+            "predicted": 3
+          }
+        }
+      },
+      "opportunityIds": [
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-09\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-09\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-10\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-11\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-12\"]"
+      ],
+      "partition": "final",
+      "rows": [
+        {
+          "cutoff": "2026-10-09T10:00:00.000Z",
+          "durableAt": null,
+          "energy": 5,
+          "executedAt": null,
+          "executionStatus": "not_executed",
+          "localDate": "2026-10-09",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_execution",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_execution",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_execution",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-09\"]",
+          "outcomeAvailableAt": "2026-10-09T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-09T10:00:00.000Z",
+          "durableAt": "2026-10-09T10:03:01.000Z",
+          "energy": 4,
+          "executedAt": "2026-10-09T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-09",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-09\"]",
+          "outcomeAvailableAt": "2026-10-09T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        },
+        {
+          "cutoff": "2026-10-10T10:00:00.000Z",
+          "durableAt": "2026-10-10T10:03:01.000Z",
+          "energy": 2,
+          "executedAt": "2026-10-10T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-10",
+          "methods": {
+            "B0": {
+              "absoluteError": 3.2,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": true,
+              "signedError": 3.2,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": 3.0,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": true,
+              "signedError": 3.0,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": 1.8604651162790704,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 3.8604651162790704,
+              "rawPrediction": 3.8604651162790704,
+              "scored": true,
+              "signedError": 1.8604651162790704,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+          "outcomeAvailableAt": "2026-10-10T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-10T10:00:00.000Z",
+          "durableAt": "2026-10-10T10:03:01.000Z",
+          "energy": 6,
+          "executedAt": "2026-10-10T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-10",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-10\"]",
+          "outcomeAvailableAt": "2026-10-10T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        },
+        {
+          "cutoff": "2026-10-11T10:00:00.000Z",
+          "durableAt": "2026-10-11T10:03:01.000Z",
+          "energy": 9,
+          "executedAt": "2026-10-11T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-11",
+          "methods": {
+            "B0": {
+              "absoluteError": 3.8,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": true,
+              "signedError": -3.8,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": 4.0,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": true,
+              "signedError": -4.0,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": 1.7906976744186052,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 7.209302325581395,
+              "rawPrediction": 7.209302325581395,
+              "scored": true,
+              "signedError": -1.7906976744186052,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+          "outcomeAvailableAt": "2026-10-11T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-11T10:00:00.000Z",
+          "durableAt": "2026-10-11T10:03:01.000Z",
+          "energy": 3,
+          "executedAt": "2026-10-11T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-11",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-11\"]",
+          "outcomeAvailableAt": "2026-10-11T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        },
+        {
+          "cutoff": "2026-10-12T10:00:00.000Z",
+          "durableAt": "2026-10-12T10:03:01.000Z",
+          "energy": 6,
+          "executedAt": "2026-10-12T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-12",
+          "methods": {
+            "B0": {
+              "absoluteError": 0.7999999999999998,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B0\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.2,
+              "rawPrediction": 5.2,
+              "scored": true,
+              "signedError": -0.7999999999999998,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "B1": {
+              "absoluteError": 1.0,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"B1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 5.0,
+              "rawPrediction": 5.0,
+              "scored": true,
+              "signedError": -1.0,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            },
+            "M1": {
+              "absoluteError": 0.3720930232558137,
+              "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+              "prediction": 6.372093023255814,
+              "rawPrediction": 6.372093023255814,
+              "scored": true,
+              "signedError": 0.3720930232558137,
+              "status": "predicted",
+              "trainingOpportunityIds": [
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+                "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+              ]
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+          "outcomeAvailableAt": "2026-10-12T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a"
+        },
+        {
+          "cutoff": "2026-10-12T10:00:00.000Z",
+          "durableAt": "2026-10-12T10:03:01.000Z",
+          "energy": 7,
+          "executedAt": "2026-10-12T10:03:00.000Z",
+          "executionStatus": "executed",
+          "localDate": "2026-10-12",
+          "methods": {
+            "B0": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "B1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            },
+            "M1": {
+              "absoluteError": null,
+              "artifactId": null,
+              "prediction": null,
+              "rawPrediction": null,
+              "scored": false,
+              "signedError": null,
+              "status": "no_frozen_model",
+              "trainingOpportunityIds": []
+            }
+          },
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-b\",\"2026-10-12\"]",
+          "outcomeAvailableAt": "2026-10-12T19:00:01.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-b"
+        }
+      ],
+      "selectedComparison": {
+        "candidate": {
+          "coverage": 1.0,
+          "mae": 1.3410852713178298,
+          "meanSignedError": 0.14728682170542634,
+          "opportunities": 3,
+          "predicted": 3,
+          "scored": 3,
+          "scoredCoverage": 1.0,
+          "statuses": {
+            "predicted": 3
+          }
+        },
+        "candidateId": "M1",
+        "commonScored": 3,
+        "comparator": {
+          "coverage": 1.0,
+          "mae": 2.6,
+          "meanSignedError": -0.46666666666666645,
+          "opportunities": 3,
+          "predicted": 3,
+          "scored": 3,
+          "scoredCoverage": 1.0,
+          "statuses": {
+            "predicted": 3
+          }
+        },
+        "comparatorId": "B0",
+        "differenceDirection": "candidate_minus_comparator_negative_favors_candidate",
+        "maeDifference": -1.2589147286821702,
+        "pairedErrorSeries": [
+          {
+            "candidateAbsoluteError": 1.8604651162790704,
+            "comparatorAbsoluteError": 3.2,
+            "cutoff": "2026-10-10T10:00:00.000Z",
+            "localDate": "2026-10-10",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+            "participantKey": "invented-person-a"
+          },
+          {
+            "candidateAbsoluteError": 1.7906976744186052,
+            "comparatorAbsoluteError": 3.8,
+            "cutoff": "2026-10-11T10:00:00.000Z",
+            "localDate": "2026-10-11",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+            "participantKey": "invented-person-a"
+          },
+          {
+            "candidateAbsoluteError": 0.3720930232558137,
+            "comparatorAbsoluteError": 0.7999999999999998,
+            "cutoff": "2026-10-12T10:00:00.000Z",
+            "localDate": "2026-10-12",
+            "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+            "participantKey": "invented-person-a"
+          }
+        ]
+      }
+    },
+    "finalAccessBoundary": "one_use_per_in_memory_experiment_not_attestation_of_human_blinding",
+    "finalPartitionOpened": true,
+    "manifest": {
+      "analysisAsOf": "2026-10-13T23:00:00.000Z",
+      "baselineMeaning": "personal_average_and_latest_rating_at_fit_cutoff",
+      "candidateId": "M1",
+      "candidateSelection": "fixed_before_development_no_automatic_selection",
+      "comparatorId": "B0",
+      "datasetVersion": "invented-twelve-day-history-v1",
+      "evaluationEnd": "2026-10-13T10:00:00.000Z",
+      "evaluationHistoryUpdates": false,
+      "evidenceKind": "synthetic_software_fixture",
+      "experimentId": "invented-pre-data-frozen-v1",
+      "finalStart": "2026-10-09T10:00:00.000Z",
+      "fitCutoff": "2026-10-06T10:00:00.000Z",
+      "fittingPolicy": "fit_personal_models_once_at_common_utc_cutoff",
+      "historyStart": "2026-10-01T10:00:00.000Z",
+      "measurement": {
+        "items": [
+          {
+            "anchors": {
+              "1": "extremely low energy",
+              "10": "extremely high energy",
+              "5": "about average"
+            },
+            "id": "energy",
+            "label": "Energy",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "not fatigued at all",
+              "10": "extremely fatigued",
+              "5": "moderately fatigued"
+            },
+            "id": "fatigue",
+            "label": "Fatigue",
+            "optional": true,
+            "prompt": "How fatigued or drained do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "fully alert",
+              "10": "extremely sleepy",
+              "5": "moderately sleepy"
+            },
+            "id": "sleepiness",
+            "label": "Sleepiness",
+            "optional": true,
+            "prompt": "How sleepy do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "extremely difficult to focus",
+              "10": "extremely easy to focus",
+              "5": "average"
+            },
+            "id": "focus",
+            "label": "Focus",
+            "optional": true,
+            "prompt": "How easy is it for you to focus right now?"
+          },
+          {
+            "anchors": {
+              "1": "Low",
+              "10": "Great",
+              "5": "Steady"
+            },
+            "id": "mood",
+            "label": "Mood",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "Calm",
+              "10": "Maxed",
+              "5": "Moderate"
+            },
+            "id": "stress",
+            "label": "Stress",
+            "optional": true,
+            "prompt": ""
+          }
+        ],
+        "kind": "customSelfReport",
+        "language": "en",
+        "recallPeriod": "right now",
+        "recallPeriodText": "right now",
+        "sharedHeading": "How do you feel right now?",
+        "status": "draftNotClinicallyValidated",
+        "version": "tonyo-self-report-draft-v1"
+      },
+      "modelPromotionAllowed": false,
+      "outputPolicy": "clip_1_through_10_without_rounding_retain_raw",
+      "partitionRule": "morning_cutoff_start_inclusive_end_exclusive",
+      "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+      "realDataTrainingAllowed": false,
+      "schemaVersion": "ai4-synthetic-frozen-manifest-v1",
+      "sleepSource": "appleHealth",
+      "uncertaintyPolicy": "not_estimated_pending_statistical_review"
+    },
+    "modelPromotionAllowed": false,
+    "realDataTrainingAllowed": false,
+    "schemaVersion": "ai4-synthetic-frozen-evaluation-v1",
+    "trainingEvidence": {
+      "asOf": "2026-10-06T10:00:00.000Z",
+      "coverage": {
+        "fixturePairs": 5,
+        "issuanceStatuses": {
+          "issued": 5
+        },
+        "issued": 5,
+        "opportunities": 5,
+        "outcomeComplete": 5,
+        "outcomeStatuses": {
+          "matched": 5
+        },
+        "sleepEligible": 5,
+        "sleepStatuses": {
+          "eligible": 5
+        },
+        "trainingEligible": 0
+      },
+      "datasetVersion": "invented-twelve-day-history-v1",
+      "measurement": "{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"}",
+      "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+      "rows": [
+        {
+          "cutoff": "2026-10-01T10:00:00.000Z",
+          "dayStart": "2026-10-01T00:00:00.000Z",
+          "durableAt": "2026-10-01T10:03:01.000Z",
+          "energy": 3,
+          "feature": {
+            "availableAt": "2026-10-01T08:00:00.000Z",
+            "endedAt": "2026-10-01T07:00:00.000Z",
+            "main_sleep_duration_hours": 5.5,
+            "revision": 1,
+            "selectionDependencies": [
+              "2026-10-01T08:00:00.000Z"
+            ],
+            "source": "appleHealth",
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-1\"]",
+            "startedAt": "2026-10-01T01:30:00.000Z"
+          },
+          "fixturePair": true,
+          "issuanceDeadline": "2026-10-01T10:15:00.000Z",
+          "issuanceStatus": "issued",
+          "issuedAt": "2026-10-01T10:03:00.000Z",
+          "localDate": "2026-10-01",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+          "outcomeAvailableAt": "2026-10-01T19:00:01.000Z",
+          "outcomeEnd": "2026-10-01T22:00:00.000Z",
+          "outcomeInitialSavedAt": "2026-10-01T19:00:01.000Z",
+          "outcomeObservedAt": "2026-10-01T19:00:00.000Z",
+          "outcomeStart": "2026-10-01T18:00:00.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "responseId": "invented-person-a-response-1-first",
+          "sleepStatus": "eligible",
+          "timezone": "Etc/UTC",
+          "trainingEligible": false
+        },
+        {
+          "cutoff": "2026-10-02T10:00:00.000Z",
+          "dayStart": "2026-10-02T00:00:00.000Z",
+          "durableAt": "2026-10-02T10:03:01.000Z",
+          "energy": 6,
+          "feature": {
+            "availableAt": "2026-10-02T08:00:00.000Z",
+            "endedAt": "2026-10-02T07:00:00.000Z",
+            "main_sleep_duration_hours": 7.0,
+            "revision": 1,
+            "selectionDependencies": [
+              "2026-10-02T08:00:00.000Z"
+            ],
+            "source": "appleHealth",
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-2\"]",
+            "startedAt": "2026-10-02T00:00:00.000Z"
+          },
+          "fixturePair": true,
+          "issuanceDeadline": "2026-10-02T10:15:00.000Z",
+          "issuanceStatus": "issued",
+          "issuedAt": "2026-10-02T10:03:00.000Z",
+          "localDate": "2026-10-02",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+          "outcomeAvailableAt": "2026-10-02T19:00:01.000Z",
+          "outcomeEnd": "2026-10-02T22:00:00.000Z",
+          "outcomeInitialSavedAt": "2026-10-02T19:00:01.000Z",
+          "outcomeObservedAt": "2026-10-02T19:00:00.000Z",
+          "outcomeStart": "2026-10-02T18:00:00.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "responseId": "invented-person-a-response-2-first",
+          "sleepStatus": "eligible",
+          "timezone": "Etc/UTC",
+          "trainingEligible": false
+        },
+        {
+          "cutoff": "2026-10-03T10:00:00.000Z",
+          "dayStart": "2026-10-03T00:00:00.000Z",
+          "durableAt": "2026-10-03T10:03:01.000Z",
+          "energy": 4,
+          "feature": {
+            "availableAt": "2026-10-03T08:00:00.000Z",
+            "endedAt": "2026-10-03T07:00:00.000Z",
+            "main_sleep_duration_hours": 6.0,
+            "revision": 1,
+            "selectionDependencies": [
+              "2026-10-03T08:00:00.000Z"
+            ],
+            "source": "appleHealth",
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-3\"]",
+            "startedAt": "2026-10-03T01:00:00.000Z"
+          },
+          "fixturePair": true,
+          "issuanceDeadline": "2026-10-03T10:15:00.000Z",
+          "issuanceStatus": "issued",
+          "issuedAt": "2026-10-03T10:03:00.000Z",
+          "localDate": "2026-10-03",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+          "outcomeAvailableAt": "2026-10-03T19:00:01.000Z",
+          "outcomeEnd": "2026-10-03T22:00:00.000Z",
+          "outcomeInitialSavedAt": "2026-10-03T19:00:01.000Z",
+          "outcomeObservedAt": "2026-10-03T19:00:00.000Z",
+          "outcomeStart": "2026-10-03T18:00:00.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "responseId": "invented-person-a-response-3-first",
+          "sleepStatus": "eligible",
+          "timezone": "Etc/UTC",
+          "trainingEligible": false
+        },
+        {
+          "cutoff": "2026-10-04T10:00:00.000Z",
+          "dayStart": "2026-10-04T00:00:00.000Z",
+          "durableAt": "2026-10-04T10:03:01.000Z",
+          "energy": 8,
+          "feature": {
+            "availableAt": "2026-10-04T08:00:00.000Z",
+            "endedAt": "2026-10-04T07:00:00.000Z",
+            "main_sleep_duration_hours": 8.0,
+            "revision": 1,
+            "selectionDependencies": [
+              "2026-10-04T08:00:00.000Z"
+            ],
+            "source": "appleHealth",
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-4\"]",
+            "startedAt": "2026-10-03T23:00:00.000Z"
+          },
+          "fixturePair": true,
+          "issuanceDeadline": "2026-10-04T10:15:00.000Z",
+          "issuanceStatus": "issued",
+          "issuedAt": "2026-10-04T10:03:00.000Z",
+          "localDate": "2026-10-04",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+          "outcomeAvailableAt": "2026-10-04T19:00:01.000Z",
+          "outcomeEnd": "2026-10-04T22:00:00.000Z",
+          "outcomeInitialSavedAt": "2026-10-04T19:00:01.000Z",
+          "outcomeObservedAt": "2026-10-04T19:00:00.000Z",
+          "outcomeStart": "2026-10-04T18:00:00.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "responseId": "invented-person-a-response-4-first",
+          "sleepStatus": "eligible",
+          "timezone": "Etc/UTC",
+          "trainingEligible": false
+        },
+        {
+          "cutoff": "2026-10-05T10:00:00.000Z",
+          "dayStart": "2026-10-05T00:00:00.000Z",
+          "durableAt": "2026-10-05T10:03:01.000Z",
+          "energy": 5,
+          "feature": {
+            "availableAt": "2026-10-05T08:00:00.000Z",
+            "endedAt": "2026-10-05T07:00:00.000Z",
+            "main_sleep_duration_hours": 7.5,
+            "revision": 1,
+            "selectionDependencies": [
+              "2026-10-05T08:00:00.000Z"
+            ],
+            "source": "appleHealth",
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-5\"]",
+            "startedAt": "2026-10-04T23:30:00.000Z"
+          },
+          "fixturePair": true,
+          "issuanceDeadline": "2026-10-05T10:15:00.000Z",
+          "issuanceStatus": "issued",
+          "issuedAt": "2026-10-05T10:03:00.000Z",
+          "localDate": "2026-10-05",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]",
+          "outcomeAvailableAt": "2026-10-05T19:00:01.000Z",
+          "outcomeEnd": "2026-10-05T22:00:00.000Z",
+          "outcomeInitialSavedAt": "2026-10-05T19:00:01.000Z",
+          "outcomeObservedAt": "2026-10-05T19:00:00.000Z",
+          "outcomeStart": "2026-10-05T18:00:00.000Z",
+          "outcomeStatus": "matched",
+          "participantKey": "invented-person-a",
+          "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+          "responseId": "invented-person-a-response-5-first",
+          "sleepStatus": "eligible",
+          "timezone": "Etc/UTC",
+          "trainingEligible": false
+        }
+      ],
+      "schemaVersion": "ai1-synthetic-audit-v1",
+      "synthetic": true
+    },
+    "trainingOpportunityIds": [
+      "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+      "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+      "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+      "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+      "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+    ],
+    "uncertainty": {
+      "pairedErrorSeriesAvailable": true,
+      "reason": "Do not treat correlated daily errors as independent observations.",
+      "status": "not_estimated_pending_statistical_review"
+    }
+  },
+  "shadowSimulation": {
+    "schemaVersion": "ai6-synthetic-shadow-rehearsal-v1",
+    "synthetic": true,
+    "simulatedDurability": true,
+    "realProspectiveEvidence": false,
+    "appModelActivationAllowed": false,
+    "coachUseAllowed": false,
+    "realDataTrainingAllowed": false,
+    "scope": "synthetic-ai4-frozen-evaluation",
+    "blockId": "invented-shadow-block-v1",
+    "artifact": {
+      "schemaVersion": "tonyo-synthetic-personal-model-v1",
+      "evidenceKind": "synthetic_software_fixture",
+      "synthetic": true,
+      "realDataTrainingAllowed": false,
+      "appModelActivationAllowed": false,
+      "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+      "candidateId": "M1",
+      "ownerScope": "synthetic-ai4-frozen-evaluation",
+      "participantKey": "invented-person-a",
+      "timezone": "Etc/UTC",
+      "dataGeneration": 0,
+      "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+      "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+      "sleepSource": "appleHealth",
+      "measurement": {
+        "items": [
+          {
+            "anchors": {
+              "1": "extremely low energy",
+              "10": "extremely high energy",
+              "5": "about average"
+            },
+            "id": "energy",
+            "label": "Energy",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "not fatigued at all",
+              "10": "extremely fatigued",
+              "5": "moderately fatigued"
+            },
+            "id": "fatigue",
+            "label": "Fatigue",
+            "optional": true,
+            "prompt": "How fatigued or drained do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "fully alert",
+              "10": "extremely sleepy",
+              "5": "moderately sleepy"
+            },
+            "id": "sleepiness",
+            "label": "Sleepiness",
+            "optional": true,
+            "prompt": "How sleepy do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "extremely difficult to focus",
+              "10": "extremely easy to focus",
+              "5": "average"
+            },
+            "id": "focus",
+            "label": "Focus",
+            "optional": true,
+            "prompt": "How easy is it for you to focus right now?"
+          },
+          {
+            "anchors": {
+              "1": "Low",
+              "10": "Great",
+              "5": "Steady"
+            },
+            "id": "mood",
+            "label": "Mood",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "Calm",
+              "10": "Maxed",
+              "5": "Moderate"
+            },
+            "id": "stress",
+            "label": "Stress",
+            "optional": true,
+            "prompt": ""
+          }
+        ],
+        "kind": "customSelfReport",
+        "language": "en",
+        "recallPeriod": "right now",
+        "recallPeriodText": "right now",
+        "sharedHeading": "How do you feel right now?",
+        "status": "draftNotClinicallyValidated",
+        "version": "tonyo-self-report-draft-v1"
+      },
+      "featureSchema": [
+        {
+          "name": "main_sleep_duration_hours",
+          "unit": "hours"
+        }
+      ],
+      "targetSchema": {
+        "name": "evening_energy",
+        "unit": "rating_1_10",
+        "minimum": 1,
+        "maximum": 10
+      },
+      "outputRule": {
+        "minimum": 1,
+        "maximum": 10,
+        "rounding": "none"
+      },
+      "coefficients": {
+        "intercept": -6.186046511627906,
+        "slope": 1.6744186046511627
+      },
+      "fittedAt": "2026-10-06T10:00:00.000Z",
+      "dataCutoff": "2026-10-06T10:00:00.000Z",
+      "historyPolicy": "frozen_personal_fit_no_inference_updates",
+      "trainingCount": 5,
+      "trainingOpportunityIds": [
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-01\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-02\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-03\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-04\"]",
+        "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-05\"]"
+      ]
+    },
+    "asOf": "2026-10-13T23:00:00.000Z",
+    "interrupted": false,
+    "coverage": {
+      "plannedOpportunities": 4,
+      "closedOpportunities": 4,
+      "withdrawnOpportunities": 0,
+      "activeClosedOpportunities": 4,
+      "executed": 3,
+      "predicted": 3,
+      "completedOutcomes": 4,
+      "missingOrUnusableOutcomes": 0,
+      "unlinkedOutcomes": 0,
+      "scored": 3,
+      "predictionCoverage": 0.75,
+      "outcomeMissingnessRate": 0.0,
+      "lateOriginalResponses": 0,
+      "mae": 1.3410852713178298
+    },
+    "rows": [
+      {
+        "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-09\"]",
+        "localDate": "2026-10-09",
+        "cutoff": "2026-10-09T10:00:00.000Z",
+        "executionStatus": "not_executed",
+        "outcomeStatus": "matched",
+        "pairingStatus": "compatible",
+        "event": null,
+        "outcome": {
+          "assessedAt": "2026-10-09T22:01:00.000Z",
+          "receiptAt": "2026-10-09T22:01:00.000Z",
+          "status": "matched",
+          "energy": 5,
+          "pairingStatus": "compatible",
+          "lateOriginalResponses": 0,
+          "knownResponseFingerprints": {
+            "[\"invented-person-a\",\"invented-person-a-response-9-first\",1]": "{\"availableAt\":\"2026-10-09T19:00:01.000Z\",\"deleted\":false,\"energy\":5,\"initialSavedAt\":\"2026-10-09T19:00:01.000Z\",\"lineageComplete\":true,\"localDate\":\"2026-10-09\",\"measurement\":\"{\\\"items\\\":[{\\\"anchors\\\":{\\\"1\\\":\\\"extremely low energy\\\",\\\"10\\\":\\\"extremely high energy\\\",\\\"5\\\":\\\"about average\\\"},\\\"id\\\":\\\"energy\\\",\\\"label\\\":\\\"Energy\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"not fatigued at all\\\",\\\"10\\\":\\\"extremely fatigued\\\",\\\"5\\\":\\\"moderately fatigued\\\"},\\\"id\\\":\\\"fatigue\\\",\\\"label\\\":\\\"Fatigue\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How fatigued or drained do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"fully alert\\\",\\\"10\\\":\\\"extremely sleepy\\\",\\\"5\\\":\\\"moderately sleepy\\\"},\\\"id\\\":\\\"sleepiness\\\",\\\"label\\\":\\\"Sleepiness\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How sleepy do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"extremely difficult to focus\\\",\\\"10\\\":\\\"extremely easy to focus\\\",\\\"5\\\":\\\"average\\\"},\\\"id\\\":\\\"focus\\\",\\\"label\\\":\\\"Focus\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How easy is it for you to focus right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Low\\\",\\\"10\\\":\\\"Great\\\",\\\"5\\\":\\\"Steady\\\"},\\\"id\\\":\\\"mood\\\",\\\"label\\\":\\\"Mood\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Calm\\\",\\\"10\\\":\\\"Maxed\\\",\\\"5\\\":\\\"Moderate\\\"},\\\"id\\\":\\\"stress\\\",\\\"label\\\":\\\"Stress\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"}],\\\"kind\\\":\\\"customSelfReport\\\",\\\"language\\\":\\\"en\\\",\\\"recallPeriod\\\":\\\"right now\\\",\\\"recallPeriodText\\\":\\\"right now\\\",\\\"sharedHeading\\\":\\\"How do you feel right now?\\\",\\\"status\\\":\\\"draftNotClinicallyValidated\\\",\\\"version\\\":\\\"tonyo-self-report-draft-v1\\\"}\",\"observedAt\":\"2026-10-09T19:00:00.000Z\",\"participantKey\":\"invented-person-a\",\"period\":\"Evening\",\"revision\":1,\"sourceId\":\"invented-person-a-response-9-first\",\"timezone\":\"Etc/UTC\"}"
+          },
+          "responseIntegrityStatus": null,
+          "previousAssessments": []
+        },
+        "prediction": null,
+        "energy": 5,
+        "scored": false,
+        "signedError": null,
+        "absoluteError": null
+      },
+      {
+        "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+        "localDate": "2026-10-10",
+        "cutoff": "2026-10-10T10:00:00.000Z",
+        "executionStatus": "executed",
+        "outcomeStatus": "matched",
+        "pairingStatus": "compatible",
+        "event": {
+          "eventId": "[\"invented-shadow-block-v1\",\"synthetic-ai4-frozen-evaluation\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-10\\\"]\"]",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-10\"]",
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+          "artifactFingerprint": "{\"appModelActivationAllowed\":false,\"artifactId\":\"[\\\"invented-pre-data-frozen-v1\\\",\\\"invented-person-a\\\",\\\"M1\\\",\\\"2026-10-06T10:00:00.000Z\\\"]\",\"candidateId\":\"M1\",\"coefficients\":{\"intercept\":-6.186046511627906,\"slope\":1.6744186046511627},\"dataCutoff\":\"2026-10-06T10:00:00.000Z\",\"dataGeneration\":0,\"evidenceKind\":\"synthetic_software_fixture\",\"featureSchema\":[{\"name\":\"main_sleep_duration_hours\",\"unit\":\"hours\"}],\"fittedAt\":\"2026-10-06T10:00:00.000Z\",\"historyPolicy\":\"frozen_personal_fit_no_inference_updates\",\"measurement\":{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"},\"outputRule\":{\"maximum\":10,\"minimum\":1,\"rounding\":\"none\"},\"ownerScope\":\"synthetic-ai4-frozen-evaluation\",\"participantKey\":\"invented-person-a\",\"protocolId\":\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"protocolVersion\":\"tonyo-sleep-evening-energy-v0.3-draft\",\"realDataTrainingAllowed\":false,\"schemaVersion\":\"tonyo-synthetic-personal-model-v1\",\"sleepSource\":\"appleHealth\",\"synthetic\":true,\"targetSchema\":{\"maximum\":10,\"minimum\":1,\"name\":\"evening_energy\",\"unit\":\"rating_1_10\"},\"timezone\":\"Etc/UTC\",\"trainingCount\":5,\"trainingOpportunityIds\":[\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-01\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-02\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-03\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-04\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-05\\\"]\"]}",
+          "executedAt": "2026-10-10T10:03:00.000Z",
+          "receiptAt": "2026-10-10T10:03:00.000Z",
+          "executionStatus": "executed",
+          "sleepStatus": "eligible",
+          "modelStatus": "predicted",
+          "rawPrediction": 3.8604651162790704,
+          "prediction": 3.8604651162790704,
+          "feature": {
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-10\"]",
+            "revision": 1,
+            "source": "appleHealth",
+            "durationHours": 6.0,
+            "startedAt": "2026-10-10T01:00:00.000Z",
+            "endedAt": "2026-10-10T07:00:00.000Z",
+            "availableAt": "2026-10-10T08:00:00.000Z",
+            "selectionDependencies": [
+              "2026-10-10T08:00:00.000Z"
+            ]
+          }
+        },
+        "outcome": {
+          "assessedAt": "2026-10-10T22:01:00.000Z",
+          "receiptAt": "2026-10-10T22:01:00.000Z",
+          "status": "matched",
+          "energy": 2,
+          "pairingStatus": "compatible",
+          "lateOriginalResponses": 0,
+          "knownResponseFingerprints": {
+            "[\"invented-person-a\",\"invented-person-a-response-10-first\",1]": "{\"availableAt\":\"2026-10-10T19:00:01.000Z\",\"deleted\":false,\"energy\":2,\"initialSavedAt\":\"2026-10-10T19:00:01.000Z\",\"lineageComplete\":true,\"localDate\":\"2026-10-10\",\"measurement\":\"{\\\"items\\\":[{\\\"anchors\\\":{\\\"1\\\":\\\"extremely low energy\\\",\\\"10\\\":\\\"extremely high energy\\\",\\\"5\\\":\\\"about average\\\"},\\\"id\\\":\\\"energy\\\",\\\"label\\\":\\\"Energy\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"not fatigued at all\\\",\\\"10\\\":\\\"extremely fatigued\\\",\\\"5\\\":\\\"moderately fatigued\\\"},\\\"id\\\":\\\"fatigue\\\",\\\"label\\\":\\\"Fatigue\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How fatigued or drained do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"fully alert\\\",\\\"10\\\":\\\"extremely sleepy\\\",\\\"5\\\":\\\"moderately sleepy\\\"},\\\"id\\\":\\\"sleepiness\\\",\\\"label\\\":\\\"Sleepiness\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How sleepy do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"extremely difficult to focus\\\",\\\"10\\\":\\\"extremely easy to focus\\\",\\\"5\\\":\\\"average\\\"},\\\"id\\\":\\\"focus\\\",\\\"label\\\":\\\"Focus\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How easy is it for you to focus right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Low\\\",\\\"10\\\":\\\"Great\\\",\\\"5\\\":\\\"Steady\\\"},\\\"id\\\":\\\"mood\\\",\\\"label\\\":\\\"Mood\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Calm\\\",\\\"10\\\":\\\"Maxed\\\",\\\"5\\\":\\\"Moderate\\\"},\\\"id\\\":\\\"stress\\\",\\\"label\\\":\\\"Stress\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"}],\\\"kind\\\":\\\"customSelfReport\\\",\\\"language\\\":\\\"en\\\",\\\"recallPeriod\\\":\\\"right now\\\",\\\"recallPeriodText\\\":\\\"right now\\\",\\\"sharedHeading\\\":\\\"How do you feel right now?\\\",\\\"status\\\":\\\"draftNotClinicallyValidated\\\",\\\"version\\\":\\\"tonyo-self-report-draft-v1\\\"}\",\"observedAt\":\"2026-10-10T19:00:00.000Z\",\"participantKey\":\"invented-person-a\",\"period\":\"Evening\",\"revision\":1,\"sourceId\":\"invented-person-a-response-10-first\",\"timezone\":\"Etc/UTC\"}"
+          },
+          "responseIntegrityStatus": null,
+          "previousAssessments": []
+        },
+        "prediction": 3.8604651162790704,
+        "energy": 2,
+        "scored": true,
+        "signedError": 1.8604651162790704,
+        "absoluteError": 1.8604651162790704
+      },
+      {
+        "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+        "localDate": "2026-10-11",
+        "cutoff": "2026-10-11T10:00:00.000Z",
+        "executionStatus": "executed",
+        "outcomeStatus": "matched",
+        "pairingStatus": "compatible",
+        "event": {
+          "eventId": "[\"invented-shadow-block-v1\",\"synthetic-ai4-frozen-evaluation\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-11\\\"]\"]",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-11\"]",
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+          "artifactFingerprint": "{\"appModelActivationAllowed\":false,\"artifactId\":\"[\\\"invented-pre-data-frozen-v1\\\",\\\"invented-person-a\\\",\\\"M1\\\",\\\"2026-10-06T10:00:00.000Z\\\"]\",\"candidateId\":\"M1\",\"coefficients\":{\"intercept\":-6.186046511627906,\"slope\":1.6744186046511627},\"dataCutoff\":\"2026-10-06T10:00:00.000Z\",\"dataGeneration\":0,\"evidenceKind\":\"synthetic_software_fixture\",\"featureSchema\":[{\"name\":\"main_sleep_duration_hours\",\"unit\":\"hours\"}],\"fittedAt\":\"2026-10-06T10:00:00.000Z\",\"historyPolicy\":\"frozen_personal_fit_no_inference_updates\",\"measurement\":{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"},\"outputRule\":{\"maximum\":10,\"minimum\":1,\"rounding\":\"none\"},\"ownerScope\":\"synthetic-ai4-frozen-evaluation\",\"participantKey\":\"invented-person-a\",\"protocolId\":\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"protocolVersion\":\"tonyo-sleep-evening-energy-v0.3-draft\",\"realDataTrainingAllowed\":false,\"schemaVersion\":\"tonyo-synthetic-personal-model-v1\",\"sleepSource\":\"appleHealth\",\"synthetic\":true,\"targetSchema\":{\"maximum\":10,\"minimum\":1,\"name\":\"evening_energy\",\"unit\":\"rating_1_10\"},\"timezone\":\"Etc/UTC\",\"trainingCount\":5,\"trainingOpportunityIds\":[\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-01\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-02\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-03\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-04\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-05\\\"]\"]}",
+          "executedAt": "2026-10-11T10:03:00.000Z",
+          "receiptAt": "2026-10-11T10:03:00.000Z",
+          "executionStatus": "executed",
+          "sleepStatus": "eligible",
+          "modelStatus": "predicted",
+          "rawPrediction": 7.209302325581395,
+          "prediction": 7.209302325581395,
+          "feature": {
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-11\"]",
+            "revision": 1,
+            "source": "appleHealth",
+            "durationHours": 8.0,
+            "startedAt": "2026-10-10T23:00:00.000Z",
+            "endedAt": "2026-10-11T07:00:00.000Z",
+            "availableAt": "2026-10-11T08:00:00.000Z",
+            "selectionDependencies": [
+              "2026-10-11T08:00:00.000Z"
+            ]
+          }
+        },
+        "outcome": {
+          "assessedAt": "2026-10-11T22:01:00.000Z",
+          "receiptAt": "2026-10-11T22:01:00.000Z",
+          "status": "matched",
+          "energy": 9,
+          "pairingStatus": "compatible",
+          "lateOriginalResponses": 0,
+          "knownResponseFingerprints": {
+            "[\"invented-person-a\",\"invented-person-a-response-11-first\",1]": "{\"availableAt\":\"2026-10-11T19:00:01.000Z\",\"deleted\":false,\"energy\":9,\"initialSavedAt\":\"2026-10-11T19:00:01.000Z\",\"lineageComplete\":true,\"localDate\":\"2026-10-11\",\"measurement\":\"{\\\"items\\\":[{\\\"anchors\\\":{\\\"1\\\":\\\"extremely low energy\\\",\\\"10\\\":\\\"extremely high energy\\\",\\\"5\\\":\\\"about average\\\"},\\\"id\\\":\\\"energy\\\",\\\"label\\\":\\\"Energy\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"not fatigued at all\\\",\\\"10\\\":\\\"extremely fatigued\\\",\\\"5\\\":\\\"moderately fatigued\\\"},\\\"id\\\":\\\"fatigue\\\",\\\"label\\\":\\\"Fatigue\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How fatigued or drained do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"fully alert\\\",\\\"10\\\":\\\"extremely sleepy\\\",\\\"5\\\":\\\"moderately sleepy\\\"},\\\"id\\\":\\\"sleepiness\\\",\\\"label\\\":\\\"Sleepiness\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How sleepy do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"extremely difficult to focus\\\",\\\"10\\\":\\\"extremely easy to focus\\\",\\\"5\\\":\\\"average\\\"},\\\"id\\\":\\\"focus\\\",\\\"label\\\":\\\"Focus\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How easy is it for you to focus right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Low\\\",\\\"10\\\":\\\"Great\\\",\\\"5\\\":\\\"Steady\\\"},\\\"id\\\":\\\"mood\\\",\\\"label\\\":\\\"Mood\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Calm\\\",\\\"10\\\":\\\"Maxed\\\",\\\"5\\\":\\\"Moderate\\\"},\\\"id\\\":\\\"stress\\\",\\\"label\\\":\\\"Stress\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"}],\\\"kind\\\":\\\"customSelfReport\\\",\\\"language\\\":\\\"en\\\",\\\"recallPeriod\\\":\\\"right now\\\",\\\"recallPeriodText\\\":\\\"right now\\\",\\\"sharedHeading\\\":\\\"How do you feel right now?\\\",\\\"status\\\":\\\"draftNotClinicallyValidated\\\",\\\"version\\\":\\\"tonyo-self-report-draft-v1\\\"}\",\"observedAt\":\"2026-10-11T19:00:00.000Z\",\"participantKey\":\"invented-person-a\",\"period\":\"Evening\",\"revision\":1,\"sourceId\":\"invented-person-a-response-11-first\",\"timezone\":\"Etc/UTC\"}"
+          },
+          "responseIntegrityStatus": null,
+          "previousAssessments": []
+        },
+        "prediction": 7.209302325581395,
+        "energy": 9,
+        "scored": true,
+        "signedError": -1.7906976744186052,
+        "absoluteError": 1.7906976744186052
+      },
+      {
+        "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+        "localDate": "2026-10-12",
+        "cutoff": "2026-10-12T10:00:00.000Z",
+        "executionStatus": "executed",
+        "outcomeStatus": "matched",
+        "pairingStatus": "compatible",
+        "event": {
+          "eventId": "[\"invented-shadow-block-v1\",\"synthetic-ai4-frozen-evaluation\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-12\\\"]\"]",
+          "opportunityId": "[\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"invented-person-a\",\"2026-10-12\"]",
+          "artifactId": "[\"invented-pre-data-frozen-v1\",\"invented-person-a\",\"M1\",\"2026-10-06T10:00:00.000Z\"]",
+          "artifactFingerprint": "{\"appModelActivationAllowed\":false,\"artifactId\":\"[\\\"invented-pre-data-frozen-v1\\\",\\\"invented-person-a\\\",\\\"M1\\\",\\\"2026-10-06T10:00:00.000Z\\\"]\",\"candidateId\":\"M1\",\"coefficients\":{\"intercept\":-6.186046511627906,\"slope\":1.6744186046511627},\"dataCutoff\":\"2026-10-06T10:00:00.000Z\",\"dataGeneration\":0,\"evidenceKind\":\"synthetic_software_fixture\",\"featureSchema\":[{\"name\":\"main_sleep_duration_hours\",\"unit\":\"hours\"}],\"fittedAt\":\"2026-10-06T10:00:00.000Z\",\"historyPolicy\":\"frozen_personal_fit_no_inference_updates\",\"measurement\":{\"items\":[{\"anchors\":{\"1\":\"extremely low energy\",\"10\":\"extremely high energy\",\"5\":\"about average\"},\"id\":\"energy\",\"label\":\"Energy\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"not fatigued at all\",\"10\":\"extremely fatigued\",\"5\":\"moderately fatigued\"},\"id\":\"fatigue\",\"label\":\"Fatigue\",\"optional\":true,\"prompt\":\"How fatigued or drained do you feel right now?\"},{\"anchors\":{\"1\":\"fully alert\",\"10\":\"extremely sleepy\",\"5\":\"moderately sleepy\"},\"id\":\"sleepiness\",\"label\":\"Sleepiness\",\"optional\":true,\"prompt\":\"How sleepy do you feel right now?\"},{\"anchors\":{\"1\":\"extremely difficult to focus\",\"10\":\"extremely easy to focus\",\"5\":\"average\"},\"id\":\"focus\",\"label\":\"Focus\",\"optional\":true,\"prompt\":\"How easy is it for you to focus right now?\"},{\"anchors\":{\"1\":\"Low\",\"10\":\"Great\",\"5\":\"Steady\"},\"id\":\"mood\",\"label\":\"Mood\",\"optional\":true,\"prompt\":\"\"},{\"anchors\":{\"1\":\"Calm\",\"10\":\"Maxed\",\"5\":\"Moderate\"},\"id\":\"stress\",\"label\":\"Stress\",\"optional\":true,\"prompt\":\"\"}],\"kind\":\"customSelfReport\",\"language\":\"en\",\"recallPeriod\":\"right now\",\"recallPeriodText\":\"right now\",\"sharedHeading\":\"How do you feel right now?\",\"status\":\"draftNotClinicallyValidated\",\"version\":\"tonyo-self-report-draft-v1\"},\"outputRule\":{\"maximum\":10,\"minimum\":1,\"rounding\":\"none\"},\"ownerScope\":\"synthetic-ai4-frozen-evaluation\",\"participantKey\":\"invented-person-a\",\"protocolId\":\"[\\\"tonyo-sleep-evening-energy-v0.3-draft\\\",\\\"appleHealth\\\",\\\"en\\\"]\",\"protocolVersion\":\"tonyo-sleep-evening-energy-v0.3-draft\",\"realDataTrainingAllowed\":false,\"schemaVersion\":\"tonyo-synthetic-personal-model-v1\",\"sleepSource\":\"appleHealth\",\"synthetic\":true,\"targetSchema\":{\"maximum\":10,\"minimum\":1,\"name\":\"evening_energy\",\"unit\":\"rating_1_10\"},\"timezone\":\"Etc/UTC\",\"trainingCount\":5,\"trainingOpportunityIds\":[\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-01\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-02\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-03\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-04\\\"]\",\"[\\\"[\\\\\\\"tonyo-sleep-evening-energy-v0.3-draft\\\\\\\",\\\\\\\"appleHealth\\\\\\\",\\\\\\\"en\\\\\\\"]\\\",\\\"invented-person-a\\\",\\\"2026-10-05\\\"]\"]}",
+          "executedAt": "2026-10-12T10:03:00.000Z",
+          "receiptAt": "2026-10-12T10:03:00.000Z",
+          "executionStatus": "executed",
+          "sleepStatus": "eligible",
+          "modelStatus": "predicted",
+          "rawPrediction": 6.372093023255814,
+          "prediction": 6.372093023255814,
+          "feature": {
+            "sourceKey": "[\"synthetic-health-episodes\",\"invented-person-a-sleep-12\"]",
+            "revision": 1,
+            "source": "appleHealth",
+            "durationHours": 7.5,
+            "startedAt": "2026-10-11T23:30:00.000Z",
+            "endedAt": "2026-10-12T07:00:00.000Z",
+            "availableAt": "2026-10-12T08:00:00.000Z",
+            "selectionDependencies": [
+              "2026-10-12T08:00:00.000Z"
+            ]
+          }
+        },
+        "outcome": {
+          "assessedAt": "2026-10-12T22:01:00.000Z",
+          "receiptAt": "2026-10-12T22:01:00.000Z",
+          "status": "matched",
+          "energy": 6,
+          "pairingStatus": "compatible",
+          "lateOriginalResponses": 0,
+          "knownResponseFingerprints": {
+            "[\"invented-person-a\",\"invented-person-a-response-12-first\",1]": "{\"availableAt\":\"2026-10-12T19:00:01.000Z\",\"deleted\":false,\"energy\":6,\"initialSavedAt\":\"2026-10-12T19:00:01.000Z\",\"lineageComplete\":true,\"localDate\":\"2026-10-12\",\"measurement\":\"{\\\"items\\\":[{\\\"anchors\\\":{\\\"1\\\":\\\"extremely low energy\\\",\\\"10\\\":\\\"extremely high energy\\\",\\\"5\\\":\\\"about average\\\"},\\\"id\\\":\\\"energy\\\",\\\"label\\\":\\\"Energy\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"not fatigued at all\\\",\\\"10\\\":\\\"extremely fatigued\\\",\\\"5\\\":\\\"moderately fatigued\\\"},\\\"id\\\":\\\"fatigue\\\",\\\"label\\\":\\\"Fatigue\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How fatigued or drained do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"fully alert\\\",\\\"10\\\":\\\"extremely sleepy\\\",\\\"5\\\":\\\"moderately sleepy\\\"},\\\"id\\\":\\\"sleepiness\\\",\\\"label\\\":\\\"Sleepiness\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How sleepy do you feel right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"extremely difficult to focus\\\",\\\"10\\\":\\\"extremely easy to focus\\\",\\\"5\\\":\\\"average\\\"},\\\"id\\\":\\\"focus\\\",\\\"label\\\":\\\"Focus\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"How easy is it for you to focus right now?\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Low\\\",\\\"10\\\":\\\"Great\\\",\\\"5\\\":\\\"Steady\\\"},\\\"id\\\":\\\"mood\\\",\\\"label\\\":\\\"Mood\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"},{\\\"anchors\\\":{\\\"1\\\":\\\"Calm\\\",\\\"10\\\":\\\"Maxed\\\",\\\"5\\\":\\\"Moderate\\\"},\\\"id\\\":\\\"stress\\\",\\\"label\\\":\\\"Stress\\\",\\\"optional\\\":true,\\\"prompt\\\":\\\"\\\"}],\\\"kind\\\":\\\"customSelfReport\\\",\\\"language\\\":\\\"en\\\",\\\"recallPeriod\\\":\\\"right now\\\",\\\"recallPeriodText\\\":\\\"right now\\\",\\\"sharedHeading\\\":\\\"How do you feel right now?\\\",\\\"status\\\":\\\"draftNotClinicallyValidated\\\",\\\"version\\\":\\\"tonyo-self-report-draft-v1\\\"}\",\"observedAt\":\"2026-10-12T19:00:00.000Z\",\"participantKey\":\"invented-person-a\",\"period\":\"Evening\",\"revision\":1,\"sourceId\":\"invented-person-a-response-12-first\",\"timezone\":\"Etc/UTC\"}"
+          },
+          "responseIntegrityStatus": null,
+          "previousAssessments": []
+        },
+        "prediction": 6.372093023255814,
+        "energy": 6,
+        "scored": true,
+        "signedError": 0.3720930232558137,
+        "absoluteError": 0.3720930232558137
+      }
+    ],
+    "limitations": [
+      "Invented fixtures and simulated store receipts are not actual prospective measurements or native durability proof.",
+      "Unopened planned days remain in closed-window denominators; not_linked means assessment is unavailable, not an inferred missing answer.",
+      "Failure statuses are in-memory diagnostics, not proof that a failed write was saved.",
+      "Failed erasures block later reads and are retried within this harness instance; this is not native crash-recovery evidence.",
+      "Observed response revisions are immutable and cumulative; omitted or changed known history fails closed on later assessments.",
+      "Erasure applies to every replay; signout preserves only previously committed scoped history.",
+      "One immutable model is frozen per block; no app display, Coach action, real-data inference or training is enabled."
+    ]
+  },
+  "lifecycleRehearsal": {
+    "artifactRoundTripMatched": true,
+    "simulatedStoreReopenMatched": true,
+    "optOutClearedSimulatedStore": true,
+    "nativeDurabilityTestedByThisCommand": false
+  },
+  "predataReview": {
+    "appModelReleaseAllowed": false,
+    "asOf": "2026-10-13T23:00:00.000Z",
+    "authorizationPolicy": "audit_only_no_permission_or_unlock_path",
+    "evidenceAuthenticityVerified": false,
+    "executionBlockers": [
+      "real_data_execution_and_release_not_implemented"
+    ],
+    "experimentId": "tonyo-pre-data-preparation-v1",
+    "featureManifest": {
+      "comparisonPartition": "development_only",
+      "experiment": "F1",
+      "featureOrder": [
+        "main_sleep_duration_hours"
+      ],
+      "features": [
+        {
+          "availabilityRule": "durably_available_on_issuing_device_at_or_before_cutoff",
+          "id": "main_sleep_duration_hours",
+          "observationRule": "main_sleep_ends_on_opportunity_date_at_or_before_cutoff",
+          "selectionVersion": "tonyo-study-sleep-v1",
+          "source": "appleHealth",
+          "unit": "hours"
+        }
+      ],
+      "ladder": [
+        {
+          "experiment": "F1",
+          "status": "implemented_synthetic_sleep_only"
+        },
+        {
+          "experiment": "F2",
+          "status": "not_implemented_requires_definition_and_review"
+        },
+        {
+          "experiment": "F3",
+          "status": "not_implemented_requires_definition_and_review"
+        },
+        {
+          "experiment": "F4",
+          "status": "optional_deferred_not_implemented"
+        },
+        {
+          "experiment": "F5",
+          "status": "optional_deferred_not_implemented"
+        },
+        {
+          "experiment": "F6",
+          "status": "optional_deferred_not_implemented"
+        }
+      ],
+      "measurement": {
+        "items": [
+          {
+            "anchors": {
+              "1": "extremely low energy",
+              "10": "extremely high energy",
+              "5": "about average"
+            },
+            "id": "energy",
+            "label": "Energy",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "not fatigued at all",
+              "10": "extremely fatigued",
+              "5": "moderately fatigued"
+            },
+            "id": "fatigue",
+            "label": "Fatigue",
+            "optional": true,
+            "prompt": "How fatigued or drained do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "fully alert",
+              "10": "extremely sleepy",
+              "5": "moderately sleepy"
+            },
+            "id": "sleepiness",
+            "label": "Sleepiness",
+            "optional": true,
+            "prompt": "How sleepy do you feel right now?"
+          },
+          {
+            "anchors": {
+              "1": "extremely difficult to focus",
+              "10": "extremely easy to focus",
+              "5": "average"
+            },
+            "id": "focus",
+            "label": "Focus",
+            "optional": true,
+            "prompt": "How easy is it for you to focus right now?"
+          },
+          {
+            "anchors": {
+              "1": "Low",
+              "10": "Great",
+              "5": "Steady"
+            },
+            "id": "mood",
+            "label": "Mood",
+            "optional": true,
+            "prompt": ""
+          },
+          {
+            "anchors": {
+              "1": "Calm",
+              "10": "Maxed",
+              "5": "Moderate"
+            },
+            "id": "stress",
+            "label": "Stress",
+            "optional": true,
+            "prompt": ""
+          }
+        ],
+        "kind": "customSelfReport",
+        "language": "en",
+        "recallPeriod": "right now",
+        "recallPeriodText": "right now",
+        "sharedHeading": "How do you feel right now?",
+        "status": "draftNotClinicallyValidated",
+        "version": "tonyo-self-report-draft-v1"
+      },
+      "missingFeaturePolicy": "abstain_no_imputation_or_source_fallback",
+      "preprocessing": "identity_no_fitted_transform",
+      "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+      "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+      "realDataUseAuthorized": false,
+      "sameOutcomeWindowFeaturesAllowed": false,
+      "schemaVersion": "ai5-feature-manifest-v1",
+      "sleepSource": "appleHealth",
+      "target": "raw_evening_energy_1_through_10"
+    },
+    "incompleteRequirementCount": 15,
+    "interpretation": "Records describe supplied evidence, not independently verified approvals. Synthetic success and complete declarations never grant data-use permission, fitting or model release. No ordinary personal app entry restriction is added.",
+    "measurement": {
+      "items": [
+        {
+          "anchors": {
+            "1": "extremely low energy",
+            "10": "extremely high energy",
+            "5": "about average"
+          },
+          "id": "energy",
+          "label": "Energy",
+          "optional": true,
+          "prompt": ""
+        },
+        {
+          "anchors": {
+            "1": "not fatigued at all",
+            "10": "extremely fatigued",
+            "5": "moderately fatigued"
+          },
+          "id": "fatigue",
+          "label": "Fatigue",
+          "optional": true,
+          "prompt": "How fatigued or drained do you feel right now?"
+        },
+        {
+          "anchors": {
+            "1": "fully alert",
+            "10": "extremely sleepy",
+            "5": "moderately sleepy"
+          },
+          "id": "sleepiness",
+          "label": "Sleepiness",
+          "optional": true,
+          "prompt": "How sleepy do you feel right now?"
+        },
+        {
+          "anchors": {
+            "1": "extremely difficult to focus",
+            "10": "extremely easy to focus",
+            "5": "average"
+          },
+          "id": "focus",
+          "label": "Focus",
+          "optional": true,
+          "prompt": "How easy is it for you to focus right now?"
+        },
+        {
+          "anchors": {
+            "1": "Low",
+            "10": "Great",
+            "5": "Steady"
+          },
+          "id": "mood",
+          "label": "Mood",
+          "optional": true,
+          "prompt": ""
+        },
+        {
+          "anchors": {
+            "1": "Calm",
+            "10": "Maxed",
+            "5": "Moderate"
+          },
+          "id": "stress",
+          "label": "Stress",
+          "optional": true,
+          "prompt": ""
+        }
+      ],
+      "kind": "customSelfReport",
+      "language": "en",
+      "recallPeriod": "right now",
+      "recallPeriodText": "right now",
+      "sharedHeading": "How do you feel right now?",
+      "status": "draftNotClinicallyValidated",
+      "version": "tonyo-self-report-draft-v1"
+    },
+    "ordinaryPersonalAppEntryChanged": false,
+    "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"appleHealth\",\"en\"]",
+    "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+    "realDataFittingAllowed": false,
+    "realDataUseAuthorized": false,
+    "requirements": [
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "measurementDefinition",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "populationAndDataUse",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "sourceTimingAndRevisionPolicy",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "privacyRetentionAndWithdrawal",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "studySizeAndPrecision",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "realDataReadiness",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "chronologicalSplitAndBaselines",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "featureDefinitions",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "metricsAndPromotionCriteria",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "uncertaintyMethod",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "physicalDeviceAcceptance",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "frozenEvaluation",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "prospectiveShadowEvaluation",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "artifactMigrationAndRollback",
+        "reviewedAt": null,
+        "reviewer": null
+      },
+      {
+        "blockers": [
+          "decision_version_not_defined",
+          "evidence_not_supplied"
+        ],
+        "declaredStatus": "notSupplied",
+        "evidenceKind": null,
+        "expectedDecisionVersion": null,
+        "recordCompleteForDeclaredScope": false,
+        "reference": null,
+        "requirement": "releaseAndMonitoringDecision",
+        "reviewedAt": null,
+        "reviewer": null
+      }
+    ],
+    "schemaVersion": "ai-predata-evidence-audit-v1"
+  }
+}

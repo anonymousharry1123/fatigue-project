@@ -26,6 +26,17 @@ void main(List<String> arguments) {
         ? Ai1SleepSource.manual
         : Ai1SleepSource.appleHealth,
   );
+  final scenario = buildAi3SyntheticScenario(protocol: protocol);
+  final report = Ai3ComparisonRunner.runSynthetic(
+    manifest: scenario.manifest,
+    days: scenario.days,
+  );
+  stdout.writeln(const JsonEncoder.withIndent('  ').convert(report.toJson()));
+}
+
+/// Shared invented scenario for the pre-data end-to-end rehearsal.
+({Ai3SyntheticManifest manifest, List<Ai1FixtureDay> days})
+buildAi3SyntheticScenario({required Ai1Protocol protocol}) {
   final manifest = Ai3SyntheticManifest(
     protocol: protocol,
     experimentId: 'invented-two-person-comparison-v1',
@@ -83,11 +94,7 @@ void main(List<String> arguments) {
       );
     }
   }
-  final report = Ai3ComparisonRunner.runSynthetic(
-    manifest: manifest,
-    days: days,
-  );
-  stdout.writeln(const JsonEncoder.withIndent('  ').convert(report.toJson()));
+  return (manifest: manifest, days: List.unmodifiable(days));
 }
 
 Ai1FixtureDay _day({

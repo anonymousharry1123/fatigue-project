@@ -1,0 +1,44 @@
+{
+  "checkCount": 12,
+  "checks": [
+    "independent_process_persistence",
+    "owner_isolation",
+    "receipt_utc_millisecond_roundtrip",
+    "host_metadata_inspection",
+    "invalid_owner_and_json_rejected",
+    "exact_four_mib_boundary",
+    "utf8_byte_bound",
+    "bounded_disk_read",
+    "owner_delete_and_pending_cleanup",
+    "concurrent_reader_observes_complete_replacements",
+    "delete_all_and_retry",
+    "temporary_root_and_symlink_guard"
+  ],
+  "evidenceKind": "synthetic_host_smoke_test",
+  "hostAttributes": {
+    "atomicReaderObservations": 105,
+    "backupExcluded": false,
+    "backupExclusionHostProbe": false,
+    "backupExclusionVerified": false,
+    "directoryProtection": "NSFileProtectionCompleteUntilFirstUserAuthentication",
+    "fileProtection": "NSFileProtectionCompleteUntilFirstUserAuthentication"
+  },
+  "hostPlatform": {
+    "machine": "arm64",
+    "system": "Darwin",
+    "version": "26.6.2"
+  },
+  "iosDataProtectionVerified": false,
+  "limitations": [
+    "macOS host, not an iOS device",
+    "No power-loss or crash-recovery guarantee",
+    "Host protection metadata does not establish iOS Data Protection",
+    "No app installation, private data, or production storage accessed"
+  ],
+  "productionClassSha256": "f9778bcc4b3ceb7614e1ee87f50b1b06430abfdb23e4818a0515c89b2b9f97e9",
+  "productionSource": "ios/Runner/AppDelegate.swift::Ai1CaptureFileStore",
+  "rootInjection": "exact lookup replacement; fresh guarded temporary directory",
+  "status": "passed",
+  "swiftVersion": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx26.0",
+  "temporaryStorageRemoved": true
+}

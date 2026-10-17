@@ -164,6 +164,8 @@ Proposed primary error unit is absolute error in original 1–10 rating points. 
 
 No accuracy, sample-size sufficiency or clinical claim follows from this document or the passing app tests. No algorithm has been selected by AI-0.
 
+The later [pre-data preparation](PRE_DATA_PREPARATION_REPORT.md) rehearses frozen synthetic evaluation, F1 feature compatibility, simulated shadow execution and strict model-artifact/lifecycle behavior. AI-4's single frozen fit is distinct from AI-3's expanding replay. The [AI-5 plan](AI5_FEATURE_EXPERIMENT_PLAN.md) keeps extra features unimplemented/deferred, and uncertainty remains explicitly unestimated pending a suitable plan. A typed evidence audit records missing review/real-data/device evidence but cannot grant training or release permission; it changes no ordinary app-entry flow. These preparations do not fill the decision record below or change this contract from `v0.3-draft`.
+
 ## 8. Decision record and exit check
 
 | Record | Current state |

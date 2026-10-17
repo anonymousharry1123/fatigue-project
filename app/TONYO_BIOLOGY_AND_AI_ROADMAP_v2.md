@@ -8,11 +8,13 @@
 
 **AI-3 preparation follow-up, October 17:** A separate [synthetic comparison runner](docs/AI3_SYNTHETIC_PREPARATION.md) prepares B0 personal mean, B1 latest prior Evening outcome and M1 sleep-only linear regression using invented AI-1 records. This is software preparation; real-data AI-3 comparison and AI-4 evaluation remain pending. No private-data input, app model activation or scientific approval is added.
 
+**Pre-data preparation follow-up, October 17:** The user requested finishing what is possible before entering real data. [The central preparation report](docs/PRE_DATA_PREPARATION_REPORT.md) covers frozen chronological synthetic evaluation, the versioned F1 feature contract and deferred feature ladder, simulated shadow execution, strict synthetic artifacts/lifecycle checks and an evidence-gap audit. These are software preparations for AI-4–AI-7, not completed empirical stages. No private data, new optional collectors or app model activation is involved; scientific decision fields remain open.
+
 ## Read This First
 
 **Work now:** finish remaining measurement/protocol decisions and, when appropriate, start an explicit future local plan to obtain prospective evidence. Use AI-2 to assess those records privately; software completion alone does not justify modeling.
 
-**Plan for later:** prospective data collection, real-data model comparisons, real-outcome evaluation, and integration. No real-data AI training or deployment is authorized by this document. Synthetic AI-3 preparation is recorded separately below.
+**Plan for later:** prospective data collection, real-data model comparisons, real-outcome evaluation, and integration. No real-data AI training or deployment is authorized by this document. Synthetic AI-3–AI-7 preparation is recorded separately below; it adds no approval screen or restriction to ordinary personal app entry.
 
 The original measurement plan is retained below, including Sections 1–18. Sections 19–32 are new proposals with decision fields for Harry, Dr. Sun, Dr. Lin, and any additional reviewer. The original custom questions remain drafts; their inclusion is not a claim of clinical validation.
 
@@ -816,6 +818,8 @@ Decide clipping and display rounding before final testing. Evaluate the actual d
 
 **Purpose:** Match the evaluation to the claim Tonyo intends to make.
 
+**Software preparation, October 17:** A synthetic runner freezes each person's B0/B1/M1 fit once at a common UTC cutoff, separates earlier training, middle development and later final opportunities, and opens final data through a separate explicit API. Candidate/comparator choices precede scoring; no later labels update the models. Coverage, individual/macro errors and identical-set paired errors are reported. Uncertainty and real promotion rules remain unfilled; no automatic winner is chosen. See [the preparation report](docs/PRE_DATA_PREPARATION_REPORT.md). Actual future-data evaluation and its decision remain pending.
+
 ### A. Separate two questions
 
 | Intended claim | Proposed evaluation design |
@@ -880,6 +884,8 @@ If the dataset cannot support dependable subgroup or uncertainty estimates, stat
 
 **Purpose:** Extend the sleep model without returning immediately to an unexplained mixture of variables.
 
+**Software preparation, October 17:** [The feature experiment plan](docs/AI5_FEATURE_EXPERIMENT_PLAN.md) defines a versioned F1 source/unit/timing contract and a future comparison-report schema. The executable validator permits only the existing sleep feature; F2/F3 remain undefined/unimplemented and F4–F6 optional/deferred. No new variables or collectors are added without evidence. Every feature's empirical disposition is currently not adequately tested; B0/B1 history baselines do not count as F2 implementation.
+
 ### Proposed feature ladder
 
 | Experiment | Permitted extension | Question |
@@ -919,6 +925,8 @@ Prediction error, feature importance, and correlations do not establish the phys
 
 **Purpose:** Confirm performance when predictions are genuinely saved before later answers exist.
 
+**Software preparation, October 17:** An isolated synthetic shadow harness rehearses a frozen artifact/calendar, actual injected-clock execution, immutable events, two-write simulated receipts, missing/unopened cases and erasure/session races. Simulated receipts are not native durability or actual prospective measurements. No normal app/background task, visible prediction or Coach integration is connected. [The central report](docs/PRE_DATA_PREPARATION_REPORT.md) records this boundary; the prospective empirical deliverable remains pending.
+
 Under the approved protocol, run a **shadow evaluation**: generate and save predictions, but initially keep them out of the check-in workflow and do not let them drive Coach changes. This is a proposed precaution against feeding the app's answer back into the response or changing the conditions being evaluated.
 
 For every opportunity, store the model version, feature cutoff, generated time, expected outcome window, original prediction, and eligibility status. Later link the actual self-report. Report missing outcomes, late answers, and prediction failures instead of silently removing them.
@@ -945,6 +953,8 @@ Prediction records should be revision-controlled rather than silently overwritte
 ## 27. AI-7: Integrate the Selected Model Safely
 
 **Purpose:** Deploy only an approach that has earned its place, without breaking the biology data collection.
+
+**Software preparation, October 17:** Strict synthetic artifact parsing/inference and an isolated registry now exercise target/feature/source/measurement compatibility, abstention, generation invalidation and rollback. They cannot load legacy residual artifacts and have no app consumer. Caller-propagated session state is required; immutable old references are not globally revoked. The [preparation model card and migration plan](docs/PRE_DATA_PREPARATION_REPORT.md#ai-7-preparation-model-card-and-migration-plan) retain the unresolved old/new output decision, device evidence and release decision.
 
 ### A. Preserve separation in the interface
 
@@ -1090,10 +1100,10 @@ Use readiness milestones instead of promising that the model will be validated b
 | AI-1 | Dataset and timing checks | Technical review plus research review | ______ | ______ | Local infrastructure implemented 2026-10-17; verification/limits in [report](docs/DATA_READINESS_REPORT.md); no real data inspected |
 | AI-2 | Measurement/data readiness report | Both mentors; statistical advice as needed | ______ | ______ | Tooling and evidence-gap report complete 2026-10-17; empirical readiness not established |
 | AI-3 | Baseline and candidate comparisons | Dr. Sun and statistical adviser | ______ | ______ | Synthetic B0/B1/M1 preparation implemented 2026-10-17; real-data comparison deferred; [report](docs/AI3_SYNTHETIC_PREPARATION.md) |
-| AI-4 | Frozen evaluation report | Both mentors | ______ | ______ | Deferred |
-| AI-5 | Input-comparison report | Dr. Lin: interpretation; Dr. Sun: modeling | ______ | ______ | Optional |
-| AI-6 | Prospective prediction report | Both mentors and applicable research reviewer | ______ | ______ | Deferred |
-| AI-7 | Integration and release decision | Technical/privacy reviewers | ______ | ______ | Deferred |
+| AI-4 | Frozen evaluation report | Both mentors | ______ | ______ | Synthetic frozen evaluation prepared; actual future-data evaluation and decision pending |
+| AI-5 | Input-comparison report | Dr. Lin: interpretation; Dr. Sun: modeling | ______ | ______ | F1 contract/feature plan prepared; extra inputs untested and deferred |
+| AI-6 | Prospective prediction report | Both mentors and applicable research reviewer | ______ | ______ | Synthetic shadow rehearsal prepared; actual prospective model evaluation pending |
+| AI-7 | Integration and release decision | Technical/privacy reviewers | ______ | ______ | Synthetic artifact/lifecycle preparation; app integration/device/release pending |
 
 Suggested roles are invitations for discussion, not commitments already made by either mentor.
 
@@ -1127,6 +1137,7 @@ Suggested roles are invitations for discussion, not commitments already made by 
 | 2.0 draft, 2026-10-04 | Preserved Sections 1–18; added future AI stages, evidence notes, and adjustment spaces | Proposed for review |
 | Implementation update, 2026-10-17 | AI-1 local infrastructure and AI-2 evidence-gap assessment implemented; links to dictionary/report | User-authorized implementation; scientific decisions and real-data readiness not promoted to approved |
 | Synthetic preparation, 2026-10-17 | AI-3 fixed-manifest B0/B1/M1 fixture replay and comparison artifacts | Software preparation only; real-data AI-3/AI-4 decisions remain open |
+| Pre-data preparation, 2026-10-17 | AI-4 frozen fixture evaluation, AI-5 manifest/plan, AI-6 simulated shadow lifecycle, AI-7 strict artifacts and evidence audit; [central report](docs/PRE_DATA_PREPARATION_REPORT.md) | User-authorized software preparation; empirical stages and scientific decisions remain open |
 | __________ | ______________________________ | ____________________ |
 | __________ | ______________________________ | ____________________ |
 

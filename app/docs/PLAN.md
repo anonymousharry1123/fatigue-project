@@ -100,6 +100,18 @@ AI-1 infrastructure and AI-2 tooling/report completion are distinct from complet
 
 Synthetic regression fits invented observations to test software; it does not establish Tonyo accuracy, a sleep effect or a scientifically adequate sample. Two-pair/nonzero-variance guards and output clipping are fixture execution rules, not approved data-use or study-size settings. The earlier AI-1/AI-2 1,322-test result remains its dated verification and is not automatically claimed for this new work.
 
+### AI-4–AI-7 — preparation before real-data entry (2026-10-17)
+
+- [x] Frozen personal B0/B1/M1 synthetic fitting at one common UTC cutoff, separate development/final evaluation APIs, explicit identical-set comparisons and no automatic promotion.
+- [x] Versioned F1 sleep-only feature manifest and [AI-5 experiment plan](AI5_FEATURE_EXPERIMENT_PLAN.md); F2–F6 remain unimplemented/deferred, with no extra collectors.
+- [x] Synthetic shadow harness with a frozen calendar/artifact, injected execution clock, simulated receipt ordering, missing-opportunity accounting and lifecycle/erasure checks.
+- [x] Strict synthetic artifact/inference/registry with explicit abstention, exact target/source/feature compatibility and isolated rollback/session-generation checks; no app activation.
+- [x] Typed evidence audit that distinguishes synthetic success from required review/empirical/device evidence and has no unlock path or ordinary personal-entry restriction.
+- [x] Central [preparation report](PRE_DATA_PREPARATION_REPORT.md), collection/device acceptance instructions and preparation model card/migration plan; parent/extension package versions aligned to `0.35.0+37`.
+- [ ] Resolve appropriate protocol/review decisions, perform applicable isolated physical-device checks, collect prospective observations and rerun AI-2. Real-data comparisons, uncertainty, prospective shadow evidence and model release remain evidence-dependent.
+
+This completes the specified software preparation, not the empirical AI-4–AI-7 stages. Final verification and reproducible artifact commands are recorded centrally; historical test totals above remain attributed to their original work. No study size, minimum useful improvement, statistical interval method or reviewer approval is invented.
+
 ### Version 0.1 — Basic Structure ✅
 
 - Flutter application skeleton

@@ -11,6 +11,8 @@ Evidence scope: repository implementation and synthetic software checks; no real
 
 **AI-1 infrastructure is implemented; AI-2 assessment tooling and this evidence-gap assessment are complete.** Final software verification is recorded below. This does not complete an empirical pilot: no prospective participant dataset was available for inspection. Software tests cannot establish comprehension, adherence, outcome variation, or an adequate study size.
 
+Subsequent [pre-data software preparation](PRE_DATA_PREPARATION_REPORT.md) adds synthetic evaluation, feature/lifecycle checks and an evidence audit. It does not change this no-real-data readiness decision. The verification below remains the dated AI-1/AI-2 result, separate from later checks.
+
 ## 1. What the implementation covers
 
 | Requirement | Implementation and boundary |

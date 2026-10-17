@@ -1,6 +1,8 @@
 # Biology upgrade — Phase 1
 
-Latest follow-up, October 17: **AI-3 synthetic comparison preparation adds B0/B1/M1 replay without private-data inputs or app model activation.** See [AI3_SYNTHETIC_PREPARATION.md](AI3_SYNTHETIC_PREPARATION.md) for its fixed synthetic manifest, boundaries and verification. Full real-data AI-3 and AI-4 remain pending.
+Latest follow-up, October 17: **Pre-data software preparation now covers AI-3–AI-7, with invented fixtures, frozen evaluation, simulated shadow execution and strict model artifacts.** See [PRE_DATA_PREPARATION_REPORT.md](PRE_DATA_PREPARATION_REPORT.md) for consolidated verification and the remaining protocol, data and device evidence. Real-data modeling and app model integration remain pending.
+
+The earlier [AI-3 preparation](AI3_SYNTHETIC_PREPARATION.md) adds B0/B1/M1 expanding-history replay. Its fixed synthetic manifest and verification remain separately documented from the later frozen evaluation.
 
 AI-1/AI-2 completion, October 17: **Local study infrastructure and the readiness assessment/report are implemented; empirical modeling readiness is not established.** The user requested completion and reported no/uncertain prospective history. No real participant data were inspected. See [DATA_READINESS_REPORT.md](DATA_READINESS_REPORT.md) for scope, final verification and readiness gaps, and [AI1_DATA_DICTIONARY.md](AI1_DATA_DICTIONARY.md) for schemas and private export.
 
@@ -473,3 +475,13 @@ Baselines require timely synthetic morning execution but can operate without cur
 Method-specific coverage, MAE/signed error, participant/macro results and pairwise identical-set comparisons retain the distinction between predictions and scored outcomes. Missing targets are never filled, and an observed execution-to-outcome timezone change excludes baseline scores too. [The preparation report](AI3_SYNTHETIC_PREPARATION.md) contains reproduction commands and final verification; synthetic artifacts are not evidence of real model performance.
 
 The CLI generates invented inputs and accepts no participant files. No runtime UI, dependency, private export reader, real-data training or app model activation is added. AI-2's real-data readiness conclusion and all unresolved scientific/review fields remain unchanged. AI-3 empirical comparison and AI-4 evaluation are still pending.
+
+## Preparation before real-data entry (2026-10-17)
+
+The user requested completing the remaining work feasible before entering real data. Added a frozen chronological synthetic evaluation, a versioned F1 feature contract with F2–F6 explicitly deferred, an isolated shadow-execution harness with simulated receipts, strict synthetic model artifacts/inference and registry lifecycle checks. A typed preflight audit reports missing or incompatible review/empirical/device evidence while keeping all authorization/activation flags false. It adds no restriction or approval screen to ordinary personal app entry.
+
+AI-4 freezes personal fits at a common UTC cutoff and keeps development and final observations separate; no later history updates alter either baseline or M1. Final opening is an explicit one-use API on that experiment instance, not evidence of human blinding or a tamper-proof registry. AI-6 uses injected software time and store receipts, not native/prospective durability. AI-7's immutable registry depends on callers propagating current session/generation state; it does not revoke older references globally or replace the legacy app model.
+
+The [central preparation report](PRE_DATA_PREPARATION_REPORT.md) contains the scope/evidence matrix, operational collection steps, device gaps, preparation model card/migration plan and consolidated verification. [The AI-5 plan](AI5_FEATURE_EXPERIMENT_PLAN.md) retains negative/inconclusive future feature decisions and source/timing requirements. The iOS extension's three configuration versions now match parent `0.35.0+37`; current build evidence is reported centrally, not inferred from earlier builds.
+
+No private records, new optional collectors, real-data fitting, empirical accuracy conclusion or app model activation are involved. Uncertainty, study size, promotion and reviewer fields remain open. The earlier 1,322-test AI-1/AI-2 and 1,350-test AI-3 results remain historical results for those slices.
