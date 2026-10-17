@@ -11,6 +11,8 @@ import 'activity_sync_logic.dart';
 import 'ai1_capture.dart';
 import 'ai1_capture_store.dart';
 import 'ai1_protocol.dart';
+import 'ai1_study.dart';
+import 'ai2_readiness.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
 import 'cloud_schema.dart';
@@ -112,6 +114,93 @@ class AppController extends ChangeNotifier {
     store: _ai1CaptureStore,
     clock: _now,
   );
+  late final _ai1Study = Ai1Study(_ai1Capture);
+  Timer? _ai1StudyTimer;
+  bool get ai1StudyActive => ai1CaptureEnabled && _ai1Study.active;
+  String get ai1StudyStatus => !ai1StudyActive
+      ? 'No study plan started.'
+      : (_ai1Capture.tombstones.isNotEmpty ||
+            _ai1Capture.entries.any(
+              (e) => e.collection == 'study' && e.data['kind'] == 'timezone',
+            ))
+      ? 'History or timezone changed. Clear history and start a new plan to resume valid pairs.'
+      : '${_ai1Study.plan!.data['startDate']} – ${_ai1Study.plan!.data['endDate']} · ${_ai1Study.protocol.sleepSource.name} · ${_ai1Study.plan!.data['timezone']}';
+
+  Future<void> startAi1Study({
+    required Ai1SleepSource source,
+    required int days,
+  }) async {
+    final ensureCurrent = _beginMutation();
+    if (days < 1 || days > 366) {
+      throw ArgumentError('Choose 1–366 calendar days.');
+    }
+    final captureGeneration = _ai1CaptureGeneration;
+    await _deviceTimezoneService.refresh();
+    ensureCurrent();
+    if (captureGeneration != _ai1CaptureGeneration) {
+      throw StateError('Local history changed. Try again.');
+    }
+    final zone = deviceTimezoneIdentifier;
+    if (zone == null) throw StateError('A known device timezone is required.');
+    final local = _deviceTimezoneService.localTime(_now());
+    final start = DateTime.utc(local.year, local.month, local.day + 1);
+    await _ai1Study.start(
+      owner: _ai1Owner,
+      timezone: zone,
+      startDate: Ai1Study.dateKey(start),
+      endDate: Ai1Study.dateKey(start.add(Duration(days: days - 1))),
+      source: source,
+      now: _now(),
+    );
+    ensureCurrent();
+    notifyListeners();
+  }
+
+  Future<void> refreshAi1Study() async {
+    if (!ai1StudyActive || _disposed || _ai1Capture.busy) return;
+    final owner = _ai1Owner;
+    final generation = _ai1CaptureGeneration;
+    try {
+      await _deviceTimezoneService.refresh();
+      if (owner != _ai1Owner ||
+          generation != _ai1CaptureGeneration ||
+          !ai1StudyActive) {
+        return;
+      }
+      await _ai1Study.tick(
+        owner: owner,
+        now: _now(),
+        deviceTimezone: deviceTimezoneIdentifier,
+      );
+    } on Object {
+      if (_ai1Capture.owner == owner && generation == _ai1CaptureGeneration) {
+        _ai1Capture.pauseAfterCaptureFailure();
+      }
+    }
+    notifyListeners();
+  }
+
+  String exportAi1Study() {
+    if (!canExportDeviceBackup || !ai1StudyActive || _ai1Capture.busy) {
+      throw StateError('Study data is unavailable or still being saved.');
+    }
+    final now = _now().toUtc();
+    final version = 'local-${now.microsecondsSinceEpoch}';
+    final payload = _ai1Study.export(asOf: now, datasetVersion: version);
+    payload['readiness'] = Ai2ReadinessEvaluator.evaluate(
+      dataset: _ai1Study.dataset(asOf: now, datasetVersion: version),
+      rawDays: _ai1Study.closedDays(asOf: now),
+    ).toJson();
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  Future<void> _clearAi1HealthEvidence() async {
+    final owner = _ai1Owner;
+    if (_ai1Capture.owner != owner) return;
+    _ai1CaptureGeneration++;
+    await _ai1Capture.clearHealthEvidence(owner);
+  }
+
   int _ai1CaptureGeneration = 0;
   String get _ai1Owner => cloudUid == null ? 'local' : 'cloud:$cloudUid';
   bool get ai1CaptureAvailable => _ai1Capture.available;
@@ -483,6 +572,7 @@ class AppController extends ChangeNotifier {
     _sessionRevision++;
     _invalidateHealthWork();
     _cloudRetryTimer?.cancel();
+    _ai1StudyTimer?.cancel();
     super.dispose();
   }
 
@@ -498,6 +588,15 @@ class AppController extends ChangeNotifier {
   /// The app owns foreground retry lifetime; headless controllers create no timers.
   void setAppForeground(bool foreground) {
     _appInForeground = foreground && !_disposed;
+    _ai1StudyTimer?.cancel();
+    _ai1StudyTimer = null;
+    if (_appInForeground) {
+      _ai1StudyTimer = Timer.periodic(
+        const Duration(minutes: 1),
+        (_) => unawaited(refreshAi1Study()),
+      );
+      unawaited(refreshAi1Study());
+    }
     if (!_appInForeground) {
       _cloudRetryTimer?.cancel();
       _cloudRetryTimer = null;
@@ -2306,12 +2405,14 @@ class AppController extends ChangeNotifier {
     _localClockChanged = false;
     await _writeLocal();
     isReady = true;
+    await refreshAi1Study();
     notifyListeners();
   }
 
   Future<void> handleAppResumed() async {
     final timezoneWasInitialized = _deviceTimezoneService.isInitialized;
     final timezoneChanged = await _deviceTimezoneService.refresh();
+    await refreshAi1Study();
     final resumedAt = _now();
     final localDay = _dayKey(resumedAt);
     _localClockChanged =
@@ -2983,6 +3084,12 @@ class AppController extends ChangeNotifier {
 
   Future<void> deleteSleepLog(String id) async {
     final ensureCurrent = _beginMutation();
+    if (signals.any(
+      (s) => s.groupId == id && s.source == SignalSource.healthKit,
+    )) {
+      await _clearAi1HealthEvidence();
+      ensureCurrent();
+    }
     await _purgeAi1Source('sleepLogs', id);
     ensureCurrent();
     await _discardPersonalizedModel();
@@ -3297,6 +3404,10 @@ class AppController extends ChangeNotifier {
   Future<void> deleteSignal(String id) async {
     final ensureCurrent = _beginMutation();
     final source = signals.where((item) => item.id == id).firstOrNull;
+    if (source?.source == SignalSource.healthKit) {
+      await _clearAi1HealthEvidence();
+      ensureCurrent();
+    }
     if (source?.groupId != null) {
       await _purgeAi1Source('sleepLogs', source!.groupId!);
       ensureCurrent();
@@ -3700,7 +3811,11 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     // Persist the local opt-out even if privacy/network checks currently pause
     // cloud processing. Native observer removal must also run if saving fails.
-    await Future.wait([_writeLocal(), _disableContinuousHealthUpdates()]);
+    await Future.wait([
+      _writeLocal(),
+      _disableContinuousHealthUpdates(),
+      _clearAi1HealthEvidence(),
+    ]);
     if (!_healthContextCurrent(context)) return;
     await _commit();
   }
@@ -3857,6 +3972,8 @@ class AppController extends ChangeNotifier {
     if (sessionEnded()) return null;
 
     final attemptTime = _now();
+    final captureGeneration = _ai1CaptureGeneration;
+    final captureOwner = _ai1Owner;
     final before = List<SignalReading>.of(signals);
     healthSyncStatus = HealthSyncStatus.syncing;
     lastHealthSyncAttempt = attemptTime;
@@ -3892,6 +4009,27 @@ class AppController extends ChangeNotifier {
     try {
       final imported = await _healthService.syncSleep();
       if (sessionEnded()) return null;
+      if (captureGeneration == _ai1CaptureGeneration &&
+          captureOwner == _ai1Owner &&
+          ai1StudyActive) {
+        try {
+          await _ai1Study.captureHealth(
+            owner: captureOwner,
+            now: _now(),
+            samples: imported,
+            isCurrent: () =>
+                current() &&
+                captureGeneration == _ai1CaptureGeneration &&
+                captureOwner == _ai1Owner,
+          );
+        } on Object {
+          if (captureGeneration == _ai1CaptureGeneration &&
+              captureOwner == _ai1Owner) {
+            _ai1Capture.pauseAfterCaptureFailure();
+          }
+        }
+        if (sessionEnded()) return null;
+      }
       sleepResult = SleepSyncLogic.merge(
         existing: signals,
         imported: imported,

@@ -49,10 +49,14 @@ class SleepSyncLogic {
     final intervals = <_SleepInterval>[];
     for (final row in readings) {
       if (row.source != SignalSource.healthKit) {
-        throw const FormatException('Study Health evidence has the wrong source.');
+        throw const FormatException(
+          'Study Health evidence has the wrong source.',
+        );
       }
       final interval = _SleepInterval.tryParse(row);
-      if (interval == null) throw const FormatException('Invalid study sleep interval.');
+      if (interval == null) {
+        throw const FormatException('Invalid study sleep interval.');
+      }
       intervals.add(interval);
     }
     final result = <({DateTime start, DateTime end, double hours})>[];
@@ -60,11 +64,16 @@ class SleepSyncLogic {
       final episode = _reconcile(cluster);
       if (episode == null) continue;
       if (episode.end.difference(episode.bedtime) > _maximumSessionSpan) {
-        throw const FormatException('Study sleep episode exceeds supported span.');
+        throw const FormatException(
+          'Study sleep episode exceeds supported span.',
+        );
       }
       if (episode.totalSleep >= _minimumSleep) {
-        result.add((start: episode.bedtime.toUtc(), end: episode.end.toUtc(),
-            hours: _hours(episode.totalSleep)));
+        result.add((
+          start: episode.bedtime.toUtc(),
+          end: episode.end.toUtc(),
+          hours: _hours(episode.totalSleep),
+        ));
       }
     }
     return result;

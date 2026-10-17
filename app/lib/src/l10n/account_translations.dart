@@ -1026,13 +1026,230 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "已保存的版本数：{count}",
     "zh-Hant": "已儲存的版本數：{count}",
   },
-  "Turning this off clears this study history. Your ordinary sleep logs and check-ins stay. Apple Health imports are not included in this history yet. Study history is excluded from backups and exports.": {
+  "Turning this off clears this study history. Your ordinary sleep logs and check-ins stay. Study tools can separately schedule morning snapshots and capture readable Apple Health sleep evidence. History is excluded from ordinary backups and exports; a private study export is available in Study tools.": {
     "es":
-        "Al desactivar esta opción se borra este historial del estudio. Tus registros habituales de sueño y de estado se conservan. Las importaciones de Salud de Apple aún no se incluyen en este historial. El historial del estudio no se incluye en las copias de seguridad ni en las exportaciones.",
+        "Al desactivar esta opción se borra este historial del estudio. Tus registros habituales de sueño y de estado se conservan. Las herramientas del estudio permiten programar por separado capturas matutinas y guardar los datos de sueño accesibles de Apple Health. El historial no se incluye en las copias de seguridad ni en las exportaciones habituales; las herramientas del estudio ofrecen una exportación privada del estudio.",
     "zh-Hans":
-        "关闭后会清除此研究历史记录。你的普通睡眠记录和状态记录会保留。此历史记录目前不包含从 Apple 健康导入的数据。备份和导出不包含研究历史记录。",
+        "关闭后会清除此研究历史记录。你的普通睡眠记录和状态记录会保留。研究工具可单独安排早晨快照，并保存可读取的 Apple 健康睡眠数据。普通备份和导出不包含此历史记录；研究工具中提供私密研究导出功能。",
     "zh-Hant":
-        "關閉後會清除此研究歷史記錄。你的普通睡眠記錄和狀態記錄會保留。此歷史記錄目前不包含從 Apple 健康匯入的資料。備份和匯出不包含研究歷史記錄。",
+        "關閉後會清除此研究歷史記錄。你的普通睡眠記錄和狀態記錄會保留。研究工具可單獨安排早晨快照，並儲存可讀取的 Apple 健康睡眠資料。一般備份和匯出不包含此歷史記錄；研究工具中提供私密研究匯出功能。",
+  },
+  "Study tools": {
+    "es": "Herramientas del estudio",
+    "zh-Hans": "研究工具",
+    "zh-Hant": "研究工具",
+  },
+  "Local study tools": {
+    "es": "Herramientas del estudio local",
+    "zh-Hans": "本地研究工具",
+    "zh-Hant": "本地研究工具",
+  },
+  "A prospective measurement plan": {
+    "es": "Un plan de medición prospectiva",
+    "zh-Hans": "前瞻性测量计划",
+    "zh-Hant": "前瞻性測量計畫",
+  },
+  "Optional and off by default. Keep new sleep and check-in history on this device to review timing, missing answers and usable days. This plan creates no model predictions and does not train a model.": {
+    "es":
+        "Opcional y desactivado de forma predeterminada. Guarda en este dispositivo el nuevo historial de sueño y de registros de estado para revisar los horarios, las respuestas ausentes y los días utilizables. Este plan no genera predicciones ni entrena modelos.",
+    "zh-Hans":
+        "此功能为可选项，默认关闭。在此设备上保留新的睡眠和状态记录历史，以检查记录时间、缺失答案及可用天数。此计划不会生成模型预测，也不会训练模型。",
+    "zh-Hant":
+        "此功能為選用項目，預設關閉。在此裝置上保留新的睡眠和狀態記錄歷史，以檢查記錄時間、缺失答案及可用天數。此計畫不會產生模型預測，也不會訓練模型。",
+  },
+  "Study tools are unavailable in this session.": {
+    "es": "Las herramientas del estudio no están disponibles en esta sesión.",
+    "zh-Hans": "当前会话无法使用研究工具。",
+    "zh-Hant": "目前工作階段無法使用研究工具。",
+  },
+  "Enable “Keep local study history” in Privacy center before starting a plan.": {
+    "es":
+        "Activa «Guardar historial local del estudio» en el Centro de privacidad antes de iniciar un plan.",
+    "zh-Hans": "开始计划前，请在隐私中心开启“保留本地研究历史记录”。",
+    "zh-Hant": "開始計畫前，請在隱私中心開啟「保留本地研究歷史記錄」。",
+  },
+  "No study plan started.": {
+    "es": "No se ha iniciado ningún plan de estudio.",
+    "zh-Hans": "尚未开始研究计划。",
+    "zh-Hant": "尚未開始研究計畫。",
+  },
+  "History or timezone changed. Clear history and start a new plan to resume valid pairs.": {
+    "es":
+        "El historial o la zona horaria han cambiado. Borra el historial e inicia un nuevo plan para volver a obtener pares válidos.",
+    "zh-Hans": "历史记录或时区已更改。请清除历史记录并开始新计划，以恢复有效的数据配对。",
+    "zh-Hant": "歷史記錄或時區已變更。請清除歷史記錄並開始新計畫，以恢復有效的資料配對。",
+  },
+  "Saved study schedule": {
+    "es": "Calendario del estudio guardado",
+    "zh-Hans": "已保存的研究日程",
+    "zh-Hant": "已儲存的研究日程",
+  },
+  "Plan starting tomorrow": {
+    "es": "Plan que empieza mañana",
+    "zh-Hans": "明天开始的计划",
+    "zh-Hant": "明天開始的計畫",
+  },
+  "The plan fixes the timezone at start and uses one sleep source. Use English Evening check-ins from 6 pm until before 10 pm. Sleep must be saved by 10 am. Open Tonyo from 10 am until before 10:15 am for the morning snapshot; background execution is not guaranteed. Unopened days still count.": {
+    "es":
+        "El plan fija la zona horaria al comenzar y utiliza una sola fuente de sueño. Completa registros vespertinos en inglés desde las 18:00 y antes de las 22:00. El sueño debe estar guardado a las 10:00. Abre Tonyo desde las 10:00 y antes de las 10:15 para la captura matutina; no se garantiza la ejecución en segundo plano. Los días en que no abras la app también cuentan.",
+    "zh-Hans":
+        "计划开始时会固定时区，并使用单一睡眠来源。请在下午 6 点至晚上 10 点之前填写英文版晚间状态记录。睡眠记录必须在上午 10 点或之前保存。请在上午 10 点至 10:15 之前打开 Tonyo，以保存早晨快照；无法保证后台执行。未打开应用的日期也会计入。",
+    "zh-Hant":
+        "計畫開始時會固定時區，並使用單一睡眠來源。請在下午 6 點至晚上 10 點之前填寫英文版晚間狀態記錄。睡眠記錄必須在上午 10 點或之前儲存。請在上午 10 點至 10:15 之前開啟 Tonyo，以儲存早晨快照；無法保證背景執行。未開啟 App 的日期也會計入。",
+  },
+  "Sleep source": {
+    "es": "Fuente de sueño",
+    "zh-Hans": "睡眠来源",
+    "zh-Hant": "睡眠來源",
+  },
+  "Manual sleep": {
+    "es": "Sueño registrado manualmente",
+    "zh-Hans": "手动睡眠记录",
+    "zh-Hant": "手動睡眠記錄",
+  },
+  "Calendar days": {
+    "es": "Días naturales",
+    "zh-Hans": "日历天数",
+    "zh-Hant": "日曆天數",
+  },
+  "Choose 1–366 calendar days.": {
+    "es": "Elige entre 1 y 366 días naturales.",
+    "zh-Hans": "请选择 1–366 个日历日。",
+    "zh-Hant": "請選擇 1–366 個日曆日。",
+  },
+  "28 days is a scheduling convenience, not evidence that enough data will be collected. Source and dates cannot be changed after starting. To replace the plan, clear local study history in Privacy center.": {
+    "es":
+        "Los 28 días facilitan la planificación, pero no demuestran que se recopilarán datos suficientes. La fuente y las fechas no se pueden cambiar después de empezar. Para sustituir el plan, borra el historial local del estudio en el Centro de privacidad.",
+    "zh-Hans":
+        "28 天仅为方便安排日程，并不代表能收集到足够的数据。开始后无法更改来源和日期。如需更换计划，请在隐私中心清除本地研究历史记录。",
+    "zh-Hant":
+        "28 天僅為方便安排日程，並不代表能收集到足夠的資料。開始後無法變更來源和日期。如需更換計畫，請在隱私中心清除本地研究歷史記錄。",
+  },
+  "Apple Health must be connected separately. Missing Health sleep is not replaced with manual sleep.": {
+    "es":
+        "Apple Health debe conectarse por separado. Los datos de sueño ausentes de Apple Health no se sustituyen por registros manuales.",
+    "zh-Hans": "需要单独连接 Apple 健康。缺失的健康睡眠数据不会用手动睡眠记录替代。",
+    "zh-Hant": "需要單獨連接 Apple 健康。缺失的健康睡眠資料不會用手動睡眠記錄替代。",
+  },
+  "For Apple Health, connect in Sleep Log and allow sleep reads before the morning cutoff.": {
+    "es":
+        "Para usar Apple Health, conéctalo desde Registro de sueño y permite la lectura de datos de sueño antes de la hora límite de la mañana.",
+    "zh-Hans": "如需使用 Apple 健康，请在早晨截止时间之前，在睡眠记录中完成连接并允许读取睡眠数据。",
+    "zh-Hant": "如需使用 Apple 健康，請在早晨截止時間之前，在睡眠記錄中完成連接並允許讀取睡眠資料。",
+  },
+  "Start tomorrow’s plan": {
+    "es": "Iniciar el plan de mañana",
+    "zh-Hans": "开始明天的计划",
+    "zh-Hant": "開始明天的計畫",
+  },
+  "The saved source, timezone and dates are fixed. To replace this plan, clear local study history in Privacy center.": {
+    "es":
+        "La fuente, la zona horaria y las fechas guardadas son fijas. Para sustituir este plan, borra el historial local del estudio en el Centro de privacidad.",
+    "zh-Hans": "已保存的来源、时区和日期均已固定。如需更换此计划，请在隐私中心清除本地研究历史记录。",
+    "zh-Hant": "已儲存的來源、時區和日期均已固定。如需更換此計畫，請在隱私中心清除本地研究歷史記錄。",
+  },
+  "Review local readiness": {
+    "es": "Revisar la preparación local",
+    "zh-Hans": "检查本地数据准备情况",
+    "zh-Hant": "檢查本地資料準備情況",
+  },
+  "Assess completed daily windows, including missed days. Counts alone do not establish measurement quality, study approval or readiness for modeling.": {
+    "es":
+        "Evalúa los períodos diarios finalizados, incluidos los días sin registros. Los recuentos por sí solos no demuestran la calidad de las mediciones, la aprobación del estudio ni la preparación para modelar.",
+    "zh-Hans": "评估已结束的每日观测窗口，包括错过的日期。单凭数量无法确定测量质量、研究是否获批或是否已具备建模条件。",
+    "zh-Hant": "評估已結束的每日觀測時段，包括錯過的日期。單憑數量無法確定測量品質、研究是否獲批或是否已具備建模條件。",
+  },
+  "Assess local readiness": {
+    "es": "Evaluar la preparación local",
+    "zh-Hans": "评估本地数据准备情况",
+    "zh-Hant": "評估本地資料準備情況",
+  },
+  "Modeling readiness is not established.": {
+    "es": "No se ha establecido la preparación para modelar.",
+    "zh-Hans": "尚未确认具备建模条件。",
+    "zh-Hant": "尚未確認具備建模條件。",
+  },
+  "Closed opportunities: {count}": {
+    "es": "Oportunidades finalizadas: {count}",
+    "zh-Hans": "已结束的观测机会：{count}",
+    "zh-Hant": "已結束的觀測機會：{count}",
+  },
+  "Completed Energy outcomes: {count}": {
+    "es": "Respuestas de Energy completas: {count}",
+    "zh-Hans": "已完成的 Energy 回答数：{count}",
+    "zh-Hant": "已完成的 Energy 回答數：{count}",
+  },
+  "Paired days: {count}": {
+    "es": "Días con datos emparejados: {count}",
+    "zh-Hans": "已配对的天数：{count}",
+    "zh-Hant": "已配對的天數：{count}",
+  },
+  "Save private study export": {
+    "es": "Guardar exportación privada del estudio",
+    "zh-Hans": "保存私密研究导出文件",
+    "zh-Hant": "儲存私密研究匯出檔案",
+  },
+  "Saving a private file is unavailable on this device.": {
+    "es": "No se pueden guardar archivos privados en este dispositivo.",
+    "zh-Hans": "此设备不支持保存私密文件。",
+    "zh-Hant": "此裝置不支援儲存私密檔案。",
+  },
+  "The export contains sensitive, pseudonymous measurements and a readiness report. No data is saved to a file until you choose to export.": {
+    "es":
+        "La exportación contiene mediciones sensibles con identificadores seudónimos y un informe de preparación. No se guarda ningún dato en un archivo hasta que elijas exportarlo.",
+    "zh-Hans": "导出文件包含使用化名标识符的敏感测量数据，以及数据准备情况报告。在你选择导出之前，不会将数据保存到文件。",
+    "zh-Hant": "匯出檔案包含使用化名識別碼的敏感測量資料，以及資料準備情況報告。在你選擇匯出之前，不會將資料儲存至檔案。",
+  },
+  "Study plan saved. The first opportunity is tomorrow.": {
+    "es": "Plan del estudio guardado. La primera oportunidad es mañana.",
+    "zh-Hans": "研究计划已保存。首次观测机会在明天。",
+    "zh-Hant": "研究計畫已儲存。首次觀測機會在明天。",
+  },
+  "Could not start the study plan. Check local history and timezone, then try again.": {
+    "es":
+        "No se pudo iniciar el plan del estudio. Revisa el historial local y la zona horaria e inténtalo de nuevo.",
+    "zh-Hans": "无法开始研究计划。请检查本地历史记录和时区，然后重试。",
+    "zh-Hant": "無法開始研究計畫。請檢查本地歷史記錄和時區，然後重試。",
+  },
+  "Could not assess local history. Please try again.": {
+    "es": "No se pudo evaluar el historial local. Inténtalo de nuevo.",
+    "zh-Hans": "无法评估本地历史记录。请重试。",
+    "zh-Hant": "無法評估本地歷史記錄。請重試。",
+  },
+  "Save a private study copy?": {
+    "es": "¿Guardar una copia privada del estudio?",
+    "zh-Hans": "保存私密研究副本？",
+    "zh-Hant": "儲存私密研究副本？",
+  },
+  "This file contains sensitive sleep and self-report history with pseudonymous IDs. Choose an on-device folder to keep it local. Tonyo does not upload this export or copy it to the clipboard. The system picker may offer cloud locations. Deleting study history cannot recall saved or shared files.": {
+    "es":
+        "Este archivo contiene un historial sensible de sueño y de autoinformes con identificadores seudónimos. Elige una carpeta del dispositivo para mantenerlo local. Tonyo no sube esta exportación ni la copia al portapapeles. El selector del sistema puede ofrecer ubicaciones en la nube. Borrar el historial del estudio no permite retirar los archivos ya guardados o compartidos.",
+    "zh-Hans":
+        "此文件包含使用化名标识符的敏感睡眠和自述历史记录。请选择设备上的文件夹以保存在本地。Tonyo 不会上传此导出文件，也不会将其复制到剪贴板。系统文件选择器可能提供云端位置。删除研究历史记录无法收回已保存或已分享的文件。",
+    "zh-Hant":
+        "此檔案包含使用化名識別碼的敏感睡眠和自述歷史記錄。請選擇裝置上的資料夾以儲存在本地。Tonyo 不會上傳此匯出檔案，也不會將其複製到剪貼簿。系統檔案選擇器可能提供雲端位置。刪除研究歷史記錄無法收回已儲存或已分享的檔案。",
+  },
+  "Choose private location": {
+    "es": "Elegir ubicación privada",
+    "zh-Hans": "选择私密保存位置",
+    "zh-Hant": "選擇私密儲存位置",
+  },
+  "Private study export saved. Keep track of any copies you share.": {
+    "es":
+        "Exportación privada del estudio guardada. Lleva un registro de las copias que compartas.",
+    "zh-Hans": "私密研究导出文件已保存。请记录你分享的所有副本。",
+    "zh-Hant": "私密研究匯出檔案已儲存。請記錄你分享的所有副本。",
+  },
+  "Export canceled. No file was saved.": {
+    "es": "Exportación cancelada. No se guardó ningún archivo.",
+    "zh-Hans": "导出已取消。未保存任何文件。",
+    "zh-Hant": "匯出已取消。未儲存任何檔案。",
+  },
+  "Could not save the private study export. Please try again.": {
+    "es":
+        "No se pudo guardar la exportación privada del estudio. Inténtalo de nuevo.",
+    "zh-Hans": "无法保存私密研究导出文件。请重试。",
+    "zh-Hant": "無法儲存私密研究匯出檔案。請重試。",
   },
   "Could not update local study history. Please try again.": {
     "es":

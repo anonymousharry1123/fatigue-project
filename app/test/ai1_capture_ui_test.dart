@@ -94,12 +94,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('Apple Health imports are not included'),
+      find.textContaining('capture readable Apple Health sleep evidence'),
       findsOneWidget,
     );
     expect(
       find.textContaining(
-        'Study history is excluded from backups and exports.',
+        'History is excluded from ordinary backups and exports;',
       ),
       findsOneWidget,
     );
@@ -245,8 +245,10 @@ void main() {
       'Off · no study history is being saved.',
       'Saved revisions: {count}',
       'Turning this off clears this study history. Your ordinary sleep logs '
-          'and check-ins stay. Apple Health imports are not included in this '
-          'history yet. Study history is excluded from backups and exports.',
+          'and check-ins stay. Study tools can separately schedule morning '
+          'snapshots and capture readable Apple Health sleep evidence. History '
+          'is excluded from ordinary backups and exports; a private study '
+          'export is available in Study tools.',
       'Could not update local study history. Please try again.',
       'Clear local history',
       'Local history could not be read. Clear it before starting again.',

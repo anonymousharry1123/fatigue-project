@@ -1,8 +1,8 @@
 import 'ai1_protocol.dart';
 
 /// A retained revision and its known availability on the prediction device.
-/// These fixture records deliberately do not adapt mutable application data.
-/// Fixture histories start at revision one and retain consecutive revisions.
+/// Histories start at revision one and retain consecutive revisions. Captured
+/// consumers use immutable journal evidence, never mutable app timestamps.
 class Ai1SleepRevision {
   Ai1SleepRevision({
     required this.participantKey,
@@ -117,8 +117,9 @@ class Ai1ResponseRevision {
   });
 }
 
-/// Explicitly synthetic, local input for offline protocol checks only.
-/// A caller cannot turn this record into evidence of a real durable save.
+/// In-memory day evidence, shared by explicit synthetic fixtures and the local
+/// capture adapter. The builder checks the evidence kind; this container alone
+/// does not attest durability, participant consent or permission to train.
 class Ai1FixtureDay {
   Ai1FixtureDay({
     required this.opportunity,

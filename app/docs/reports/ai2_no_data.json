@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "ai2-measurement-readiness-v1",
+  "datasetVersion": "no-prospective-data-2026-10-17",
+  "asOf": "2026-10-17T00:00:00.000Z",
+  "synthetic": false,
+  "evidenceKind": "no_closed_opportunities_supplied",
+  "modelingReady": false,
+  "trainingAllowed": false,
+  "status": "not_established",
+  "protocolId": "[\"tonyo-sleep-evening-energy-v0.3-draft\",\"manual\",\"en\"]",
+  "protocolVersion": "tonyo-sleep-evening-energy-v0.3-draft",
+  "measurement": {
+    "items": [
+      {
+        "anchors": {
+          "1": "extremely low energy",
+          "10": "extremely high energy",
+          "5": "about average"
+        },
+        "id": "energy",
+        "label": "Energy",
+        "optional": true,
+        "prompt": ""
+      },
+      {
+        "anchors": {
+          "1": "not fatigued at all",
+          "10": "extremely fatigued",
+          "5": "moderately fatigued"
+        },
+        "id": "fatigue",
+        "label": "Fatigue",
+        "optional": true,
+        "prompt": "How fatigued or drained do you feel right now?"
+      },
+      {
+        "anchors": {
+          "1": "fully alert",
+          "10": "extremely sleepy",
+          "5": "moderately sleepy"
+        },
+        "id": "sleepiness",
+        "label": "Sleepiness",
+        "optional": true,
+        "prompt": "How sleepy do you feel right now?"
+      },
+      {
+        "anchors": {
+          "1": "extremely difficult to focus",
+          "10": "extremely easy to focus",
+          "5": "average"
+        },
+        "id": "focus",
+        "label": "Focus",
+        "optional": true,
+        "prompt": "How easy is it for you to focus right now?"
+      },
+      {
+        "anchors": {
+          "1": "Low",
+          "10": "Great",
+          "5": "Steady"
+        },
+        "id": "mood",
+        "label": "Mood",
+        "optional": true,
+        "prompt": ""
+      },
+      {
+        "anchors": {
+          "1": "Calm",
+          "10": "Maxed",
+          "5": "Moderate"
+        },
+        "id": "stress",
+        "label": "Stress",
+        "optional": true,
+        "prompt": ""
+      }
+    ],
+    "kind": "customSelfReport",
+    "language": "en",
+    "recallPeriod": "right now",
+    "recallPeriodText": "right now",
+    "sharedHeading": "How do you feel right now?",
+    "status": "draftNotClinicallyValidated",
+    "version": "tonyo-self-report-draft-v1"
+  },
+  "participantCount": 0,
+  "participantsWithActiveOpportunities": 0,
+  "coverage": {
+    "opportunities": 0,
+    "withdrawnOpportunities": 0,
+    "scheduledEveningCheckIns": 0,
+    "sleepEligibleDays": 0,
+    "issuedSnapshots": 0,
+    "completedOutcomes": 0,
+    "pairedOutcomes": 0,
+    "missingOrUnusableOutcomes": 0,
+    "outcomeCompletionRate": null,
+    "outcomeMissingnessRate": null,
+    "pairCoverageRate": null,
+    "sleepStatuses": {},
+    "issuanceStatuses": {},
+    "outcomeStatuses": {}
+  },
+  "energy": {
+    "count": 0,
+    "histogram": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0
+    },
+    "distinctValues": 0,
+    "minimum": null,
+    "maximum": null,
+    "mean": null,
+    "sampleStandardDeviation": null,
+    "atOne": 0,
+    "atTen": 0,
+    "endpointRate": null,
+    "constantObservedRatings": null,
+    "longestSameRatingRunAmongObservedOutcomes": 0,
+    "runDefinition": "Chronological observed outcomes within a participant; missing days do not imply an observed repeat."
+  },
+  "participants": [],
+  "sleep": {
+    "configuredSource": "manual",
+    "eligibleDays": 0,
+    "frozenFeatureCount": 0,
+    "frozenFeatureSources": {},
+    "availabilityLeadMinutes": {
+      "count": 0,
+      "minimum": null,
+      "maximum": null,
+      "definition": "Cutoff minus latest selected-feature availability or selection dependency; issued snapshots only."
+    }
+  },
+  "responseTiming": {
+    "originalEveningResponses": 0,
+    "onTimeOriginalResponses": 0,
+    "lateOriginalResponses": 0,
+    "earlyOriginalResponses": 0,
+    "invalidTimingResponses": 0,
+    "timingAssessableResponses": 0,
+    "latenessRate": null,
+    "delayedAnalysisAvailability": 0,
+    "unassessableOriginalGroups": 0,
+    "deletedGroupsOmitted": 0,
+    "definition": "Original retained evening responses attributed by recorded local date; late means observed or initially saved at/after 22:00 in the frozen zone. This response-level denominator is not scheduled days. Duplicate copies collapse; corrections are not substituted; late analysis availability alone is not late responding."
+  },
+  "measurementDefinitions": {
+    "coverage": "retained_original_evening_responses",
+    "definitions": []
+  },
+  "questionnaireCompletion": {
+    "available": false,
+    "scheduled": null,
+    "completed": null,
+    "completionRate": null,
+    "reason": "The daily Energy dataset does not carry questionnaire schedules, all item responses, or instrument completion records."
+  },
+  "reviewGaps": [
+    "no_closed_daily_opportunities_supplied",
+    "no_completed_outcomes",
+    "no_usable_predictor_outcome_pairs",
+    "questionnaire_completion_unavailable",
+    "question_comprehension_not_assessed",
+    "participant_protocol_review_not_established",
+    "study_size_and_precision_require_statistical_review"
+  ],
+  "denominatorNotes": [
+    "Participants are those represented by retained daily opportunities, not an enrollment census.",
+    "This assessment covers closed daily opportunities supplied to it; zero rows do not prove that no raw measurements or ongoing study days exist.",
+    "One scheduled evening check-in per non-withdrawn daily opportunity; morning check-ins are outside this contract.",
+    "Sleep-eligible days, completed Energy outcomes, and predictor/outcome pairs are separate counts.",
+    "Outcome missingness includes unusable or excluded outcomes; no response and missing Energy have separate status counts.",
+    "Withdrawn opportunities are reported separately and excluded from scheduled-check-in denominators.",
+    "Exclusion counts overlap across sleep, issuance, and outcome stages; do not add stage totals.",
+    "Zero denominators produce null rates, never a claimed zero-percent missingness.",
+    "Energy distribution uses all matched outcomes, including outcomes without an issued predictor; missing targets are never imputed.",
+    "Participant aliases are report-local; no participant, response, or sleep-record identifiers are exported.",
+    "No automatic sample-size, variance, or accuracy threshold establishes readiness."
+  ]
+}

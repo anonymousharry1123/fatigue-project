@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'device_backup_flow.dart';
 import 'backup_restore_screen.dart';
+import 'study_tools_screen.dart';
 
 /// Account controls are explicit user actions. Merely opening this route never
 /// exports, changes consent, imports Health data, or starts a deletion.
@@ -774,12 +775,29 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
           Text(
             context.tr(
               'Turning this off clears this study history. Your ordinary '
-              'sleep logs and check-ins stay. Apple Health imports are not '
-              'included in this history yet. Study history is excluded from '
-              'backups and exports.',
+              'sleep logs and check-ins stay. Study tools can separately '
+              'schedule morning snapshots and capture readable Apple Health '
+              'sleep evidence. History is excluded from ordinary backups and '
+              'exports; a private study export is available in Study tools.',
             ),
             style: TextStyle(color: TonyoPalette.of(context).muted),
           ),
+          if (enabled)
+            TextButton.icon(
+              key: const Key('privacy-study-tools'),
+              onPressed: _busy
+                  ? null
+                  : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => StudyToolsScreen(
+                          controller: _controller,
+                          backupService: widget.backupService,
+                        ),
+                      ),
+                    ),
+              icon: const Icon(Icons.science_outlined),
+              label: Text(context.tr('Study tools')),
+            ),
           if (error != null) ...[
             const SizedBox(height: 8),
             Semantics(

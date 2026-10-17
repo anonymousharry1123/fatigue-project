@@ -1,16 +1,18 @@
 # Tonyo: Biology Measurement and Future AI Redesign
 
 **Version:** 2.0 draft  
-**Updated:** October 4, 2026  
-**Document status:** An editable roadmap, not evidence of implementation or approval.
+**Updated:** October 17, 2026<br>
+**Document status:** Editable roadmap; dated implementation updates link verification evidence and do not grant research approval.
 
-**October 11, 2026 scope update:** The user selected fixed 10:00 prediction / 18:00–22:00 evening rating times, their own data first, English, and manual sleep by default with Apple Health selectable. [Contract `v0.3-draft`](docs/PREDICTION_CONTRACT.md) records those decisions and remaining operational/construct proposals. The user then authorized the next step: AI-1 now includes offline synthetic protocol/calendar rules, immutable records and dataset validation, plus default-off device-local revision capture for future manual sleep and check-in saves. Health ingestion lineage, prediction events, real-data adapters and model training remain future work.
+**October 17, 2026 scope update:** The user requested completing AI-1 and AI-2. Default-off local study infrastructure now includes a future calendar, immutable morning feature snapshots, manual/Apple Health ingestion lineage, outcome matching, private export and a local readiness evaluator. [The completion/readiness report](docs/DATA_READINESS_REPORT.md) records verification and the evidence gap: the user said “No / unsure” about existing prospective history, and no real records were inspected. AI-2 tooling and this assessment are complete; empirical modeling readiness is **not established**. The [contract `v0.3-draft`](docs/PREDICTION_CONTRACT.md) retains the selected 10:00 / 18:00–22:00 timing, own-data-first scope, English and manual default with selectable Apple Health. Remaining scientific/operational review is still pending.
+
+**AI-3 preparation follow-up, October 17:** A separate [synthetic comparison runner](docs/AI3_SYNTHETIC_PREPARATION.md) prepares B0 personal mean, B1 latest prior Evening outcome and M1 sleep-only linear regression using invented AI-1 records. This is software preparation; real-data AI-3 comparison and AI-4 evaluation remain pending. No private-data input, app model activation or scientific approval is added.
 
 ## Read This First
 
-**Work now:** measurement acceptance and the user-authorized local AI-1 implementation, verified with synthetic fixtures while remaining AI-0 review continues.
+**Work now:** finish remaining measurement/protocol decisions and, when appropriate, start an explicit future local plan to obtain prospective evidence. Use AI-2 to assess those records privately; software completion alone does not justify modeling.
 
-**Plan for later:** prospective data collection, model comparisons, real-outcome evaluation, and integration. No new AI training or deployment is authorized by this document.
+**Plan for later:** prospective data collection, real-data model comparisons, real-outcome evaluation, and integration. No real-data AI training or deployment is authorized by this document. Synthetic AI-3 preparation is recorded separately below.
 
 The original measurement plan is retained below, including Sections 1–18. Sections 19–32 are new proposals with decision fields for Harry, Dr. Sun, Dr. Lin, and any additional reviewer. The original custom questions remain drafts; their inclusion is not a claim of clinical validation.
 
@@ -541,7 +543,7 @@ Fatigue, Sleepiness, and Focus should be collected as separate secondary outcome
 
 ## 19. Future AI Redesign: Status and Ground Rules
 
-**Status: AI-1 LOCAL SYNTHETIC DEVELOPMENT STARTED, October 11, 2026.** The user authorized the first offline protocol/records/dataset slice after selecting timing, population, source defaults and English. See [the review draft](docs/PREDICTION_CONTRACT.md). Remaining AI-0 operational/construct review continues; the real prospective dataset and later modeling are not implemented by this slice.
+**Status, October 17, 2026: AI-1 local infrastructure and AI-2 assessment implemented; real-data modeling readiness not established.** The user authorized completing these stages and reporting gaps when prospective history was unavailable/uncertain. See [the report](docs/DATA_READINESS_REPORT.md) and [review draft](docs/PREDICTION_CONTRACT.md). No real participant records were inspected or history enabled during development. Remaining contract review, prospective evidence and later modeling remain separate work.
 
 The first AI goal should remain narrow:
 
@@ -567,7 +569,7 @@ This predicts a person's report, not an objectively measured quantity of biologi
 | Training schedule and improvement threshold | Privacy, consent, applicable research review, and withdrawal/deletion safeguards |
 | Deployment architecture and display design | No diagnosis, unsupported health claims, or causal claims from prediction alone |
 
-A proposal becomes approved only after its decision record is completed. The explicit instruction to continue authorizes the first reversible synthetic AI-1 implementation while contract review continues; it does not activate real-data collection, training or release.
+A scientific proposal becomes approved only after its decision record is completed. The October 17 request authorizes the AI-1/AI-2 implementation and report while contract review continues. It does not establish a completed empirical pilot, reviewer approval, model training or release; local history and future study plans require explicit in-app enablement.
 
 ---
 
@@ -640,7 +642,7 @@ For the future analysis, preserve the approved instrument's original response op
 
 **Purpose:** Make every training example traceable to an earlier information set and a later real report.
 
-**Initial slice, October 11:** local, offline, synthetic-only Dart [protocol/calendar rules](lib/src/ai1_protocol.dart), [immutable records](lib/src/ai1_records.dart), [dataset validation](lib/src/ai1_dataset_builder.dart) and [acceptance fixtures](test/ai1_dataset_builder_test.dart). It exercises cutoff availability, frozen snapshots, source isolation and explicit outcome missingness. Manual is the default source; Apple Health is selectable in a separately versioned experiment. The draft policy permits no automatic fallback/merging and treats competing main episodes within the selected source as ambiguous. The follow-up now wires an optional device-only revision journal to manual sleep and check-in saves, with native storage receipts and privacy lifecycle controls. It defaults off and excludes existing/imported records, notes, cloud sync and exports. Health lineage, real-data adapters, prediction events and training remain unbuilt.
+**Implementation update, October 17:** The original synthetic calendar/record/builder checks now have a protected local journal adapter, fixed future study calendar, morning feature snapshots, manual/Apple Health lineage, closed-opportunity outcome matching and a private export. Manual remains the default; Health is a separately selected fixed source. No fallback, merging, late backdating or synthetic-to-real conversion is permitted. [The data dictionary](docs/AI1_DATA_DICTIONARY.md) describes `tonyo-study-export-v1`; [the report](docs/DATA_READINESS_REPORT.md) records verification and limits. Events are feature snapshots without numeric predictions or model identities. `trainingEligible` remains false.
 
 ### A. Create two linked tables
 
@@ -722,6 +724,8 @@ Do not send real participant data to Codex, external AI services, or a public re
 
 **Purpose:** Avoid treating a large row count as evidence that the data are informative.
 
+**Implementation/assessment update, October 17:** [AI-2 tooling](lib/src/ai2_readiness.dart) and [DATA_READINESS_REPORT.md](docs/DATA_READINESS_REPORT.md) are complete for the available evidence. The user reported no/uncertain prospective history; no actual participant measurements were inspected. Coverage/missingness/lateness/distribution calculations are implemented and tested with synthetic cases, but a real empirical pilot and modeling readiness are not established. The next step is to resolve remaining protocol decisions, obtain ordinary prospective measurements and rerun the private assessment.
+
 Under the agreed participant protocol, first evaluate whether questions are understandable, responses are completed at the intended times, and there is usable variation in the primary outcome. Use ordinary observed routines; do not ask teenagers to reduce sleep, consume stimulants, or increase exercise for data collection.
 
 Report:
@@ -758,6 +762,8 @@ Discuss study size with the mentors or a statistical adviser using the number of
 ## 23. AI-3: Build Simple Comparisons Before Complex Models
 
 **Purpose:** Determine whether a learned model adds value beyond an ordinary personal expectation.
+
+**Preparation update, October 17:** [AI3_SYNTHETIC_PREPARATION.md](docs/AI3_SYNTHETIC_PREPARATION.md) documents an isolated fixture-only B0/B1/M1 runner with a fixed source/definition/time manifest. It replays per-person expanding history, rebuilding eligibility at each morning cutoff, and reports method-specific coverage and pairwise common-set errors. Numeric regression, clipping to 1–10 and numerical minimums are synthetic execution policies, not approved empirical choices. The command accepts no participant files and has no app integration. This completes AI-3 software preparation only; actual comparison on prospective data and all AI-4 acceptance work remain pending.
 
 ### Suggested comparison order
 
@@ -1081,9 +1087,9 @@ Use readiness milestones instead of promising that the model will be validated b
 |---|---|---|---|---|---|
 | Phase 2A, current | Survey/check-in implementation and tests | Both mentors as available | ______ | ______ | ______ |
 | AI-0 | Approved prediction contract | Dr. Lin: constructs; Dr. Sun: implementation | ______ | ______ | Timing/population/source defaults/English selected 2026-10-11; remaining review pending |
-| AI-1 | Dataset and timing checks | Technical review plus research review | ______ | ______ | Synthetic checks and optional local revision capture implemented 2026-10-11; prospective prediction dataset unbuilt |
-| AI-2 | Measurement/data readiness report | Both mentors; statistical advice as needed | ______ | ______ | Deferred |
-| AI-3 | Baseline and candidate comparisons | Dr. Sun and statistical adviser | ______ | ______ | Deferred |
+| AI-1 | Dataset and timing checks | Technical review plus research review | ______ | ______ | Local infrastructure implemented 2026-10-17; verification/limits in [report](docs/DATA_READINESS_REPORT.md); no real data inspected |
+| AI-2 | Measurement/data readiness report | Both mentors; statistical advice as needed | ______ | ______ | Tooling and evidence-gap report complete 2026-10-17; empirical readiness not established |
+| AI-3 | Baseline and candidate comparisons | Dr. Sun and statistical adviser | ______ | ______ | Synthetic B0/B1/M1 preparation implemented 2026-10-17; real-data comparison deferred; [report](docs/AI3_SYNTHETIC_PREPARATION.md) |
 | AI-4 | Frozen evaluation report | Both mentors | ______ | ______ | Deferred |
 | AI-5 | Input-comparison report | Dr. Lin: interpretation; Dr. Sun: modeling | ______ | ______ | Optional |
 | AI-6 | Prospective prediction report | Both mentors and applicable research reviewer | ______ | ______ | Deferred |
@@ -1119,6 +1125,8 @@ Suggested roles are invitations for discussion, not commitments already made by 
 |---|---|---|
 | Original measurement plan | Sections 1–18: biology-only survey and scale upgrade | Approval not established in the supplied material |
 | 2.0 draft, 2026-10-04 | Preserved Sections 1–18; added future AI stages, evidence notes, and adjustment spaces | Proposed for review |
+| Implementation update, 2026-10-17 | AI-1 local infrastructure and AI-2 evidence-gap assessment implemented; links to dictionary/report | User-authorized implementation; scientific decisions and real-data readiness not promoted to approved |
+| Synthetic preparation, 2026-10-17 | AI-3 fixed-manifest B0/B1/M1 fixture replay and comparison artifacts | Software preparation only; real-data AI-3/AI-4 decisions remain open |
 | __________ | ______________________________ | ____________________ |
 | __________ | ______________________________ | ____________________ |
 

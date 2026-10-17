@@ -10,8 +10,13 @@ abstract final class Ai1DatasetBuilder {
     required DateTime asOf,
     required String datasetVersion,
   }) {
-    return _build(protocol: protocol, days: days, asOf: asOf,
-        datasetVersion: datasetVersion, synthetic: true);
+    return _build(
+      protocol: protocol,
+      days: days,
+      asOf: asOf,
+      datasetVersion: datasetVersion,
+      synthetic: true,
+    );
   }
 
   static Ai1DatasetReport buildCaptured({
@@ -19,15 +24,26 @@ abstract final class Ai1DatasetBuilder {
     required Iterable<Ai1FixtureDay> days,
     required DateTime asOf,
     required String datasetVersion,
-  }) => _build(protocol: protocol, days: days, asOf: asOf,
-      datasetVersion: datasetVersion, synthetic: false);
+  }) => _build(
+    protocol: protocol,
+    days: days,
+    asOf: asOf,
+    datasetVersion: datasetVersion,
+    synthetic: false,
+  );
 
   static ({String status, Ai1SleepRevision? record}) selectSleep(
-      Ai1Protocol protocol, Ai1FixtureDay day) => _selectSleep(protocol, day);
+    Ai1Protocol protocol,
+    Ai1FixtureDay day,
+  ) => _selectSleep(protocol, day);
 
-  static Ai1DatasetReport _build({required Ai1Protocol protocol,
-      required Iterable<Ai1FixtureDay> days, required DateTime asOf,
-      required String datasetVersion, required bool synthetic}) {
+  static Ai1DatasetReport _build({
+    required Ai1Protocol protocol,
+    required Iterable<Ai1FixtureDay> days,
+    required DateTime asOf,
+    required String datasetVersion,
+    required bool synthetic,
+  }) {
     final freeze = asOf.toUtc();
     if (datasetVersion.trim().isEmpty) {
       throw ArgumentError.value(datasetVersion, 'datasetVersion');
@@ -431,7 +447,9 @@ class Ai1DatasetReport {
   int get trainingEligibleCount => 0;
 
   Map<String, Object?> toJson() => {
-    'schemaVersion': synthetic ? 'ai1-synthetic-audit-v1' : 'ai1-captured-audit-v1',
+    'schemaVersion': synthetic
+        ? 'ai1-synthetic-audit-v1'
+        : 'ai1-captured-audit-v1',
     'datasetVersion': datasetVersion,
     'asOf': asOf.toIso8601String(),
     'synthetic': synthetic,

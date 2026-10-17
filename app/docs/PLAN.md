@@ -1,6 +1,6 @@
 # Tonyo Product Roadmap
 
-Last updated: September 19, 2026
+Last updated: October 17, 2026
 Current implementation: **Version 0.35 — Production polish; release QA pending**
 Remaining Version 0.32 release QA: iPhone performance/heap profiling and production rules deployment/IAM verification. Executable rules emulator validation passed during 0.34.
 
@@ -69,15 +69,36 @@ See [measurement implementation and boundaries](PHASE2A_MEASUREMENT.md) and the 
 - [x] Record manual sleep as default, Apple Health as a selectable source, and English (`v0.3-draft`, 2026-10-11). The manual default supersedes the earlier Apple Health default preference.
 - [ ] Review target wording/construct meaning, exact timing/matching and source isolation/versioning policies, then accept the remaining contract. The proposed 15-minute issuance tolerance is separate from the selected prediction time.
 
-### AI-1 — dataset foundation and optional local capture (started 2026-10-11)
+### AI-1 — local study infrastructure (implemented 2026-10-17)
 
-- [x] Start the user-authorized first slice: offline, synthetic-only Dart [protocol/calendar rules](../lib/src/ai1_protocol.dart), [immutable records](../lib/src/ai1_records.dart) and [dataset validation](../lib/src/ai1_dataset_builder.dart), with [acceptance fixtures](../test/ai1_dataset_builder_test.dart).
-- [x] Validate the first slice: 38 focused tests, clean analysis across `lib`, `test` and `tool`, and both source variants of the [synthetic audit](../tool/ai1_synthetic_audit.dart).
-- [x] Add default-off, device-only revision history for new manual sleep saves and versioned check-ins, with protected iOS storage, post-write receipts, edit/delete/owner lifecycle handling and Privacy Center controls. No backfill or training.
-- [x] Validate local capture: 1,249 full-suite tests passed (one optional screenshot skip), clean analysis, successful iOS Simulator build and synthetic native storage checks (2026-10-11). Physical-device storage/backup behavior remains unverified.
-- [ ] Complete Apple Health ingestion lineage, frozen prediction opportunities/events, real-data adapters and a reviewed private dataset export.
+- [x] Synthetic protocol/calendar rules, immutable records and dataset validation, with explicit source isolation, revision lineage and missingness.
+- [x] Default-off protected device journal for new manual sleep and versioned check-in saves; no backfill, notes, cloud sync or training.
+- [x] Future fixed-source/timezone calendar, immutable morning feature events and closed-opportunity denominator including unopened days.
+- [x] Apple Health readable-query lineage before app reconciliation, conservative deletion/competing-episode handling and journal-to-dataset adapter.
+- [x] Explicit private `tonyo-study-export-v1` file export, export-local aliases, dataset/as-of provenance and [versioned data dictionary](AI1_DATA_DICTIONARY.md).
+- [x] **Privacy center → Local study history → Study tools** with explicit start, aggregate assessment and separately confirmed private file export.
+- [ ] Complete applicable physical-device/release acceptance and remaining protocol/research review. Final software verification is recorded centrally in [DATA_READINESS_REPORT.md](DATA_READINESS_REPORT.md).
 
-The first slice exercises cutoff rules, outcome missingness and one fixed source per versioned experiment: manual by default, selectable Apple Health, with no automatic fallback or merging. Operational rules remain draft choices that can be tested locally while review continues. The optional history setting starts future local capture only after the person enables it; backups, exports and cloud sync exclude that journal. Training remains disabled for these records; the prospective prediction dataset is still unbuilt.
+The app checks the issuance window while executing; reliable OS background scheduling is not promised. Health read access may be incomplete, and older external changes are not fully detectable. Relevant deletion tombstones or timezone mismatches require clear/restart. Each plan uses one issuing device; independently exported aliases cannot establish cross-device identity. No numeric model prediction is made, and `trainingEligible` remains false.
+
+### AI-2 — measurement readiness assessment (implemented/reported 2026-10-17)
+
+- [x] Local aggregate coverage, missingness, timing/lateness, Energy distribution/within-participant variation, source/definition summaries and review gaps.
+- [x] Empty/synthetic evidence remains explicit; zero denominators give unavailable rates and no automatic size/variance threshold grants readiness.
+- [x] [Readiness report](DATA_READINESS_REPORT.md) for the user's “No / unsure — report readiness gaps” answer. No participant records inspected; empirical readiness **not established**.
+- [ ] Resolve remaining measurement/protocol and study-size decisions, collect ordinary prospective observations under the appropriate scope, and rerun the private assessment before real-data AI-3. Synthetic preparation below does not require or establish those empirical findings.
+
+AI-1 infrastructure and AI-2 tooling/report completion are distinct from completing a real empirical pilot. The original 38-test synthetic slice and October 11 1,249-test capture result remain dated history in [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md); current verification is not inferred from those older runs. No user's history setting was enabled, and no training, deployment, commit or push was performed.
+
+### AI-3 — synthetic comparison preparation (2026-10-17)
+
+- [x] Reproducible fixture-only B0 personal-mean, B1 latest-Evening-outcome and M1 sleep-only ordinary least-squares runner, with fixed protocol/source/definition and chronological manifest.
+- [x] Per-person expanding-history replay rebuilt at each morning cutoff; no future labels/revisions, pooled fallback, target imputation or tuning.
+- [x] Separate method execution/coverage, current sleep requirement for M1, raw and clipped predictions, method/per-participant metrics and pairwise common-set comparison IDs.
+- [x] Manual and Apple Health fixture commands with no input-file path, runtime UI, new dependencies or real-data model activation. See [AI3_SYNTHETIC_PREPARATION.md](AI3_SYNTHETIC_PREPARATION.md) for exact behavior and final verification.
+- [ ] Complete real-data readiness/review, approve a distinct empirical experiment manifest and run a prospective-data comparison. AI-4 evaluation, uncertainty and promotion decisions remain pending.
+
+Synthetic regression fits invented observations to test software; it does not establish Tonyo accuracy, a sleep effect or a scientifically adequate sample. Two-pair/nonzero-variance guards and output clipping are fixture execution rules, not approved data-use or study-size settings. The earlier AI-1/AI-2 1,322-test result remains its dated verification and is not automatically claimed for this new work.
 
 ### Version 0.1 — Basic Structure ✅
 

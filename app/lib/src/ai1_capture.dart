@@ -71,7 +71,10 @@ class Ai1CaptureObservation {
     required String sourceId,
     required Map<String, Object?> data,
   }) => Ai1CaptureObservation._(
-    collection: 'study', sourceId: sourceId, data: data, originalLocal: true,
+    collection: 'study',
+    sourceId: sourceId,
+    data: data,
+    originalLocal: true,
   );
 
   final String collection;
@@ -325,6 +328,17 @@ class Ai1CaptureJournal {
           .where((entry) => entry.key == observation.key)
           .lastOrNull;
       if (previous?.fingerprint == observation.fingerprint) return;
+      // Plans, daily events and the first timezone warning are immutable.
+      // Serialized retries must never create a second issuance or revise it.
+      if (previous != null &&
+          observation.collection == 'study' &&
+          const {
+            'plan',
+            'event',
+            'timezone',
+          }.contains(observation.data['kind'])) {
+        return;
+      }
       if (_entries.length >= _maximumEntries) {
         _error = 'Local history is full. Clear it to start a new capture.';
         _enabled = false;
@@ -409,6 +423,16 @@ class Ai1CaptureJournal {
     () => {Ai1CaptureObservation.sourceKey(collection, sourceId)},
   );
 
+  /// Select at execution time, after queued capture writes, so disconnection
+  /// also erases Health payloads that were pending when erasure was requested.
+  Future<void> clearHealthEvidence(String owner) => _purge(
+    owner,
+    () => _entries
+        .where((e) => e.collection == 'study' && e.data['kind'] == 'health')
+        .map((e) => e.key)
+        .toSet(),
+  );
+
   /// Remote edits, ordinary backup restore or missing records cannot reuse old
   /// captured answers. Only already-captured identities are reconciled here.
   Future<void> reconcile({
@@ -422,8 +446,11 @@ class Ai1CaptureJournal {
         latest[entry.key] = entry;
       }
       return latest.entries
-          .where((entry) => entry.value.collection != 'study' &&
-              fingerprints[entry.key] != entry.value.fingerprint)
+          .where(
+            (entry) =>
+                entry.value.collection != 'study' &&
+                fingerprints[entry.key] != entry.value.fingerprint,
+          )
           .map((entry) => entry.key)
           .toSet();
     }, clearUnreadable: false);
@@ -456,8 +483,14 @@ class Ai1CaptureJournal {
       if (relevant.isEmpty) return;
       // Derived snapshots must not survive source erasure. Conservatively
       // invalidate all event payloads; the plan still accounts for missed days.
-      relevant.addAll(_entries.where((entry) => entry.collection == 'study' &&
-          entry.data['kind'] == 'event').map((entry) => entry.key));
+      relevant.addAll(
+        _entries
+            .where(
+              (entry) =>
+                  entry.collection == 'study' && entry.data['kind'] == 'event',
+            )
+            .map((entry) => entry.key),
+      );
       final kept = _entries
           .where((entry) => !relevant.contains(entry.key))
           .toList();
