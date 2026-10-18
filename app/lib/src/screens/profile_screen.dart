@@ -953,9 +953,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (_) => ChangePasswordDialog(controller: controller),
     );
     if (changed != true || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.tr('Password updated.'))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('Password updated.'))));
   }
 
   Future<void> _saveDeviceBackup(AppController controller) async {
@@ -1318,6 +1318,29 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                   ? (value) => _update(
                       context,
                       () => controller.setCoachPlanNotifications(value),
+                    )
+                  : null,
+            ),
+            SwitchListTile(
+              key: const Key('notification-study-log-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Study log reminders')),
+              subtitle: Text(
+                context.tr(
+                  '9:00 to log main sleep, and 18:00 to rate evening Energy, for the next 14 days. Skipped once that entry is saved.',
+                ),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
+              ),
+              value: controller.studyLogNotificationsEnabled,
+              onChanged:
+                  controller.notificationSchedulingSupported &&
+                      !controller.isNotificationSyncing
+                  ? (value) => _update(
+                      context,
+                      () => controller.setStudyLogNotifications(value),
                     )
                   : null,
             ),

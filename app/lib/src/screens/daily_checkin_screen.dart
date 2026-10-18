@@ -13,8 +13,15 @@ import 'reaction_test_screen.dart';
 import 'sleep_log_screen.dart';
 
 class DailyCheckInScreen extends StatefulWidget {
-  const DailyCheckInScreen({super.key, this.initialCheckIn});
+  const DailyCheckInScreen({
+    super.key,
+    this.initialCheckIn,
+    this.initialPeriod,
+  });
   final DailyCheckIn? initialCheckIn;
+
+  /// Used when opening a new check-in, such as from the evening reminder.
+  final CheckInPeriod? initialPeriod;
   @override
   State<DailyCheckInScreen> createState() => _DailyCheckInScreenState();
 }
@@ -75,6 +82,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
         _language = initial.questionnaireLanguage;
         skipped.addAll(ratings.keys.where((id) => ratings[id] == null));
       }
+    } else {
+      period = widget.initialPeriod;
     }
   }
 

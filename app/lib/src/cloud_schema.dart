@@ -89,6 +89,7 @@ Map<String, Object?> profileToCloud({
   bool crashNotificationsEnabled = true,
   bool recoveryNotificationsEnabled = true,
   bool coachPlanNotificationsEnabled = false,
+  bool studyLogNotificationsEnabled = false,
   int notificationPrefsVersion = notificationPreferencesVersion,
   required bool outcomeConsent,
   required bool healthAuthorized,
@@ -108,6 +109,7 @@ Map<String, Object?> profileToCloud({
     'crashNotificationsEnabled': crashNotificationsEnabled,
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
+    'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
     'notificationPreferencesVersion': notificationPrefsVersion,
     'healthAuthorized': healthAuthorized,
   },
@@ -185,6 +187,7 @@ class CloudUserState {
     this.crashNotificationsEnabled = true,
     this.recoveryNotificationsEnabled = true,
     this.coachPlanNotificationsEnabled = false,
+    this.studyLogNotificationsEnabled = false,
     this.notificationPrefsVersion = 0,
     this.personalizedEnergyModel,
     this.userUpdatedAt,
@@ -200,6 +203,7 @@ class CloudUserState {
   final bool crashNotificationsEnabled;
   final bool recoveryNotificationsEnabled;
   final bool coachPlanNotificationsEnabled;
+  final bool studyLogNotificationsEnabled;
   final int notificationPrefsVersion;
   final bool outcomeConsent;
   final bool healthAuthorized;
@@ -234,6 +238,7 @@ class CloudUserState {
     crashNotificationsEnabled: crashNotificationsEnabled,
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
     coachPlanNotificationsEnabled: coachPlanNotificationsEnabled,
+    studyLogNotificationsEnabled: studyLogNotificationsEnabled,
     notificationPrefsVersion: notificationPrefsVersion,
     outcomeConsent: outcomeConsent ?? this.outcomeConsent,
     healthAuthorized: healthAuthorized,
@@ -263,6 +268,7 @@ class CloudUserState {
     'crashNotificationsEnabled': crashNotificationsEnabled,
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
+    'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
     'notificationPreferencesVersion': notificationPrefsVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
