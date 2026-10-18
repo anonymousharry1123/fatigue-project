@@ -1,5 +1,13 @@
 # Phase 2A measurement foundation
 
+## Current collection policy — October 18, 2026
+
+The user replaced the fixed clock schedule with flexible personal collection. New **Morning** check-ins collect **Energy only**, with no sleep entry. **Evening** check-ins retain all six optional ratings and link to a separate main-sleep log. Either period can be saved at any time; record the actual sleep and wake times. Earlier saved answers remain intact. New Morning records retain the six-item definition for compatibility, but the five hidden ratings are not collected and stay null; they are not evidence of five deliberate skips. Earlier full Morning records remain editable without discarding their other answers.
+
+The current experimental path is **retrospective**, using `flexible-evening-retrospective-v1` in [the preparation tool](../tool/prepare_experimental_sleep_data.py). It has no 10 a.m. sleep deadline, morning snapshot requirement, or 6–10 p.m. response window. It still requires valid chronology: matched main sleep must end within 24 hours before the selected Evening response, and known save/import times cannot be after the export. Sleep may be logged after Energy; this does not establish a prospective prediction. Morning answers are not Evening targets.
+
+The fixed schedule described below is **historical**. Existing saved plans keep their original meaning and remain reviewable under **Earlier fixed-schedule study**; the ordinary flow no longer starts them. Flexible experiment cohorts are versioned separately. The remainder records the earlier implementation and evidence at its stated date.
+
 Implemented October 4, 2026 after the user requested the next step in [roadmap v2](../TONYO_BIOLOGY_AND_AI_ROADMAP_v2.md). The initial slice completed Section 16 steps 1–3: definitions, check-in UI, and raw storage, plus a separate self-report display. Steps 4–7 were added October 10, 2026: personal references, independent trends, private research export and an empty approved-instrument framework. This does **not** complete physical-device/release acceptance or approve a research protocol. The user-authored roadmap and its undecided research fields are unchanged.
 
 ## What the app now does

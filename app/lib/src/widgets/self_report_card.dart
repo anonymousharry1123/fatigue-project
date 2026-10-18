@@ -137,8 +137,14 @@ class SelfReportRecordCard extends StatelessWidget {
     final time = material.formatTimeOfDay(TimeOfDay.fromDateTime(stamp));
     final ratings = rawSelfReportRatings(item);
     final maximum = selfReportScaleMaximum(item);
+    final energyOnlyMorning =
+        item.isResearchCheckIn &&
+        item.period == CheckInPeriod.morning &&
+        ratings.entries.every((e) => e.key == 'energy' || e.value == null);
     final ids = item.isResearchCheckIn
-        ? ratings.keys
+        ? energyOnlyMorning
+              ? ['energy']
+              : ratings.keys
         : ['energy', 'mood', 'stress'];
     final contents = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,7 +191,9 @@ class SelfReportRecordCard extends StatelessWidget {
         Text(
           item.isResearchCheckIn
               ? context.tr(
-                  '{count}/6 answered · Custom draft · {version} · {language}',
+                  energyOnlyMorning
+                      ? 'Morning Energy · Custom draft · {version} · {language}'
+                      : '{count}/6 answered · Custom draft · {version} · {language}',
                   args: {
                     'count': ratings.values.whereType<double>().length,
                     'version': item.questionnaireVersion,

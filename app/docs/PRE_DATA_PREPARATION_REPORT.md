@@ -1,5 +1,13 @@
 # Pre-data preparation report
 
+## Current collection policy — October 18, 2026
+
+The user replaced the fixed clock schedule with flexible personal collection. New **Morning** check-ins collect **Energy only**, with no sleep entry. **Evening** check-ins retain all six optional ratings and link to a separate main-sleep log. Either period can be saved at any time; record the actual sleep and wake times. Earlier saved answers remain intact.
+
+The current experimental path is **retrospective**, using `flexible-evening-retrospective-v1` in [the preparation tool](../tool/prepare_experimental_sleep_data.py). It has no 10 a.m. sleep deadline, morning snapshot requirement, or 6–10 p.m. response window. It still requires valid chronology: matched main sleep must end within 24 hours before the selected Evening response, and known save/import times cannot be after the export. Sleep may be logged after Energy; this does not establish a prospective prediction. Morning answers are not Evening targets.
+
+The fixed schedule described below is **historical**. Existing saved plans keep their original meaning and remain reviewable under **Earlier fixed-schedule study**; the ordinary flow no longer starts them. Flexible experiment cohorts are versioned separately. The remainder records the earlier implementation and evidence at its stated date.
+
 Date: October 17, 2026<br>
 Report version: `tonyo-pre-data-preparation-v1`<br>
 Protocol: `tonyo-sleep-evening-energy-v0.3-draft`<br>

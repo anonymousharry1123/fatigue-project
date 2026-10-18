@@ -4,6 +4,7 @@ import 'package:app/src/check_in_measurement.dart';
 import 'package:app/src/l10n/app_localizations.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screens/daily_checkin_screen.dart';
+import 'package:app/src/screens/sleep_log_screen.dart';
 import 'package:app/src/screens/today_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/widgets/self_report_card.dart';
@@ -17,9 +18,9 @@ import 'privacy_test_support.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
   final now = DateTime(2026, 10, 4, 9);
-  AppController controller() => AppController(
+  AppController controller({DateTime? at}) => AppController(
     initialPrivacyConsent: testAdultPrivacyConsent,
-    clock: () => now,
+    clock: () => at ?? now,
   );
 
   testWidgets(
@@ -78,7 +79,7 @@ void main() {
       addTearDown(app.dispose);
       await _pump(tester, app, const DailyCheckInScreen(), language: 'es');
       expect(find.text('¿Cómo te sientes ahora mismo?'), findsOneWidget);
-      await _tap(tester, 'checkin-period-morning');
+      await _tap(tester, 'checkin-period-evening');
       final selections = {
         'energy': 1,
         'fatigue': 10,
@@ -121,6 +122,112 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Morning at night saves only Energy, with no sleep entry', (
+    tester,
+  ) async {
+    final late = DateTime(2026, 10, 4, 23, 45);
+    final app = controller(at: late);
+    addTearDown(app.dispose);
+    await _pump(tester, app, const DailyCheckInScreen());
+    await _tap(tester, 'checkin-period-evening');
+    await _tap(tester, 'rating-fatigue-8');
+    await _tap(tester, 'checkin-period-morning', delta: -300);
+    expect(find.byKey(const Key('evening-sleep-card')), findsNothing);
+    expect(find.byKey(const Key('rating-fatigue')), findsNothing);
+    expect(find.byKey(const Key('rating-sleepiness')), findsNothing);
+    await tester.tap(find.byKey(const Key('save-checkin')));
+    await tester.pumpAndSettle();
+    expect(
+      app.checkIns,
+      isEmpty,
+    ); // A hidden Evening answer cannot save Morning.
+    await _tap(tester, 'rating-energy-7');
+    await tester.tap(find.byKey(const Key('save-checkin')));
+    await tester.pumpAndSettle();
+    final saved = app.checkIns.single;
+    expect(saved.period, CheckInPeriod.morning);
+    expect(saved.timestamp, late);
+    expect(saved.energy, 7);
+    expect(
+      saved.ratings.entries
+          .where((e) => e.key != 'energy')
+          .every((e) => e.value == null),
+      isTrue,
+    );
+    expect(saved.isValidResearchResponse, isTrue);
+    expect(app.sleepLogs, isEmpty);
+    await _pump(
+      tester,
+      app,
+      Scaffold(body: SelfReportRecordCard(checkIn: saved)),
+    );
+    expect(find.text('Energy: 7 / 10'), findsOneWidget);
+    expect(find.text('Sleepiness: Not answered'), findsNothing);
+    expect(find.textContaining('1/6 answered'), findsNothing);
+  });
+
+  testWidgets('Evening sleep saves late and returns to the Energy draft', (
+    tester,
+  ) async {
+    final late = DateTime(2026, 10, 4, 23, 45);
+    final app = controller(at: late);
+    addTearDown(app.dispose);
+    await _pump(tester, app, const DailyCheckInScreen());
+    await _tap(tester, 'checkin-period-evening');
+    await _tap(tester, 'rating-energy-6');
+    await _tap(tester, 'checkin-log-sleep', delta: -300);
+    expect(find.byType(SleepLogScreen), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Save sleep'), 250);
+    await tester.tap(find.text('Save sleep'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SleepLogScreen), findsNothing);
+    expect(app.sleepLogs, hasLength(1));
+    expect(app.sleepLogs.single.wakeTime, DateTime(2026, 10, 4, 7));
+    final sleepId = app.sleepLogs.single.id;
+    // Reviewing the existing sleep updates it, rather than creating a duplicate.
+    await _tap(tester, 'checkin-log-sleep', delta: -300);
+    await tester.scrollUntilVisible(find.text('Update sleep'), 250);
+    await tester.tap(find.text('Update sleep'));
+    await tester.pumpAndSettle();
+    expect(app.sleepLogs.single.id, sleepId);
+    await tester.tap(find.byKey(const Key('save-checkin')));
+    await tester.pumpAndSettle();
+    expect(app.checkIns.single.energy, 6);
+    expect(app.checkIns.single.period, CheckInPeriod.evening);
+    expect(app.checkIns.single.timestamp, late);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('editing an earlier full Morning preserves its other answers', (
+    tester,
+  ) async {
+    final app = controller();
+    addTearDown(app.dispose);
+    await app.saveSelfReportCheckIn(
+      id: 'earlier-morning',
+      period: CheckInPeriod.morning,
+      energy: 5,
+      fatigue: 3,
+      sleepiness: 2,
+      questionnaireSnapshot: CheckInMeasurement.snapshot(
+        language: 'en',
+        translate: (text) => text,
+      ),
+      questionnaireLanguage: 'en',
+    );
+    await _pump(
+      tester,
+      app,
+      DailyCheckInScreen(initialCheckIn: app.checkIns.single),
+    );
+    await _tap(tester, 'rating-fatigue-4');
+    await tester.tap(find.byKey(const Key('save-checkin')));
+    await tester.pumpAndSettle();
+    expect(app.checkIns.single.fatigue, 4);
+    expect(app.checkIns.single.sleepiness, 2);
+    expect(app.checkIns.single.energy, 5);
+  });
 
   testWidgets(
     'editing a Spanish draft under Chinese UI retains original questions and metadata',
@@ -379,6 +486,7 @@ void main() {
         language: language,
         largeText: true,
       );
+      await _tap(tester, 'checkin-period-evening');
       final scrollable = find.byType(Scrollable).first;
       var previous = -1.0;
       for (var attempt = 0; attempt < 100; attempt++) {
@@ -394,11 +502,11 @@ void main() {
   }
 }
 
-Future<void> _tap(WidgetTester tester, String key) async {
+Future<void> _tap(WidgetTester tester, String key, {double delta = 300}) async {
   final target = find.byKey(Key(key));
   await tester.scrollUntilVisible(
     target,
-    300,
+    delta,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.ensureVisible(target);

@@ -6,6 +6,12 @@ App icon: [Tonyo wave icon](assets/branding/tonyo-app-icon.png) ·
 [source, platform exports, and preparation prompt](assets/branding/tonyo-icon-design.md).
 Installed in the Android, iOS, macOS, Windows, and web launcher assets.
 
+## Flexible daily collection
+
+As of October 18, 2026, new **Morning** check-ins collect **Energy only**. **Evening** check-ins keep the full optional questionnaire and a link to log or review the last main sleep. Both periods can be saved at any time. Enter actual sleep/wake dates and times; existing answers are preserved.
+
+The [experimental sleep → Evening Energy preparation](tool/prepare_experimental_sleep_data.py) uses the separate `flexible-evening-retrospective-v1` policy: no 10 a.m. cutoff or 6–10 p.m. window, while retaining valid timestamps, source separation and sleep-before-response chronology. Sleep can be logged after Energy, so these are retrospective pairs rather than proof of prospective prediction. **Local study tools → Open measurement export** provides the saved observations. Any previously saved fixed-schedule plan remains reviewable in a collapsed historical section; new fixed plans are no longer offered in the ordinary flow. See the [collection-policy update](docs/PREDICTION_CONTRACT.md).
+
 ## Appearance
 
 Swipe left or right to move between **Today**, **Forecast**, **Add**, **Coach**,

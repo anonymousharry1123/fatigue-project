@@ -775,10 +775,10 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
           Text(
             context.tr(
               'Turning this off clears this study history. Your ordinary '
-              'sleep logs and check-ins stay. Study tools can separately '
-              'schedule morning snapshots and capture readable Apple Health '
-              'sleep evidence. History is excluded from ordinary backups and '
-              'exports; a private study export is available in Study tools.',
+              'sleep logs and check-ins stay. Any earlier fixed-schedule plan '
+              'keeps its original timing rules. Review or export its retained '
+              'history in Study tools. This history is excluded from ordinary '
+              'backups and exports.',
             ),
             style: TextStyle(color: TonyoPalette.of(context).muted),
           ),

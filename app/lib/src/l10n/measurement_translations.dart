@@ -1,5 +1,54 @@
 // Authored presentation copy for draft custom self-report measurements.
 const measurementTranslations = <String, Map<String, String>>{
+  "Morning Energy · Custom draft · {version} · {language}": {
+    "es": "Energía matutina · Borrador personalizado · {version} · {language}",
+    "zh-Hans": "早间精力 · 自定义草案 · {version} · {language}",
+    "zh-Hant": "早間精力 · 自訂草案 · {version} · {language}",
+  },
+  "Sleep must have ended before you save it. Check the wake date and time.": {
+    "es":
+        "El sueño debe haber terminado antes de guardarlo. Revisa la fecha y la hora de despertar.",
+    "zh-Hans": "保存时睡眠必须已经结束。请检查醒来日期和时间。",
+    "zh-Hant": "儲存時睡眠必須已經結束。請檢查醒來日期和時間。",
+  },
+  "Morning is a quick Energy check-in. Log sleep with your Evening check-in whenever it suits you.": {
+    "es":
+        "Por la mañana, registra solo tu energía. Añade el sueño con tu registro de la tarde cuando te venga bien.",
+    "zh-Hans": "早间只需快速记录精力。睡眠可在方便时与晚间状态一起记录。",
+    "zh-Hant": "早間只需快速記錄精力。睡眠可在方便時與晚間狀態一起記錄。",
+  },
+  "Morning: Energy after waking, whatever the time. Evening: your daily check-in and sleep log. Choose the period yourself; both can be saved at any time.": {
+    "es":
+        "Mañana: tu energía al despertarte, sea la hora que sea. Tarde: tu registro diario y de sueño. Elige el período; ambos se pueden guardar a cualquier hora.",
+    "zh-Hans": "早间：起床后记录精力，不限时间。晚间：记录当天状态和睡眠。自行选择时段，随时都能保存。",
+    "zh-Hant": "早間：起床後記錄精力，不限時間。晚間：記錄當天狀態和睡眠。自行選擇時段，隨時都能儲存。",
+  },
+  "Sleep for this check-in": {
+    "es": "Sueño para este registro",
+    "zh-Hans": "本次状态对应的睡眠",
+    "zh-Hant": "本次狀態對應的睡眠",
+  },
+  "Log your most recent main sleep here, even if you woke up late. There is no logging deadline. Sleep and Energy are saved separately.": {
+    "es":
+        "Registra aquí tu último sueño principal, aunque te hayas despertado tarde. No hay hora límite. El sueño y la energía se guardan por separado.",
+    "zh-Hans": "在此记录最近一次主要睡眠，晚起也没关系。没有填写截止时间。睡眠和精力分别保存。",
+    "zh-Hant": "在此記錄最近一次主要睡眠，晚起也沒關係。沒有填寫截止時間。睡眠和精力分別儲存。",
+  },
+  "Log or review sleep": {
+    "es": "Registrar o revisar el sueño",
+    "zh-Hans": "记录或查看睡眠",
+    "zh-Hant": "記錄或查看睡眠",
+  },
+  "Wake date": {
+    "es": "Fecha al despertar",
+    "zh-Hans": "醒来日期",
+    "zh-Hant": "醒來日期",
+  },
+  "Nap date": {
+    "es": "Fecha de la siesta",
+    "zh-Hans": "小睡日期",
+    "zh-Hant": "小睡日期",
+  },
   "How do you feel right now?": {
     "es": "¿Cómo te sientes ahora mismo?",
     "zh-Hans": "你现在感觉如何？",
