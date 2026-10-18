@@ -6,6 +6,12 @@ App icon: [Tonyo wave icon](assets/branding/tonyo-app-icon.png) ·
 [source, platform exports, and preparation prompt](assets/branding/tonyo-icon-design.md).
 Installed in the Android, iOS, macOS, Windows, and web launcher assets.
 
+## Flexible daily collection
+
+As of October 18, 2026, new **Morning** check-ins collect **Energy only**. **Evening** check-ins keep the full optional questionnaire and a link to log or review the last main sleep. Both periods can be saved at any time. Enter actual sleep/wake dates and times; existing answers are preserved.
+
+The [experimental sleep → Evening Energy preparation](tool/prepare_experimental_sleep_data.py) uses the separate `flexible-evening-retrospective-v1` policy: no 10 a.m. cutoff or 6–10 p.m. window, while retaining valid timestamps, source separation and sleep-before-response chronology. Sleep can be logged after Energy, so these are retrospective pairs rather than proof of prospective prediction. **Local study tools → Open measurement export** provides the saved observations. Any previously saved fixed-schedule plan remains reviewable in a collapsed historical section; new fixed plans are no longer offered in the ordinary flow. See the [collection-policy update](docs/PREDICTION_CONTRACT.md).
+
 ## Appearance
 
 Swipe left or right to move between **Today**, **Forecast**, **Add**, **Coach**,
@@ -143,14 +149,15 @@ and [executable Firestore security tests](tool/security_rules/README.md).
 Version 0.10-a adds Firebase Authentication, user-scoped Cloud Firestore
 persistence, offline migration/cache behavior, export, and permanent deletion.
 See [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md) for console setup and the
-environment-safe run command.
+one-time local configuration used by normal Flutter and Xcode builds.
 
 ### Prep for Version 0.32
 
-Launch from this `app/` directory with Firebase enabled:
+After completing [Default launch with Firebase](#default-launch-with-firebase),
+launch from this `app/` directory:
 
 ```sh
-flutter run --release --dart-define-from-file=config/firebase_options.json
+flutter run --release
 ```
 
 Open **Profile → Model preparation** while signed in, choose the final date of
@@ -239,11 +246,9 @@ like a wiped cache and sends you through onboarding again. Use a fixed port:
 flutter run -d edge --web-port=7357
 ```
 
-With Firebase:
-
-```sh
-flutter run -d edge --dart-define-from-file=config/firebase_options.json
-```
+The same command uses the compiled values in `lib/src/firebase_secrets.dart`.
+Empty constants keep it offline; filled, valid constants enable Firebase.
+No separate Firebase launch flag is needed.
 
 VS Code launch configs under `../.vscode/launch.json` already set `--web-port=7357`.
 Version 0.14 ranks supporting and reducing score drivers, explains each
@@ -369,13 +374,29 @@ Tonyo is an AI-powered fatigue prediction app that continuously fuses health, sl
 
 ## Default launch with Firebase
 
+Before the first build in a checkout, create the ignored local configuration
+from the empty example **only if it does not already exist**. From `app/`:
+
+```sh
+if [ ! -e lib/src/firebase_secrets.dart ]; then
+  cp lib/src/firebase_secrets.example.dart lib/src/firebase_secrets.dart
+fi
+```
+
+Keep a configured file intact. Empty constants keep Firebase offline. Fill the
+constants with your Firebase app configuration to enable it, including the
+separate iOS app ID; see [Firebase setup](docs/FIREBASE_SETUP.md#local-runtime-values).
+The file is imported directly, so a fresh checkout must perform this one-time
+copy before compilation. A missing file is a compile error, not an offline
+configuration. Only the empty example belongs in Git.
+
 Select **Tonyo (Firebase)** in VS Code Run and Debug, then press **F5**.
 This is the first launch profile and the default for Run/Debug links in `lib/`.
 Launch configurations support opening `Ai App/`, `fatigue-project/`, or `app/`
-as the workspace. The profile uses the selected Flutter device and passes the
-existing ignored `config/firebase_options.json` to Flutter before compilation.
-Flutter flags use [`toolArgs`](https://dartcode.org/docs/launch-configuration/).
-The explicit Edge local-only profile remains available from `fatigue-project/`.
+as the workspace. The profile uses the selected Flutter device. Normal `flutter run`
+and Xcode **Run** compile the same local constants without Firebase command-line
+flags. Rebuild after changing them. The Edge fixed-port profile uses the same
+configuration; its name does not promise an offline build.
 
 For a terminal launch from `app/`:
 
@@ -388,8 +409,15 @@ For a terminal launch from `app/`:
 The launcher resolves its own directory, so it also works when invoked by path
 from another folder. Flutter must be on `PATH`. It stops with setup instructions
 if the private configuration file is missing; it never creates or overwrites it.
-A direct `flutter run` still needs `--dart-define-from-file=config/firebase_options.json`
-to enable Firebase. Runtime values remain outside tracked source files.
+The old ignored `config/firebase_options.json` is a migration input, not the
+runtime configuration source. Runtime values remain outside tracked source
+files, but filled constants are compiled into the application. Passing the old
+`--dart-define-from-file=config/firebase_options.json` flag no longer configures
+Firebase.
+
+For an offline or emulator-only build, use a separate checkout with the empty
+example copied to `firebase_secrets.dart`; do not overwrite a configured working
+copy. See the [isolated emulator instructions](tool/security_rules/README.md#native-flutter-app-integration).
 
 ## Biology Phase 1
 

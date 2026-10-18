@@ -2,7 +2,8 @@
 
 Tonyo uses the existing Firebase project **Fatigue Project**
 (`fatigue-project-e28a3`). Firebase values are injected at build time and are
-not committed to source control.
+not committed to source control. Normal Flutter and Xcode builds now compile
+the string constants from the ignored `lib/src/firebase_secrets.dart` file.
 
 ## Provisioned console state
 
@@ -14,12 +15,11 @@ not committed to source control.
 - The owner-only rules in `firestore.rules` are published.
 - The `signals(type ASC, timestamp DESC)` collection index declared in
   `firestore.indexes.json` is provisioned.
-- The ignored `config/firebase_options.json` contains the current runtime
-  values for local builds.
+- The ignored `config/firebase_options.json` is the legacy migration input;
+  runtime builds use `lib/src/firebase_secrets.dart`.
 
-The current native bundle/application ID is `com.example.app`. Register
-platform-specific Firebase apps after that placeholder is replaced for a
-production release.
+The iOS Firebase registration must match the native target's bundle ID. Its
+app ID is separate from the web registration.
 
 ## Re-deploying rules and indexes
 
@@ -37,29 +37,49 @@ does not grant collection-group access.
 
 ## Local runtime values
 
-The current machine already has an ignored runtime file. On a new machine, copy
-the safe template:
+Before the first build in a new checkout, copy the empty Dart example once.
+Preserve any existing configured file:
 
 ```sh
-cp config/firebase_options.example.json config/firebase_options.json
+if [ ! -e lib/src/firebase_secrets.dart ]; then
+  cp lib/src/firebase_secrets.example.dart lib/src/firebase_secrets.dart
+fi
 ```
 
-Fill the values from **Project Settings → Your apps → SDK setup and
-configuration**. `FIREBASE_APP_ID` is the web registration and
-`FIREBASE_IOS_APP_ID` is the separate iOS registration (its value contains
-`:ios:`). The real file is gitignored.
+Leave the constants empty for offline mode, or fill them from **Project
+Settings → Your apps → SDK setup and configuration**. `webAppId` is the web
+registration; `iosAppId` is the separate iOS registration (its value contains
+`:ios:`). The other constants are `apiKey`, `messagingSenderId`, `projectId`,
+`authDomain`, `storageBucket` and `iosBundleId`. The real file is gitignored;
+commit only the empty `firebase_secrets.example.dart` template.
+
+The existing ignored `config/firebase_options.json` can supply values during
+migration. It is no longer read by normal runtime builds, and changing it does
+not update the compiled app. The old `--dart-define-from-file` launch flag no
+longer configures Firebase. Keep real configuration out of tracked documents,
+logs and commits.
 
 Run the app with:
 
 ```sh
-flutter run --dart-define-from-file=config/firebase_options.json
+flutter run
 ```
 
-When the file is omitted, Tonyo deliberately starts in offline demo mode. It
-continues to use the existing SharedPreferences cache and does not attempt a
-Firebase connection. iOS also starts offline when `FIREBASE_IOS_APP_ID` is
-missing or is not an iOS app ID; this prevents the native Firebase SDK from
-terminating Runner when given the web app ID.
+VS Code and Xcode **Run** use the same compiled constants without Firebase
+launch flags or an Xcode setup script. Rebuild after changing the file.
+
+The one-time copy is a compilation prerequisite because `firebase_options.dart`
+imports `firebase_secrets.dart` directly. A missing file cannot compile. An
+existing file with empty constants starts offline, continues to use the
+existing SharedPreferences cache and does not attempt a Firebase connection.
+iOS also starts offline when `iosAppId` is empty or is not an iOS app ID; this
+preserves the protection against passing the web app ID to the native iOS SDK.
+
+For offline/emulator testing, use a separate checkout with the empty example
+copied to its local secrets file. The guarded native emulator harness rejects
+any nonempty Firebase configuration. Do not replace this working copy's
+configured file to run an emulator; follow the
+[isolated integration instructions](../tool/security_rules/README.md#native-flutter-app-integration).
 
 ## Data layout
 
@@ -198,8 +218,8 @@ creating Firebase Auth accounts.
 
 ### Optional Firestore publish
 
-Requires a signed-in Firebase account and
-`--dart-define-from-file=config/firebase_options.json`.
+Requires a signed-in Firebase account and valid compiled values in
+`lib/src/firebase_secrets.dart`.
 
 Published tree:
 

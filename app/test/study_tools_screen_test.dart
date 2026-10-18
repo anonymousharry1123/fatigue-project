@@ -5,6 +5,7 @@ import 'package:app/src/ai1_protocol.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/device_backup_service.dart';
 import 'package:app/src/screens/study_tools_screen.dart';
+import 'package:app/src/screens/research_export_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,9 +20,7 @@ class _StudyController extends AppController {
   int revision = 0;
   String? uid;
   String? captureError;
-  bool failStart = false;
   bool failExport = false;
-  Completer<void>? startPending;
   final starts = <({Ai1SleepSource source, int days})>[];
   int exportCalls = 0;
 
@@ -64,8 +63,6 @@ class _StudyController extends AppController {
     required int days,
   }) async {
     starts.add((source: source, days: days));
-    await startPending?.future;
-    if (failStart) throw StateError('sensitive-internal-diagnostic');
     active = true;
     notifyListeners();
   }
@@ -103,6 +100,7 @@ Future<void> _open(
   _StudyController controller,
   _StudyFileService service, {
   double scale = 1,
+  bool expandLegacy = true,
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -122,6 +120,10 @@ Future<void> _open(
     ),
   );
   await tester.pumpAndSettle();
+  if (expandLegacy && controller.ai1StudyActive && !controller.isSignedOut) {
+    await _tap(tester, 'study-legacy');
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _reach(WidgetTester tester, String key) async {
@@ -155,100 +157,78 @@ Future<void> _confirmExport(WidgetTester tester) async {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('opening is inert; history and plan stay off', (tester) async {
-    final controller = _StudyController();
-    final service = _StudyFileService();
-    await _open(tester, controller, service);
-    expect(controller.starts, isEmpty);
-    expect(controller.exportCalls, 0);
-    expect(service.files, isEmpty);
-    expect(find.text('No study plan started.'), findsOneWidget);
-    expect(
-      find.textContaining('Enable “Keep local study history”'),
-      findsOneWidget,
-    );
-    await _reach(tester, 'study-start');
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(const Key('study-start')))
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('study-days')))
-          .controller!
-          .text,
-      '28',
-    );
-    expect(
-      tester
-          .widget<DropdownButtonFormField<Ai1SleepSource>>(
-            find.byKey(const Key('study-source')),
-          )
-          .initialValue,
-      Ai1SleepSource.manual,
-    );
-  });
-
   testWidgets(
-    'explicit start freezes chosen source and days; pending work disables controls',
+    'opening offers untimed collection without starting a fixed plan',
     (tester) async {
-      final pending = Completer<void>();
-      final controller = _StudyController()
-        ..enabled = true
-        ..startPending = pending;
+      final controller = _StudyController();
       final service = _StudyFileService();
       await _open(tester, controller, service);
-      await _tap(tester, 'study-source');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Apple Health').last);
-      await tester.pumpAndSettle();
-      await _reach(tester, 'study-days');
-      await tester.enterText(find.byKey(const Key('study-days')), '14');
-      await _tap(tester, 'study-start');
-      expect(controller.starts, [
-        (source: Ai1SleepSource.appleHealth, days: 14),
-      ]);
+      expect(controller.starts, isEmpty);
+      expect(controller.exportCalls, 0);
+      expect(service.files, isEmpty);
+      expect(find.text('Morning: record Energy only.'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'Evening: record your check-in and last main sleep.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('You can save either at any time.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('study-start')), findsNothing);
+      expect(find.byKey(const Key('study-days')), findsNothing);
+      expect(find.byKey(const Key('study-legacy')), findsNothing);
+      expect(find.textContaining('Sleep must be saved by'), findsNothing);
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const Key('study-start')))
+            .widget<FilledButton>(
+              find.byKey(const Key('study-measurement-export')),
+            )
             .onPressed,
-        isNull,
+        isNotNull,
       );
-      expect(controller.exportCalls, 0);
-      pending.complete();
+    },
+  );
+
+  testWidgets(
+    'measurement export opens without reading or writing a study export',
+    (tester) async {
+      final controller = _StudyController();
+      final service = _StudyFileService();
+      await _open(tester, controller, service);
+      await _tap(tester, 'study-measurement-export');
       await tester.pumpAndSettle();
-      expect(controller.ai1StudyActive, isTrue);
-      expect(find.byKey(const Key('study-days')), findsNothing);
-      expect(find.byKey(const Key('study-source')), findsNothing);
+      expect(find.byType(ResearchExportScreen), findsOneWidget);
+      expect(find.byKey(const Key('research-study-code')), findsOneWidget);
+      expect(controller.starts, isEmpty);
+      expect(controller.exportCalls, 0);
       expect(service.files, isEmpty);
     },
   );
 
-  testWidgets('invalid calendar counts cannot start and 366 is permitted', (
+  testWidgets('existing fixed plan is collapsed until explicitly opened', (
     tester,
   ) async {
-    final controller = _StudyController()..enabled = true;
-    await _open(tester, controller, _StudyFileService());
-    await _reach(tester, 'study-days');
-    for (final value in ['', '0', '367']) {
-      await tester.enterText(find.byKey(const Key('study-days')), value);
-      await tester.pump();
-      await _reach(tester, 'study-start');
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key('study-start')))
-            .onPressed,
-        isNull,
-      );
-    }
-    await _reach(tester, 'study-days');
-    await tester.enterText(find.byKey(const Key('study-days')), '366');
-    await tester.pump();
-    await _tap(tester, 'study-start');
+    final controller = _StudyController()
+      ..enabled = true
+      ..active = true;
+    final service = _StudyFileService();
+    await _open(tester, controller, service, expandLegacy: false);
+    expect(find.byKey(const Key('study-flexible-collection')), findsOneWidget);
+    expect(find.text('Earlier fixed-schedule study'), findsOneWidget);
+    expect(find.byKey(const Key('study-assess')), findsNothing);
+    expect(find.textContaining('Sleep must be saved by'), findsNothing);
+    await _tap(tester, 'study-legacy');
     await tester.pumpAndSettle();
-    expect(controller.starts.single.days, 366);
+    await _reach(tester, 'study-assess');
+    expect(find.byKey(const Key('study-assess')), findsOneWidget);
+    expect(find.textContaining('Sleep must be saved by'), findsOneWidget);
+    expect(find.byKey(const Key('study-start')), findsNothing);
+    expect(controller.starts, isEmpty);
+    expect(controller.exportCalls, 0);
+    expect(service.files, isEmpty);
   });
 
   testWidgets('assessment displays aggregates only and never saves a file', (
@@ -388,12 +368,18 @@ void main() {
     controller.isSignedOut = true;
     controller.changed();
     await tester.pump();
-    for (final key in ['study-assess', 'study-export']) {
-      expect(
-        tester.widget<OutlinedButton>(find.byKey(Key(key))).onPressed,
-        isNull,
-      );
-    }
+    expect(find.byKey(const Key('study-legacy')), findsNothing);
+    expect(find.byKey(const Key('study-assess')), findsNothing);
+    expect(find.byKey(const Key('study-export')), findsNothing);
+    await _reach(tester, 'study-measurement-export');
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('study-measurement-export')),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(controller.exportCalls, 0);
     expect(service.files, isEmpty);
   });
@@ -454,24 +440,12 @@ void main() {
     expect(service.files, isEmpty);
   });
 
-  testWidgets('start and file failures show sanitized messages', (
-    tester,
-  ) async {
+  testWidgets('file failures show sanitized messages', (tester) async {
     final controller = _StudyController()
       ..enabled = true
-      ..failStart = true;
+      ..active = true;
     final service = _StudyFileService()..fails = true;
     await _open(tester, controller, service);
-    await _tap(tester, 'study-start');
-    await tester.pumpAndSettle();
-    await _reach(tester, 'study-action-message');
-    expect(
-      find.textContaining('Could not start the study plan.'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('sensitive-internal-diagnostic'), findsNothing);
-    controller.active = true;
-    controller.changed();
     await _tap(tester, 'study-export');
     await _confirmExport(tester);
     await tester.pumpAndSettle();

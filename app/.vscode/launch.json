@@ -7,10 +7,7 @@
       "type": "dart",
       "program": "${workspaceFolder}/lib/main.dart",
       "cwd": "${workspaceFolder}",
-      "templateFor": "lib",
-      "toolArgs": [
-        "--dart-define-from-file=config/firebase_options.json"
-      ]
+      "templateFor": "lib"
     }
   ]
 }

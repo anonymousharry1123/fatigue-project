@@ -22,6 +22,54 @@ void main() {
     child: MaterialApp(theme: buildTonyoTheme(), home: child),
   );
 
+  testWidgets('late sleep logging keeps the selected wake date and duration', (
+    tester,
+  ) async {
+    final model = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+      clock: () => DateTime(2026, 10, 4, 23, 45),
+    )..isReady = true;
+    addTearDown(model.dispose);
+    await tester.pumpWidget(
+      screen(model, SleepLogScreen(initialWakeDate: DateTime(2026, 10, 3))),
+    );
+    await tester.ensureVisible(find.byKey(const Key('sleep-wake-date')));
+    await tester.tap(find.byKey(const Key('sleep-wake-date')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save sleep'));
+    await tester.tap(find.text('Save sleep'));
+    await tester.pumpAndSettle();
+    final saved = model.sleepLogs.single;
+    expect(saved.wakeTime, DateTime(2026, 10, 2, 7));
+    expect(saved.bedtime, DateTime(2026, 10, 1, 23));
+    expect(saved.durationHours, 8);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sleep cannot be recorded before its wake time', (tester) async {
+    final model = AppController(
+      initialPrivacyConsent: testAdultPrivacyConsent,
+      clock: () => DateTime(2026, 10, 4, 1),
+    )..isReady = true;
+    addTearDown(model.dispose);
+    await tester.pumpWidget(
+      screen(model, SleepLogScreen(initialWakeDate: DateTime(2026, 10, 4))),
+    );
+    await tester.ensureVisible(find.text('Save sleep'));
+    await tester.tap(find.text('Save sleep'));
+    await tester.pumpAndSettle();
+    expect(model.sleepLogs, isEmpty);
+    expect(
+      find.text(
+        'Sleep must have ended before you save it. Check the wake date and time.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   for (final width in [390.0, 320.0]) {
     testWidgets('sleep form fits ${width.toInt()}px with double text size', (
       tester,
@@ -116,7 +164,7 @@ void main() {
     final model = controller();
     addTearDown(model.dispose);
     final now = DateTime.now();
-    final end = DateTime(now.year, now.month, now.day, 14, 30);
+    final end = now.subtract(const Duration(minutes: 1));
     await model.addSleep(
       bedtime: end.subtract(const Duration(minutes: 30)),
       wakeTime: end,

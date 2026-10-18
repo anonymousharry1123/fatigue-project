@@ -141,5 +141,22 @@ counts do not include the Flutter integration scenarios.
 
 See [Phase 1 emulator integration](../../docs/PHASE1_EMULATOR_INTEGRATION.md)
 for prerequisites, exact commands, isolation guards, current results, and
-limitations. Do not pass the normal Firebase configuration or use `run.sh`
-for these local integration checks.
+limitations. Normal builds now import `lib/src/firebase_secrets.dart`, so the
+absence of a Firebase command-line flag does **not** imply an offline build.
+Use a separate checkout for native emulator integration. Before its first build,
+from that checkout's `app/` directory, create the local file from the empty
+example only if no local file already exists:
+
+```sh
+if [ ! -e lib/src/firebase_secrets.dart ]; then
+  cp lib/src/firebase_secrets.example.dart lib/src/firebase_secrets.dart
+fi
+```
+
+Keep all constants empty in that isolated checkout. The imported file must
+exist for compilation, and the native integration path rejects any nonempty
+Firebase configuration. Do not copy real values or a native Firebase project
+plist into it, and do not overwrite a configured working copy. Run only the
+guarded `pnpm test:app` harness, not `run.sh` or a normal app launch. The Node
+rules-only `pnpm test` command does not compile the Flutter app and does not
+need the Dart configuration file. These checks do not deploy rules or indexes.

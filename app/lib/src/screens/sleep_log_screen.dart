@@ -9,9 +9,16 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 
 class SleepLogScreen extends StatefulWidget {
-  const SleepLogScreen({super.key, this.initialLog});
+  const SleepLogScreen({
+    super.key,
+    this.initialLog,
+    this.initialWakeDate,
+    this.returnAfterSave = false,
+  });
 
   final SleepLogEntry? initialLog;
+  final DateTime? initialWakeDate;
+  final bool returnAfterSave;
 
   @override
   State<SleepLogScreen> createState() => _SleepLogScreenState();
@@ -109,6 +116,16 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
                     onSelectionChanged: _saving
                         ? null
                         : (selection) => _selectKind(selection.single),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    key: const Key('sleep-wake-date'),
+                    onPressed: _saving ? null : _pickWakeDate,
+                    icon: const Icon(Icons.calendar_today_outlined),
+                    label: Text(
+                      '${context.tr(_kind == SleepKind.nap ? 'Nap date' : 'Wake date')}: '
+                      '${MaterialLocalizations.of(context).formatMediumDate(previewWake)}',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TranslatedText(
@@ -383,6 +400,41 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     });
   }
 
+  Future<void> _pickWakeDate() async {
+    final now = AppScope.of(context).currentTime.toLocal();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _wakeTime.isAfter(now) ? now : _wakeTime,
+      firstDate: _wakeTime.year < 2000
+          ? DateTime(_wakeTime.year, _wakeTime.month, _wakeTime.day)
+          : DateTime(2000),
+      lastDate: now,
+    );
+    if (picked == null || !mounted || _saving) return;
+    setState(() {
+      final startDayOffset =
+          DateTime.utc(_bedtime.year, _bedtime.month, _bedtime.day)
+              .difference(
+                DateTime.utc(_wakeTime.year, _wakeTime.month, _wakeTime.day),
+              )
+              .inDays;
+      _bedtime = DateTime(
+        picked.year,
+        picked.month,
+        picked.day + startDayOffset,
+        _bedtime.hour,
+        _bedtime.minute,
+      );
+      _wakeTime = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _wakeTime.hour,
+        _wakeTime.minute,
+      );
+    });
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final normalized = SleepLogEntry.normalizeOvernightPair(
@@ -391,12 +443,15 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     );
     final start = normalized.$1;
     final end = normalized.$2;
-    final validation = SleepLogEntry.validationMessage(
-      bedtime: start,
-      wakeTime: end,
-      quality: _quality,
-      kind: _kind,
-    );
+    final controller = AppScope.of(context);
+    final validation = end.isAfter(controller.currentTime)
+        ? 'Sleep must have ended before you save it. Check the wake date and time.'
+        : SleepLogEntry.validationMessage(
+            bedtime: start,
+            wakeTime: end,
+            quality: _quality,
+            kind: _kind,
+          );
     if (validation != null) {
       ScaffoldMessenger.of(
         context,
@@ -405,7 +460,6 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     }
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _saving = true);
-    final controller = AppScope.of(context);
     final id =
         _editingId ??
         (_pendingCreateId ??= 'sleep-${DateTime.now().microsecondsSinceEpoch}');
@@ -430,7 +484,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
           ),
         ),
       );
-      if (widget.initialLog != null) {
+      if (widget.initialLog != null || widget.returnAfterSave) {
         Navigator.of(context).pop();
         return;
       }
@@ -506,7 +560,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   }
 
   void _resetTimes() {
-    final now = DateTime.now();
+    final now = widget.initialWakeDate ?? DateTime.now();
     if (_kind == SleepKind.nap) {
       _wakeTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
       _bedtime = _wakeTime.subtract(const Duration(minutes: 30));

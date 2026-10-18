@@ -10,6 +10,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/self_report_card.dart';
 import '../widgets/translated_text.dart';
 import 'reaction_test_screen.dart';
+import 'sleep_log_screen.dart';
 
 class DailyCheckInScreen extends StatefulWidget {
   const DailyCheckInScreen({
@@ -41,6 +42,23 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   bool get _legacy =>
       widget.initialCheckIn != null &&
       !widget.initialCheckIn!.isResearchCheckIn;
+
+  // Earlier Morning records can contain the full questionnaire. Keep those
+  // answers editable; new Morning check-ins collect only Energy.
+  bool get _morningEnergyOnly =>
+      !_legacy &&
+      period == CheckInPeriod.morning &&
+      (widget.initialCheckIn == null ||
+          widget.initialCheckIn!.ratings.entries.every(
+            (entry) => entry.key == 'energy' || entry.value == null,
+          ));
+
+  Map<String, double?> get _visibleRatings => {
+    for (final entry in ratings.entries)
+      entry.key: _morningEnergyOnly && entry.key != 'energy'
+          ? null
+          : entry.value,
+  };
 
   bool get _legacyEditable =>
       widget.initialCheckIn?.originalLegacyRatings == null &&
@@ -210,10 +228,16 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                 'These are draft custom self-report questions, not a validated questionnaire. Your answers stay separate from Tonyo’s experimental scores and are not used to train models.',
               ),
               const SizedBox(height: 8),
-              const TranslatedText(
-                'Choose a period and answer at least one item. Other items and notes are optional; unanswered items stay missing.',
+              TranslatedText(
+                _morningEnergyOnly
+                    ? 'Morning is a quick Energy check-in. Log sleep with your Evening check-in whenever it suits you.'
+                    : 'Choose a period and answer at least one item. Other items and notes are optional; unanswered items stay missing.',
               ),
               const SizedBox(height: 12),
+              if (period == CheckInPeriod.evening) ...[
+                _EveningSleepCard(enabled: !saving, onOpen: _openSleep),
+                const SizedBox(height: 12),
+              ],
               _PeriodPicker(
                 value: period,
                 onChanged: saving
@@ -231,7 +255,9 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                 const TranslatedText(
                   'This questionnaire version cannot be edited in this app version. Its saved answers are retained.',
                 ),
-              for (final item in snapshotItems) ...[
+              for (final item in snapshotItems.where(
+                (item) => !_morningEnergyOnly || item['id'] == 'energy',
+              )) ...[
                 _ResearchRatingCard(
                   item: item,
                   value: ratings[item['id']],
@@ -271,17 +297,19 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
                 ),
               ),
             ),
-            const SectionHeader('Cognitive tests · 30 sec'),
-            _TestCard(
-              icon: Icons.timer_outlined,
-              color: TonyoPalette.of(context).primary,
-              title: 'Reaction time',
-              detail: 'Tap when it flashes',
-              status: 'Try now',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ReactionTestScreen()),
+            if (!_morningEnergyOnly) ...[
+              const SectionHeader('Cognitive tests · 30 sec'),
+              _TestCard(
+                icon: Icons.timer_outlined,
+                color: TonyoPalette.of(context).primary,
+                title: 'Reaction time',
+                detail: 'Tap when it flashes',
+                status: 'Try now',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ReactionTestScreen()),
+                ),
               ),
-            ),
+            ],
             const SectionHeader('Check-in history'),
             if (history.isEmpty)
               const TonyoCard(
@@ -304,7 +332,8 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   Future<void> _save() async {
     if (saving) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    if (period == null || ratings.values.every((value) => value == null)) {
+    final answers = _visibleRatings;
+    if (period == null || answers.values.every((value) => value == null)) {
       setState(
         () => _validationError = period == null
             ? 'Choose Morning or Evening before saving.'
@@ -342,12 +371,12 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
         await controller.saveSelfReportCheckIn(
           id: id,
           period: period!,
-          energy: ratings['energy'],
-          fatigue: ratings['fatigue'],
-          sleepiness: ratings['sleepiness'],
-          focus: ratings['focus'],
-          mood: ratings['mood'],
-          stress: ratings['stress'],
+          energy: answers['energy'],
+          fatigue: answers['fatigue'],
+          sleepiness: answers['sleepiness'],
+          focus: answers['focus'],
+          mood: answers['mood'],
+          stress: answers['stress'],
           note: noteController.text.trim(),
           questionnaireSnapshot: _snapshot!,
           questionnaireLanguage: _language!,
@@ -379,6 +408,60 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
       if (mounted) setState(() => saving = false);
     }
   }
+
+  Future<void> _openSleep() async {
+    final controller = AppScope.of(context);
+    final at = widget.initialCheckIn?.timestamp ?? controller.currentTime;
+    final existing = controller.sleepLogs
+        .where(
+          (log) =>
+              !log.isNap &&
+              !log.wakeTime.isAfter(at) &&
+              at.difference(log.wakeTime) <= const Duration(hours: 24),
+        )
+        .firstOrNull;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SleepLogScreen(
+          initialLog: existing,
+          initialWakeDate: at.toLocal(),
+          returnAfterSave: true,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+}
+
+class _EveningSleepCard extends StatelessWidget {
+  const _EveningSleepCard({required this.enabled, required this.onOpen});
+  final bool enabled;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) => TonyoCard(
+    key: const Key('evening-sleep-card'),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const TranslatedText(
+          'Sleep for this check-in',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        const TranslatedText(
+          'Log your most recent main sleep here, even if you woke up late. There is no logging deadline. Sleep and Energy are saved separately.',
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          key: const Key('checkin-log-sleep'),
+          onPressed: enabled ? onOpen : null,
+          icon: const Icon(Icons.bedtime_outlined),
+          label: const TranslatedText('Log or review sleep'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _PeriodPicker extends StatelessWidget {
@@ -412,7 +495,7 @@ class _PeriodPicker extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const TranslatedText(
-          'Morning: after waking and beginning the day. Evening: near your usual evening time. The period you choose is kept even if you answer late.',
+          'Morning: Energy after waking, whatever the time. Evening: your daily check-in and sleep log. Choose the period yourself; both can be saved at any time.',
         ),
       ],
     ),

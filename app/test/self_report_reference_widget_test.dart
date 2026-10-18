@@ -61,7 +61,9 @@ void main() {
     final original = jsonEncode(rows.map((item) => item.toJson()).toList());
     await _pump(tester, rows);
     expect(find.text('Energy: 5 / 10'), findsOneWidget);
-    expect(find.text('Fatigue: Not answered'), findsOneWidget);
+    // The quick Morning card shows Energy only; historical references below
+    // can still describe other answers collected by earlier versions.
+    expect(find.text('Fatigue: Not answered'), findsNothing);
     await _expand(tester);
     expect(find.text('Energy average: 4.0 / 10'), findsOneWidget);
     expect(find.text('Fatigue average: 6.0 / 10'), findsOneWidget);

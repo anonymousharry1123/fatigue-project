@@ -1026,13 +1026,13 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "已保存的版本数：{count}",
     "zh-Hant": "已儲存的版本數：{count}",
   },
-  "Turning this off clears this study history. Your ordinary sleep logs and check-ins stay. Study tools can separately schedule morning snapshots and capture readable Apple Health sleep evidence. History is excluded from ordinary backups and exports; a private study export is available in Study tools.": {
+  "Turning this off clears this study history. Your ordinary sleep logs and check-ins stay. Any earlier fixed-schedule plan keeps its original timing rules. Review or export its retained history in Study tools. This history is excluded from ordinary backups and exports.": {
     "es":
-        "Al desactivar esta opción se borra este historial del estudio. Tus registros habituales de sueño y de estado se conservan. Las herramientas del estudio permiten programar por separado capturas matutinas y guardar los datos de sueño accesibles de Apple Health. El historial no se incluye en las copias de seguridad ni en las exportaciones habituales; las herramientas del estudio ofrecen una exportación privada del estudio.",
+        "Al desactivar esta opción se borra este historial del estudio. Tus registros habituales de sueño y de estado se conservan. Los planes anteriores con horario fijo conservan sus reglas originales. Revisa o exporta su historial guardado en las herramientas del estudio. Este historial no se incluye en las copias de seguridad ni en las exportaciones habituales.",
     "zh-Hans":
-        "关闭后会清除此研究历史记录。你的普通睡眠记录和状态记录会保留。研究工具可单独安排早晨快照，并保存可读取的 Apple 健康睡眠数据。普通备份和导出不包含此历史记录；研究工具中提供私密研究导出功能。",
+        "关闭后会清除此研究历史记录。普通睡眠记录和状态记录会保留。之前的固定时间计划仍采用原来的时间规则。你可以在研究工具中查看或导出其保留的历史记录。普通备份和导出不包含此历史记录。",
     "zh-Hant":
-        "關閉後會清除此研究歷史記錄。你的普通睡眠記錄和狀態記錄會保留。研究工具可單獨安排早晨快照，並儲存可讀取的 Apple 健康睡眠資料。一般備份和匯出不包含此歷史記錄；研究工具中提供私密研究匯出功能。",
+        "關閉後會清除此研究歷史記錄。一般睡眠記錄和狀態記錄會保留。之前的固定時間計畫仍採用原來的時間規則。你可以在研究工具中查看或匯出其保留的歷史記錄。一般備份和匯出不包含此歷史記錄。",
   },
   "Study tools": {
     "es": "Herramientas del estudio",
@@ -2542,5 +2542,43 @@ const accountTranslations = <String, Map<String, String>>{
     "es": "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
     "zh-Hans": "无法更改密码，请重试。",
     "zh-Hant": "無法更改密碼，請重試。",
+  },
+  "Collect at your own pace": {
+    "es": "Registra a tu ritmo",
+    "zh-Hans": "按自己的节奏记录",
+    "zh-Hant": "按自己的節奏記錄",
+  },
+  "Morning: record Energy only.": {
+    "es": "Mañana: registra solo tu energía.",
+    "zh-Hans": "早间：只记录精力。",
+    "zh-Hant": "早間：只記錄精力。",
+  },
+  "Evening: record your check-in and last main sleep. Enter the actual sleep and wake times.": {
+    "es":
+        "Tarde/noche: completa tu registro y anota tu último sueño principal. Introduce las horas reales de sueño y de despertar.",
+    "zh-Hans": "晚间：填写自评并记录上一次主要睡眠，输入实际的入睡和起床时间。",
+    "zh-Hant": "晚間：填寫自評並記錄上一次主要睡眠，輸入實際的入睡和起床時間。",
+  },
+  "Morning and Evening are your choices, not clock-based deadlines. You can save either at any time.": {
+    "es":
+        "Tú eliges Mañana o Tarde/noche, sin horarios límite. Puedes guardar cualquiera de los dos en cualquier momento.",
+    "zh-Hans": "早间和晚间由你选择，没有固定时间限制。你可以随时保存任一记录。",
+    "zh-Hant": "早間和晚間由你選擇，沒有固定時間限制。你可以隨時儲存任一記錄。",
+  },
+  "Open measurement export": {
+    "es": "Abrir exportación de mediciones",
+    "zh-Hans": "打开测量数据导出",
+    "zh-Hant": "開啟測量資料匯出",
+  },
+  "Earlier fixed-schedule study": {
+    "es": "Estudio anterior con horario fijo",
+    "zh-Hans": "之前的固定时间研究",
+    "zh-Hant": "之前的固定時間研究",
+  },
+  "Review the plan you already saved. Its original timing rules apply only to that plan.": {
+    "es":
+        "Revisa el plan que ya guardaste. Sus reglas de horario originales se aplican solo a ese plan.",
+    "zh-Hans": "查看已保存的计划。原来的时间规则仅适用于该计划。",
+    "zh-Hant": "查看已儲存的計畫。原來的時間規則僅適用於該計畫。",
   },
 };

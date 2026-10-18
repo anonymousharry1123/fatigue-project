@@ -1,14 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import '../ai1_protocol.dart';
 import '../app_controller.dart';
 import '../device_backup_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import 'research_export_screen.dart';
 
 /// Opening this screen never starts a plan, reads an export or saves a file.
 class StudyToolsScreen extends StatefulWidget {
@@ -26,8 +25,6 @@ class StudyToolsScreen extends StatefulWidget {
 }
 
 class _StudyToolsScreenState extends State<StudyToolsScreen> {
-  final _days = TextEditingController(text: '28');
-  Ai1SleepSource _source = Ai1SleepSource.manual;
   bool _working = false;
   String? _message;
   bool _messageIsError = false;
@@ -37,17 +34,8 @@ class _StudyToolsScreenState extends State<StudyToolsScreen> {
 
   AppController get _controller => widget.controller;
   bool get _busy => _working || _controller.ai1CaptureBusy;
-  int? get _dayCount => int.tryParse(_days.text);
-  bool get _validDays =>
-      _dayCount != null && _dayCount! >= 1 && _dayCount! <= 366;
   bool get _sessionAvailable =>
       !_controller.isSignedOut && _controller.canExportDeviceBackup;
-  bool get _canStart =>
-      !_busy &&
-      _sessionAvailable &&
-      _controller.ai1CaptureEnabled &&
-      !_controller.ai1StudyActive &&
-      _validDays;
   bool get _canAssess =>
       !_busy && _sessionAvailable && _controller.ai1StudyActive;
   bool get _showResult =>
@@ -83,7 +71,6 @@ class _StudyToolsScreenState extends State<StudyToolsScreen> {
   @override
   void dispose() {
     _controller.removeListener(_discardStaleResults);
-    _days.dispose();
     super.dispose();
   }
 
@@ -107,240 +94,184 @@ class _StudyToolsScreenState extends State<StudyToolsScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
               children: [
                 TonyoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionHeader('A prospective measurement plan'),
-                      Text(
-                        context.tr(
-                          'Optional and off by default. Keep new sleep and '
-                          'check-in history on this device to review timing, '
-                          'missing answers and usable days. This plan creates '
-                          'no model predictions and does not train a model.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _sessionAvailable
-                            ? context.tr(_controller.ai1StudyStatus)
-                            : context.tr(
-                                'Study tools are unavailable in this session.',
-                              ),
-                        key: const Key('study-plan-status'),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      if (!_controller.ai1CaptureEnabled) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          context.tr(
-                            'Enable “Keep local study history” in Privacy '
-                            'center before starting a plan.',
-                          ),
-                        ),
-                      ],
-                      if (_controller.ai1CaptureError case final error?) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          context.tr(error),
-                          key: const Key('study-capture-error'),
-                          style: TextStyle(
-                            color: TonyoPalette.of(context).error,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TonyoCard(
+                  key: const Key('study-flexible-collection'),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SectionHeader(
-                        active
-                            ? 'Saved study schedule'
-                            : 'Plan starting tomorrow',
-                      ),
+                      const SectionHeader('Collect at your own pace'),
+                      Text(context.tr('Morning: record Energy only.')),
+                      const SizedBox(height: 8),
                       Text(
                         context.tr(
-                          'The plan fixes the timezone at start and uses '
-                          'one sleep source. Use English Evening check-ins from '
-                          '6 pm until before 10 pm. Sleep must be saved by '
-                          '10 am. Open Tonyo from 10 am until before 10:15 am '
-                          'for the morning snapshot; background execution '
-                          'is not guaranteed. Unopened days still count.',
+                          'Evening: record your check-in and last main sleep. '
+                          'Enter the actual sleep and wake times.',
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         context.tr(
-                          'For Apple Health, connect in Sleep Log and allow sleep reads before the morning cutoff.',
+                          'Morning and Evening are your choices, not clock-based '
+                          'deadlines. You can save either at any time.',
                         ),
                       ),
-                      if (!active) ...[
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<Ai1SleepSource>(
-                          key: const Key('study-source'),
-                          initialValue: _source,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: context.tr('Sleep source'),
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: Ai1SleepSource.manual,
-                              child: Text(context.tr('Manual sleep')),
-                            ),
-                            DropdownMenuItem(
-                              value: Ai1SleepSource.appleHealth,
-                              child: Text(context.tr('Apple Health')),
-                            ),
-                          ],
-                          onChanged: _busy || active || !_sessionAvailable
-                              ? null
-                              : (value) => setState(() => _source = value!),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          key: const Key('study-days'),
-                          controller: _days,
-                          enabled: !_busy && !active && _sessionAvailable,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: InputDecoration(
-                            labelText: context.tr('Calendar days'),
-                            errorText: _validDays
-                                ? null
-                                : context.tr('Choose 1–366 calendar days.'),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        key: const Key('study-measurement-export'),
+                        onPressed: _working || !_sessionAvailable
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => ResearchExportScreen(
+                                    controller: _controller,
+                                    service: widget.backupService,
+                                  ),
+                                ),
+                              ),
+                        icon: const Icon(Icons.table_view_outlined),
+                        label: Text(context.tr('Open measurement export')),
+                      ),
+                      if (!_sessionAvailable) ...[
                         const SizedBox(height: 8),
                         Text(
                           context.tr(
-                            '28 days is a scheduling convenience, not evidence '
-                            'that enough data will be collected. Source and '
-                            'dates cannot be changed after starting. To replace '
-                            'the plan, clear local study history in Privacy center.',
-                          ),
-                          style: TextStyle(
-                            color: TonyoPalette.of(context).muted,
-                          ),
-                        ),
-                        if (_source == Ai1SleepSource.appleHealth &&
-                            !active) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            context.tr(
-                              'Apple Health must be connected separately. '
-                              'Missing Health sleep is not replaced with manual sleep.',
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 14),
-                        FilledButton.icon(
-                          key: const Key('study-start'),
-                          onPressed: _canStart ? _start : null,
-                          icon: const Icon(Icons.event_available_outlined),
-                          label: Text(context.tr('Start tomorrow’s plan')),
-                        ),
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          context.tr(
-                            'The saved source, timezone and dates are fixed. '
-                            'To replace this plan, clear local study history '
-                            'in Privacy center.',
+                            'Study tools are unavailable in this session.',
                           ),
                         ),
                       ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                TonyoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                if (active) ...[
+                  const SizedBox(height: 16),
+                  ExpansionTile(
+                    key: const Key('study-legacy'),
+                    title: Text(context.tr('Earlier fixed-schedule study')),
+                    subtitle: Text(
+                      context.tr(
+                        'Review the plan you already saved. Its original '
+                        'timing rules apply only to that plan.',
+                      ),
+                    ),
                     children: [
-                      const SectionHeader('Review local readiness'),
-                      Text(
-                        context.tr(
-                          'Assess completed daily windows, including missed '
-                          'days. Counts alone do not establish measurement '
-                          'quality, study approval or readiness for modeling.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        key: const Key('study-assess'),
-                        onPressed: _canAssess ? _assess : null,
-                        icon: const Icon(Icons.fact_check_outlined),
-                        label: Text(context.tr('Assess local readiness')),
-                      ),
-                      if (summary != null) ...[
-                        const SizedBox(height: 12),
-                        Semantics(
-                          liveRegion: true,
-                          child: Column(
-                            key: const Key('study-readiness-summary'),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                context.tr(
-                                  'Modeling readiness is not established.',
-                                ),
+                      TonyoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SectionHeader('Saved study schedule'),
+                            Text(
+                              context.tr(_controller.ai1StudyStatus),
+                              key: const Key('study-plan-status'),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
-                              Text(
-                                context.tr(
-                                  'Closed opportunities: {count}',
-                                  args: {'count': summary.opportunities},
-                                ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              context.tr(
+                                'The plan fixes the timezone at start and uses '
+                                'one sleep source. Use English Evening check-ins from '
+                                '6 pm until before 10 pm. Sleep must be saved by '
+                                '10 am. Open Tonyo from 10 am until before 10:15 am '
+                                'for the morning snapshot; background execution '
+                                'is not guaranteed. Unopened days still count.',
                               ),
+                            ),
+                            if (_controller.ai1CaptureError
+                                case final error?) ...[
+                              const SizedBox(height: 8),
                               Text(
-                                context.tr(
-                                  'Completed Energy outcomes: {count}',
-                                  args: {'count': summary.outcomes},
-                                ),
-                              ),
-                              Text(
-                                context.tr(
-                                  'Paired days: {count}',
-                                  args: {'count': summary.pairs},
+                                context.tr(error),
+                                key: const Key('study-capture-error'),
+                                style: TextStyle(
+                                  color: TonyoPalette.of(context).error,
                                 ),
                               ),
                             ],
-                          ),
+                            const SizedBox(height: 16),
+                            const SectionHeader('Review local readiness'),
+                            Text(
+                              context.tr(
+                                'Assess completed daily windows, including missed '
+                                'days. Counts alone do not establish measurement '
+                                'quality, study approval or readiness for modeling.',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              key: const Key('study-assess'),
+                              onPressed: _canAssess ? _assess : null,
+                              icon: const Icon(Icons.fact_check_outlined),
+                              label: Text(context.tr('Assess local readiness')),
+                            ),
+                            if (summary != null) ...[
+                              const SizedBox(height: 12),
+                              Semantics(
+                                liveRegion: true,
+                                child: Column(
+                                  key: const Key('study-readiness-summary'),
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      context.tr(
+                                        'Modeling readiness is not established.',
+                                      ),
+                                    ),
+                                    Text(
+                                      context.tr(
+                                        'Closed opportunities: {count}',
+                                        args: {'count': summary.opportunities},
+                                      ),
+                                    ),
+                                    Text(
+                                      context.tr(
+                                        'Completed Energy outcomes: {count}',
+                                        args: {'count': summary.outcomes},
+                                      ),
+                                    ),
+                                    Text(
+                                      context.tr(
+                                        'Paired days: {count}',
+                                        args: {'count': summary.pairs},
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              key: const Key('study-export'),
+                              onPressed:
+                                  _canAssess && widget.backupService.isSupported
+                                  ? _export
+                                  : null,
+                              icon: const Icon(Icons.save_alt_rounded),
+                              label: Text(
+                                context.tr('Save private study export'),
+                              ),
+                            ),
+                            if (!widget.backupService.isSupported)
+                              Text(
+                                context.tr(
+                                  'Saving a private file is unavailable on this device.',
+                                ),
+                              ),
+                            Text(
+                              context.tr(
+                                'The export contains sensitive, pseudonymous '
+                                'measurements and a readiness report. No data is '
+                                'saved to a file until you choose to export.',
+                              ),
+                              style: TextStyle(
+                                color: TonyoPalette.of(context).muted,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        key: const Key('study-export'),
-                        onPressed:
-                            _canAssess && widget.backupService.isSupported
-                            ? _export
-                            : null,
-                        icon: const Icon(Icons.save_alt_rounded),
-                        label: Text(context.tr('Save private study export')),
-                      ),
-                      if (!widget.backupService.isSupported)
-                        Text(
-                          context.tr(
-                            'Saving a private file is unavailable on this device.',
-                          ),
-                        ),
-                      Text(
-                        context.tr(
-                          'The export contains sensitive, pseudonymous '
-                          'measurements and a readiness report. No data is '
-                          'saved to a file until you choose to export.',
-                        ),
-                        style: TextStyle(color: TonyoPalette.of(context).muted),
                       ),
                     ],
                   ),
-                ),
+                ],
                 if (_working) ...[
                   const SizedBox(height: 16),
                   const LinearProgressIndicator(key: Key('study-working')),
@@ -387,30 +318,6 @@ class _StudyToolsScreenState extends State<StudyToolsScreen> {
     _message = value;
     _messageIsError = error;
   });
-
-  Future<void> _start() async {
-    if (!_canStart) return;
-    final controller = _controller;
-    final revision = _controller.sessionRevision;
-    final owner = _controller.cloudUid;
-    final days = _dayCount!;
-    _begin();
-    try {
-      await _controller.startAi1Study(source: _source, days: days);
-      if (_current(revision, owner, controller)) {
-        _showMessage('Study plan saved. The first opportunity is tomorrow.');
-      }
-    } on Object {
-      if (_current(revision, owner, controller)) {
-        _showMessage(
-          'Could not start the study plan. Check local history and timezone, then try again.',
-          error: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
 
   void _assess() {
     if (!_canAssess) return;
