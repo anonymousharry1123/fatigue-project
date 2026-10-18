@@ -750,6 +750,7 @@ class AppController extends ChangeNotifier {
   bool crashNotificationsEnabled = true;
   bool recoveryNotificationsEnabled = true;
   bool coachPlanNotificationsEnabled = false;
+  bool studyLogNotificationsEnabled = false;
   bool outcomeConsent = false;
   bool healthAvailable = false;
   bool healthAuthorized = false;
@@ -2101,6 +2102,9 @@ class AppController extends ChangeNotifier {
         coachPlanEnabled: coachPlanNotificationsEnabled,
         currentEvidenceEligible:
             score.canEstimateEnergy || score.canEstimateCognitive,
+        studyLogEnabled: studyLogNotificationsEnabled,
+        signals: signals,
+        checkIns: checkIns,
       );
       if (!notificationsEnabled) {
         notificationPermission = NotificationPermissionState.unknown;
@@ -3127,6 +3131,7 @@ class AppController extends ChangeNotifier {
       ),
     );
     ensureCurrent();
+    await _refreshStudyReminders();
   }
 
   Future<void> deleteSleepLog(String id) async {
@@ -3144,6 +3149,7 @@ class AppController extends ChangeNotifier {
     signals.removeWhere((item) => item.groupId == id);
     await _commit(energyInputsChanged: true);
     ensureCurrent();
+    await _refreshStudyReminders();
   }
 
   Future<void> addCheckIn({
@@ -3309,8 +3315,18 @@ class AppController extends ChangeNotifier {
       ),
     );
     ensureCurrent();
+    await _refreshStudyReminders();
     // Deliberately no legacy observed-energy outcome: this wording/version has
     // no approved compatibility contract with that model's target.
+  }
+
+  Future<void> _refreshStudyReminders() async {
+    if (!notificationsEnabled || !studyLogNotificationsEnabled) return;
+    try {
+      await refreshNotifications(notify: false);
+    } on Object {
+      // The log is already saved. The next foreground refresh reschedules.
+    }
   }
 
   Future<void> addReactionResult(
@@ -3595,6 +3611,13 @@ class AppController extends ChangeNotifier {
     );
   }
 
+  Future<void> setStudyLogNotifications(bool value) async {
+    await _setNotificationPreferences(
+      studyLog: value,
+      enabled: value && !notificationsEnabled ? true : null,
+    );
+  }
+
   Future<void> setCrashNotifications(bool value) async {
     await _setNotificationPreferences(crash: value);
   }
@@ -3606,6 +3629,7 @@ class AppController extends ChangeNotifier {
   Future<NotificationPermissionState> _setNotificationPreferences({
     bool? enabled,
     bool? coachPlan,
+    bool? studyLog,
     bool? crash,
     bool? recovery,
   }) async {
@@ -3622,12 +3646,14 @@ class AppController extends ChangeNotifier {
     final previous = (
       enabled: notificationsEnabled,
       coach: coachPlanNotificationsEnabled,
+      studyLog: studyLogNotificationsEnabled,
       crash: crashNotificationsEnabled,
       recovery: recoveryNotificationsEnabled,
     );
     _notificationPreferencesPersisted = false;
     _notificationScheduleConfirmed = false;
     if (coachPlan != null) coachPlanNotificationsEnabled = coachPlan;
+    if (studyLog != null) studyLogNotificationsEnabled = studyLog;
     if (crash != null) crashNotificationsEnabled = crash;
     if (recovery != null) recoveryNotificationsEnabled = recovery;
     isNotificationSyncing = true;
@@ -3688,6 +3714,7 @@ class AppController extends ChangeNotifier {
       if (current()) {
         notificationsEnabled = previous.enabled;
         coachPlanNotificationsEnabled = previous.coach;
+        studyLogNotificationsEnabled = previous.studyLog;
         crashNotificationsEnabled = previous.crash;
         recoveryNotificationsEnabled = previous.recovery;
         notificationError = 'Could not save reminder settings. Please retry.';
@@ -4739,6 +4766,7 @@ class AppController extends ChangeNotifier {
     crashNotificationsEnabled = true;
     recoveryNotificationsEnabled = true;
     coachPlanNotificationsEnabled = false;
+    studyLogNotificationsEnabled = false;
     isNotificationSyncing = false;
     notificationError = null;
     notificationPermission = NotificationPermissionState.unknown;
@@ -4861,6 +4889,7 @@ class AppController extends ChangeNotifier {
     'crashNotificationsEnabled': crashNotificationsEnabled,
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
+    'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
     'notificationPreferencesVersion': notificationPreferencesVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
@@ -5327,6 +5356,7 @@ class AppController extends ChangeNotifier {
     crashNotificationsEnabled: crashNotificationsEnabled,
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
     coachPlanNotificationsEnabled: coachPlanNotificationsEnabled,
+    studyLogNotificationsEnabled: studyLogNotificationsEnabled,
     notificationPrefsVersion: notificationPreferencesVersion,
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
@@ -5403,6 +5433,7 @@ class AppController extends ChangeNotifier {
     crashNotificationsEnabled = state.crashNotificationsEnabled;
     recoveryNotificationsEnabled = state.recoveryNotificationsEnabled;
     coachPlanNotificationsEnabled = state.coachPlanNotificationsEnabled;
+    studyLogNotificationsEnabled = state.studyLogNotificationsEnabled;
     if (!notificationsEnabled || !onboardingComplete) {
       // Account restoration can return to setup without regenerating guidance.
       // Queue cancellation now so a former device plan cannot remain active.
@@ -5515,6 +5546,8 @@ class AppController extends ChangeNotifier {
         json['recoveryNotificationsEnabled'] as bool? ?? true;
     coachPlanNotificationsEnabled =
         json['coachPlanNotificationsEnabled'] as bool? ?? false;
+    studyLogNotificationsEnabled =
+        json['studyLogNotificationsEnabled'] as bool? ?? false;
     notificationPermission = NotificationPermissionState.unknown;
     notificationError = null;
     _notificationPlan = const NotificationPlan(

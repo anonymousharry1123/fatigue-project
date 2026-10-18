@@ -33,7 +33,10 @@ abstract final class NotificationLogic {
   static const maximumForecastAge = Duration(hours: 12);
   static const maximumCoachPlanAge = Duration(hours: 12);
   static const maximumCoachReminders = 12;
+  static const studySleepHour = 9;
+  static const studyEnergyHour = 18;
   static const _coachIdNamespace = 0x40000000;
+  static const _studyIdNamespace = 0x20000000;
   static const _idMask = _coachIdNamespace - 1;
 
   static NotificationPlan build({
@@ -47,6 +50,9 @@ abstract final class NotificationLogic {
     List<Recommendation> recommendations = const [],
     bool coachPlanEnabled = false,
     bool currentEvidenceEligible = false,
+    bool studyLogEnabled = false,
+    List<SignalReading> signals = const [],
+    List<DailyCheckIn> checkIns = const [],
   }) {
     final forecast = _forecastPlan(
       now: now,
@@ -57,18 +63,20 @@ abstract final class NotificationLogic {
       crashEnabled: crashEnabled,
       recoveryEnabled: recoveryEnabled,
     );
-    if (!enabled || !coachPlanEnabled || !currentEvidenceEligible) {
-      return forecast;
-    }
-    final coach = _coachReminders(now, recommendations);
-    if (coach.isEmpty) return forecast;
-    final notifications = [...forecast.notifications, ...coach]
+    final coach = enabled && coachPlanEnabled && currentEvidenceEligible
+        ? _coachReminders(now, recommendations)
+        : const <GuidanceNotification>[];
+    final study = enabled && studyLogEnabled
+        ? _studyReminders(now: now, signals: signals, checkIns: checkIns)
+        : const <GuidanceNotification>[];
+    if (coach.isEmpty && study.isEmpty) return forecast;
+    final notifications = [...forecast.notifications, ...coach, ...study]
       ..sort((left, right) {
         final time = left.scheduledAt.compareTo(right.scheduledAt);
         return time != 0 ? time : left.id.compareTo(right.id);
       });
     return NotificationPlan(
-      state: NotificationPlanState.ready,
+      state: coach.isEmpty ? forecast.state : NotificationPlanState.ready,
       notifications: List.unmodifiable(notifications),
       dismissedRiskAlertCount: forecast.dismissedRiskAlertCount,
     );
@@ -200,6 +208,91 @@ abstract final class NotificationLogic {
     // its heuristic coverage can justify a precise peak/crash notification.
     return suppressed(NotificationPlanState.uncalibratedForecast);
   }
+
+  static List<GuidanceNotification> _studyReminders({
+    required DateTime now,
+    required List<SignalReading> signals,
+    required List<DailyCheckIn> checkIns,
+  }) {
+    final reminders = <GuidanceNotification>[];
+    final sleepTimes = _upcomingStudyInstants(
+      now: now,
+      hour: studySleepHour,
+      satisfied: (day) => _mainSleepSavedOn(signals, day),
+    );
+    for (final (offset, sleepAt) in sleepTimes.indexed) {
+      reminders.add(
+        GuidanceNotification(
+          id: '${_dayId(localDay(sleepAt))}-study-sleep',
+          platformId: _studyIdNamespace | 0x100 | offset,
+          kind: GuidanceNotificationKind.studySleep,
+          scheduledAt: sleepAt,
+          title: 'Log main sleep',
+          body: "Save today's main sleep before 10:00.",
+        ),
+      );
+    }
+    final energyTimes = _upcomingStudyInstants(
+      now: now,
+      hour: studyEnergyHour,
+      satisfied: (day) => _eveningEnergySavedOn(checkIns, day),
+    );
+    for (final (offset, energyAt) in energyTimes.indexed) {
+      reminders.add(
+        GuidanceNotification(
+          id: '${_dayId(localDay(energyAt))}-study-energy',
+          platformId: _studyIdNamespace | 0x200 | offset,
+          kind: GuidanceNotificationKind.studyEnergy,
+          scheduledAt: energyAt,
+          title: 'Rate evening Energy',
+          body: 'Save evening Energy between 6:00 and 10:00 pm.',
+        ),
+      );
+    }
+    return reminders;
+  }
+
+  /// Upcoming 9:00 or 18:00 instants over the next 14 local days. A day is
+  /// skipped once its entry is already saved, and a time inside the one-minute
+  /// lead window waits until the next open day.
+  static List<DateTime> _upcomingStudyInstants({
+    required DateTime now,
+    required int hour,
+    required bool Function(DateTime day) satisfied,
+  }) {
+    final threshold = now.add(minimumLeadTime);
+    final times = <DateTime>[];
+    for (var offset = 0; offset < 14; offset++) {
+      final day = localDay(now, offset);
+      final at = DateTime(day.year, day.month, day.day, hour);
+      if (!at.isAfter(threshold) || satisfied(day)) continue;
+      times.add(at);
+    }
+    return times;
+  }
+
+  static bool _mainSleepSavedOn(List<SignalReading> signals, DateTime day) =>
+      signals.any(
+        (item) =>
+            item.type == SignalType.sleep && sameLocalDay(item.timestamp, day),
+      );
+
+  static bool _eveningEnergySavedOn(
+    List<DailyCheckIn> checkIns,
+    DateTime day,
+  ) => checkIns.any((item) {
+    final energy = item.energy;
+    if (item.period != CheckInPeriod.evening || energy == null) return false;
+    if (!energy.isFinite ||
+        energy < 1 ||
+        energy > 10 ||
+        energy != energy.roundToDouble()) {
+      return false;
+    }
+    if (!sameLocalDay(item.timestamp, day)) return false;
+    final local = item.timestamp.toLocal();
+    return local.hour >= 18 && local.hour < 22;
+  });
 
   static String _dayId(DateTime day) =>
       '${day.year.toString().padLeft(4, '0')}-'

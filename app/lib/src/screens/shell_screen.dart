@@ -2,23 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 
+import '../models.dart';
+import '../notification_service.dart';
 import '../theme.dart';
 import 'add_data_screen.dart';
 import 'coach_screen.dart';
+import 'daily_checkin_screen.dart';
 import 'forecast_insights_screen.dart';
 import 'profile_screen.dart';
+import 'sleep_log_screen.dart';
 import 'today_screen.dart';
 
 class ShellScreen extends StatefulWidget {
   const ShellScreen({
     super.key,
     this.coachOpenRequest,
+    this.studyOpenRequest,
+    this.studyDestination,
     this.notificationNavigation,
   });
 
   /// A new request selects Coach once, leaving subsequent manual tab choices
   /// alone. The app supplies this only after authentication/privacy gates pass.
   final int? coachOpenRequest;
+  final int? studyOpenRequest;
+  final StudyReminderDestination? studyDestination;
   final CoachNotificationNavigation? notificationNavigation;
 
   @override
@@ -32,9 +40,14 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
-    _index = widget.coachOpenRequest == null ? 0 : 3;
+    _index = widget.coachOpenRequest != null
+        ? 3
+        : widget.studyOpenRequest != null
+        ? 2
+        : 0;
     _pageController = PageController(initialPage: _index);
     if (widget.coachOpenRequest != null) _openCoachFromNotification();
+    if (widget.studyOpenRequest != null) _openStudyFromNotification();
   }
 
   @override
@@ -50,6 +63,40 @@ class _ShellScreenState extends State<ShellScreen> {
         widget.coachOpenRequest != oldWidget.coachOpenRequest) {
       _openCoachFromNotification();
     }
+    if (widget.studyOpenRequest != null &&
+        widget.studyOpenRequest != oldWidget.studyOpenRequest) {
+      _openStudyFromNotification();
+    }
+  }
+
+  void _openStudyFromNotification() {
+    _index = 2;
+    final request = widget.studyOpenRequest;
+    final destination = widget.studyDestination;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted ||
+          widget.studyOpenRequest != request ||
+          destination == null) {
+        return;
+      }
+      if (_pageController.hasClients) _pageController.jumpToPage(2);
+      await widget.notificationNavigation?.revealShell(
+        isCurrent: () => mounted && widget.studyOpenRequest == request,
+      );
+      if (!mounted || widget.studyOpenRequest != request) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) return;
+      await navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => switch (destination) {
+            StudyReminderDestination.sleepLog => const SleepLogScreen(),
+            StudyReminderDestination.eveningCheckIn => const DailyCheckInScreen(
+              initialPeriod: CheckInPeriod.evening,
+            ),
+          },
+        ),
+      );
+    });
   }
 
   void _openCoachFromNotification() {

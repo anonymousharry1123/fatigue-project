@@ -529,6 +529,128 @@ void main() {
       expect(service.reconciliations, 0);
     });
   });
+
+  group('study log reminders', () {
+    test('study reminders use the next unlogged 9:00 and 18:00', () {
+      final plan = NotificationLogic.build(
+        now: DateTime(2026, 8, 15, 8),
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+        studyLogEnabled: true,
+      );
+      final study = plan.notifications
+          .where(
+            (item) =>
+                item.kind == GuidanceNotificationKind.studySleep ||
+                item.kind == GuidanceNotificationKind.studyEnergy,
+          )
+          .toList();
+
+      expect(study.map((item) => item.scheduledAt).take(2), [
+        DateTime(2026, 8, 15, 9),
+        DateTime(2026, 8, 15, 18),
+      ]);
+      expect(
+        study.where((item) => item.kind == GuidanceNotificationKind.studySleep),
+        hasLength(14),
+      );
+      expect(
+        study.where(
+          (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+        ),
+        hasLength(14),
+      );
+      expect(study.first.payload, 'tonyo-guidance:study:sleep');
+      expect(
+        study
+            .firstWhere(
+              (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+            )
+            .payload,
+        'tonyo-guidance:study:energy',
+      );
+    });
+
+    test('saved main sleep and in-window evening Energy skip that day', () {
+      final morning = DateTime(2026, 8, 15, 8);
+      final plan = NotificationLogic.build(
+        now: morning,
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+        studyLogEnabled: true,
+        signals: [
+          SignalReading(
+            id: 'sleep',
+            type: SignalType.sleep,
+            value: 7.5,
+            timestamp: DateTime(2026, 8, 15, 7, 30),
+          ),
+          SignalReading(
+            id: 'nap',
+            type: SignalType.nap,
+            value: 0.4,
+            timestamp: DateTime(2026, 8, 16, 14),
+          ),
+        ],
+        checkIns: [
+          DailyCheckIn(
+            id: 'afternoon',
+            timestamp: DateTime(2026, 8, 15, 14, 30),
+            period: CheckInPeriod.evening,
+            energy: 6,
+          ),
+          DailyCheckIn(
+            id: 'evening',
+            timestamp: DateTime(2026, 8, 15, 19),
+            period: CheckInPeriod.evening,
+            energy: 5,
+          ),
+        ],
+      );
+      final study = plan.notifications
+          .where(
+            (item) =>
+                item.kind == GuidanceNotificationKind.studySleep ||
+                item.kind == GuidanceNotificationKind.studyEnergy,
+          )
+          .toList();
+
+      expect(study.map((item) => (item.kind, item.scheduledAt)).take(2), [
+        (GuidanceNotificationKind.studySleep, DateTime(2026, 8, 16, 9)),
+        (GuidanceNotificationKind.studyEnergy, DateTime(2026, 8, 16, 18)),
+      ]);
+      expect(study, hasLength(26));
+    });
+
+    test('study reminders stay off until the switch is enabled', () {
+      final plan = NotificationLogic.build(
+        now: DateTime(2026, 8, 15, 8),
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+      );
+
+      expect(
+        plan.notifications.where(
+          (item) =>
+              item.kind == GuidanceNotificationKind.studySleep ||
+              item.kind == GuidanceNotificationKind.studyEnergy,
+        ),
+        isEmpty,
+      );
+    });
+  });
 }
 
 class _FakeNotificationService implements NotificationService {

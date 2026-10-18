@@ -1125,6 +1125,7 @@ class MemoryCloudRepository implements CloudRepository {
               recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
               coachPlanNotificationsEnabled:
                   state.coachPlanNotificationsEnabled,
+              studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
               notificationPrefsVersion: state.notificationPrefsVersion,
               outcomeConsent: state.outcomeConsent,
               healthAuthorized: state.healthAuthorized,

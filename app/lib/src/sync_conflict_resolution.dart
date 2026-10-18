@@ -498,6 +498,7 @@ String _conflictFieldLabel(String path) {
         'crashNotificationsEnabled': 'Low energy alerts',
         'recoveryNotificationsEnabled': 'Recovery alerts',
         'coachPlanNotificationsEnabled': 'Daily plan reminders',
+        'studyLogNotificationsEnabled': 'Study log reminders',
         'healthAuthorized': 'Health access',
         'notificationPreferencesVersion': 'Notification settings version',
         'lastHealthSync': 'Last Health sync',

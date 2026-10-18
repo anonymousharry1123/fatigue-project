@@ -431,6 +431,8 @@ class FirestoreCloudRepository implements CloudRepository {
           prefs['recoveryNotificationsEnabled'] as bool? ?? true,
       coachPlanNotificationsEnabled:
           prefs['coachPlanNotificationsEnabled'] as bool? ?? false,
+      studyLogNotificationsEnabled:
+          prefs['studyLogNotificationsEnabled'] as bool? ?? false,
       notificationPrefsVersion: notificationPrefsVersion,
       outcomeConsent:
           consent['outcomeCollection'] == true &&
@@ -474,6 +476,7 @@ class FirestoreCloudRepository implements CloudRepository {
         crashNotificationsEnabled: state.crashNotificationsEnabled,
         recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
         coachPlanNotificationsEnabled: state.coachPlanNotificationsEnabled,
+        studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
         notificationPrefsVersion: state.notificationPrefsVersion,
         outcomeConsent: state.outcomeConsent,
         healthAuthorized: state.healthAuthorized,
