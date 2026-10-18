@@ -220,6 +220,7 @@ const coreTranslations = <String, Map<String, String>>{
     "zh-Hans": "反应时间",
     "zh-Hant": "反應時間",
   },
+  "Heart rate": {"es": "Frecuencia cardíaca", "zh-Hans": "心率", "zh-Hant": "心率"},
   "Log today’s signals to personalize this estimate.": {
     "es": "Registra las señales de hoy para adaptar esta estimación.",
     "zh-Hans": "记录今天的信号以调整此估算。",

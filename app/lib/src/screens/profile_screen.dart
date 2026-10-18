@@ -953,9 +953,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (_) => ChangePasswordDialog(controller: controller),
     );
     if (changed != true || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.tr('Password updated.'))),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('Password updated.'))));
   }
 
   Future<void> _saveDeviceBackup(AppController controller) async {
@@ -1924,7 +1924,7 @@ class _ContinuousSyncStatus extends StatelessWidget {
         : TonyoPalette.of(context).success;
     final status = switch (controller.healthSyncStatus) {
       HealthSyncStatus.syncing => 'Refresh in progress',
-      HealthSyncStatus.updated => 'New model inputs imported',
+      HealthSyncStatus.updated => 'New Health data imported',
       HealthSyncStatus.upToDate => 'Health inputs are up to date',
       HealthSyncStatus.partialFailure => 'Some Health sources need attention',
       HealthSyncStatus.failed => 'Automatic refresh needs attention',
@@ -1932,8 +1932,8 @@ class _ContinuousSyncStatus extends StatelessWidget {
       HealthSyncStatus.idle => 'Automatic refresh is ready',
     };
     final delivery = controller.healthBackgroundRefreshEnabled
-        ? 'HealthKit background delivery enabled'
-        : 'Refreshes when Tonyo opens or resumes';
+        ? 'Checks every minute while open, plus HealthKit change notifications'
+        : 'Checks every minute while Tonyo is open';
     return Container(
       key: const Key('continuous-health-sync-status'),
       width: double.infinity,
@@ -1980,6 +1980,7 @@ class _HeartSyncStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final failed = controller.healthSyncError != null;
+    final latest = controller.latestHealthKitHeartRate;
     final color = failed
         ? TonyoPalette.of(context).warning
         : TonyoPalette.of(context).primary;
@@ -2007,11 +2008,37 @@ class _HeartSyncStatus extends StatelessWidget {
                   context.tr(controller.healthSyncSummary),
                   style: const TextStyle(fontSize: 11),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  latest == null
+                      ? context.tr(
+                          'No Heart Rate samples imported yet. Check Heart Rate access in Apple Health, then tap Sync now.',
+                        )
+                      : context.tr(
+                          'Latest Heart Rate: {value} bpm · recorded {time}',
+                          args: {
+                            'value': latest.value.round(),
+                            'time': _timestamp(latest.timestamp),
+                          },
+                        ),
+                  key: const Key('latest-health-heart-rate'),
+                  style: const TextStyle(fontSize: 11),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  context.tr(
+                    'Recent Heart Rate refreshes automatically. Sync now also checks the last 30 days.',
+                  ),
+                  style: TextStyle(
+                    color: TonyoPalette.of(context).muted,
+                    fontSize: 10,
+                  ),
+                ),
                 if (controller.lastSync != null && !controller.isSyncing) ...[
                   const SizedBox(height: 3),
                   Text(
                     context.tr(
-                      "Last checked {value0} · 30-day window",
+                      "Last checked {value0}",
                       args: {'value0': _timestamp(controller.lastSync!)},
                     ),
                     style: TextStyle(

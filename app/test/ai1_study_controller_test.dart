@@ -61,7 +61,7 @@ class _Health extends HealthService {
   @override
   Future<void> disableBackgroundUpdates() async {}
   @override
-  Future<List<SignalReading>> sync() async => [];
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async => [];
   @override
   Future<List<SignalReading>> syncActivity() async => [];
   @override

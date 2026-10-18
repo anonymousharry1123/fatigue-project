@@ -187,6 +187,7 @@ import UserNotifications
   private var requestedHealthTypes: Set<HKObjectType> {
     var types: Set<HKObjectType> = [HKObjectType.workoutType()]
     let quantityIdentifiers: [HKQuantityTypeIdentifier] = [
+      .heartRate,
       .heartRateVariabilitySDNN,
       .restingHeartRate,
       .dietaryWater,
@@ -214,7 +215,8 @@ import UserNotifications
     case "openSettings":
       openAppSettings(result: result)
     case "sync":
-      syncHeartData(result: result)
+      let arguments = call.arguments as? [String: Any]
+      syncHeartData(recentOnly: arguments?["recentOnly"] as? Bool == true, result: result)
     case "syncSleep":
       syncSleepData(result: result)
     case "syncActivity":
@@ -255,7 +257,9 @@ import UserNotifications
       healthObserverQueries.append(observer)
       healthStore.execute(observer)
       group.enter()
-      healthStore.enableBackgroundDelivery(for: sampleType, frequency: .hourly) {
+      // Ask HealthKit to notify us when samples change. iOS still controls
+      // actual delivery timing and may throttle individual sample types.
+      healthStore.enableBackgroundDelivery(for: sampleType, frequency: .immediate) {
         success, _ in
         if !success {
           lock.lock()
@@ -326,7 +330,7 @@ import UserNotifications
     UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
   }
 
-  private func syncHeartData(result: @escaping FlutterResult) {
+  private func syncHeartData(recentOnly: Bool, result: @escaping FlutterResult) {
     guard HKHealthStore.isHealthDataAvailable() else {
       result(
         FlutterError(
@@ -355,8 +359,17 @@ import UserNotifications
       end: now,
       options: .strictStartDate
     )
+    // Frequent refreshes need only the recent high-volume heart-rate samples.
+    // The initial/manual/daily full sync still backfills all 30 days, including
+    // older samples that another device only recently uploaded to Health.
+    let recentHeartRatePredicate = HKQuery.predicateForSamples(
+      withStart: now.addingTimeInterval(-24 * 60 * 60),
+      end: now,
+      options: .strictStartDate
+    )
     let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
     let definitions: [(HKQuantityTypeIdentifier, String, HKUnit)] = [
+      (.heartRate, "heartRate", HKUnit.count().unitDivided(by: HKUnit.minute())),
       (.heartRateVariabilitySDNN, "hrv", HKUnit.secondUnit(with: .milli)),
       (
         .restingHeartRate,
@@ -376,7 +389,7 @@ import UserNotifications
       group.enter()
       let query = HKSampleQuery(
         sampleType: sampleType,
-        predicate: predicate,
+        predicate: recentOnly && identifier == .heartRate ? recentHeartRatePredicate : predicate,
         limit: HKObjectQueryNoLimit,
         sortDescriptors: [sort]
       ) { _, samples, error in
@@ -410,6 +423,8 @@ import UserNotifications
 
     group.notify(queue: .main) {
       if let queryError {
+        // Treat this combined import as unsuccessful when any query fails;
+        // a partial response must not look like a complete heart-data sync.
         result(
           FlutterError(
             code: "health_sync_failed",

@@ -373,7 +373,7 @@ IconData iconForSignal(SignalType type) => switch (type) {
   SignalType.caffeine => Icons.coffee_rounded,
   SignalType.reactionTime => Icons.bolt_rounded,
   SignalType.hrv => Icons.monitor_heart_rounded,
-  SignalType.restingHeartRate => Icons.favorite_rounded,
+  SignalType.restingHeartRate || SignalType.heartRate => Icons.favorite_rounded,
   SignalType.sleepAwake => Icons.visibility_rounded,
   SignalType.sleepCore ||
   SignalType.sleepDeep ||
@@ -388,7 +388,8 @@ Color colorForSignal(SignalType type, TonyoPalette colors) => switch (type) {
   SignalType.study => colors.primary,
   SignalType.exercise ||
   SignalType.steps ||
-  SignalType.restingHeartRate => colors.secondary,
+  SignalType.restingHeartRate ||
+  SignalType.heartRate => colors.secondary,
   SignalType.screenTime || SignalType.reactionTime => colors.secondary,
   SignalType.caffeine => colors.primary,
   SignalType.sleepAwake => colors.secondary,

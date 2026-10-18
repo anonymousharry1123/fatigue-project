@@ -172,7 +172,7 @@ class _SleepHealthService extends HealthService {
   Future<void> disableBackgroundUpdates() async {}
 
   @override
-  Future<List<SignalReading>> sync() async => [];
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async => [];
 
   @override
   Future<List<SignalReading>> syncSleep() async {

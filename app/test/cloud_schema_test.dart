@@ -5,6 +5,28 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Version 0.10-a Firestore schema', () {
     test(
+      'regular heart rate round-trips separately from resting heart rate',
+      () {
+        final reading = SignalReading(
+          id: 'healthkit-heartRate-sample',
+          type: SignalType.heartRate,
+          value: 91,
+          timestamp: DateTime.utc(2026, 10, 18, 12),
+          source: SignalSource.healthKit,
+          syncedAt: DateTime.utc(2026, 10, 18, 12, 1),
+        );
+        final local = SignalReading.fromJson(reading.toJson());
+        expect(local.toJson(), reading.toJson());
+        final cloud = signalToCloud(reading);
+        expect(cloud['type'], 'heartRate');
+        expect(cloud['unit'], 'bpm');
+        final restored = signalFromCloud(reading.id, cloud);
+        expect(restored.toJson(), reading.toJson());
+        expect(restored.type.label, 'Heart rate');
+      },
+    );
+
+    test(
       'deterministic merge cannot restore obsolete personalized fallback',
       () {
         final day = DateTime(2026, 9, 7);

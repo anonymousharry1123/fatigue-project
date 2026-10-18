@@ -346,8 +346,8 @@ void main() {
     final health = _WidgetHealthService(
       readings: [
         SignalReading(
-          id: 'healthkit-widget-hrv',
-          type: SignalType.hrv,
+          id: 'healthkit-widget-heart-rate',
+          type: SignalType.heartRate,
           value: 58,
           timestamp: DateTime.now(),
           source: SignalSource.healthKit,
@@ -418,12 +418,16 @@ void main() {
     expect(controller.healthKitHydrationSignalCount, 1);
     expect(controller.healthKitStepSignalCount, 1);
     expect(find.textContaining('Imported 1 new heart signal'), findsOneWidget);
+    expect(find.textContaining('Latest Heart Rate: 58 bpm'), findsOneWidget);
     expect(find.textContaining('Reconciled 1 night'), findsOneWidget);
     expect(
       find.textContaining('Imported 3 new or updated activity signals'),
       findsOneWidget,
     );
-    expect(find.textContaining('30-day window'), findsOneWidget);
+    expect(
+      find.textContaining('Sync now also checks the last 30 days'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('additional designs open from Add and Today', (tester) async {
@@ -1218,7 +1222,7 @@ class _WidgetHealthService extends HealthService {
   Future<bool> openSettings() async => true;
 
   @override
-  Future<List<SignalReading>> sync() async {
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async {
     syncCalls += 1;
     return readings;
   }

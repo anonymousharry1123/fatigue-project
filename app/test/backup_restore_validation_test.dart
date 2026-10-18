@@ -84,6 +84,34 @@ void main() {
 
   tearDown(() => app.dispose());
 
+  test(
+    'restores regular heart rate observations and rejects oversized bpm',
+    () async {
+      final reading = SignalReading(
+        id: 'healthkit-heartRate-backup',
+        type: SignalType.heartRate,
+        value: 87,
+        timestamp: _now,
+        source: SignalSource.healthKit,
+        syncedAt: _now,
+      );
+      final valid = copy();
+      valid['local']['signals'] = [reading.toJson()];
+      final preview = app.previewDeviceBackup(jsonEncode(valid));
+      expect(preview.newRecords, 1);
+      await app.restoreDeviceBackup(preview);
+      expect(app.signals.single.toJson(), reading.toJson());
+      final saved = jsonDecode(await app.exportDeviceBackup()) as Map;
+      expect((saved['local'] as Map)['signals'], [reading.toJson()]);
+
+      final invalid = copy();
+      invalid['local']['signals'] = [
+        {...reading.toJson(), 'value': 401},
+      ];
+      rejects(invalid);
+    },
+  );
+
   test('rejects malformed JSON and unsupported envelopes without writes', () {
     final before = app.exportJson();
     for (final raw in ['{', 'null', '[]', '{}', '{"backupVersion":2}']) {

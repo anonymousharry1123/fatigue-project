@@ -579,7 +579,7 @@ class _TrackingHealth extends HealthService {
   Future<void> disableBackgroundUpdates() async => disableCalls++;
 
   @override
-  Future<List<SignalReading>> sync() async {
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async {
     readCalls++;
     return pendingImport == null ? [] : await pendingImport!.future;
   }

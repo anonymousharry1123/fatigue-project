@@ -573,6 +573,7 @@ class AppController extends ChangeNotifier {
     _invalidateHealthWork();
     _cloudRetryTimer?.cancel();
     _ai1StudyTimer?.cancel();
+    _healthForegroundTimer?.cancel();
     super.dispose();
   }
 
@@ -590,7 +591,13 @@ class AppController extends ChangeNotifier {
     _appInForeground = foreground && !_disposed;
     _ai1StudyTimer?.cancel();
     _ai1StudyTimer = null;
+    _healthForegroundTimer?.cancel();
+    _healthForegroundTimer = null;
     if (_appInForeground) {
+      _healthForegroundTimer = Timer.periodic(
+        ContinuousRefreshLogic.foregroundRefreshInterval,
+        (_) => unawaited(_pollForegroundHealth()),
+      );
       _ai1StudyTimer = Timer.periodic(
         const Duration(minutes: 1),
         (_) => unawaited(refreshAi1Study()),
@@ -603,6 +610,26 @@ class AppController extends ChangeNotifier {
       return;
     }
     scheduleCloudRetry();
+  }
+
+  Future<void> _pollForegroundHealth() async {
+    if (!_appInForeground ||
+        !isReady ||
+        isPrivacyBusy ||
+        isHealthAuthorizing ||
+        isSyncing) {
+      return;
+    }
+    final context = _healthContext;
+    try {
+      await refreshHealthIfDue();
+    } on Object {
+      if (!_healthContextCurrent(context) || !healthAuthorized) return;
+      healthSyncStatus = HealthSyncStatus.failed;
+      healthSyncError =
+          'Automatic Health refresh could not finish. Tap Sync now to retry.';
+      notifyListeners();
+    }
   }
 
   bool get hasPendingCloudChanges =>
@@ -769,6 +796,8 @@ class AppController extends ChangeNotifier {
   HealthSyncStatus healthSyncStatus = HealthSyncStatus.idle;
   HealthRefreshReason? lastHealthRefreshReason;
   bool healthBackgroundRefreshEnabled = false;
+  Timer? _healthForegroundTimer;
+  DateTime? _lastFullHeartSync;
   int _healthConnectionGeneration = 0;
   (int, int, String?)? _healthSyncContext;
   Future<HeartSyncMergeResult?>? _pendingHealthSync;
@@ -1208,6 +1237,20 @@ class AppController extends ChangeNotifier {
             HeartSyncLogic.supportedTypes.contains(item.type),
       )
       .length;
+  SignalReading? get latestHealthKitHeartRate {
+    SignalReading? latest;
+    final now = _now();
+    for (final item in signals) {
+      if (item.source == SignalSource.healthKit &&
+          item.type == SignalType.heartRate &&
+          !item.timestamp.isAfter(now) &&
+          (latest == null || item.timestamp.isAfter(latest.timestamp))) {
+        latest = item;
+      }
+    }
+    return latest;
+  }
+
   int get healthKitSleepSignalCount => signals
       .where(
         (item) =>
@@ -4033,7 +4076,15 @@ class AppController extends ChangeNotifier {
     SleepSyncMergeResult? sleepResult;
     ActivitySyncMergeResult? activityResult;
     try {
-      final imported = await _healthService.sync();
+      final fullHeartHistory =
+          reason == HealthRefreshReason.manual ||
+          reason == HealthRefreshReason.initial ||
+          ContinuousRefreshLogic.shouldRefresh(
+            now: attemptTime,
+            lastAttempt: _lastFullHeartSync,
+            minimumInterval: ContinuousRefreshLogic.fullHeartHistoryInterval,
+          );
+      final imported = await _healthService.sync(recentOnly: !fullHeartHistory);
       if (sessionEnded()) return null;
       heartResult = HeartSyncLogic.merge(
         existing: signals,
@@ -4044,6 +4095,7 @@ class AppController extends ChangeNotifier {
       lastHealthImportCount = heartResult.importedCount;
       lastHealthDuplicateCount = heartResult.duplicateCount;
       lastHealthRejectedCount = heartResult.rejectedCount;
+      if (fullHeartHistory) _lastFullHeartSync = attemptTime;
     } on HealthSyncException catch (error) {
       if (sessionEnded()) return null;
       healthSyncError = error.message;
@@ -4194,6 +4246,7 @@ class AppController extends ChangeNotifier {
     _pendingHealthSync = null;
     _pendingHealthObserverSetup = null;
     _healthRefreshRequested = false;
+    _lastFullHeartSync = null;
     healthBackgroundRefreshEnabled = false;
     isHealthAuthorizing = false;
     isSyncing = false;
@@ -4219,7 +4272,7 @@ class AppController extends ChangeNotifier {
   }
 
   String get healthSyncSummary {
-    if (isSyncing) return 'Reading the last 30 days of heart data…';
+    if (isSyncing) return 'Reading Apple Health heart data…';
     if (healthSyncError != null) return healthSyncError!;
     if (lastSync == null) return 'Heart data has not been synced yet.';
     final total = healthKitHeartSignalCount;

@@ -659,7 +659,7 @@ double _backupSignalMaximum(SignalType type) => switch (type) {
   SignalType.hydration || SignalType.caffeine => 100,
   SignalType.steps => 1000000,
   SignalType.reactionTime || SignalType.hrv => 60000,
-  SignalType.restingHeartRate => 400,
+  SignalType.restingHeartRate || SignalType.heartRate => 400,
 };
 
 Map<String, dynamic> _backupMap(Object? value) {

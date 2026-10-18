@@ -47,7 +47,7 @@ const healthPermissions = <HealthPermissionInfo>[
   HealthPermissionInfo(
     title: 'Heart',
     detail:
-        'Heart-rate variability and resting heart rate for recovery trends and future personalization.',
+        'Heart rate for your recorded observations, plus heart-rate variability and resting heart rate for recovery trends.',
     iconName: 'heart',
   ),
   HealthPermissionInfo(
@@ -132,10 +132,14 @@ class HealthService {
     }
   }
 
-  Future<List<SignalReading>> sync() async {
+  /// Frequent refreshes read the last day of ordinary Heart Rate. Initial,
+  /// manual, and daily backfills read 30 days; HRV and resting HR stay at 30 days.
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async {
     try {
       final result =
-          await _channel.invokeListMethod<Map<Object?, Object?>>('sync') ??
+          await _channel.invokeListMethod<Map<Object?, Object?>>('sync', {
+            'recentOnly': recentOnly,
+          }) ??
           const [];
       return result.map((raw) {
         final json = raw.map((key, value) => MapEntry(key.toString(), value));

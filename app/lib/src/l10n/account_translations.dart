@@ -1976,6 +1976,12 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "Apple 健康权限",
     "zh-Hant": "Apple 健康權限",
   },
+  "Heart rate for your recorded observations, plus heart-rate variability and resting heart rate for recovery trends.": {
+    "es":
+        "Frecuencia cardíaca para tus observaciones registradas, además de variabilidad de la frecuencia cardíaca y frecuencia cardíaca en reposo para las tendencias de recuperación.",
+    "zh-Hans": "导入心率作为实测记录，并导入心率变异性和静息心率用于恢复趋势。",
+    "zh-Hant": "匯入心率作為實測記錄，並匯入心率變異性和靜息心率用於恢復趨勢。",
+  },
   "Tonyo requests read access only. It never writes to Apple Health, and you choose each category in Apple’s permission sheet.": {
     "es":
         "Tonyo solo solicita acceso de lectura. Nunca escribe en Apple Salud y tú eliges cada categoría en la pantalla de permisos de Apple.",
@@ -2120,10 +2126,10 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "正在刷新",
     "zh-Hant": "正在刷新",
   },
-  "New model inputs imported": {
-    "es": "Nuevos datos del modelo importados",
-    "zh-Hans": "已导入新的模型输入",
-    "zh-Hant": "已導入新的模型輸入",
+  "New Health data imported": {
+    "es": "Nuevos datos de Salud importados",
+    "zh-Hans": "已导入新的健康数据",
+    "zh-Hant": "已匯入新的健康資料",
   },
   "Health inputs are up to date": {
     "es": "Los datos de Salud están al día",
@@ -2150,20 +2156,49 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "自动刷新已就绪",
     "zh-Hant": "自動刷新已就緒",
   },
-  "HealthKit background delivery enabled": {
-    "es": "Entrega en segundo plano de HealthKit activada",
-    "zh-Hans": "HealthKit 后台传输已启用",
-    "zh-Hant": "HealthKit 後台傳輸已啓用",
+  "Checks every minute while open, plus HealthKit change notifications": {
+    "es":
+        "Comprueba cada minuto mientras está abierta y recibe avisos de cambios de HealthKit",
+    "zh-Hans": "应用打开时每分钟检查一次，并接收 HealthKit 数据变更通知",
+    "zh-Hant": "應用開啟時每分鐘檢查一次，並接收 HealthKit 資料變更通知",
   },
-  "Refreshes when Tonyo opens or resumes": {
-    "es": "Se actualiza al abrir o reanudar Tonyo",
-    "zh-Hans": "打开或恢复 Tonyo 时刷新",
-    "zh-Hant": "打開或恢復 Tonyo 時刷新",
+  "Checks every minute while Tonyo is open": {
+    "es": "Comprueba cada minuto mientras Tonyo está abierta",
+    "zh-Hans": "Tonyo 打开时每分钟检查一次",
+    "zh-Hant": "Tonyo 開啟時每分鐘檢查一次",
   },
-  "Last checked {value0} · 30-day window": {
-    "es": "Última comprobación {value0} · ventana de 30 días",
-    "zh-Hans": "上次检查 {value0} · 30 天时间范围",
-    "zh-Hant": "上次檢查 {value0} · 30 天時間範圍",
+  "Reading Apple Health heart data…": {
+    "es": "Leyendo datos cardíacos de Apple Salud…",
+    "zh-Hans": "正在读取 Apple 健康中的心脏数据…",
+    "zh-Hant": "正在讀取 Apple 健康中的心臟資料…",
+  },
+  "Automatic Health refresh could not finish. Tap Sync now to retry.": {
+    "es":
+        "No se pudo completar la actualización automática de Salud. Toca Sincronizar ahora para reintentarlo.",
+    "zh-Hans": "健康数据自动刷新未能完成。请点按“立即同步”重试。",
+    "zh-Hant": "健康資料自動更新未能完成。請點選「立即同步」重試。",
+  },
+  "No Heart Rate samples imported yet. Check Heart Rate access in Apple Health, then tap Sync now.": {
+    "es":
+        "Aún no se han importado muestras de frecuencia cardíaca. Comprueba el acceso a Frecuencia cardíaca en Apple Salud y toca Sincronizar ahora.",
+    "zh-Hans": "尚未导入心率样本。请检查 Apple 健康中的心率读取权限，然后点按“立即同步”。",
+    "zh-Hant": "尚未匯入心率樣本。請檢查 Apple 健康中的心率讀取權限，然後點選「立即同步」。",
+  },
+  "Latest Heart Rate: {value} bpm · recorded {time}": {
+    "es": "Última frecuencia cardíaca: {value} lpm · registrada {time}",
+    "zh-Hans": "最新心率：{value} 次/分 · 记录于 {time}",
+    "zh-Hant": "最新心率：{value} 次/分 · 記錄於 {time}",
+  },
+  "Recent Heart Rate refreshes automatically. Sync now also checks the last 30 days.": {
+    "es":
+        "La frecuencia cardíaca reciente se actualiza automáticamente. Sincronizar ahora también comprueba los últimos 30 días.",
+    "zh-Hans": "近期心率会自动刷新。“立即同步”还会检查过去 30 天的数据。",
+    "zh-Hant": "近期心率會自動更新。「立即同步」也會檢查過去 30 天的資料。",
+  },
+  "Last checked {value0}": {
+    "es": "Última comprobación {value0}",
+    "zh-Hans": "上次检查 {value0}",
+    "zh-Hant": "上次檢查 {value0}",
   },
   "Unavailable here · manual logs stay available": {
     "es": "No disponible aquí · registro manual disponible",

@@ -4,6 +4,120 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'imports regular heart rate without collapsing nearby equal samples',
+    () {
+      final observedAt = DateTime.utc(2026, 10, 18, 12);
+      SignalReading heart(String id, int seconds, {double value = 72}) =>
+          SignalReading(
+            id: id,
+            type: SignalType.heartRate,
+            value: value,
+            timestamp: observedAt.add(Duration(seconds: seconds)),
+            source: SignalSource.healthKit,
+          );
+      final original = heart('healthkit-heartRate-first', 0);
+      final second = heart('healthkit-heartRate-second', 10);
+      final syncedAt = observedAt.add(const Duration(minutes: 1));
+      final result = HeartSyncLogic.merge(
+        existing: [original],
+        imported: [
+          original,
+          second,
+          heart(' healthkit-heartRate-second ', 10),
+          heart('healthkit-heartRate-third', 20),
+        ],
+        syncedAt: syncedAt,
+      );
+
+      expect(result.importedCount, 2);
+      expect(result.duplicateCount, 2);
+      expect(result.rejectedCount, 0);
+      expect(result.readings.map((item) => item.id), [
+        'healthkit-heartRate-third',
+        'healthkit-heartRate-second',
+        'healthkit-heartRate-first',
+      ]);
+      expect(result.readings.first.syncedAt, syncedAt);
+      expect(result.readings.first.type, SignalType.heartRate);
+      expect(result.readings.first.source, SignalSource.healthKit);
+      expect(
+        result.readings.first.timestamp.toUtc(),
+        observedAt.add(const Duration(seconds: 20)),
+      );
+    },
+  );
+
+  test(
+    'regular heart rate validates bpm and stays separate from resting HR',
+    () {
+      final observedAt = DateTime.utc(2026, 10, 18, 12);
+      SignalReading heart(String id, double value) => SignalReading(
+        id: id,
+        type: SignalType.heartRate,
+        value: value,
+        timestamp: observedAt,
+      );
+      final result = HeartSyncLogic.merge(
+        existing: [
+          SignalReading(
+            id: 'healthkit-resting',
+            type: SignalType.restingHeartRate,
+            value: 72,
+            timestamp: observedAt,
+            source: SignalSource.healthKit,
+          ),
+        ],
+        imported: [
+          heart('normal', 72),
+          heart('low-bound', 20),
+          heart('high-bound', 300),
+          heart('too-low', 19.9),
+          heart('too-high', 300.1),
+          heart('invalid', double.nan),
+        ],
+        syncedAt: observedAt,
+      );
+      expect(result.importedCount, 3);
+      expect(result.duplicateCount, 0);
+      expect(result.rejectedCount, 3);
+      expect(
+        result.readings.where((item) => item.type == SignalType.heartRate),
+        hasLength(3),
+      );
+      expect(
+        result.readings.where(
+          (item) => item.type == SignalType.restingHeartRate,
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('dense regular heart history reimport is idempotent by sample ID', () {
+    final observedAt = DateTime.utc(2026, 10, 18, 12);
+    final samples = List.generate(
+      10000,
+      (index) => SignalReading(
+        id: 'healthkit-heartRate-$index',
+        type: SignalType.heartRate,
+        value: 72,
+        timestamp: observedAt.add(Duration(seconds: index)),
+        source: SignalSource.healthKit,
+      ),
+    );
+    final first = HeartSyncLogic.merge(existing: const [], imported: samples);
+    final second = HeartSyncLogic.merge(
+      existing: first.readings,
+      imported: samples,
+    );
+    expect(first.importedCount, samples.length);
+    expect(first.duplicateCount, 0);
+    expect(second.importedCount, 0);
+    expect(second.duplicateCount, samples.length);
+    expect(second.readings, hasLength(samples.length));
+  });
+
+  test(
     'Version 0.23 normalizes heart samples and preserves manual duplicates',
     () {
       final hrvTimestamp = DateTime.utc(2026, 8, 17, 10);

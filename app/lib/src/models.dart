@@ -13,6 +13,7 @@ enum SignalType {
   reactionTime,
   hrv,
   restingHeartRate,
+  heartRate,
   sleepAwake,
   sleepCore,
   sleepDeep,
@@ -36,6 +37,7 @@ extension SignalTypeInfo on SignalType {
     SignalType.reactionTime => 'Reaction time',
     SignalType.hrv => 'HRV',
     SignalType.restingHeartRate => 'Resting HR',
+    SignalType.heartRate => 'Heart rate',
     SignalType.sleepAwake => 'Awake',
     SignalType.sleepCore => 'Core sleep',
     SignalType.sleepDeep => 'Deep sleep',
@@ -59,7 +61,7 @@ extension SignalTypeInfo on SignalType {
     SignalType.caffeine => 'drinks',
     SignalType.reactionTime => 'ms',
     SignalType.hrv => 'ms',
-    SignalType.restingHeartRate => 'bpm',
+    SignalType.restingHeartRate || SignalType.heartRate => 'bpm',
     SignalType.steps => 'steps',
   };
 }

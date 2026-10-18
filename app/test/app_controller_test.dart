@@ -2045,7 +2045,7 @@ class _FakeHealthService extends HealthService {
       requestResult;
 
   @override
-  Future<List<SignalReading>> sync() async {
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async {
     syncCalls += 1;
     final error = syncError;
     if (error != null) throw error;

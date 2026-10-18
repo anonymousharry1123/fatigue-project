@@ -5,13 +5,17 @@ import 'sleep_sync_logic.dart';
 /// Pure Version 0.26 policy for deciding when HealthKit should be queried and
 /// whether an import can change a model output.
 abstract final class ContinuousRefreshLogic {
-  static const foregroundRefreshInterval = Duration(minutes: 15);
+  static const foregroundRefreshInterval = Duration(minutes: 1);
+  static const fullHeartHistoryInterval = Duration(days: 1);
 
   static bool shouldRefresh({
     required DateTime now,
     DateTime? lastAttempt,
     Duration minimumInterval = foregroundRefreshInterval,
-  }) => lastAttempt == null || now.difference(lastAttempt) >= minimumInterval;
+  }) =>
+      lastAttempt == null ||
+      lastAttempt.isAfter(now) ||
+      now.difference(lastAttempt) >= minimumInterval;
 
   static bool hasMeaningfulModelChange(
     Iterable<SignalReading> before,

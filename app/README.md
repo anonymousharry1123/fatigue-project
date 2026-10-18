@@ -306,10 +306,33 @@ available for approval, denial, revocation, errors, and unsupported platforms.
 Version 0.23 imports the latest 30 days of readable HealthKit HRV and resting
 heart-rate samples. Native values are normalized to milliseconds and bpm,
 timestamps are converted for local-day grouping, and stable HealthKit UUIDs are
-stored as private `signals` with `source: healthKit`. Repeated syncs skip the
+stored as private `signals` with `source: healthKit`. For these two types, repeated syncs skip the
 same UUID or a same-type sample within two minutes and 0.1 unit; an existing
 manual row always wins that match. Profile shows import, empty, duplicate, and
 error states without deleting saved data.
+
+As of October 18, 2026, the iOS integration also imports ordinary **Heart Rate**
+samples as the separate `heartRate` signal in bpm. These are recorded observations,
+not model inputs: they do not affect fatigue scores, confidence, personal baselines,
+or forecasts. Profile shows the latest imported value and its original observation
+time; Daily History shows the saved samples. Repeated syncs identify these samples
+by HealthKit UUID, so distinct nearby observations with the same bpm are retained.
+
+Health sync now checks every **one minute while Tonyo is open**, replacing the
+previous 15-minute foreground interval. Opening or resuming the app also checks
+whether a refresh is due. Native observers request `.immediate` background delivery;
+iOS controls when it actually runs, so this is not a guaranteed background schedule
+or continuous heart-rate measurement. Ordinary Heart Rate uses a 24-hour window for
+frequent automatic refreshes. Initial connection, **Sync now**, and the first eligible
+refresh after 24 hours read the full 30-day history to catch delayed records. HRV and
+resting HR continue to use 30-day windows. Observation-only imports save normally
+without regenerating scores and forecasts.
+
+Install a new iOS build to use the added category. Existing users must review Tonyo's
+Apple Health permissions and enable **Heart Rate** read access, then tap **Sync now**.
+Permission for HRV or Resting Heart Rate does not grant access to ordinary Heart Rate.
+Apple does not reveal individual read-category decisions to apps; an empty result can
+mean either no readable samples in the query window or unavailable read access.
 
 Version 0.24 imports awake, core, deep, REM, and unspecified HealthKit sleep
 samples as typed private signals. It resolves overlapping intervals across

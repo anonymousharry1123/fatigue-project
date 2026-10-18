@@ -3,31 +3,35 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'Version 0.26 refreshes on launch and after the foreground interval',
-    () {
-      final now = DateTime(2026, 8, 20, 12);
+  test('refreshes on launch and after one minute in the foreground', () {
+    final now = DateTime(2026, 8, 20, 12);
 
-      expect(
-        ContinuousRefreshLogic.shouldRefresh(now: now, lastAttempt: null),
-        isTrue,
-      );
-      expect(
-        ContinuousRefreshLogic.shouldRefresh(
-          now: now,
-          lastAttempt: now.subtract(const Duration(minutes: 14)),
-        ),
-        isFalse,
-      );
-      expect(
-        ContinuousRefreshLogic.shouldRefresh(
-          now: now,
-          lastAttempt: now.subtract(const Duration(minutes: 15)),
-        ),
-        isTrue,
-      );
-    },
-  );
+    expect(
+      ContinuousRefreshLogic.shouldRefresh(now: now, lastAttempt: null),
+      isTrue,
+    );
+    expect(
+      ContinuousRefreshLogic.shouldRefresh(
+        now: now,
+        lastAttempt: now.subtract(const Duration(seconds: 59)),
+      ),
+      isFalse,
+    );
+    expect(
+      ContinuousRefreshLogic.shouldRefresh(
+        now: now,
+        lastAttempt: now.subtract(const Duration(minutes: 1)),
+      ),
+      isTrue,
+    );
+    expect(
+      ContinuousRefreshLogic.shouldRefresh(
+        now: now,
+        lastAttempt: now.add(const Duration(minutes: 2)),
+      ),
+      isTrue,
+    );
+  });
 
   test('Version 0.26 ignores sync-only metadata changes', () {
     final observedAt = DateTime(2026, 8, 20, 8);
