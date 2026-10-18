@@ -529,6 +529,161 @@ void main() {
       expect(service.reconciliations, 0);
     });
   });
+
+  group('study log reminders', () {
+    test('study reminders use optional evening times without deadlines', () {
+      final plan = NotificationLogic.build(
+        now: DateTime(2026, 8, 15, 8),
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+        studyLogEnabled: true,
+      );
+      final study = plan.notifications
+          .where(
+            (item) =>
+                item.kind == GuidanceNotificationKind.studySleep ||
+                item.kind == GuidanceNotificationKind.studyEnergy,
+          )
+          .toList();
+
+      expect(study.map((item) => item.scheduledAt).take(2), [
+        DateTime(2026, 8, 15, 18),
+        DateTime(2026, 8, 15, 19),
+      ]);
+      expect(
+        study.where((item) => item.kind == GuidanceNotificationKind.studySleep),
+        hasLength(14),
+      );
+      expect(
+        study.where(
+          (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+        ),
+        hasLength(14),
+      );
+      expect(study.first.payload, 'tonyo-guidance:study:sleep');
+      expect(
+        study.first.body,
+        'Log your main sleep whenever it suits you. There is no deadline.',
+      );
+      expect(
+        study
+            .firstWhere(
+              (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+            )
+            .body,
+        'Choose Evening and rate your Energy whenever it suits you.',
+      );
+      expect(
+        study
+            .firstWhere(
+              (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+            )
+            .payload,
+        'tonyo-guidance:study:energy',
+      );
+    });
+
+    test('late-wake sleep and afternoon Evening Energy skip that day', () {
+      final afternoon = DateTime(2026, 8, 15, 17);
+      final plan = NotificationLogic.build(
+        now: afternoon,
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+        studyLogEnabled: true,
+        signals: [
+          SignalReading(
+            id: 'sleep',
+            type: SignalType.sleep,
+            value: 7.5,
+            timestamp: DateTime(2026, 8, 15, 14),
+          ),
+          SignalReading(
+            id: 'nap',
+            type: SignalType.nap,
+            value: 0.4,
+            timestamp: DateTime(2026, 8, 16, 14),
+          ),
+        ],
+        checkIns: [
+          DailyCheckIn(
+            id: 'afternoon',
+            timestamp: DateTime(2026, 8, 15, 14, 30),
+            period: CheckInPeriod.evening,
+            energy: 6,
+          ),
+        ],
+      );
+      final study = plan.notifications
+          .where(
+            (item) =>
+                item.kind == GuidanceNotificationKind.studySleep ||
+                item.kind == GuidanceNotificationKind.studyEnergy,
+          )
+          .toList();
+
+      expect(study.map((item) => (item.kind, item.scheduledAt)).take(2), [
+        (GuidanceNotificationKind.studySleep, DateTime(2026, 8, 16, 18)),
+        (GuidanceNotificationKind.studyEnergy, DateTime(2026, 8, 16, 19)),
+      ]);
+      expect(study, hasLength(26));
+    });
+
+    test('Morning Energy does not suppress the Evening reminder', () {
+      final plan = NotificationLogic.build(
+        now: DateTime(2026, 8, 15, 17),
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+        studyLogEnabled: true,
+        checkIns: [
+          DailyCheckIn(
+            id: 'late-morning',
+            timestamp: DateTime(2026, 8, 15, 14, 30),
+            period: CheckInPeriod.morning,
+            energy: 6,
+          ),
+        ],
+      );
+
+      final energy = plan.notifications.where(
+        (item) => item.kind == GuidanceNotificationKind.studyEnergy,
+      );
+      expect(energy.first.scheduledAt, DateTime(2026, 8, 15, 19));
+      expect(energy, hasLength(14));
+    });
+
+    test('study reminders stay off until the switch is enabled', () {
+      final plan = NotificationLogic.build(
+        now: DateTime(2026, 8, 15, 8),
+        points: points(),
+        windows: windows(),
+        riskAlerts: const [],
+        enabled: true,
+        crashEnabled: false,
+        recoveryEnabled: false,
+      );
+
+      expect(
+        plan.notifications.where(
+          (item) =>
+              item.kind == GuidanceNotificationKind.studySleep ||
+              item.kind == GuidanceNotificationKind.studyEnergy,
+        ),
+        isEmpty,
+      );
+    });
+  });
 }
 
 class _FakeNotificationService implements NotificationService {

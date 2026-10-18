@@ -6,7 +6,22 @@ import 'timezone_database.dart';
 
 enum NotificationPermissionState { unknown, granted, denied, unavailable }
 
-enum GuidanceNotificationKind { crash, recovery, coachPlan }
+enum GuidanceNotificationKind {
+  crash,
+  recovery,
+  coachPlan,
+  studySleep,
+  studyEnergy,
+}
+
+enum StudyReminderDestination { sleepLog, eveningCheckIn }
+
+StudyReminderDestination? studyReminderDestination(String payload) =>
+    switch (payload) {
+      'tonyo-guidance:study:sleep' => StudyReminderDestination.sleepLog,
+      'tonyo-guidance:study:energy' => StudyReminderDestination.eveningCheckIn,
+      _ => null,
+    };
 
 class GuidanceNotification {
   const GuidanceNotification({
@@ -29,11 +44,13 @@ class GuidanceNotification {
   final List<String> sourceRiskAlertIds;
   final String? sourceRecommendationId;
 
-  String get payload =>
-      kind == GuidanceNotificationKind.coachPlan &&
-          sourceRecommendationId != null
-      ? 'tonyo-guidance:coach:${Uri.encodeComponent(sourceRecommendationId!)}'
-      : 'tonyo-guidance:$id';
+  String get payload => switch (kind) {
+    GuidanceNotificationKind.coachPlan when sourceRecommendationId != null =>
+      'tonyo-guidance:coach:${Uri.encodeComponent(sourceRecommendationId!)}',
+    GuidanceNotificationKind.studySleep => 'tonyo-guidance:study:sleep',
+    GuidanceNotificationKind.studyEnergy => 'tonyo-guidance:study:energy',
+    _ => 'tonyo-guidance:$id',
+  };
 }
 
 abstract interface class NotificationService {
@@ -248,6 +265,9 @@ class LocalNotificationService
       await _cancelManagedPending(replacementIds: ids);
       for (final notification in notifications) {
         final coach = notification.kind == GuidanceNotificationKind.coachPlan;
+        final study =
+            notification.kind == GuidanceNotificationKind.studySleep ||
+            notification.kind == GuidanceNotificationKind.studyEnergy;
         await _plugin.zonedSchedule(
           id: notification.platformId,
           title: notification.title,
@@ -259,9 +279,19 @@ class LocalNotificationService
           ),
           notificationDetails: NotificationDetails(
             android: AndroidNotificationDetails(
-              coach ? 'tonyo_coach_plan' : 'tonyo_forecast_guidance',
-              coach ? 'Daily Coach plan' : 'Forecast guidance',
-              channelDescription: coach
+              study
+                  ? 'tonyo_study_reminders'
+                  : coach
+                  ? 'tonyo_coach_plan'
+                  : 'tonyo_forecast_guidance',
+              study
+                  ? 'Study log reminders'
+                  : coach
+                  ? 'Daily Coach plan'
+                  : 'Forecast guidance',
+              channelDescription: study
+                  ? 'Optional evening reminders for main sleep and Energy. Entries can be saved at any time.'
+                  : coach
                   ? 'Opt-in reminders for the scheduled steps in your daily Coach plan.'
                   : 'Opt-in reminders for predicted energy and recovery windows.',
               importance: Importance.defaultImportance,

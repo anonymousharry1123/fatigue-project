@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_controller.dart';
 import 'l10n/app_localizations.dart';
+import 'notification_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/privacy_center_screen.dart';
 import 'screens/shell_screen.dart';
@@ -30,7 +31,10 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
   ]);
   late (int, String?) _navigationSession;
   (int, String?)? _pendingCoachTap;
+  ((int, String?), StudyReminderDestination)? _pendingStudyTap;
   int? _coachOpenRequest;
+  int? _studyOpenRequest;
+  StudyReminderDestination? _studyDestination;
   int _notificationRequestSequence = 0;
   Object? _navigatorIdentity;
   CoachNotificationNavigation _notificationNavigation =
@@ -64,8 +68,16 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
     if (session != _navigationSession) {
       _navigationSession = session;
       _coachOpenRequest = null;
+      _studyOpenRequest = null;
     }
-    _pendingCoachTap = session;
+    final study = studyReminderDestination(payload);
+    if (study == null) {
+      _pendingCoachTap = session;
+      _pendingStudyTap = null;
+    } else {
+      _pendingCoachTap = null;
+      _pendingStudyTap = (session, study);
+    }
     _handleNotificationNavigation();
   }
 
@@ -75,15 +87,28 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
     if (session != _navigationSession) {
       _navigationSession = session;
       _pendingCoachTap = null;
+      _pendingStudyTap = null;
       _coachOpenRequest = null;
+      _studyOpenRequest = null;
     }
     if (!controller.canOpenNotificationTarget) {
       _coachOpenRequest = null;
+      _studyOpenRequest = null;
       return;
     }
-    if (_pendingCoachTap != session) return;
-    _pendingCoachTap = null;
-    setState(() => _coachOpenRequest = ++_notificationRequestSequence);
+    if (_pendingCoachTap == session) {
+      _pendingCoachTap = null;
+      setState(() => _coachOpenRequest = ++_notificationRequestSequence);
+      return;
+    }
+    final study = _pendingStudyTap;
+    if (study != null && study.$1 == session) {
+      _pendingStudyTap = null;
+      setState(() {
+        _studyDestination = study.$2;
+        _studyOpenRequest = ++_notificationRequestSequence;
+      });
+    }
   }
 
   @override
@@ -182,6 +207,8 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
                   : controller.onboardingComplete && !controller.isSignedOut
                   ? ShellScreen(
                       coachOpenRequest: _coachOpenRequest,
+                      studyOpenRequest: _studyOpenRequest,
+                      studyDestination: _studyDestination,
                       notificationNavigation: _notificationNavigation,
                     )
                   : const OnboardingScreen(),
@@ -194,6 +221,7 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
 }
 
 bool _isGuidanceNotification(String payload) {
+  if (studyReminderDestination(payload) != null) return true;
   if (RegExp(
     r'^tonyo-guidance:\d{4}-\d{2}-\d{2}-(?:crash|recovery)$',
   ).hasMatch(payload)) {

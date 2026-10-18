@@ -48,6 +48,7 @@ class InputSyncSnapshot {
             crashNotificationsEnabled: state.crashNotificationsEnabled,
             recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
             coachPlanNotificationsEnabled: state.coachPlanNotificationsEnabled,
+            studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
             notificationPrefsVersion: state.notificationPrefsVersion,
             outcomeConsent: state.outcomeConsent,
             healthAuthorized: state.healthAuthorized,
@@ -140,6 +141,8 @@ class InputSyncSnapshot {
           prefs['recoveryNotificationsEnabled'] != false,
       coachPlanNotificationsEnabled:
           prefs['coachPlanNotificationsEnabled'] == true,
+      studyLogNotificationsEnabled:
+          prefs['studyLogNotificationsEnabled'] == true,
       notificationPrefsVersion:
           (prefs['notificationPreferencesVersion'] as num?)?.toInt() ?? 0,
       healthAuthorized: prefs['healthAuthorized'] == true,

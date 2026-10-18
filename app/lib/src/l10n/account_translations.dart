@@ -1627,6 +1627,19 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "每日计划提醒",
     "zh-Hant": "每日計劃提醒",
   },
+  "Study log reminders": {
+    "es": "Recordatorios de registro del estudio",
+    "zh-Hans": "研究记录提醒",
+    "zh-Hant": "研究記錄提醒",
+  },
+  "Optional reminders at 18:00 for main sleep and 19:00 for Evening Energy, for the next 14 days. Save either at any time; reminders are skipped once that day’s entry is saved.": {
+    "es":
+        "Recordatorios opcionales a las 18:00 para el sueño principal y a las 19:00 para la Energía de Noche durante los próximos 14 días. Puedes guardar ambos en cualquier momento; se omite el recordatorio cuando se guarda el registro de ese día.",
+    "zh-Hans":
+        "未来 14 天可选择在 18:00 接收主要睡眠提醒，在 19:00 接收晚间精力提醒。两项都可随时保存；当天的记录保存后会跳过对应提醒。",
+    "zh-Hant":
+        "未來 14 天可選擇在 18:00 接收主要睡眠提醒，在 19:00 接收晚間精力提醒。兩項都可隨時儲存；當天的記錄儲存後會略過對應提醒。",
+  },
   "Lower-energy heads-up": {
     "es": "Aviso de energía baja",
     "zh-Hans": "低精力提醒",

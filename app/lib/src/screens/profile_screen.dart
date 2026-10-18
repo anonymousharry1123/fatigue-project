@@ -1322,6 +1322,29 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                   : null,
             ),
             SwitchListTile(
+              key: const Key('notification-study-log-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Study log reminders')),
+              subtitle: Text(
+                context.tr(
+                  'Optional reminders at 18:00 for main sleep and 19:00 for Evening Energy, for the next 14 days. Save either at any time; reminders are skipped once that day’s entry is saved.',
+                ),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
+              ),
+              value: controller.studyLogNotificationsEnabled,
+              onChanged:
+                  controller.notificationSchedulingSupported &&
+                      !controller.isNotificationSyncing
+                  ? (value) => _update(
+                      context,
+                      () => controller.setStudyLogNotifications(value),
+                    )
+                  : null,
+            ),
+            SwitchListTile(
               key: const Key('notification-crash-switch'),
               contentPadding: EdgeInsets.zero,
               title: Text(context.tr('Lower-energy heads-up')),

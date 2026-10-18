@@ -7,8 +7,10 @@ import 'package:app/src/health_service.dart';
 import 'package:app/src/notification_service.dart';
 import 'package:app/src/privacy_consent.dart';
 import 'package:app/src/screen_time_service.dart';
+import 'package:app/src/screens/daily_checkin_screen.dart';
 import 'package:app/src/screens/onboarding_screen.dart';
 import 'package:app/src/screens/privacy_center_screen.dart';
+import 'package:app/src/screens/sleep_log_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,6 +74,57 @@ void main() {
     service.tap('tonyo-guidance:2026-09-20-recovery');
     await tester.pumpAndSettle();
     expect(selectedTab(tester), 3);
+  });
+
+  testWidgets('study taps open Evening Energy and main sleep entry', (
+    tester,
+  ) async {
+    final (_, service) = await showApp(tester);
+    service.tap('tonyo-guidance:study:energy');
+    await tester.pumpAndSettle();
+    expect(find.byType(DailyCheckInScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const Key('checkin-period-evening')))
+          .selected,
+      isTrue,
+    );
+
+    // A second reminder replaces the detail route instead of stacking forms.
+    service.tap('tonyo-guidance:study:sleep');
+    await tester.pumpAndSettle();
+    expect(find.byType(DailyCheckInScreen), findsNothing);
+    expect(find.byType(SleepLogScreen), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(selectedTab(tester), 2);
+    expect(
+      tester.state<NavigatorState>(find.byType(Navigator)).canPop(),
+      isFalse,
+    );
+  });
+
+  testWidgets('cold-launch study tap waits for loading before entry', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    await showApp(
+      tester,
+      launchPayload: 'tonyo-guidance:study:energy',
+      ready: false,
+      loadGate: gate,
+    );
+    expect(find.byType(DailyCheckInScreen), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(DailyCheckInScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const Key('checkin-period-evening')))
+          .selected,
+      isTrue,
+    );
   });
 
   testWidgets(
