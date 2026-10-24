@@ -15,6 +15,7 @@ import '../schedule_logic.dart';
 import '../sleep_sync_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/heart_data_details.dart';
 import 'account_sign_in_dialog.dart';
 import 'appearance_screen.dart';
 import 'change_password_dialog.dart';
@@ -2047,6 +2048,10 @@ class _HeartSyncStatus extends StatelessWidget {
                   key: const Key('latest-health-heart-rate'),
                   style: const TextStyle(fontSize: 11),
                 ),
+                HeartDataDetails(
+                  readings: controller.signals,
+                  now: controller.currentTime,
+                ),
                 const SizedBox(height: 3),
                 Text(
                   context.tr(
@@ -2338,7 +2343,11 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
       await widget.controller.retryCloudSync();
     } on Object {
       if (mounted) {
-        setState(() => _error = 'Could not finish syncing. Please try again.');
+        setState(
+          () => _error =
+              widget.controller.cloudSyncError ??
+              'Could not finish syncing. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2399,6 +2408,8 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
   @override
   Widget build(BuildContext context) {
     final conflict = widget.controller.cloudSyncConflict;
+    final quotaReached =
+        widget.controller.cloudSyncFailureKind == CloudSyncFailureKind.quota;
     final busy = _busy || widget.controller.isCloudSyncing;
     final error =
         _error ??
@@ -2423,21 +2434,22 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            conflict
-                ? context.tr(
-                    'Another device changed the same data. Your edits remain saved '
-                    'on this device. Review each conflict and choose which version to keep.',
-                  )
-                : context.tr(
-                    'Your latest changes are saved on this device. Retry when you’re '
-                    'connected to sync them to your account.',
-                  ),
-            style: TextStyle(
-              color: TonyoPalette.of(context).muted,
-              fontSize: 11,
+          if (!quotaReached)
+            Text(
+              conflict
+                  ? context.tr(
+                      'Another device changed the same data. Your edits remain saved '
+                      'on this device. Review each conflict and choose which version to keep.',
+                    )
+                  : context.tr(
+                      'Your latest changes are saved on this device. Retry when you’re '
+                      'connected to sync them to your account.',
+                    ),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
             ),
-          ),
           if (error != null) ...[
             const SizedBox(height: 8),
             Semantics(

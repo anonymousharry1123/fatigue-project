@@ -39,8 +39,19 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 pnpm test:running
 - Unauthenticated/cross-account reads, writes, lists and deletion are denied.
 - No user-directory queries, including a query filtered to the caller's own ID,
   and no cross-user collection-group queries.
-- Owners can get/export/delete their seven known collections without renewing
-  consent. Unknown collections and deeper nesting remain denied.
+- Owners can inspect/export all ten known collections without renewing consent.
+  Tracked input deletion requires its atomic journal entry; account deletion
+  permits cleanup of every collection, including retained journal tombstones.
+  Unknown collections and deeper nesting remain denied.
+- Daily heart-rate and forecast documents have bounded formats. Heart-rate
+  summaries retain an immutable writer ID; activating summary storage blocks
+  new individual HealthKit heart-rate uploads while allowing HRV/resting rates.
+- Input sync/storage versions cannot downgrade. Tracked source changes and
+  matching full known-field journal payloads require one atomic revision step.
+  Sixteen signal changes or complete research check-ins fit the rule budgets.
+  Check-in answer/metadata validation runs on the source and its immutable
+  questionnaire definition is validated on the matching journal, keeping the
+  complete contract within Firestore's per-write expression limit.
 - New adult consent must use a server timestamp. Missing, malformed, implicit,
   backdated or future consent cannot permit data collection.
 - Acknowledged age/region cannot be silently changed. A client cannot set
@@ -101,7 +112,7 @@ Synthetic-lab operators similarly require a trusted-backend
 `syntheticLabAdmin: true` claim. Ordinary accounts intentionally lose cloud lab
 access. Admin SDKs bypass client rules, so backend IAM and any historical unknown
 subcollections need a separate trusted-server audit. The mobile export/delete
-contract covers the root document and seven flat known collections, not an
+contract covers the root document and ten flat known collections, not an
 arbitrary backend-created subtree, provider backups, or original Apple Health
 records. These rules are local until an authorized deployment occurs.
 
@@ -124,8 +135,8 @@ sandboxed run could not bind loopback sockets (`EPERM`); the approved local
 emulator retry passed. See [the progress record](../../docs/BIOLOGY_UPGRADE_PROGRESS.md)
 for exact runtime paths and executed command.
 
-Verified on 2026-10-04 after the Phase 2A changes: **35 executable cases passed;
-0 failures, skips, cancellations or TODO cases**, including seven new measurement
+Verified on 2026-10-24 after the storage/sync changes: **47 executable cases passed;
+0 failures, skips, cancellations or TODO cases**, including the seven measurement
 cases. Existing runtimes and the locked dependencies were reused. Initial runs
 exposed the rules expression limit; equivalent exact-key/type/length validation
 was simplified and the full suite rerun successfully. No rules were deployed.
@@ -160,3 +171,30 @@ plist into it, and do not overwrite a configured working copy. Run only the
 guarded `pnpm test:app` harness, not `run.sh` or a normal app launch. The Node
 rules-only `pnpm test` command does not compile the Flutter app and does not
 need the Dart configuration file. These checks do not deploy rules or indexes.
+
+The incremental input and heart-summary scenario uses the same guards and a
+separate newly created simulator:
+
+```sh
+node run_app_integration.mjs sync
+```
+
+It exercises native protocol activation, a two-chunk tracked write, a full
+bootstrap, older-timestamp edits, explicit nulls, journal deletions, and durable
+cursor replay after a real process restart. Heart-rate summary acknowledgement
+and server rereading precede raw-record cleanup; the storage marker then blocks
+new raw HealthKit heart-rate uploads. The default native SQLite store preserves
+exact raw fields, import provenance, and a deliberately empty snapshot across
+the process restart. The second process verifies summary idempotence and deletes
+its synthetic account and local records. This suite requires the same
+empty configuration in an isolated checkout as the Phase 1 scenario.
+
+Verified on 2026-10-24: the `sync` scenario passed in both independent native app
+processes on a newly created iPhone 17 / iOS 26.5 simulator, using the real
+FlutterFire and sqflite platform plugins. The guarded runner exited 0 with rules
+SHA-256 `3b79a44a2f311d1b23f2eb76a28b776f1caf2b9dcd8e27f70a3c4c16cf54b37e`.
+The first attempt exposed an inconsistent synthetic partial-answer fixture;
+correcting its completeness fields allowed both full runs to pass. This
+verification used only the fixed demo project and loopback emulators, with
+empty Firebase configuration in a temporary source copy. It did not deploy
+rules, contact a production project, or install on a physical device.

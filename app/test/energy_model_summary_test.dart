@@ -247,7 +247,7 @@ void main() {
 
   group('Firebase summary projection', () {
     test(
-      'uses the existing user read with no extra reads, writes, or listeners',
+      'uses the account bootstrap reads with no model-specific reads, writes, or listeners',
       () async {
         final metadata = _metadata();
         metadata['trainedAt'] = Timestamp.fromDate(
@@ -271,6 +271,9 @@ void main() {
           'get users/owner',
           'get users/owner/signals',
           'get users/owner/checkIns',
+          // Confirm the root revision after reading inputs before accepting
+          // the baseline used for future incremental reads.
+          'get users/owner',
         ]);
       },
     );
@@ -294,7 +297,7 @@ void main() {
           expect(state!.personalizedEnergyModel, isNull);
           expect(state.userUpdatedAt, isNull);
           expect(state.accountEmail, 'owner@example.test');
-          expect(store.calls.length, 3);
+          expect(store.calls.length, 4);
         }
       },
     );

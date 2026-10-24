@@ -1,6 +1,7 @@
 import 'local_day.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +16,11 @@ import 'ai1_study.dart';
 import 'ai2_readiness.dart';
 import 'check_in_logic.dart';
 import 'cloud_repository.dart';
+import 'cloud_quota_gate.dart';
+import 'incremental_inputs.dart';
+import 'raw_heart_rate_store.dart';
+import 'heart_rate_summary.dart';
+import 'heart_rate_cloud.dart';
 import 'cloud_schema.dart';
 import 'cloud_sync.dart';
 import 'continuous_refresh_logic.dart';
@@ -28,6 +34,7 @@ import 'energy_model_service.dart';
 import 'energy_model_summary.dart';
 import 'health_service.dart';
 import 'heart_sync_logic.dart';
+import 'heart_derivation_logic.dart';
 import 'insights_logic.dart';
 import 'language_preference.dart';
 import 'l10n/app_localizations.dart';
@@ -51,6 +58,7 @@ import 'today_dashboard_logic.dart';
 part 'backup_restore.dart';
 part 'sync_conflict_resolution.dart';
 part 'coach_sync.dart';
+part 'efficient_sync.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -64,9 +72,22 @@ class AppController extends ChangeNotifier {
     EnergyModelStore? energyModelStore,
     Ai1CaptureStore? captureStore,
     this.energyModelMetadataWriter,
-    this.cloudRepository,
+    CloudRepository? cloudRepository,
+    RawHeartRateStore? rawHeartRateStore,
+    HeartRateCloudStore? heartRateCloudStore,
     PrivacyConsent? initialPrivacyConsent,
-  }) : _healthService = healthService ?? const HealthService(),
+  }) : cloudRepository = cloudRepository == null
+           ? null
+           : QuotaCloudRepository(
+               cloudRepository,
+               gate: CloudQuotaGate(clock: clock),
+             ),
+       // Public injection names are intentional.
+       // ignore: prefer_initializing_formals
+       _rawHeartRateStore = rawHeartRateStore,
+       // ignore: prefer_initializing_formals
+       _heartRateCloudStore = heartRateCloudStore,
+       _healthService = healthService ?? const HealthService(),
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
        _notificationService = notificationService ?? LocalNotificationService(),
@@ -107,6 +128,30 @@ class AppController extends ChangeNotifier {
   bool _localClockChanged = false;
   final DateTime Function() _now;
   final CloudRepository? cloudRepository;
+  final RawHeartRateStore? _rawHeartRateStore;
+  final HeartRateCloudStore? _heartRateCloudStore;
+  String? _rawHeartRateOwner;
+  bool _rawHeartRateLoaded = false;
+  bool _isClearingTrackingData = false;
+  bool _rawHeartRateSnapshotExpected = false;
+  final Set<String> _ownedHeartRateDays = {};
+  final Set<String> _blockedHeartRateDays = {};
+  final Set<String> _explicitRawHeartRateDeletes = {};
+  List<SignalReading>? _heartRateSummarySource;
+  int _heartRateSummarySourceLength = -1;
+  List<HeartRateDailySummary> _heartRateSummaryCache = [];
+  String? _heartRateWriterId;
+  Map<String, HeartRateSampleProvenance> _heartRateProvenance = {};
+  Map<String, HeartRateDailySummary> _cloudHeartRateDays = {};
+  Map<String, String> _heartRateAcknowledged = {};
+  Map<String, Map<String, dynamic>> _legacyHeartRateCloud = {};
+  InputSyncSnapshot? _remoteInputSnapshot;
+  int? _remoteInputRevision;
+  String? _remoteInputOwner;
+  String? _lastInputHydrationOwner;
+  DateTime? _lastInputHydrationAt;
+  DateTime? _lastHeartSummaryUploadAt;
+
   final MlPrepService? _mlPrepService;
   final EnergyModelStore _energyModelStore;
   final Ai1CaptureStore _ai1CaptureStore;
@@ -497,6 +542,7 @@ class AppController extends ChangeNotifier {
   DateTime? get lastCloudSyncAt =>
       cloudUid == _lastCloudSyncOwnerUid ? _lastCloudSyncAt : null;
   Timer? _cloudRetryTimer;
+  DateTime? _cloudRetryScheduledAt;
   Duration _cloudRetryDelay = const Duration(seconds: 5);
   bool _appInForeground = false;
   bool _disposed = false;
@@ -523,9 +569,7 @@ class AppController extends ChangeNotifier {
         _syncBaseline != null) {
       final patch = InputSyncPatch(
         _syncBaseline!,
-        InputSyncSnapshot.fromState(
-          _cloudState(migrationVersion: localMigrationVersion),
-        ),
+        _inputSnapshot(_cloudState(migrationVersion: localMigrationVersion)),
       );
       count +=
           patch.signals.length +
@@ -536,6 +580,10 @@ class AppController extends ChangeNotifier {
     if (hasPendingCoachChanges) {
       count += _pendingCoachWrites.length + _pendingAlertWrites.length;
     }
+    count +=
+        _pendingHeartRateDays.length +
+        _deletedHeartRateDays.length +
+        _legacyHeartRateCloud.length;
     return count;
   }
 
@@ -551,6 +599,9 @@ class AppController extends ChangeNotifier {
       return 'Your edits are saved here. Review the changes from the other device.';
     }
     if (cloudSyncError != null) return cloudSyncError!;
+    if (_onlyDeferredHeartSummaries) {
+      return 'Heart-rate summaries are saved on this device and will sync with the next daily update.';
+    }
     if (hasAnyPendingCloudChanges) {
       return '$pendingCloudRecordCount ${pendingCloudRecordCount == 1 ? "record" : "records"} saved on this device · waiting to sync';
     }
@@ -633,15 +684,18 @@ class AppController extends ChangeNotifier {
   }
 
   bool get hasPendingCloudChanges =>
-      cloudUid != null &&
-      _syncOwnerUid == cloudUid &&
-      _syncBaseline != null &&
-      !InputSyncPatch(
-        _syncBaseline!,
-        InputSyncSnapshot.fromState(
-          _cloudState(migrationVersion: localMigrationVersion),
-        ),
-      ).isEmpty;
+      _pendingHeartRateDays.isNotEmpty ||
+      _deletedHeartRateDays.isNotEmpty ||
+      _legacyHeartRateCloud.isNotEmpty ||
+      (cloudUid != null &&
+          _syncOwnerUid == cloudUid &&
+          _syncBaseline != null &&
+          !InputSyncPatch(
+            _syncBaseline!,
+            _inputSnapshot(
+              _cloudState(migrationVersion: localMigrationVersion),
+            ),
+          ).isEmpty);
   PrivacyConsent? _privacyConsent;
   String? _privacyOwnerUid;
   bool _cloudPrivacyVerified = false;
@@ -697,7 +751,7 @@ class AppController extends ChangeNotifier {
     final uid = cloudUid;
     if (uid != null && (_syncBaseline == null || _syncOwnerUid != uid)) {
       _syncOwnerUid = uid;
-      _syncBaseline = InputSyncSnapshot.fromState(
+      _syncBaseline = _inputSnapshot(
         _cloudState(migrationVersion: localMigrationVersion),
       );
     }
@@ -1249,6 +1303,20 @@ class AppController extends ChangeNotifier {
         latest = item;
       }
     }
+    for (final summary in _cloudHeartRateDays.values) {
+      if (!summary.latestAt.isAfter(now) &&
+          (latest == null || summary.latestAt.isAfter(latest.timestamp))) {
+        latest = SignalReading(
+          id: 'cloud-summary-${summary.day}-latest',
+          type: SignalType.heartRate,
+          value: summary.latestValue,
+          timestamp: summary.latestAt.toLocal(),
+          source: SignalSource.healthKit,
+          note:
+              'Exact latest sample from a cloud summary; raw history stays on its original device.',
+        );
+      }
+    }
     return latest;
   }
 
@@ -1340,42 +1408,40 @@ class AppController extends ChangeNotifier {
     final grouped = <String, List<SignalReading>>{};
     for (final signal in signals) {
       final groupId = signal.groupId;
-      if (groupId != null && groupId.startsWith('sleep-')) {
+      if (groupId != null &&
+          (groupId.startsWith('sleep-') ||
+              groupId.startsWith(SleepSyncLogic.importedGroupPrefix) ||
+              groupId.startsWith(SleepSyncLogic.importedNapGroupPrefix))) {
         grouped.putIfAbsent(groupId, () => []).add(signal);
       }
     }
+    final selected = [
+      ...SleepSyncLogic.preferredSleepReadings(signals),
+      ...SleepSyncLogic.preferredNapReadings(signals),
+    ];
     final entries = <SleepLogEntry>[];
-    for (final group in grouped.entries) {
-      final sleep = group.value
-          .where(
-            (item) =>
-                item.type == SignalType.sleep || item.type == SignalType.nap,
-          )
-          .firstOrNull;
-      final bedtime = group.value
+    for (final sleep in selected) {
+      final group = grouped[sleep.groupId];
+      if (group == null) continue;
+      final bedtime = group
           .where((item) => item.type == SignalType.bedtime)
           .firstOrNull;
-      if (sleep == null || (bedtime == null && sleep.type != SignalType.nap)) {
-        continue;
-      }
+      if (bedtime == null && sleep.type != SignalType.nap) continue;
+      final duration = Duration(
+        microseconds: (sleep.value * Duration.microsecondsPerHour).round(),
+      );
       entries.add(
         SleepLogEntry(
-          id: group.key,
-          bedtime:
-              (bedtime?.timestamp ??
-                      sleep.timestamp.subtract(
-                        Duration(
-                          microseconds:
-                              (sleep.value * Duration.microsecondsPerHour)
-                                  .round(),
-                        ),
-                      ))
-                  .toLocal(),
+          id: sleep.groupId!,
+          bedtime: (bedtime?.timestamp ?? sleep.timestamp.subtract(duration))
+              .toLocal(),
           wakeTime: sleep.timestamp.toLocal(),
           quality: sleep.quality * 5,
           kind: sleep.type == SignalType.nap
               ? SleepKind.nap
               : SleepKind.mainSleep,
+          source: sleep.source,
+          recordedDuration: duration,
         ),
       );
     }
@@ -1706,7 +1772,12 @@ class AppController extends ChangeNotifier {
       if (canUseCloud) {
         final dashboardResults = await Future.wait<Object?>([
           repository.scoreSnapshotForDay(session.uid, start),
-          repository.signalsByRange(session.uid, start: start, end: end),
+          repository.signalsByRange(
+            session.uid,
+            start: start,
+            end: end,
+            includeHeartRate: false,
+          ),
         ]);
         if (!currentRequest()) return;
         final savedSnapshot = dashboardResults[0] as ScoreSnapshot?;
@@ -1739,6 +1810,7 @@ class AppController extends ChangeNotifier {
             session.uid,
             start: localDay(start, -PersonalBaselineLogic.windowDays),
             end: end,
+            includeHeartRate: false,
           ),
           repository.checkInsByRange(
             session.uid,
@@ -1787,7 +1859,10 @@ class AppController extends ChangeNotifier {
       }
       _scoreSnapshot = snapshot;
       _scoreLoadedFromSnapshot = false;
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       // A network/query failure must not make the wellness estimate disappear.
       _scoreSnapshot = FatigueEngine.score(
@@ -1892,6 +1967,7 @@ class AppController extends ChangeNotifier {
             session.uid,
             start: localDay(firstDay, -7),
             end: rangeEnd,
+            includeHeartRate: false,
           ),
           repository.checkInsByRange(
             session.uid,
@@ -1932,7 +2008,10 @@ class AppController extends ChangeNotifier {
       if (session != null && repository != null) {
         forecastError = 'Cloud sync pending · using saved device inputs';
       }
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       _generateLocalForecasts(days, generatedAt: clock);
       _forecastLoadedFromCloud = false;
@@ -2044,6 +2123,7 @@ class AppController extends ChangeNotifier {
             session.uid,
             start: rangeStart,
             end: rangeEnd,
+            includeHeartRate: false,
           ),
           repository.checkInsByRange(
             session.uid,
@@ -2097,7 +2177,10 @@ class AppController extends ChangeNotifier {
       if (session != null && repository != null) {
         guidanceError = 'Cloud sync pending · using saved device inputs';
       }
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
       _guidanceSavedToCloud = false;
@@ -2179,7 +2262,10 @@ class AppController extends ChangeNotifier {
         _notificationScheduleConfirmed = false;
         await _notificationService.cancelGuidance();
       }
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       notificationError = 'Notification schedule unavailable · try again';
     } finally {
@@ -2222,6 +2308,7 @@ class AppController extends ChangeNotifier {
             session.uid,
             start: rangeStart,
             end: rangeEnd,
+            includeHeartRate: false,
           ),
           repository.checkInsByRange(
             session.uid,
@@ -2232,7 +2319,12 @@ class AppController extends ChangeNotifier {
         if (!currentRequest()) return;
         _insightsSnapshot = InsightsLogic.build(
           now: clock,
-          signals: values[0] as List<SignalReading>,
+          signals: [
+            ...(values[0] as List<SignalReading>).where(
+              (item) => !isRawHeartRate(item),
+            ),
+            ...signals.where(isRawHeartRate),
+          ],
           checkIns: values[1] as List<DailyCheckIn>,
         );
         insightsLoadedFromCloud = true;
@@ -2247,7 +2339,10 @@ class AppController extends ChangeNotifier {
       if (session != null && repository != null) {
         insightsError = 'Cloud sync pending · using saved device inputs';
       }
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       _insightsSnapshot = InsightsLogic.build(
         now: clock,
@@ -2345,7 +2440,10 @@ class AppController extends ChangeNotifier {
                 (left, right) => right.observedAt.compareTo(left.observedAt),
               );
       }
-    } on Object {
+    } on Object catch (error) {
+      if (error is FirebaseException && error.code == 'resource-exhausted') {
+        _recordCloudFailure(error);
+      }
       if (!currentRequest()) return;
       outcomeError = 'Private outcomes unavailable · cached records retained';
     } finally {
@@ -2394,6 +2492,21 @@ class AppController extends ChangeNotifier {
         'On Flutter web, use a fixed --web-port so localhost storage persists.',
       );
     }
+    if (_heartRateSummaryEnabled) {
+      try {
+        await _loadRawHeartRate(
+          _privacyOwnerUid ?? _syncOwnerUid ?? 'local',
+          mergeCurrent: true,
+        );
+      } on Object {
+        cloudSyncFailureKind = CloudSyncFailureKind.deviceStorage;
+        cloudSyncError =
+            'Could not load device heart-rate history. Keep the app installed and retry.';
+        isReady = true;
+        notifyListeners();
+        return;
+      }
+    }
     await _restoreDeletionJournal(preferences);
     // A saved local profile is not an active session. Do not hydrate cloud
     // state or resume health/model work behind the welcome screen.
@@ -2414,7 +2527,19 @@ class AppController extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      await _hydrateOrMigrateCloud();
+      if (_cloudInputsPullDue) {
+        await _hydrateOrMigrateCloud();
+      } else {
+        final revision = _sessionRevision;
+        final owner = cloudUid;
+        try {
+          await _refreshCloudPrivacy(
+            () => revision == _sessionRevision && owner == cloudUid,
+          );
+        } on Object catch (error) {
+          _recordCloudFailure(error);
+        }
+      }
       await _writeLocal();
       if (!outcomeConsent) await _discardPersonalizedModel();
     }
@@ -2517,7 +2642,7 @@ class AppController extends ChangeNotifier {
           !_cloudPrivacyVerified || cloudSyncError != null;
       try {
         if (!await _refreshCloudPrivacy(current)) return;
-        if (isReady && (_syncBaseline == null || _syncOwnerUid != owner)) {
+        if (isReady && _cloudInputsPullDue) {
           await _hydrateOrMigrateCloud(isCurrent: current);
           if (!current()) return;
         }
@@ -2571,6 +2696,7 @@ class AppController extends ChangeNotifier {
     await refreshScreenTimeAuthorization(notify: false);
     if (!current()) return;
     if ((derivedViewsNeedRefresh ||
+            _scoreSnapshot == null ||
             (hadPendingInputs && !hasPendingCloudChanges)) &&
         onboardingComplete) {
       if (_localClockChanged) {
@@ -2697,6 +2823,12 @@ class AppController extends ChangeNotifier {
         );
         _privacyOwnerUid = uid;
         _cloudPrivacyVerified = true;
+        if (_heartRateSummaryEnabled) {
+          await _loadRawHeartRate(
+            uid,
+            mergeCurrent: _rawHeartRateOwner == 'local' && accountEmail == null,
+          );
+        }
         await _clearModelPreparationWindow();
         await _invalidateModelPreparation();
       }
@@ -2735,7 +2867,7 @@ class AppController extends ChangeNotifier {
         throw StateError('Account setup changed. Please retry.');
       }
       _syncOwnerUid = uid;
-      _syncBaseline = InputSyncSnapshot.fromState(remote);
+      _syncBaseline = _inputSnapshot(remote);
     }
     profile = newProfile;
     accountEmail = _accountAuth.currentSession?.email ?? email ?? accountEmail;
@@ -3130,8 +3262,16 @@ class AppController extends ChangeNotifier {
     if (validation != null) throw ArgumentError(validation);
     final hours = end.difference(start).inMinutes / 60;
     final recordedAt = _now();
-    final groupId =
-        id ?? 'sleep-${recordedAt.microsecondsSinceEpoch}-${signals.length}';
+    // Reviewing imported sleep creates a stable manual correction. Preserve
+    // its Health group and stages so the existing source-preference gate can
+    // select the best record, and retrying the save cannot create duplicates.
+    final importedId =
+        id != null &&
+        (id.startsWith(SleepSyncLogic.importedGroupPrefix) ||
+            id.startsWith(SleepSyncLogic.importedNapGroupPrefix));
+    final groupId = importedId
+        ? 'sleep-correction-$id'
+        : id ?? 'sleep-${recordedAt.microsecondsSinceEpoch}-${signals.length}';
     final existing = signals.any((item) => item.groupId == groupId);
     if (existing) {
       await _discardPersonalizedModel();
@@ -3520,8 +3660,22 @@ class AppController extends ChangeNotifier {
     }
     await _discardPersonalizedModel();
     ensureCurrent();
+    if (_heartRateSummaryEnabled && _legacyHeartRateCloud.containsKey(id)) {
+      _explicitRawHeartRateDeletes.add(id);
+      if (source != null) {
+        _blockedHeartRateDays.remove(HeartRateSummary.dayId(source.timestamp));
+      }
+    }
     signals.removeWhere((item) => item.id == id);
-    await _commit(energyInputsChanged: true);
+    final deletedRaw = source != null && isRawHeartRate(source);
+    if (deletedRaw) {
+      signals = HeartDerivationLogic.reconcile(
+        readings: signals,
+        now: _now(),
+        authoritativeLocalDays: {localDay(source.timestamp.toLocal())},
+      ).readings;
+    }
+    await _commit(energyInputsChanged: true, forceHeartSummary: deletedRaw);
     ensureCurrent();
     await _deleteOutcome('reaction-$id');
   }
@@ -3771,7 +3925,11 @@ class AppController extends ChangeNotifier {
         if (current()) {
           try {
             await _notificationService.cancelGuidance();
-          } on Object {
+          } on Object catch (error) {
+            if (error is FirebaseException &&
+                error.code == 'resource-exhausted') {
+              _recordCloudFailure(error);
+            }
             /* keep the original save error */
           }
         }
@@ -4118,7 +4276,28 @@ class AppController extends ChangeNotifier {
         imported: imported,
         syncedAt: attemptTime.toUtc(),
       );
-      signals = heartResult.readings;
+      if (_heartRateSummaryEnabled) {
+        final known = before
+            .where(isRawHeartRate)
+            .map(rawHeartRateSampleId)
+            .toSet();
+        for (final sample in heartResult.readings.where(isRawHeartRate)) {
+          final id = rawHeartRateSampleId(sample);
+          if (!known.contains(id)) {
+            _heartRateProvenance.putIfAbsent(
+              id,
+              () => HeartRateSampleProvenance(
+                offsetMinutes: _deviceTimezoneService.utcOffset.inMinutes,
+                timezoneName: deviceTimezoneIdentifier,
+              ),
+            );
+          }
+        }
+      }
+      signals = HeartDerivationLogic.reconcile(
+        readings: heartResult.readings,
+        now: attemptTime,
+      ).readings;
       lastHealthImportCount = heartResult.importedCount;
       lastHealthDuplicateCount = heartResult.duplicateCount;
       lastHealthRejectedCount = heartResult.rejectedCount;
@@ -4223,7 +4402,10 @@ class AppController extends ChangeNotifier {
       signals,
     );
     if (meaningfulChange) lastHealthChangeAt = attemptTime;
-    await _commit(energyInputsChanged: meaningfulChange);
+    await _commit(
+      energyInputsChanged: meaningfulChange,
+      forceHeartSummary: reason == HealthRefreshReason.manual,
+    );
     return heartResult;
   }
 
@@ -4265,7 +4447,10 @@ class AppController extends ChangeNotifier {
       (_healthConnectionGeneration, _sessionRevision, cloudUid);
 
   bool _healthContextCurrent((int, int, String?) context) =>
-      !_disposed && _canProcessData && context == _healthContext;
+      !_disposed &&
+      !_isClearingTrackingData &&
+      _canProcessData &&
+      context == _healthContext;
 
   void _invalidateHealthWork() {
     _healthConnectionGeneration++;
@@ -4565,7 +4750,22 @@ class AppController extends ChangeNotifier {
   /// Clears signals, check-ins, and score snapshots but keeps the account and
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
+    if (_isClearingTrackingData) return;
+    _isClearingTrackingData = true;
+    _invalidateHealthWork();
+    try {
+      await _clearTrackingDataNow();
+    } finally {
+      _isClearingTrackingData = false;
+    }
+  }
+
+  Future<void> _clearTrackingDataNow() async {
     final ensureCurrent = _beginMutation();
+    while (_pendingCloudPush != null) {
+      await _pendingCloudPush;
+      ensureCurrent();
+    }
     _ai1CaptureGeneration++;
     await _ai1Capture.stopAndClear(_ai1Owner);
     ensureCurrent();
@@ -4584,6 +4784,8 @@ class AppController extends ChangeNotifier {
     _clearCoachSync();
     await _discardPersonalizedModel();
     ensureCurrent();
+    _explicitRawHeartRateDeletes.addAll(_legacyHeartRateCloud.keys);
+    _blockedHeartRateDays.clear();
     signals = [];
     checkIns = [];
     _outcomes = [];
@@ -4620,11 +4822,24 @@ class AppController extends ChangeNotifier {
     _recommendations = [];
     _riskAlerts = [];
     guidanceError = null;
+    await _writeLocal();
+    ensureCurrent();
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session != null && repository != null) {
       await repository.clearScoreSnapshots(session.uid);
       await repository.clearGuidance(session.uid);
+      if (_heartRateCloudStore != null) {
+        await _quotaGate!.run(
+          session.uid,
+          () => _heartRateCloudStore.clearDays(session.uid),
+        );
+        ensureCurrent();
+        _cloudHeartRateDays.clear();
+        _heartRateAcknowledged.clear();
+        _lastHeartSummaryUploadAt = null;
+        _ownedHeartRateDays.clear();
+      }
       await repository.clearOutcomes(session.uid);
       ensureCurrent();
       final preferences = await SharedPreferences.getInstance();
@@ -4793,6 +5008,33 @@ class AppController extends ChangeNotifier {
     // Invalidate its session, then drain it before removing the account cache,
     // so a completed deletion cannot be undone by a late language save.
     await _localWriteQueue;
+    if (_rawHeartRateStore != null) {
+      for (final owner in {
+        _rawHeartRateOwner,
+        _privacyOwnerUid,
+        _deletionOwner,
+        cloudUid,
+      }.whereType<String>()) {
+        await _rawHeartRateStore.clear(owner);
+      }
+    }
+    _rawHeartRateOwner = null;
+    _rawHeartRateLoaded = false;
+    _rawHeartRateSnapshotExpected = false;
+    _ownedHeartRateDays.clear();
+    _blockedHeartRateDays.clear();
+    _explicitRawHeartRateDeletes.clear();
+    _heartRateSummarySource = null;
+    _heartRateAcknowledged.clear();
+    _lastHeartSummaryUploadAt = null;
+    _cloudHeartRateDays.clear();
+    _legacyHeartRateCloud.clear();
+    _heartRateProvenance.clear();
+    _remoteInputOwner = null;
+    _lastInputHydrationOwner = null;
+    _lastInputHydrationAt = null;
+    _remoteInputSnapshot = null;
+    _remoteInputRevision = null;
     await _ai1Capture.clearAll();
     _scoreRefreshGeneration++;
     isForecastLoading = false;
@@ -4906,10 +5148,15 @@ class AppController extends ChangeNotifier {
       }
     }
     isSignedOut = false;
+    if (_heartRateSummaryEnabled) {
+      await _loadRawHeartRate('local', mergeCurrent: false);
+    }
     notifyListeners();
   }
 
-  Map<String, Object?> _json() => {
+  Map<String, Object?> _json({bool includeRawHeartRate = true}) => {
+    'cloudQuotaCooldown': _quotaGate?.toJson(),
+    if (_heartRateSummaryEnabled) 'efficientSync': _efficientSyncJson(),
     if (_coachSyncOwnerUid != null) 'coachSync': _coachSyncJson(),
     if (_lastCloudSyncOwnerUid != null)
       'cloudSyncMetadata': {
@@ -4966,7 +5213,10 @@ class AppController extends ChangeNotifier {
     'lastHealthRefreshReason': lastHealthRefreshReason?.name,
     'healthBackgroundRefreshEnabled': healthBackgroundRefreshEnabled,
     'profile': profile.toJson(),
-    'signals': signals.map((item) => item.toJson()).toList(),
+    'signals': signals
+        .where((item) => includeRawHeartRate || !isRawHeartRate(item))
+        .map((item) => item.toJson())
+        .toList(),
     'checkIns': checkIns.map((item) => item.toJson()).toList(),
     'outcomes': _outcomes.map((item) => item.toJson()).toList(),
     if (_outcomeSyncOwnerUid != null && _pendingOutcomeWrites.isNotEmpty)
@@ -4989,8 +5239,10 @@ class AppController extends ChangeNotifier {
   Future<void> _commit({
     bool energyInputsChanged = false,
     bool forecastInputsChanged = false,
+    bool forceHeartSummary = false,
     _Ai1CaptureIntent? ai1Capture,
   }) async {
+    _heartRateSummarySource = null;
     if (!_canProcessData) return;
     final revision = _sessionRevision;
     final uid = cloudUid;
@@ -5023,7 +5275,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal(ai1Capture: ai1Capture);
     if (!current()) return;
-    await _pushCloud();
+    await _pushCloud(forceHeartSummary: forceHeartSummary);
     if (!current()) return;
     if (energyInputsChanged && onboardingComplete) {
       await refreshScores(forceRecalculate: true);
@@ -5053,8 +5305,34 @@ class AppController extends ChangeNotifier {
           isDeletingAccount) {
         return;
       }
-      final encoded = jsonEncode(_json());
-      final savedState = Map<String, Object?>.from(jsonDecode(encoded) as Map);
+      final savedState = _json();
+      if (_heartRateSummaryEnabled) {
+        if (!_rawHeartRateLoaded) {
+          throw StateError(
+            'Could not save to this device: raw history is not loaded.',
+          );
+        }
+        final owner = _rawHeartRateOwner;
+        if (owner == null ||
+            owner != (_privacyOwnerUid ?? cloudUid ?? 'local')) {
+          throw StateError(
+            'Could not save to this device: raw history owner changed.',
+          );
+        }
+        await _rawHeartRateStore!.replace(
+          owner,
+          signals,
+          provenance: _heartRateProvenance,
+        );
+        if (revision != _sessionRevision ||
+            deletionPending ||
+            isDeletingAccount) {
+          return;
+        }
+      }
+      final encoded = jsonEncode(
+        _json(includeRawHeartRate: !_heartRateSummaryEnabled),
+      );
       if (!await preferences.setString(_storageKey, encoded)) {
         throw StateError(
           'Could not save to this device. Keep this screen open and retry.',
@@ -5112,7 +5390,7 @@ class AppController extends ChangeNotifier {
     final pending = _syncOwnerUid == session.uid && _syncBaseline != null
         ? InputSyncPatch(
             _syncBaseline!,
-            InputSyncSnapshot.fromState(
+            _inputSnapshot(
               _cloudState(migrationVersion: localMigrationVersion),
             ),
           )
@@ -5122,7 +5400,7 @@ class AppController extends ChangeNotifier {
     cloudSyncError = null;
     notifyListeners();
     try {
-      final remote = await repository.readUser(session.uid);
+      final remote = await _readCloudInputs(session.uid);
       if (cloudUid != session.uid ||
           _sessionRevision != revision ||
           (isCurrent != null && !isCurrent()) ||
@@ -5139,6 +5417,39 @@ class AppController extends ChangeNotifier {
             _isSigningOut ||
             deletionPending) {
           return;
+        }
+      }
+      if (_heartRateSummaryEnabled && remote != null) {
+        await _loadRawHeartRate(
+          session.uid,
+          mergeCurrent: _rawHeartRateOwner == session.uid,
+        );
+        if (cloudUid != session.uid ||
+            _sessionRevision != revision ||
+            (isCurrent != null && !isCurrent())) {
+          return;
+        }
+        await _readHeartRateCloud(session.uid);
+        if (cloudUid != session.uid ||
+            _sessionRevision != revision ||
+            (isCurrent != null && !isCurrent())) {
+          return;
+        }
+        signals = [
+          ...signals.where((item) => !isRawHeartRate(item)),
+          ...HeartRateSummary.uniqueRawReadings([
+            ...signals.where(isRawHeartRate),
+            ...remote.signals.where(
+              (item) =>
+                  isRawHeartRate(item) &&
+                  !_explicitRawHeartRateDeletes.contains(item.id),
+            ),
+          ]),
+        ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        for (final sample in remote.signals.where(isRawHeartRate)) {
+          _legacyHeartRateCloud[sample.id] = Map<String, dynamic>.from(
+            syncCanonical(signalToCloud(sample)) as Map,
+          );
         }
       }
       if (remote == null) {
@@ -5164,7 +5475,10 @@ class AppController extends ChangeNotifier {
         _outcomes = [];
         outcomeConsent = false;
       } else {
-        final remoteInputs = InputSyncSnapshot.fromState(remote);
+        final remoteInputs = _inputSnapshot(remote);
+        _remoteInputSnapshot = remoteInputs;
+        _remoteInputRevision = remote.inputRevision;
+        _remoteInputOwner = session.uid;
         if (pending != null && !pending.isEmpty) {
           _syncBaseline = remoteInputs.overlay(pending, useBefore: true);
           _applyCloud(remoteInputs.overlay(pending).toState(remote));
@@ -5189,6 +5503,10 @@ class AppController extends ChangeNotifier {
         _cloudMetadataFetchedAt = metadataFetchedAt;
         _cloudEnergySummary = remote?.personalizedEnergyModel;
         _cloudUserUpdatedAt = remote?.userUpdatedAt;
+        if (remote != null) {
+          _lastInputHydrationOwner = session.uid;
+          _lastInputHydrationAt = metadataFetchedAt;
+        }
       }
     } on Object catch (error) {
       if (cloudUid == session.uid &&
@@ -5201,7 +5519,7 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _pushCloud() async {
+  Future<void> _pushCloud({bool forceHeartSummary = false}) async {
     // Serialize commits; a later local edit is compared against the last
     // acknowledged snapshot after the current request finishes.
     final revision = _sessionRevision;
@@ -5210,7 +5528,7 @@ class AppController extends ChangeNotifier {
       await _pendingCloudPush;
     }
     if (revision != _sessionRevision || uid != cloudUid) return;
-    final task = _pushCloudNow();
+    final task = _pushCloudNow(forceHeartSummary: forceHeartSummary);
     _pendingCloudPush = task;
     try {
       await task;
@@ -5220,8 +5538,11 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _pushCloudNow() async {
-    if (!_canProcessData) return;
+  Future<void> _pushCloudNow({bool forceHeartSummary = false}) async {
+    if (!_canProcessData ||
+        (cloudUid != null && _quotaGate?.paused(cloudUid!) == true)) {
+      return;
+    }
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
@@ -5242,7 +5563,7 @@ class AppController extends ChangeNotifier {
         if (remote == null) {
           throw StateError('Restore the cloud account before syncing.');
         }
-        final known = InputSyncSnapshot.fromState(remote);
+        final known = _inputSnapshot(remote);
         // First setup may upload local records, but cannot delete unseen ones.
         _syncBaseline = InputSyncSnapshot(
           root: known.root,
@@ -5251,16 +5572,29 @@ class AppController extends ChangeNotifier {
         );
         _syncOwnerUid = session.uid;
       }
-      final desired = InputSyncSnapshot.fromState(
+      final desired = _inputSnapshot(
         _cloudState(migrationVersion: localMigrationVersion),
       );
       final patch = InputSyncPatch(_syncBaseline!, desired);
       await _writeLocal(); // durable retry baseline before any network write
       if (!current()) return;
+      if (_heartRateSummaryEnabled) {
+        await _pushHeartRateCloud(
+          session.uid,
+          current,
+          force: forceHeartSummary,
+        );
+      }
+      if (!current()) return;
       if (!patch.isEmpty) await repository.applyInputPatch(session.uid, patch);
       if (!current()) return;
       _syncBaseline = desired;
       if (!patch.isEmpty) _markCloudUploadSuccess();
+      if (_blockedHeartRateDays.isNotEmpty) {
+        _recordCloudFailure(
+          HeartRateSummaryOwnershipConflict(_blockedHeartRateDays.first),
+        );
+      }
       await _writeLocal();
     } on Object catch (error) {
       if (!current()) return;
@@ -5275,6 +5609,7 @@ class AppController extends ChangeNotifier {
       throw StateError('Finish the current account operation before syncing.');
     }
     final uid = cloudUid;
+    if (uid != null) _quotaGate?.retryNow(uid);
     final revision = _sessionRevision;
     final generation = ++_privacyRefreshGeneration;
     bool current() =>
@@ -5289,13 +5624,12 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       try {
         if (!await _refreshCloudPrivacy(current)) return;
-        if (_syncBaseline == null || _syncOwnerUid != uid) {
-          await _hydrateOrMigrateCloud(isCurrent: current);
-          if (!current()) return;
-          if (cloudSyncError != null) {
-            throw StateError('Cloud account could not be restored. Retry.');
-          }
+        await _hydrateOrMigrateCloud(isCurrent: current);
+        if (!current()) return;
+        if (cloudSyncError != null) {
+          throw StateError('Cloud account could not be restored. Retry.');
         }
+        _blockedHeartRateDays.clear();
       } on Object catch (error) {
         if (current()) {
           _cloudPrivacyVerified = false;
@@ -5310,7 +5644,7 @@ class AppController extends ChangeNotifier {
     }
     if (!current()) return;
     final ensureCurrent = _beginMutation();
-    await _pushCloud();
+    await _pushCloud(forceHeartSummary: true);
     ensureCurrent();
     await _retryCoachSync();
     ensureCurrent();
@@ -5351,16 +5685,14 @@ class AppController extends ChangeNotifier {
     final uid = cloudUid;
     final repository = cloudRepository;
     if (uid == null || repository == null) return;
-    final original = InputSyncSnapshot.fromState(
+    final original = _inputSnapshot(
       _cloudState(migrationVersion: localMigrationVersion),
     );
     void ensureInputsUnchanged() {
       ensureCurrent();
       if (!InputSyncPatch(
         original,
-        InputSyncSnapshot.fromState(
-          _cloudState(migrationVersion: localMigrationVersion),
-        ),
+        _inputSnapshot(_cloudState(migrationVersion: localMigrationVersion)),
       ).isEmpty) {
         throw StateError(
           'New data was saved during recovery. Review it and retry.',
@@ -5376,7 +5708,7 @@ class AppController extends ChangeNotifier {
     await _discardPersonalizedModel();
     ensureInputsUnchanged();
     _syncOwnerUid = uid;
-    _syncBaseline = InputSyncSnapshot.fromState(remote);
+    _syncBaseline = _inputSnapshot(remote);
     _applyCloud(remote);
     cloudSyncError = null;
     cloudSyncConflict = false;
@@ -5425,6 +5757,23 @@ class AppController extends ChangeNotifier {
   );
 
   void _applyCloud(CloudUserState state) {
+    if (_privacyOwnerUid == cloudUid &&
+        _syncOwnerUid == cloudUid &&
+        sameSyncValue(
+          _inputSnapshot(
+            _cloudState(migrationVersion: localMigrationVersion),
+          ).toJson(),
+          _inputSnapshot(state).toJson(),
+        ) &&
+        sameSyncValue(
+          _privacyConsent?.toJson(),
+          state.privacyConsent?.toJson(),
+        ) &&
+        outcomeConsent == state.outcomeConsent &&
+        outcomeConsentUpdatedAt == state.outcomeConsentUpdatedAt &&
+        !state.deletionPending) {
+      return;
+    }
     _notificationPreferenceGeneration++;
     _notificationRefreshGeneration++;
     _notificationScheduleConfirmed = false;
@@ -5512,18 +5861,25 @@ class AppController extends ChangeNotifier {
     _reconcileOutcomeSync();
     if (!outcomeConsent) _outcomes = [];
     outcomeError = null;
-    // Health authorization is device-specific. Cloud state must not turn on
-    // access on a different device; the local platform check remains primary.
-    lastSync = state.lastSync;
-    lastHealthSyncAttempt = state.lastHealthSyncAttempt;
-    lastHealthChangeAt = state.lastHealthChangeAt;
-    healthSyncStatus = state.healthSyncStatus;
-    lastHealthRefreshReason = state.lastHealthRefreshReason;
-    // Observer registration is device-process state and must be re-established
-    // after every launch even when another device wrote `true` to Firestore.
-    healthBackgroundRefreshEnabled = false;
-    signals = [...state.signals]
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    // Health authorization, polling diagnostics and observer registration are
+    // local installation state. A cloud refresh must not overwrite a recent
+    // attempt or turn off an observer already registered in this process.
+    // Loading/resetting the account re-establishes observer state separately.
+    signals = _heartRateSummaryEnabled
+        ? [
+            ...state.signals.where((item) => !isRawHeartRate(item)),
+            ...HeartRateSummary.uniqueRawReadings([
+              if (_rawHeartRateOwner == cloudUid)
+                ...signals.where(isRawHeartRate),
+              ...state.signals.where(
+                (item) =>
+                    isRawHeartRate(item) &&
+                    !_explicitRawHeartRateDeletes.contains(item.id),
+              ),
+            ]),
+          ]
+        : [...state.signals];
+    signals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     checkIns = [...state.checkIns]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
@@ -5534,6 +5890,8 @@ class AppController extends ChangeNotifier {
     _notificationScheduleConfirmed = false;
     _notificationPreferencesPersisted = true;
     isNotificationSyncing = false;
+    _quotaGate?.restore(json['cloudQuotaCooldown']);
+    _restoreEfficientSync(json['efficientSync']);
     final sync = json['inputSync'];
     if (sync is Map && sync['version'] == 1 && sync['uid'] is String) {
       try {
@@ -5547,6 +5905,9 @@ class AppController extends ChangeNotifier {
       }
     }
 
+    if (_heartRateSummaryEnabled && _syncBaseline != null) {
+      _syncBaseline = _withoutRawHeartRate(_syncBaseline!);
+    }
     _privacyConsent = PrivacyConsent.tryParse(json['privacyConsent']);
     _privacyOwnerUid = json['privacyOwnerUid'] as String?;
     outcomeConsentUpdatedAt = DateTime.tryParse(

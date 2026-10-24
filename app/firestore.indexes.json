@@ -4,10 +4,42 @@
       "collectionGroup": "signals",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "type", "order": "ASCENDING" },
-        { "fieldPath": "timestamp", "order": "DESCENDING" }
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "forecastDays",
+      "fieldPath": "points",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "heartRateDays",
+      "fieldPath": "hours",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "heartRateDays",
+      "fieldPath": "timezoneProvenance",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "inputChanges",
+      "fieldPath": "after",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "heartRateDays",
+      "fieldPath": "cardiacContext",
+      "indexes": []
+    }
+  ]
 }

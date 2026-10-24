@@ -5,7 +5,8 @@ import 'sleep_sync_logic.dart';
 /// Pure Version 0.26 policy for deciding when HealthKit should be queried and
 /// whether an import can change a model output.
 abstract final class ContinuousRefreshLogic {
-  static const foregroundRefreshInterval = Duration(minutes: 1);
+  static const foregroundRefreshInterval = Duration(minutes: 15);
+  static const cloudInputRefreshInterval = Duration(hours: 3);
   static const fullHeartHistoryInterval = Duration(days: 1);
 
   static bool shouldRefresh({

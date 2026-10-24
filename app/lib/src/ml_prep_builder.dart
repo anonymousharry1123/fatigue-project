@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'fatigue_engine.dart';
+import 'heart_derivation_logic.dart';
 import 'ml_prep_models.dart';
 import 'models.dart';
 import 'personal_baseline_logic.dart';
@@ -150,7 +151,11 @@ abstract final class MlPrepBuilder {
     if (!_hostTimezoneMatches(window)) return null;
     final selectedSignals = signals
         .where(
-          (row) => window.contains(row.timestamp) && !row.timestamp.isAfter(at),
+          (row) =>
+              row.type != SignalType.heartRate &&
+              !HeartDerivationLogic.isEstimatedRestingHeartRate(row) &&
+              window.contains(row.timestamp) &&
+              !row.timestamp.isAfter(at),
         )
         .toList();
     final researchCheckInIds = checkIns

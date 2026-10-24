@@ -261,11 +261,14 @@ abstract interface class CloudRepository {
   /// closed; unrelated documents and protected account fields are preserved.
   Future<void> applyInputPatch(String uid, InputSyncPatch patch);
 
+  /// Derived views can exclude dense raw heart-rate samples on the server.
+  /// HRV and resting heart rate remain included; full history is the default.
   Future<List<SignalReading>> signalsByRange(
     String uid, {
     required DateTime start,
     required DateTime end,
     SignalType? type,
+    bool includeHeartRate = true,
   });
 
   Future<List<DailyCheckIn>> checkInsByRange(
@@ -380,6 +383,9 @@ const userDataChildCollections = <String>[
   'recommendations',
   'outcomes',
   'riskAlerts',
+  'heartRateDays',
+  'forecastDays',
+  'inputChanges',
 ];
 
 class UserDataDocument {
@@ -767,6 +773,7 @@ class MemoryCloudRepository implements CloudRepository {
     required DateTime start,
     required DateTime end,
     SignalType? type,
+    bool includeHeartRate = true,
   }) async {
     _authorize(uid);
     final matches = (_users[uid]?.signals ?? const <SignalReading>[])
@@ -774,6 +781,7 @@ class MemoryCloudRepository implements CloudRepository {
           (reading) =>
               !reading.timestamp.isBefore(start) &&
               reading.timestamp.isBefore(end) &&
+              (includeHeartRate || reading.type != SignalType.heartRate) &&
               (type == null || reading.type == type),
         )
         .toList();
@@ -1107,6 +1115,7 @@ class MemoryCloudRepository implements CloudRepository {
     _authorize(uid);
     _recommendations.remove(uid);
     _riskAlerts.remove(uid);
+    _forecasts.remove(uid);
   }
 
   @override

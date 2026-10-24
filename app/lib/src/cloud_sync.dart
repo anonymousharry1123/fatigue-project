@@ -26,6 +26,17 @@ bool sameSyncValue(Object? a, Object? b) =>
 Map<String, dynamic> _map(Object? value) =>
     Map<String, dynamic>.from(value as Map);
 
+// Health polling diagnostics describe this installation, not shared inputs.
+// Filter both current state and persisted baselines so upgrading an old journal
+// does not turn obsolete diagnostics into root-field deletion writes.
+Map<String, dynamic> _inputRoot(Map<String, dynamic> value) => _map(
+  syncCanonical({
+    for (final entry in value.entries)
+      if (entry.key != 'lastHealthSync' && entry.key != 'healthSync')
+        entry.key: entry.value,
+  }),
+);
+
 /// Only ordinary profile fields are synchronized here. Consent, deletion and
 /// model metadata retain their separate protected APIs.
 class InputSyncSnapshot {
@@ -64,7 +75,7 @@ class InputSyncSnapshot {
           ..remove('consentFlags')
           ..remove('updatedAt');
     return InputSyncSnapshot(
-      root: _map(syncCanonical(root)),
+      root: _inputRoot(root),
       signals: {
         for (final item in state.signals)
           item.id: _map(syncCanonical(signalToCloud(item))),
@@ -83,7 +94,7 @@ class InputSyncSnapshot {
   };
   factory InputSyncSnapshot.fromJson(Map<String, dynamic> json) =>
       InputSyncSnapshot(
-        root: _map(json['root']),
+        root: _inputRoot(_map(json['root'])),
         signals: _map(
           json['signals'],
         ).map((key, value) => MapEntry(key, _map(value))),
@@ -127,9 +138,6 @@ class InputSyncSnapshot {
 
   CloudUserState toState(CloudUserState authoritative) {
     final prefs = _map(root['prefs'] ?? {});
-    final health = _map(root['healthSync'] ?? {});
-    DateTime? date(Object? value) =>
-        value == null ? null : cloudDateTime(value, field: 'sync time');
     return CloudUserState(
       profile: UserProfile.fromJson(_map(root['profile'])),
       accountEmail:
@@ -146,17 +154,15 @@ class InputSyncSnapshot {
       notificationPrefsVersion:
           (prefs['notificationPreferencesVersion'] as num?)?.toInt() ?? 0,
       healthAuthorized: prefs['healthAuthorized'] == true,
-      lastSync: date(root['lastHealthSync']),
-      healthSyncStatus: HealthSyncStatus.values.byName(
-        health['status'] as String? ?? 'idle',
-      ),
-      lastHealthRefreshReason: health['reason'] == null
-          ? null
-          : HealthRefreshReason.values.byName(health['reason'] as String),
-      lastHealthSyncAttempt: date(health['lastAttemptAt']),
-      lastHealthChangeAt: date(health['lastMeaningfulChangeAt']),
+      // Input snapshots intentionally have no device polling diagnostics.
+      // Preserve the supplied state's metadata when applying a profile patch.
+      lastSync: authoritative.lastSync,
+      healthSyncStatus: authoritative.healthSyncStatus,
+      lastHealthRefreshReason: authoritative.lastHealthRefreshReason,
+      lastHealthSyncAttempt: authoritative.lastHealthSyncAttempt,
+      lastHealthChangeAt: authoritative.lastHealthChangeAt,
       healthBackgroundRefreshEnabled:
-          health['backgroundRefreshEnabled'] == true,
+          authoritative.healthBackgroundRefreshEnabled,
       migrationVersion: (root['localMigrationVersion'] as num?)?.toInt() ?? 0,
       signals: signals.entries
           .map((item) => signalFromCloud(item.key, item.value))
@@ -170,6 +176,9 @@ class InputSyncSnapshot {
       deletionPending: authoritative.deletionPending,
       personalizedEnergyModel: authoritative.personalizedEnergyModel,
       userUpdatedAt: authoritative.userUpdatedAt,
+      inputRevision: authoritative.inputRevision,
+      inputSyncVersion: authoritative.inputSyncVersion,
+      heartRateStorageVersion: authoritative.heartRateStorageVersion,
     );
   }
 }

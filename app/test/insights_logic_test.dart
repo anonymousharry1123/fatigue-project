@@ -15,6 +15,154 @@ void main() {
     DateTime timestamp,
   ) => SignalReading(id: id, type: type, value: value, timestamp: timestamp);
 
+  SignalReading sleepSignal(
+    String groupId,
+    SignalType type,
+    double hours, {
+    int daysAgo = 0,
+    String suffix = '',
+  }) => SignalReading(
+    id: '$groupId-${type.name}$suffix',
+    type: type,
+    value: hours,
+    timestamp: today
+        .subtract(Duration(days: daysAgo))
+        .add(const Duration(hours: 8)),
+    source: groupId.startsWith('healthkit-')
+        ? SignalSource.healthKit
+        : SignalSource.manual,
+    groupId: groupId,
+  );
+
+  group('preferred main sleep stages', () {
+    test('sums only sibling stages and keeps awake outside main duration', () {
+      final result = InsightsLogic.build(
+        now: now,
+        signals: [
+          sleepSignal('healthkit-sleep-main', SignalType.sleep, 8),
+          sleepSignal('healthkit-sleep-main', SignalType.sleepCore, 2),
+          sleepSignal(
+            'healthkit-sleep-main',
+            SignalType.sleepCore,
+            2,
+            suffix: '-2',
+          ),
+          sleepSignal('healthkit-sleep-main', SignalType.sleepDeep, 1.5),
+          sleepSignal('healthkit-sleep-main', SignalType.sleepRem, 2.5),
+          sleepSignal('healthkit-sleep-main', SignalType.sleepAwake, .5),
+          sleepSignal('healthkit-sleep-other', SignalType.sleep, 2),
+          sleepSignal('healthkit-sleep-other', SignalType.sleepDeep, 2),
+          sleepSignal('healthkit-nap-extra', SignalType.nap, 1),
+          sleepSignal('healthkit-nap-extra', SignalType.sleepRem, 1),
+        ],
+        checkIns: const [],
+      );
+      final day = result.currentDays.last;
+      expect(day.sleepHours, 8);
+      expect(day.sleepCoreHours, 4);
+      expect(day.sleepDeepHours, 1.5);
+      expect(day.sleepRemHours, 2.5);
+      expect(day.sleepAwakeHours, .5);
+      expect(day.recordedStageHours, 8.5);
+      expect(result.currentSummary.stagedNightCount, 1);
+    });
+
+    test(
+      'respects manual preference and the existing imported staging gate',
+      () {
+        final signals = [
+          sleepSignal('sleep-manual', SignalType.sleep, 8),
+          sleepSignal('healthkit-sleep-main', SignalType.sleep, 7),
+          sleepSignal('healthkit-sleep-main', SignalType.sleepDeep, 1),
+        ];
+        final manualPreferred = InsightsLogic.build(
+          now: now,
+          signals: signals,
+          checkIns: const [],
+        );
+        expect(manualPreferred.currentDays.last.sleepHours, 8);
+        expect(manualPreferred.currentDays.last.hasSleepStages, isFalse);
+        expect(manualPreferred.currentSummary.stagedNightCount, 0);
+        expect(manualPreferred.currentSummary.averageSleepDeepHours, isNull);
+
+        final healthPreferred = InsightsLogic.build(
+          now: now,
+          signals: [
+            ...signals,
+            sleepSignal('healthkit-sleep-main', SignalType.sleepCore, 4),
+            sleepSignal('healthkit-sleep-main', SignalType.sleepRem, 2),
+          ],
+          checkIns: const [],
+        );
+        expect(healthPreferred.currentDays.last.sleepHours, 7);
+        expect(healthPreferred.currentDays.last.sleepDeepHours, 1);
+        expect(healthPreferred.currentDays.last.hasSleepStages, isTrue);
+      },
+    );
+
+    test('averages only recorded stages in each seven-day window', () {
+      final result = InsightsLogic.build(
+        now: now,
+        signals: [
+          sleepSignal('healthkit-sleep-one', SignalType.sleep, 8),
+          sleepSignal('healthkit-sleep-one', SignalType.sleepCore, 5),
+          sleepSignal('healthkit-sleep-one', SignalType.sleepDeep, 1),
+          sleepSignal('healthkit-sleep-one', SignalType.sleepRem, 2),
+          sleepSignal('healthkit-sleep-two', SignalType.sleep, 6, daysAgo: 1),
+          sleepSignal(
+            'healthkit-sleep-two',
+            SignalType.sleepCore,
+            4,
+            daysAgo: 1,
+          ),
+          sleepSignal(
+            'healthkit-sleep-two',
+            SignalType.sleepDeep,
+            2,
+            daysAgo: 1,
+          ),
+          sleepSignal('sleep-manual', SignalType.sleep, 7, daysAgo: 2),
+          sleepSignal('healthkit-sleep-prior', SignalType.sleep, 8, daysAgo: 7),
+          sleepSignal(
+            'healthkit-sleep-prior',
+            SignalType.sleepDeep,
+            3,
+            daysAgo: 7,
+          ),
+        ],
+        checkIns: const [],
+      );
+      expect(result.currentSummary.stagedNightCount, 2);
+      expect(result.currentSummary.averageSleepCoreHours, 4.5);
+      expect(result.currentSummary.averageSleepDeepHours, 1.5);
+      expect(result.currentSummary.averageSleepRemHours, 2);
+      expect(result.currentSummary.averageSleepAwakeHours, isNull);
+      expect(result.currentSummary.averageSleepHours, 7);
+      expect(result.previousSummary.stagedNightCount, 1);
+      expect(result.previousSummary.averageSleepDeepHours, 3);
+      expect(
+        result.currentDays[result.currentDays.length - 3].hasSleepStages,
+        isFalse,
+      );
+    });
+
+    test('displaying stages does not alter duration-based scores', () {
+      final duration = sleepSignal('healthkit-sleep-main', SignalType.sleep, 8);
+      InsightsSnapshot build(List<SignalReading> signals) =>
+          InsightsLogic.build(now: now, signals: signals, checkIns: const []);
+      final before = build([duration]).currentDays.last;
+      final after = build([
+        duration,
+        sleepSignal('healthkit-sleep-main', SignalType.sleepCore, 4),
+        sleepSignal('healthkit-sleep-main', SignalType.sleepDeep, 2),
+        sleepSignal('healthkit-sleep-main', SignalType.sleepRem, 2),
+      ]).currentDays.last;
+      expect(after.estimatedEnergy, before.estimatedEnergy);
+      expect(after.estimatedCognitive, before.estimatedCognitive);
+      expect(after.recordCount, before.recordCount);
+    });
+  });
+
   group('Version 0.21 InsightsLogic', () {
     test(
       'historical series discloses current deterministic recomputations',

@@ -88,7 +88,7 @@ extension InputConflictResolution on AppController {
       revision,
       baseline: baseline,
       phone: phone,
-      cloud: InputSyncSnapshot.fromState(remote!),
+      cloud: _inputSnapshot(remote!),
     );
   }
 
@@ -128,9 +128,8 @@ extension InputConflictResolution on AppController {
     }
   }
 
-  InputSyncSnapshot _conflictInputSnapshot() => InputSyncSnapshot.fromState(
-    _cloudState(migrationVersion: localMigrationVersion),
-  );
+  InputSyncSnapshot _conflictInputSnapshot() =>
+      _inputSnapshot(_cloudState(migrationVersion: localMigrationVersion));
 
   void _ensureConflictReviewCurrent(InputConflictReview review) {
     _requirePrivacy();
@@ -191,7 +190,7 @@ extension InputConflictResolution on AppController {
       final remote = await cloudRepository!.readUser(uid);
       ensureReviewCurrent();
       _requireReviewableRemote(remote);
-      final cloud = InputSyncSnapshot.fromState(remote!);
+      final cloud = _inputSnapshot(remote!);
       if (!_sameConflictSnapshot(review._cloud, cloud)) {
         throw StateError(
           'Cloud data changed. Refresh the review before saving.',

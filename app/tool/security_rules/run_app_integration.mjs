@@ -5,6 +5,10 @@ import { dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
+const suite = process.argv[2] ?? 'phase1';
+if (!['phase1', 'sync'].includes(suite) || process.argv.length > 3) {
+  throw new Error('Select only the phase1 or sync integration suite.');
+}
 const cli = fileURLToPath(new URL('node_modules/firebase-tools/lib/bin/firebase.js', import.meta.url));
 const rules = await readFile(new URL('../../firestore.rules', import.meta.url));
 console.log(`Current firestore.rules SHA-256: ${createHash('sha256').update(rules).digest('hex')}`);
@@ -24,6 +28,7 @@ const environment = {
   XDG_CONFIG_HOME: fileURLToPath(new URL('.runtime/app-config', import.meta.url)),
   FIREBASE_EMULATORS_PATH: fileURLToPath(new URL('.runtime/emulators', import.meta.url)),
   FLUTTER_BIN: process.env.FLUTTER_BIN ?? 'flutter',
+  TONYO_APP_INTEGRATION_SUITE: suite,
 };
 for (const name of ['JAVA_HOME', 'TMPDIR', 'TEMP', 'TMP', 'SYSTEMROOT', 'HOME', 'DEVELOPER_DIR']) {
   if (process.env[name]) environment[name] = process.env[name];

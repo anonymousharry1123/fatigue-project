@@ -96,6 +96,37 @@ Future<void> _reveal(WidgetTester tester, String key) async {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets('quota failure shows service limit instead of connection advice', (
+    tester,
+  ) async {
+    const message =
+        'Cloud service quota reached. Your changes are saved on this device. Try syncing again later.';
+    final controller = _SyncController()
+      ..cloudSyncFailureKind = CloudSyncFailureKind.quota
+      ..cloudSyncError = message;
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _reveal(tester, 'cloud-sync-retry');
+    expect(find.text(message), findsWidgets);
+    expect(
+      find.text(
+        'Your latest changes are saved on this device. Retry when you’re connected to sync them to your account.',
+      ),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('cloud-sync-retry')));
+    await tester.pump();
+    controller.request.completeError(StateError('Quota exceeded'));
+    await tester.pumpAndSettle();
+    expect(find.text(message), findsWidgets);
+    expect(
+      find.text('Could not finish syncing. Please try again.'),
+      findsNothing,
+    );
+    expect(controller.pending, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Outcome-only sync failure exposes retry without input replacement',
     (tester) async {

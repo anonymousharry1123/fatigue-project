@@ -22,9 +22,16 @@ class _Repository extends MemoryCloudRepository {
     required DateTime start,
     required DateTime end,
     SignalType? type,
+    bool includeHeartRate = true,
   }) {
     signalQueries++;
-    return super.signalsByRange(uid, start: start, end: end, type: type);
+    return super.signalsByRange(
+      uid,
+      start: start,
+      end: end,
+      type: type,
+      includeHeartRate: includeHeartRate,
+    );
   }
 }
 

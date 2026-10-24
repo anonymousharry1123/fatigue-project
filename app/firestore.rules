@@ -55,7 +55,171 @@ service cloud.firestore {
       return ['profile', 'accountEmail', 'prefs', 'consentFlags',
         'onboardingComplete', 'lastHealthSync', 'healthSync',
         'localMigrationVersion', 'schemaVersion', 'updatedAt',
-        'personalizedEnergyModel', 'privacyConsent', 'outcomeConsentUpdatedAt'];
+        'personalizedEnergyModel', 'privacyConsent', 'outcomeConsentUpdatedAt',
+        'inputSyncVersion', 'inputRevision', 'heartRateStorageVersion'];
+    }
+
+    function validSyncMetadata(data) {
+      let version = data.get('inputSyncVersion', 0);
+      let revision = data.get('inputRevision', 0);
+      return version in [0, 1] && revision is int && revision >= 0
+        && (version == 1 || revision == 0)
+        && data.get('heartRateStorageVersion', 0) in [0, 1];
+    }
+
+    function monotonicSyncMetadata() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return validSyncMetadata(after)
+        && after.get('inputSyncVersion', 0) >= before.get('inputSyncVersion', 0)
+        && after.get('heartRateStorageVersion', 0) >= before.get('heartRateStorageVersion', 0)
+        && after.get('inputRevision', 0) >= before.get('inputRevision', 0)
+        && after.get('inputRevision', 0) <= before.get('inputRevision', 0) + 1;
+    }
+
+    function revisionAdvanced(uid) {
+      let before = get(/databases/$(database)/documents/users/$(uid)).data;
+      let after = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      return after.get('inputSyncVersion', 0) == 1
+        && after.inputRevision == before.get('inputRevision', 0) + 1;
+    }
+
+    function validInputChange(uid, id, data) {
+      return data.keys().hasAll(['collection', 'id', 'revision', 'after'])
+        && data.keys().hasOnly(['collection', 'id', 'revision', 'after'])
+        && data.collection in ['signals', 'checkIns']
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 1490
+        && id == data.collection + '__' + data.id
+        && data.revision is int && data.revision > 0
+        && data.revision == getAfter(/databases/$(database)/documents/users/$(uid)).data.inputRevision
+        && (data.after == null || data.after is map)
+        && (data.collection != 'checkIns' || data.after == null
+          || data.after.get('questionnaireVersion', null) == null
+          || questionnaireSnapshot(data.after))
+        && revisionAdvanced(uid);
+    }
+
+    function completeInputPayload(collection, after) {
+      let known = collection == 'signals'
+        ? ['type', 'value', 'unit', 'timestamp', 'source', 'quality', 'note',
+          'groupId', 'syncedAt', 'recordedAt', 'schemaVersion']
+        : ['energy', 'fatigue', 'sleepiness', 'focus', 'mood', 'stress', 'period',
+          'note', 'timestamp', 'recordedAt', 'localDate', 'timezone',
+          'utcOffsetMinutes', 'questionnaireVersion', 'questionnaireLanguage',
+          'questionnaireSnapshot', 'source', 'completionStatus',
+          'answeredItemCount', 'schemaVersion'];
+      return after.keys().toSet().hasAll(
+        request.resource.data.keys().toSet().intersection(known.toSet()));
+    }
+
+    function matchingInputChange(uid, collection, id) {
+      let after = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      let change = getAfter(/databases/$(database)/documents/users/$(uid)/inputChanges/$(collection + '__' + id)).data;
+      return revisionAdvanced(uid)
+          && change.collection == collection && change.id == id
+          && change.revision == after.inputRevision
+          && (request.method == 'delete' ? change.after == null
+            : change.after is map
+              && completeInputPayload(collection, change.after)
+              && request.resource.data.diff(change.after).changedKeys().size() == 0
+              && request.resource.data.diff(change.after).removedKeys().size() == 0);
+    }
+
+    function trackedInputWrite(uid, collection, id) {
+      return getAfter(/databases/$(database)/documents/users/$(uid)).data.get('inputSyncVersion', 0) != 1
+        || matchingInputChange(uid, collection, id);
+    }
+
+    function inputDeleteAllowed(uid, collection, id) {
+      let parent = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      return deletionPending(parent) || trackedInputWrite(uid, collection, id);
+    }
+
+    function validForecastDay(id, data) {
+      return data.keys().hasAll(['formatVersion', 'localDate', 'day', 'dayEnd', 'utcOffsetMinutes', 'points'])
+        && data.keys().hasOnly(['formatVersion', 'localDate', 'day', 'dayEnd', 'utcOffsetMinutes', 'points'])
+        && data.formatVersion == 1 && data.localDate == id
+        && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.day is timestamp && data.dayEnd is timestamp
+        && data.dayEnd > data.day
+        && data.dayEnd - data.day >= duration.value(22, 'h')
+        && data.dayEnd - data.day <= duration.value(26, 'h')
+        && data.utcOffsetMinutes is int
+        && data.utcOffsetMinutes >= -840 && data.utcOffsetMinutes <= 840
+        && data.points is list && data.points.size() <= 48;
+    }
+
+    function validHeartContextMetric(data, hrv) {
+      return data is map
+        && data.keys().hasAll(['mean', 'sampleCount', 'source', 'unit'])
+        && data.keys().hasOnly(['mean', 'sampleCount', 'source', 'unit'])
+        && data.mean is number
+        && (hrv ? data.mean > 0 && data.mean <= 1000 : data.mean >= 20 && data.mean <= 250)
+        && data.sampleCount is int && data.sampleCount > 0 && data.sampleCount <= 1000000
+        && (hrv ? data.source == 'healthKit' : data.source in ['healthKit', 'estimatedFromHeartRate'])
+        && data.unit == (hrv ? 'ms' : 'bpm');
+    }
+
+    function validSampledHeartVariation(data, day, sampleCount) {
+      return data is map
+        && data.keys().hasAll(['rmsSuccessiveDifferenceBpm', 'sampleCount', 'pairCount',
+          'firstAt', 'latestAt', 'source', 'unit', 'method', 'timezoneBasis'])
+        && data.keys().hasOnly(['rmsSuccessiveDifferenceBpm', 'sampleCount', 'pairCount',
+          'firstAt', 'latestAt', 'source', 'unit', 'method', 'timezoneBasis'])
+        && data.rmsSuccessiveDifferenceBpm is number
+        && data.rmsSuccessiveDifferenceBpm >= 0 && data.rmsSuccessiveDifferenceBpm <= 280
+        && data.sampleCount is int && data.sampleCount >= 6 && data.sampleCount <= sampleCount
+        && data.pairCount is int && data.pairCount >= 5 && data.pairCount < data.sampleCount
+        && modelUtcString(data.firstAt) && modelUtcString(data.latestAt)
+        && data.firstAt.matches('^' + day + 'T.*Z$') && data.latestAt.matches('^' + day + 'T.*Z$')
+        && data.source == 'healthKit' && data.unit == 'bpm'
+        && data.method == 'sampled-bpm-successive-difference-v1'
+        && data.timezoneBasis == 'device-local-at-import';
+    }
+
+    function validHeartCardiacContext(data, day, sampleCount) {
+      return data is map && data.size() > 0
+        && data.keys().hasOnly(['hrv', 'restingHeartRate', 'sampledHeartRateVariation'])
+        && (!('hrv' in data) || validHeartContextMetric(data.hrv, true))
+        && (!('restingHeartRate' in data) || validHeartContextMetric(data.restingHeartRate, false))
+        && (!('sampledHeartRateVariation' in data)
+          || validSampledHeartVariation(data.sampledHeartRateVariation, day, sampleCount));
+    }
+
+    function validHeartRateDay(id, data) {
+      let fields = ['schemaVersion', 'aggregation', 'day', 'source', 'sampleCount',
+        'sum', 'min', 'max', 'firstAt', 'latestAt', 'latestValue', 'qualitySum',
+        'qualityMin', 'zeroQualityCount', 'sampleIdDigest', 'contentDigest',
+        'hours', 'timezoneProvenance', 'writerId'];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(['schemaVersion', 'aggregation', 'day', 'source', 'sampleCount',
+          'sum', 'min', 'max', 'firstAt', 'latestAt', 'latestValue', 'qualitySum',
+          'qualityMin', 'zeroQualityCount', 'sampleIdDigest', 'contentDigest',
+          'hours', 'timezoneProvenance', 'writerId', 'rawContentDigest', 'cardiacContext'])
+        && ((data.schemaVersion == 1 && !data.keys().hasAny(['rawContentDigest', 'cardiacContext']))
+          || (data.schemaVersion == 2 && data.keys().hasAll(['rawContentDigest', 'cardiacContext'])
+            && data.rawContentDigest.matches('^[a-f0-9]{64}$')
+            && validHeartCardiacContext(data.cardiacContext, id, data.sampleCount)))
+        && data.aggregation == 'utc-day-v1'
+        && data.source == 'healthKit' && data.day == id
+        && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.writerId.matches('(?s)^.{1,200}$')
+        && data.sampleCount is int && data.sampleCount > 0
+        && data.min is number && data.min >= 20
+        && data.max is number && data.max >= data.min && data.max <= 300
+        // Repeated fractional readings can accumulate tiny floating-point
+        // error even when every sample equals the minimum/maximum exactly.
+        && data.sum is number && data.sum >= (data.min - 0.000001) * data.sampleCount
+        && data.sum <= (data.max + 0.000001) * data.sampleCount
+        && data.latestValue is number && data.latestValue >= data.min && data.latestValue <= data.max
+        && modelUtcString(data.firstAt) && modelUtcString(data.latestAt)
+        && data.qualitySum is number && data.qualitySum >= 0 && data.qualitySum <= data.sampleCount
+        && modelFraction(data.qualityMin)
+        && data.zeroQualityCount is int && data.zeroQualityCount >= 0 && data.zeroQualityCount <= data.sampleCount
+        && data.sampleIdDigest.matches('^[a-f0-9]{64}$')
+        && data.contentDigest.matches('^[a-f0-9]{64}$')
+        && data.hours is list && data.hours.size() > 0 && data.hours.size() <= 24
+        && data.timezoneProvenance is map;
     }
 
     function validConsentFlags(data) {
@@ -225,7 +389,7 @@ service cloud.firestore {
         'completionStatus', 'answeredItemCount']);
     }
 
-    function validResearchCheckIn(data) {
+    function validResearchCheckIn(data, validateDefinition) {
       let count = researchAnswerCount(data);
       return data.keys().hasOnly(['energy', 'fatigue', 'sleepiness', 'focus',
           'mood', 'stress', 'period', 'note', 'timestamp', 'recordedAt',
@@ -252,15 +416,19 @@ service cloud.firestore {
         && data.source == 'selfReport'
         && data.note is string && data.note.size() <= 10000
         && data.schemaVersion is int && data.schemaVersion >= 16
-        && questionnaireSnapshot(data);
+        // Accepted definitions are immutable on update (checked below). Avoid
+        // revalidating all six bounded items when only an answer/note changes.
+        && (!validateDefinition || (request.method == 'update'
+            && data.questionnaireSnapshot == resource.data.questionnaireSnapshot)
+          || questionnaireSnapshot(data));
     }
 
-    function validCheckInWrite(data) {
+    function validCheckInWrite(data, validateDefinition) {
       // Old clients/records retain their prior policy. Adding any new-format
       // field opts into the complete bounded contract; missing answers remain
       // absent/null. No new training consent or collection is introduced.
       return data.get('questionnaireVersion', null) != null
-        ? validResearchCheckIn(data)
+        ? validResearchCheckIn(data, validateDefinition)
         : !hasResearchFields(data);
     }
 
@@ -283,6 +451,7 @@ service cloud.firestore {
         && ((request.resource.data.keys().hasOnly(['privacyDeletion'])
             && validDeletionRequest())
           || (request.resource.data.keys().hasOnly(clientProfileFields())
+            && validSyncMetadata(request.resource.data)
             && freshPrivacyConsent(request.resource.data)
             && privacyAllowed(request.resource.data)
             && request.resource.data.get('outcomeConsentUpdatedAt', null) == request.time
@@ -296,6 +465,7 @@ service cloud.firestore {
           || (!deletionPending(resource.data)
             && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(clientProfileFields())
+            && monotonicSyncMetadata()
             && safePrivacyUpdate()
             && safeOutcomeConsentTimestamp()
             && (safetyRevocationOnly()
@@ -314,19 +484,51 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && outcomeConsentGranted(uid);
       }
 
+      match /checkIns/{checkInId} {
+        // Keep the bounded questionnaire validation on its own branch. It is
+        // deliberately detailed; unrelated collection predicates would waste
+        // the rules expression budget on every six-item research response.
+        allow create, update: if ownerDataWritable(uid)
+          && trackedInputWrite(uid, 'checkIns', checkInId)
+          // In v1, the matching atomic journal validates the immutable six-item
+          // definition. Source validation still checks every answer and field.
+          && validCheckInWrite(request.resource.data,
+            getAfter(/databases/$(database)/documents/users/$(uid)).data.get('inputSyncVersion', 0) != 1)
+          && (request.method == 'create'
+            || retainsCheckInDefinition(resource.data, request.resource.data));
+      }
+
       match /{collection}/{document} {
         // Keep this list aligned with userDataChildCollections. No arbitrary
         // client collections, nested records, model weights or training rows.
-        allow get, list, delete: if isOwner(uid)
+        allow get, list: if isOwner(uid)
           && collection in ['signals', 'checkIns', 'scoreSnapshots',
-            'forecastPoints', 'recommendations', 'riskAlerts'];
-        allow create, update: if collection in ['signals', 'checkIns',
-            'scoreSnapshots', 'forecastPoints', 'recommendations', 'riskAlerts']
+            'forecastPoints', 'forecastDays', 'heartRateDays', 'inputChanges',
+            'recommendations', 'riskAlerts'];
+        allow delete: if isOwner(uid)
+          && collection in ['signals', 'checkIns', 'scoreSnapshots',
+            'forecastPoints', 'forecastDays', 'heartRateDays', 'inputChanges',
+            'recommendations', 'riskAlerts']
+          && (!(collection in ['signals', 'checkIns'])
+            || inputDeleteAllowed(uid, collection, document))
+          && (collection != 'inputChanges'
+            || deletionPending(getAfter(/databases/$(database)/documents/users/$(uid)).data)
+            || getAfter(/databases/$(database)/documents/users/$(uid)).data.get('inputSyncVersion', 0) != 1);
+        allow create, update: if collection in ['signals',
+            'scoreSnapshots', 'forecastPoints', 'forecastDays', 'heartRateDays',
+            'inputChanges', 'recommendations', 'riskAlerts']
           && ownerDataWritable(uid)
-          && (collection != 'checkIns'
-            || (validCheckInWrite(request.resource.data)
-              && (request.method == 'create'
-                || retainsCheckInDefinition(resource.data, request.resource.data))));
+          && (collection != 'signals'
+            || getAfter(/databases/$(database)/documents/users/$(uid)).data.get('heartRateStorageVersion', 0) != 1
+            || request.resource.data.get('type', null) != 'heartRate'
+            || request.resource.data.get('source', null) != 'healthKit')
+          && (!(collection in ['signals', 'checkIns'])
+            || trackedInputWrite(uid, collection, document))
+          && (collection != 'forecastDays' || validForecastDay(document, request.resource.data))
+          && (collection != 'heartRateDays'
+            || (validHeartRateDay(document, request.resource.data)
+              && (request.method == 'create' || request.resource.data.writerId == resource.data.writerId)))
+          && (collection != 'inputChanges' || validInputChange(uid, document, request.resource.data));
       }
     }
 

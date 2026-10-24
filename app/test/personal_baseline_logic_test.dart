@@ -1,8 +1,76 @@
+import 'package:app/src/fatigue_engine.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/personal_baseline_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('estimated resting HR never changes measured baselines or scoring', () {
+    final today = DateTime(2026, 10, 24, 12);
+    final measured = [
+      for (var daysAgo = 0; daysAgo <= 8; daysAgo++)
+        SignalReading(
+          id: 'healthkit-resting-$daysAgo',
+          type: SignalType.restingHeartRate,
+          value: daysAgo == 0 ? 75 : 60,
+          timestamp: today.subtract(Duration(days: daysAgo, hours: 4)),
+          source: SignalSource.healthKit,
+        ),
+    ];
+    final estimates = [
+      for (var daysAgo = 0; daysAgo <= 12; daysAgo++)
+        SignalReading(
+          id: 'derived-hr-resting-$daysAgo',
+          type: SignalType.restingHeartRate,
+          value: daysAgo == 0 ? 200 : 20,
+          timestamp: today.subtract(Duration(days: daysAgo, hours: 5)),
+          source: SignalSource.model,
+          quality: .5,
+        ),
+    ];
+    final baseline = PersonalBaselineLogic.build(
+      signals: measured,
+      asOf: today,
+    );
+    final withEstimates = PersonalBaselineLogic.build(
+      signals: [...measured, ...estimates],
+      asOf: today,
+    );
+    final metric = withEstimates.metric(PersonalBaselineType.restingHeartRate)!;
+    expect(metric.value, 60);
+    expect(metric.sampleCount, 8);
+    expect(
+      PersonalBaselineLogic.currentValue(
+        PersonalBaselineType.restingHeartRate,
+        signals: [...measured, ...estimates],
+        day: today,
+      ),
+      75,
+    );
+    expect(
+      PersonalBaselineLogic.currentValue(
+        PersonalBaselineType.restingHeartRate,
+        signals: estimates,
+        day: today,
+      ),
+      isNull,
+    );
+    final initialScore = FatigueEngine.score(
+      signals: measured,
+      checkIns: [],
+      now: today,
+      personalBaselines: baseline,
+    );
+    final unchangedScore = FatigueEngine.score(
+      signals: [...measured, ...estimates],
+      checkIns: [],
+      now: today,
+      personalBaselines: withEstimates,
+    );
+    expect(unchangedScore.energy, initialScore.energy);
+    expect(unchangedScore.cognitive, initialScore.cognitive);
+    expect(unchangedScore.inputCount, initialScore.inputCount);
+  });
+
   test('Version 0.27 builds robust rolling baselines from prior days only', () {
     final today = DateTime(2026, 8, 20);
     final signals = <SignalReading>[];

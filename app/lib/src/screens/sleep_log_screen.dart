@@ -7,6 +7,7 @@ import '../models.dart';
 import '../sleep_sync_logic.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/data_source_badge.dart';
 
 class SleepLogScreen extends StatefulWidget {
   const SleepLogScreen({
@@ -30,6 +31,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   double _quality = 3;
   SleepKind _kind = SleepKind.mainSleep;
   String? _editingId;
+  SleepLogEntry? _reviewedHealthLog;
   String? _pendingCreateId;
   bool _saving = false;
 
@@ -89,6 +91,25 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
               style: TextStyle(color: TonyoPalette.of(context).muted),
             ),
             const SizedBox(height: 18),
+            if (_reviewedHealthLog case final log?) ...[
+              TonyoCard(
+                key: const Key('review-health-sleep'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TranslatedText(
+                      '${context.tr('Apple Health')} · ${_durationLabel(log.duration)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    const TranslatedText(
+                      'Device sleep excludes awake time. Saving these times creates a manual correction; imported sleep stages stay available.',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (controller.healthAvailable) ...[
               const _SleepHealthConnection(),
               const SizedBox(height: 12),
@@ -507,7 +528,30 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
+      if (log.isFromHealth) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: TranslatedText(log.isNap ? 'Delete nap' : 'Delete sleep'),
+            content: const TranslatedText(
+              'This removes the sleep record and its stages from Tonyo. The original stays in Apple Health and may be imported again on a later sync.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const TranslatedText('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const TranslatedText('Delete'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+      }
       await AppScope.of(context).deleteSleepLog(log.id);
+      if (mounted && _editingId == log.id) _clearForm();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -527,6 +571,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   void _loadLog(SleepLogEntry log) {
     _pendingCreateId = null;
     _editingId = log.id;
+    _reviewedHealthLog = log.isFromHealth ? log : null;
     _bedtime = log.bedtime.toLocal();
     _wakeTime = log.wakeTime.toLocal();
     _quality = log.quality;
@@ -544,6 +589,7 @@ class _SleepLogScreenState extends State<SleepLogScreen> {
   void _clearForm() {
     setState(() {
       _editingId = null;
+      _reviewedHealthLog = null;
       _pendingCreateId = null;
       _saving = false;
       _resetTimes();
@@ -742,17 +788,23 @@ class _SleepHistoryCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               TranslatedText(
-                '${formatDate(log.wakeTime)} · ${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · quality ${log.quality.round()}/5',
+                '${formatDate(log.wakeTime)} · ${formatHour(log.bedtime)}–${formatHour(log.wakeTime)} · ${log.isFromHealth ? context.tr('Apple Health') : context.tr('quality {quality}/5', args: {'quality': log.quality.round()})}',
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
                   fontSize: 11,
                 ),
               ),
+              const SizedBox(height: 5),
+              DataSourceBadge(source: log.source, recordId: log.id),
             ],
           ),
         ),
         IconButton(
-          tooltip: context.tr(log.isNap ? 'Edit nap' : 'Edit sleep'),
+          tooltip: context.tr(
+            log.isFromHealth
+                ? (log.isNap ? 'Review nap' : 'Review sleep')
+                : (log.isNap ? 'Edit nap' : 'Edit sleep'),
+          ),
           onPressed: onEdit,
           icon: const Icon(Icons.edit_outlined),
         ),

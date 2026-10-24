@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'privacy_test_support.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/activity_sync_logic.dart';
@@ -1816,8 +1818,12 @@ void main() {
       expect(repository.scoreUpsertCallCount, scoreWrites);
       expect(repository.forecastReplaceCallCount, forecastWrites);
       final cloud = await repository.readUser('refresh-user');
-      expect(cloud?.healthSyncStatus, HealthSyncStatus.upToDate);
-      expect(cloud?.lastHealthRefreshReason, HealthRefreshReason.background);
+      expect(cloud?.healthSyncStatus, HealthSyncStatus.idle);
+      expect(cloud?.lastHealthRefreshReason, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      final local = jsonDecode(prefs.getString('tonyo_state_v1')!) as Map;
+      expect(local['healthSyncStatus'], 'upToDate');
+      expect(local['lastHealthRefreshReason'], 'background');
     },
   );
 

@@ -42,7 +42,7 @@ class AddDataScreen extends StatelessWidget {
             badge: '${controller.dailyHistory.length} days',
             onTap: () => _push(context, const DailyHistoryScreen()),
           ),
-          const SectionHeader('Manual logs'),
+          const SectionHeader('Activity and sleep logs'),
           _LaunchCard(
             icon: Icons.tune_rounded,
             color: TonyoPalette.of(context).secondary,

@@ -1,3 +1,4 @@
+import 'heart_derivation_logic.dart';
 import 'local_day.dart';
 import 'models.dart';
 import 'sleep_sync_logic.dart';
@@ -17,6 +18,7 @@ abstract final class PersonalBaselineLogic {
     final historical = signals
         .where(
           (item) =>
+              !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
               !item.timestamp.isBefore(start) &&
               item.timestamp.isBefore(cutoff),
         )
@@ -57,7 +59,9 @@ abstract final class PersonalBaselineLogic {
     final readings = signals
         .where(
           (item) =>
-              !item.timestamp.isBefore(start) && item.timestamp.isBefore(end),
+              !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
+              !item.timestamp.isBefore(start) &&
+              item.timestamp.isBefore(end),
         )
         .toList();
     final typeReadings = switch (type) {

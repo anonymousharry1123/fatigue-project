@@ -6,6 +6,57 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('estimated resting HR is excluded from training and live features', () {
+    final observed = _checkIn(20, 20);
+    final measured = [
+      for (var day = 10; day <= 20; day++) ...[
+        {..._signal(day, 7, 'hrv', 50), 'source': 'healthKit'},
+        {..._signal(day, 7, 'restingHeartRate', 60), 'source': 'healthKit'},
+      ],
+    ];
+    final estimated = [
+      for (var day = 10; day <= 20; day++)
+        {
+          ..._signal(day, 6, 'restingHeartRate', 30),
+          'id': 'derived-hr-resting-2026-07-$day',
+          'source': 'model',
+          'quality': .5,
+          'note': 'Estimated resting HR from overnight heart rate',
+        },
+    ];
+    PrepReport report(List<Map<String, dynamic>> signals) =>
+        MlPrepBuilder.build(
+          _snapshot(
+            signals: signals,
+            checkIns: [observed],
+            outcomes: [_energy(observed)],
+          ),
+        );
+    final original = report(measured).examples.single;
+    final augmented = report([...measured, ...estimated]).examples.single;
+    expect(augmented.features, original.features);
+    expect(augmented.featureSources, original.featureSources);
+    expect(augmented.featureAgeHours, original.featureAgeHours);
+    expect(augmented.reference, original.reference);
+
+    final at = DateTime.parse(observed['timestamp'] as String);
+    TrainingExample? live(List<Map<String, dynamic>> rows) =>
+        MlPrepBuilder.energyInput(
+          signals: rows.map(SignalReading.fromJson).toList(),
+          checkIns: [],
+          at: at,
+          timezone: at.toLocal().timeZoneOffset == Duration.zero
+              ? 'UTC'
+              : 'America/Los_Angeles',
+        );
+    final liveOriginal = live(measured);
+    final liveAugmented = live([...measured, ...estimated]);
+    expect(liveOriginal, isNotNull);
+    expect(liveAugmented!.features, liveOriginal!.features);
+    expect(liveAugmented.featureSources, liveOriginal.featureSources);
+    expect(liveAugmented.reference, liveOriginal.reference);
+  });
+
   test(
     'consent blocks examples; check-ins never manufacture outcome labels',
     () {
@@ -466,6 +517,114 @@ void main() {
       expect(row.featureSources['studyScreenLoad'], isEmpty);
     }
   });
+
+  test(
+    'dense ordinary heart rate does not consume the live feature budget',
+    () {
+      final at = DateTime(2026, 7, 20, 20);
+      final timezone = at.timeZoneOffset == Duration.zero
+          ? 'UTC'
+          : at.timeZoneOffset == const Duration(hours: -7)
+          ? 'America/Los_Angeles'
+          : null;
+      if (timezone == null) return;
+      SignalReading reading(
+        SignalType type,
+        double value,
+        DateTime time, {
+        DateTime? available,
+      }) => SignalReading(
+        id: 'manual-${time.microsecondsSinceEpoch}-${type.name}',
+        type: type,
+        value: value,
+        timestamp: time,
+        recordedAt: available ?? time,
+      );
+      final useful = [
+        for (var day = 1; day <= 12; day++) ...[
+          reading(SignalType.hrv, 50, at.subtract(Duration(days: day))),
+          reading(
+            SignalType.restingHeartRate,
+            60,
+            at.subtract(Duration(days: day)),
+          ),
+        ],
+        reading(SignalType.hrv, 60, at.subtract(const Duration(hours: 3))),
+        reading(
+          SignalType.restingHeartRate,
+          55,
+          at.subtract(const Duration(hours: 3)),
+        ),
+        reading(SignalType.study, 2, at.subtract(const Duration(hours: 4))),
+        reading(
+          SignalType.screenTime,
+          2,
+          at.subtract(const Duration(hours: 4)),
+        ),
+        // Late edits and future observations must remain excluded.
+        reading(
+          SignalType.study,
+          9,
+          at.subtract(const Duration(hours: 2)),
+          available: at.add(const Duration(hours: 1)),
+        ),
+        reading(SignalType.hrv, 500, at.add(const Duration(hours: 1))),
+      ];
+      final checks = [
+        DailyCheckIn(
+          id: 'checkin-${at.microsecondsSinceEpoch}',
+          timestamp: at.subtract(const Duration(hours: 1)),
+          recordedAt: at.subtract(const Duration(hours: 1)),
+          energy: 6,
+          mood: 7,
+          stress: 4,
+        ),
+      ];
+      final reference = MlPrepBuilder.energyInput(
+        signals: useful,
+        checkIns: checks,
+        at: at,
+        timezone: timezone,
+      );
+      final dense = MlPrepBuilder.energyInput(
+        signals: [
+          ...useful,
+          for (var i = 0; i < 4223; i++)
+            SignalReading(
+              id: 'healthkit-heart-$i',
+              type: SignalType.heartRate,
+              value: 70,
+              timestamp: at.subtract(Duration(seconds: i)),
+              source: SignalSource.healthKit,
+              syncedAt: at,
+            ),
+        ],
+        checkIns: checks,
+        at: at,
+        timezone: timezone,
+      );
+      expect(reference, isNotNull);
+      expect(reference!.features['studyScreenLoad'], .25);
+      expect(reference.features['recoveryDeviation'], isNotNull);
+      expect(reference.featureSources['recoveryDeviation'], isNotEmpty);
+      expect(dense, isNotNull);
+      expect(dense!.toJson(), reference.toJson());
+
+      // The budget still applies to actual model inputs.
+      expect(
+        MlPrepBuilder.energyInput(
+          signals: [
+            for (var i = 0; i < 1500; i++)
+              reading(SignalType.hrv, 50, at.subtract(Duration(seconds: i))),
+          ],
+          checkIns: checks,
+          at: at,
+          timezone: timezone,
+        ),
+        isNull,
+      );
+    },
+  );
 
   test('snapshot cutoff rejects future observations, labels and revisions', () {
     final check = _checkIn(10, 20);

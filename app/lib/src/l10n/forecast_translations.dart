@@ -1,5 +1,42 @@
 /// Forecast presentation copy. Stored observations and engine values stay unchanged.
 const Map<String, Map<String, String>> forecastTranslations = {
+  "Sleep stages": {
+    "es": "Fases del sueño",
+    "zh-Hans": "睡眠阶段",
+    "zh-Hant": "睡眠階段",
+  },
+  "Avg deep sleep": {
+    "es": "Sueño profundo medio",
+    "zh-Hans": "平均深度睡眠",
+    "zh-Hant": "平均深度睡眠",
+  },
+  "Avg REM sleep": {
+    "es": "Sueño REM medio",
+    "zh-Hans": "平均 REM 睡眠",
+    "zh-Hant": "平均 REM 睡眠",
+  },
+  "Core": {"es": "Ligero", "zh-Hans": "核心", "zh-Hant": "核心"},
+  "Deep": {"es": "Profundo", "zh-Hans": "深度", "zh-Hant": "深度"},
+  "REM": {"es": "REM", "zh-Hans": "REM", "zh-Hant": "REM"},
+  "Awake": {"es": "Despierto", "zh-Hans": "清醒", "zh-Hant": "清醒"},
+  "Not recorded": {"es": "Sin registrar", "zh-Hans": "未记录", "zh-Hant": "未記錄"},
+  "{hours} hr": {
+    "es": "{hours} h",
+    "zh-Hans": "{hours} 小时",
+    "zh-Hant": "{hours} 小時",
+  },
+  "Sleep stage averages use nights with that stage recorded; missing stages are not zero.": {
+    "es":
+        "Los promedios de las fases del sueño usan las noches con esa fase registrada; las fases sin datos no cuentan como cero.",
+    "zh-Hans": "睡眠阶段平均值仅使用记录了该阶段的夜晚；缺失阶段不计为零。",
+    "zh-Hant": "睡眠階段平均值僅使用記錄了該階段的夜晚；缺少的階段不計為零。",
+  },
+  "Recorded stages for the preferred main sleep on each wake date. Awake time is separate from sleep duration. Device estimates do not change your score.": {
+    "es":
+        "Fases registradas del sueño principal seleccionado para cada fecha de despertar. El tiempo despierto se separa de la duración del sueño. Las estimaciones del dispositivo no cambian tu puntuación.",
+    "zh-Hans": "显示每个醒来日期所选主要睡眠的已记录阶段。清醒时间与睡眠时长分开计算。设备估计值不会改变你的评分。",
+    "zh-Hant": "顯示每個醒來日期所選主要睡眠的已記錄階段。清醒時間與睡眠時長分開計算。裝置估計值不會改變你的評分。",
+  },
   "Energy Forecast": {
     "es": "Previsión de energía",
     "zh-Hans": "精力预测",

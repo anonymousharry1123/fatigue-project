@@ -1,5 +1,48 @@
 // Authored presentation copy for draft custom self-report measurements.
 const measurementTranslations = <String, Map<String, String>>{
+  "Auto-synced": {
+    "es": "Sincronizado automáticamente",
+    "zh-Hans": "自动同步",
+    "zh-Hant": "自動同步",
+  },
+  "Estimated": {"es": "Estimado", "zh-Hans": "估算", "zh-Hant": "估算"},
+  "Demo": {"es": "Demostración", "zh-Hans": "演示", "zh-Hant": "示範"},
+  "Added in Tonyo.": {
+    "es": "Añadido en Tonyo.",
+    "zh-Hans": "在 Tonyo 中添加。",
+    "zh-Hant": "在 Tonyo 中新增。",
+  },
+  "Activity and sleep logs": {
+    "es": "Registros de actividad y sueño",
+    "zh-Hans": "活动和睡眠记录",
+    "zh-Hant": "活動與睡眠記錄",
+  },
+  "Imported from Apple Health.": {
+    "es": "Importado de Apple Salud.",
+    "zh-Hans": "从 Apple 健康导入。",
+    "zh-Hant": "從 Apple 健康匯入。",
+  },
+  "Calculated from your recorded data.": {
+    "es": "Calculado a partir de tus datos registrados.",
+    "zh-Hans": "根据你记录的数据计算。",
+    "zh-Hant": "根據你記錄的資料計算。",
+  },
+  "Example data for demonstration.": {
+    "es": "Datos de ejemplo para demostración.",
+    "zh-Hans": "用于演示的示例数据。",
+    "zh-Hant": "用於示範的範例資料。",
+  },
+  "Data source: {source}. {description}": {
+    "es": "Origen de los datos: {source}. {description}",
+    "zh-Hans": "数据来源：{source}。{description}",
+    "zh-Hant": "資料來源：{source}。{description}",
+  },
+  "Auto-synced entries are imported from Apple Health. Manual entries are added in Tonyo.": {
+    "es":
+        "Los registros sincronizados automáticamente se importan de Apple Salud. Los registros manuales se añaden en Tonyo.",
+    "zh-Hans": "自动同步的记录来自 Apple 健康；手动记录在 Tonyo 中添加。",
+    "zh-Hant": "自動同步的記錄來自 Apple 健康；手動記錄在 Tonyo 中新增。",
+  },
   "Morning Energy · Custom draft · {version} · {language}": {
     "es": "Energía matutina · Borrador personalizado · {version} · {language}",
     "zh-Hans": "早间精力 · 自定义草案 · {version} · {language}",
@@ -38,6 +81,49 @@ const measurementTranslations = <String, Map<String, String>>{
     "es": "Registrar o revisar el sueño",
     "zh-Hans": "记录或查看睡眠",
     "zh-Hant": "記錄或查看睡眠",
+  },
+  "Review sleep": {
+    "es": "Revisar el sueño",
+    "zh-Hans": "查看睡眠",
+    "zh-Hant": "查看睡眠",
+  },
+  "Review nap": {
+    "es": "Revisar la siesta",
+    "zh-Hans": "查看小睡",
+    "zh-Hant": "查看小睡",
+  },
+  "Review {item}": {
+    "es": "Revisar {item}",
+    "zh-Hans": "查看{item}",
+    "zh-Hant": "查看{item}",
+  },
+  "{duration} · {source} · Saved": {
+    "es": "{duration} · {source} · Guardado",
+    "zh-Hans": "{duration} · {source} · 已保存",
+    "zh-Hant": "{duration} · {source} · 已儲存",
+  },
+  "{hours}h {minutes}m": {
+    "es": "{hours} h {minutes} min",
+    "zh-Hans": "{hours}小时{minutes}分钟",
+    "zh-Hant": "{hours}小時{minutes}分鐘",
+  },
+  "Your main sleep is already logged. Review it if needed. Sleep and Energy are saved separately.": {
+    "es":
+        "Tu sueño principal ya está registrado. Revísalo si lo necesitas. El sueño y la energía se guardan por separado.",
+    "zh-Hans": "主要睡眠已记录，可按需查看。睡眠和精力分别保存。",
+    "zh-Hant": "主要睡眠已記錄，可按需查看。睡眠和精力分別儲存。",
+  },
+  "Device sleep excludes awake time. Saving these times creates a manual correction; imported sleep stages stay available.": {
+    "es":
+        "El sueño del dispositivo excluye el tiempo despierto. Guardar estos horarios crea una corrección manual; las fases de sueño importadas se conservan.",
+    "zh-Hans": "设备记录的睡眠不含清醒时间。保存这些时间会创建手动修正，导入的睡眠阶段会保留。",
+    "zh-Hant": "裝置記錄的睡眠不含清醒時間。儲存這些時間會建立手動修正，匯入的睡眠階段會保留。",
+  },
+  "This removes the sleep record and its stages from Tonyo. The original stays in Apple Health and may be imported again on a later sync.": {
+    "es":
+        "Esto elimina el registro de sueño y sus fases de Tonyo. El original permanece en Apple Health y puede volver a importarse en otra sincronización.",
+    "zh-Hans": "这会从 Tonyo 移除该睡眠记录及阶段。原始数据仍在 Apple Health 中，之后同步时可能再次导入。",
+    "zh-Hant": "這會從 Tonyo 移除該睡眠記錄及階段。原始資料仍在 Apple Health 中，之後同步時可能再次匯入。",
   },
   "Wake date": {
     "es": "Fecha al despertar",

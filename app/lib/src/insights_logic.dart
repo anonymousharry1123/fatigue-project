@@ -20,6 +20,10 @@ class InsightDay {
     required this.estimatedEnergy,
     required this.estimatedCognitive,
     required this.recordCount,
+    this.sleepCoreHours,
+    this.sleepDeepHours,
+    this.sleepRemHours,
+    this.sleepAwakeHours,
   });
 
   final DateTime date;
@@ -29,6 +33,25 @@ class InsightDay {
   final int? estimatedEnergy;
   final int? estimatedCognitive;
   final int recordCount;
+
+  /// Recorded stages from the preferred main sleep only. Missing stages stay
+  /// null; neither manual-only nights nor naps become zero-valued observations.
+  final double? sleepCoreHours;
+  final double? sleepDeepHours;
+  final double? sleepRemHours;
+  final double? sleepAwakeHours;
+
+  bool get hasSleepStages =>
+      sleepCoreHours != null ||
+      sleepDeepHours != null ||
+      sleepRemHours != null ||
+      sleepAwakeHours != null;
+
+  double get recordedStageHours =>
+      (sleepCoreHours ?? 0) +
+      (sleepDeepHours ?? 0) +
+      (sleepRemHours ?? 0) +
+      (sleepAwakeHours ?? 0);
 
   bool get hasTrackedData => recordCount > 0;
 
@@ -49,6 +72,11 @@ class InsightPeriodSummary {
     required this.studyHours,
     required this.averageEstimatedEnergy,
     required this.trackedDayCount,
+    this.averageSleepCoreHours,
+    this.averageSleepDeepHours,
+    this.averageSleepRemHours,
+    this.averageSleepAwakeHours,
+    this.stagedNightCount = 0,
   });
 
   final DateTime start;
@@ -58,6 +86,11 @@ class InsightPeriodSummary {
   final double? studyHours;
   final double? averageEstimatedEnergy;
   final int trackedDayCount;
+  final double? averageSleepCoreHours;
+  final double? averageSleepDeepHours;
+  final double? averageSleepRemHours;
+  final double? averageSleepAwakeHours;
+  final int stagedNightCount;
 }
 
 class InsightAssociation {
@@ -244,6 +277,21 @@ abstract final class InsightsLogic {
     }
 
     final sleepReadings = SleepSyncLogic.preferredSleepReadings(daySignals);
+    final preferredSleep = sleepReadings.firstOrNull;
+    double? sleepStageHours(SignalType type) {
+      final groupId = preferredSleep?.groupId;
+      if (groupId == null) return null;
+      final siblings = signals.where(
+        (item) =>
+            item.groupId == groupId &&
+            item.type == type &&
+            !item.timestamp.isAfter(cutoff),
+      );
+      return siblings.isEmpty
+          ? null
+          : siblings.fold<double>(0, (sum, item) => sum + item.value);
+    }
+
     final trackedSignals = daySignals
         .where((item) => _scoreSignalTypes.contains(item.type))
         .length;
@@ -262,9 +310,13 @@ abstract final class InsightsLogic {
           );
     return InsightDay(
       date: day,
-      // One sleep-duration record represents a night. Use the latest record
-      // rather than summing duplicate/manual replacements into impossible sleep.
-      sleepHours: sleepReadings.firstOrNull?.value,
+      // Use the same preferred main night as Sleep Log and scoring, so stages
+      // from a competing device night or a nap cannot enter its breakdown.
+      sleepHours: preferredSleep?.value,
+      sleepCoreHours: sleepStageHours(SignalType.sleepCore),
+      sleepDeepHours: sleepStageHours(SignalType.sleepDeep),
+      sleepRemHours: sleepStageHours(SignalType.sleepRem),
+      sleepAwakeHours: sleepStageHours(SignalType.sleepAwake),
       trainingHours: total(SignalType.exercise),
       studyHours: total(SignalType.study),
       estimatedEnergy: score?.canEstimateEnergy == true ? score!.energy : null,
@@ -295,6 +347,19 @@ abstract final class InsightsLogic {
           : study.fold<double>(0, (sum, value) => sum + value),
       averageEstimatedEnergy: _average(energy),
       trackedDayCount: days.where((item) => item.hasTrackedData).length,
+      averageSleepCoreHours: _average(
+        days.map((item) => item.sleepCoreHours).nonNulls.toList(),
+      ),
+      averageSleepDeepHours: _average(
+        days.map((item) => item.sleepDeepHours).nonNulls.toList(),
+      ),
+      averageSleepRemHours: _average(
+        days.map((item) => item.sleepRemHours).nonNulls.toList(),
+      ),
+      averageSleepAwakeHours: _average(
+        days.map((item) => item.sleepAwakeHours).nonNulls.toList(),
+      ),
+      stagedNightCount: days.where((item) => item.hasSleepStages).length,
     );
   }
 

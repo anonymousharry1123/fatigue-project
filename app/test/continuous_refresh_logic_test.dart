@@ -3,7 +3,7 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('refreshes on launch and after one minute in the foreground', () {
+  test('refreshes on launch and after fifteen minutes in the foreground', () {
     final now = DateTime(2026, 8, 20, 12);
 
     expect(
@@ -13,14 +13,14 @@ void main() {
     expect(
       ContinuousRefreshLogic.shouldRefresh(
         now: now,
-        lastAttempt: now.subtract(const Duration(seconds: 59)),
+        lastAttempt: now.subtract(const Duration(minutes: 14, seconds: 59)),
       ),
       isFalse,
     );
     expect(
       ContinuousRefreshLogic.shouldRefresh(
         now: now,
-        lastAttempt: now.subtract(const Duration(minutes: 1)),
+        lastAttempt: now.subtract(const Duration(minutes: 15)),
       ),
       isTrue,
     );

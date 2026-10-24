@@ -9,7 +9,10 @@ void main() {
   final day = DateTime(2026, 7, 28);
   late MemoryCloudRepository repository;
 
-  CloudUserState state({bool outcomeConsent = false}) => CloudUserState(
+  CloudUserState state({
+    bool outcomeConsent = false,
+    List<SignalReading> extraSignals = const [],
+  }) => CloudUserState(
     profile: const UserProfile(name: 'Maya'),
     accountEmail: 'maya@example.com',
     onboardingComplete: true,
@@ -18,6 +21,7 @@ void main() {
     healthAuthorized: false,
     migrationVersion: localMigrationVersion,
     signals: [
+      ...extraSignals,
       SignalReading(
         id: 'hydration',
         type: SignalType.hydration,
@@ -189,6 +193,56 @@ void main() {
     expect(latest?.id, 'evening');
     expect(reactions.single.id, 'reaction-new');
   });
+
+  test(
+    'derived queries exclude raw heart rate without deleting heart history',
+    () async {
+      repository.seed(
+        'maya-uid',
+        state(
+          extraSignals: [
+            for (final type in [
+              SignalType.heartRate,
+              SignalType.hrv,
+              SignalType.restingHeartRate,
+            ])
+              SignalReading(
+                id: type.name,
+                type: type,
+                value: 60,
+                timestamp: day,
+              ),
+          ],
+        ),
+      );
+      final filtered = await repository.signalsByRange(
+        'maya-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+        includeHeartRate: false,
+      );
+      expect(
+        filtered.map((item) => item.type),
+        isNot(contains(SignalType.heartRate)),
+      );
+      expect(
+        filtered.map((item) => item.type),
+        containsAll([SignalType.hrv, SignalType.restingHeartRate]),
+      );
+      final all = await repository.signalsByRange(
+        'maya-uid',
+        start: day,
+        end: day.add(const Duration(days: 1)),
+      );
+      expect(all.length, filtered.length + 1);
+      expect(
+        (await repository.readUser(
+          'maya-uid',
+        ))!.signals.map((item) => item.type),
+        contains(SignalType.heartRate),
+      );
+    },
+  );
 
   test('queries check-ins by score window', () async {
     final checkIns = await repository.checkInsByRange(

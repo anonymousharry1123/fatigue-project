@@ -8,6 +8,12 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8080'
   throw new Error('Both loopback emulators and the fixed demo project are required.');
 }
 const appDirectory = fileURLToPath(new URL('../..', import.meta.url));
+const targets = {
+  phase1: 'integration_test/phase1_cloud_test.dart',
+  sync: 'integration_test/efficient_sync_cloud_test.dart',
+};
+const target = targets[process.env.TONYO_APP_INTEGRATION_SUITE ?? 'phase1'];
+if (!target) throw new Error('An allowlisted native integration suite is required.');
 function run(command, args, { capture = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: appDirectory, env: process.env,
@@ -35,7 +41,7 @@ try {
   await run('xcrun', ['simctl', 'boot', simulator]);
   await run('xcrun', ['simctl', 'bootstatus', simulator, '-b']);
   await run(process.env.FLUTTER_BIN, ['test', '--no-pub', '--no-uninstall',
-    'integration_test/phase1_cloud_test.dart', '-d', simulator,
+    target, '-d', simulator,
     '--dart-define=TONYO_LOCAL_EMULATORS=true', '--reporter=expanded']);
   try {
     await run('xcrun', ['simctl', 'terminate', simulator, 'com.ios.tonyo'], { capture: true });
@@ -48,7 +54,7 @@ try {
   }
   console.log('First native test process stopped; starting independent restart verification.');
   await run(process.env.FLUTTER_BIN, ['test', '--no-pub', '--no-uninstall',
-    'integration_test/phase1_cloud_test.dart', '-d', simulator,
+    target, '-d', simulator,
     '--dart-define=TONYO_LOCAL_EMULATORS=true',
     '--dart-define=TONYO_VERIFY_PROCESS_RESTART=true', '--reporter=expanded']);
 } finally {

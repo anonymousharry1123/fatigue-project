@@ -1,3 +1,4 @@
+import 'heart_derivation_logic.dart';
 import 'models.dart';
 
 class HeartSyncMergeResult {
@@ -40,7 +41,13 @@ class HeartSyncLogic {
     // without scanning dense regular-heart-rate history for each imported row.
     final comparableReadings = <SignalType, List<SignalReading>>{
       for (final type in [SignalType.hrv, SignalType.restingHeartRate])
-        type: readings.where((item) => item.type == type).toList(),
+        type: readings
+            .where(
+              (item) =>
+                  item.type == type &&
+                  !HeartDerivationLogic.isEstimatedRestingHeartRate(item),
+            )
+            .toList(),
     };
     var importedCount = 0;
     var duplicateCount = 0;

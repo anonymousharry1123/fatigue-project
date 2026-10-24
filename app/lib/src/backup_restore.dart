@@ -56,7 +56,7 @@ extension DeviceBackupRestoration on AppController {
 
   String _backupRestoreFingerprint() => jsonEncode(
     syncCanonical({
-      'inputs': InputSyncSnapshot.fromState(
+      'inputs': _inputSnapshot(
         _cloudState(migrationVersion: localMigrationVersion),
       ).toJson(),
       'outcomes': _outcomes.map((item) => item.toJson()).toList(),

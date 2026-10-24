@@ -7,6 +7,7 @@ import '../local_day.dart';
 import '../models.dart';
 import '../theme.dart';
 import 'common_widgets.dart';
+import 'data_source_badge.dart';
 import 'self_report_reference_card.dart';
 
 Map<String, double?> selfReportRatings(DailyCheckIn item) => {
@@ -162,6 +163,12 @@ class SelfReportRecordCard extends StatelessWidget {
         Text(
           '$date · $time${item.timezone == null ? '' : ' · ${item.timezone}'}',
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 11),
+        ),
+        const SizedBox(height: 5),
+        DataSourceBadge(
+          source: SignalSource.manual,
+          recordId: item.id,
+          isDemo: selfReportIsSynthetic(item),
         ),
         const SizedBox(height: 8),
         Wrap(

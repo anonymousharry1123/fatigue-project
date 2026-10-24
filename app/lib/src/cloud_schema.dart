@@ -194,6 +194,9 @@ class CloudUserState {
     this.privacyConsent,
     this.deletionPending = false,
     this.outcomeConsentUpdatedAt,
+    this.inputRevision,
+    this.inputSyncVersion = 0,
+    this.heartRateStorageVersion = 0,
   });
 
   final UserProfile profile;
@@ -223,6 +226,9 @@ class CloudUserState {
   final PrivacyConsent? privacyConsent;
   final bool deletionPending;
   final DateTime? outcomeConsentUpdatedAt;
+  final int? inputRevision;
+  final int inputSyncVersion;
+  final int heartRateStorageVersion;
 
   CloudUserState copyWith({
     int? migrationVersion,
@@ -230,6 +236,10 @@ class CloudUserState {
     bool? deletionPending,
     bool? outcomeConsent,
     DateTime? outcomeConsentUpdatedAt,
+    List<SignalReading>? signals,
+    int? inputRevision,
+    int? inputSyncVersion,
+    int? heartRateStorageVersion,
   }) => CloudUserState(
     profile: profile,
     accountEmail: accountEmail,
@@ -249,8 +259,12 @@ class CloudUserState {
     lastHealthChangeAt: lastHealthChangeAt,
     healthBackgroundRefreshEnabled: healthBackgroundRefreshEnabled,
     migrationVersion: migrationVersion ?? this.migrationVersion,
-    signals: signals,
+    signals: signals ?? this.signals,
     checkIns: checkIns,
+    inputRevision: inputRevision ?? this.inputRevision,
+    inputSyncVersion: inputSyncVersion ?? this.inputSyncVersion,
+    heartRateStorageVersion:
+        heartRateStorageVersion ?? this.heartRateStorageVersion,
     personalizedEnergyModel: personalizedEnergyModel,
     userUpdatedAt: userUpdatedAt,
     privacyConsent: privacyConsent ?? this.privacyConsent,

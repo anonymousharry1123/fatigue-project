@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'cloud_repository.dart';
+import 'heart_rate_cloud.dart';
 import 'cloud_schema.dart';
 import 'cloud_sync.dart';
 import 'energy_model_repository.dart';
@@ -14,6 +15,8 @@ import 'energy_model_summary.dart';
 import 'firebase_options.dart';
 import 'firebase_emulator_options.dart';
 import 'firestore_value_codec.dart';
+import 'incremental_inputs.dart';
+import 'forecast_day_store.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 import 'ml_prep_models.dart';
@@ -25,10 +28,12 @@ class FirebaseRuntime {
     required this.repository,
     required this.prepSource,
     required this.energyModelMetadataWriter,
+    required this.heartRateCloudStore,
   });
 
   final AccountAuth auth;
   final CloudRepository repository;
+  final HeartRateCloudStore heartRateCloudStore;
   final PrepDataSource prepSource;
   final EnergyModelMetadataWriter energyModelMetadataWriter;
 
@@ -79,6 +84,10 @@ class FirebaseRuntime {
     final auth = FirebaseAccountAuth(firebaseAuth);
     return FirebaseRuntime(
       auth: auth,
+      heartRateCloudStore: FirestoreHeartRateCloudStore(
+        firestore: firestore,
+        auth: auth,
+      ),
       energyModelMetadataWriter: FirestoreEnergyModelMetadataWriter(
         firestore: firestore,
         auth: auth,
@@ -233,7 +242,8 @@ class FirebaseAccountAuth implements AccountAuth {
   }
 }
 
-class FirestoreCloudRepository implements CloudRepository {
+class FirestoreCloudRepository
+    implements CloudRepository, EfficientInputRepository {
   FirestoreCloudRepository({
     required FirebaseFirestore firestore,
     required AccountAuth auth,
@@ -243,6 +253,66 @@ class FirestoreCloudRepository implements CloudRepository {
 
   final FirebaseFirestore _firestore;
   final AccountAuth _auth;
+  String? _cachedInputsUid;
+  CloudUserState? _cachedInputs;
+
+  CloudUserState? _cachedInputState(String uid) {
+    _authorize(uid);
+    return _cachedInputsUid == uid ? _cachedInputs : null;
+  }
+
+  void _cacheInputState(String uid, CloudUserState state) {
+    _authorize(uid);
+    _cachedInputsUid = uid;
+    _cachedInputs = state;
+  }
+
+  void _invalidateInputCache() {
+    _cachedInputsUid = null;
+    _cachedInputs = null;
+  }
+
+  late final ForecastDayStore _forecastDays = ForecastDayStore(
+    loadDays: (uid, firstDate, lastDate) async {
+      final snapshot = await _user(uid)
+          .collection('forecastDays')
+          .where('localDate', isGreaterThanOrEqualTo: firstDate)
+          .where('localDate', isLessThanOrEqualTo: lastDate)
+          .get(const GetOptions(source: Source.server));
+      _authorize(uid);
+      return {
+        for (final document in snapshot.docs)
+          document.id: _normalizeDates(document.data()),
+      };
+    },
+    loadDay: (uid, id) async {
+      final document = await _user(uid)
+          .collection('forecastDays')
+          .doc(id)
+          .get(const GetOptions(source: Source.server));
+      _authorize(uid);
+      final data = document.data();
+      return data == null ? null : _normalizeDates(data);
+    },
+    loadLegacy: (uid, start, end) async {
+      final snapshot = await _user(uid)
+          .collection('forecastPoints')
+          .where('time', isGreaterThanOrEqualTo: start)
+          .where('time', isLessThan: end)
+          .orderBy('time')
+          .get(const GetOptions(source: Source.server));
+      _authorize(uid);
+      return snapshot.docs
+          .map(
+            (document) =>
+                forecastPointFromCloud(_normalizeDates(document.data())),
+          )
+          .toList();
+    },
+    writeDay: (uid, id, data) => _user(
+      uid,
+    ).collection('forecastDays').doc(id).set(encodeFirestoreDocument(data)),
+  );
 
   DocumentReference<Map<String, dynamic>> _user(String uid) {
     _authorize(uid);
@@ -372,32 +442,220 @@ class FirestoreCloudRepository implements CloudRepository {
   @override
   Future<CloudUserState?> readUser(String uid) async {
     final user = _user(uid);
-    final values = await Future.wait([
-      user.get(const GetOptions(source: Source.server)),
-      // Conflict recovery requires server-confirmed inputs, not SDK cache.
-      user.collection('signals').get(const GetOptions(source: Source.server)),
-      user.collection('checkIns').get(const GetOptions(source: Source.server)),
-    ]);
+    _invalidateInputCache();
+    try {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final before = await user.get(const GetOptions(source: Source.server));
+        _authorize(uid);
+        final beforeData = before.data();
+        if (beforeData == null) return null;
+        final readRevision = beforeData['inputSyncVersion'] == 1
+            ? _inputRevision(beforeData)
+            : null;
+        final values = await Future.wait([
+          user
+              .collection('signals')
+              .get(const GetOptions(source: Source.server)),
+          user
+              .collection('checkIns')
+              .get(const GetOptions(source: Source.server)),
+        ]);
+        _authorize(uid);
+        final confirmed = await user.get(
+          const GetOptions(source: Source.server),
+        );
+        _authorize(uid);
+        final confirmedData = confirmed.data();
+        if (confirmedData == null) return null;
+        try {
+          if (readRevision == null) {
+            // Legacy accounts have no journal cursor. This remains a full,
+            // read-only restore; its first new write activates the protocol.
+            if (confirmedData['inputSyncVersion'] == 1 ||
+                !_sameCloudValue(beforeData, confirmedData)) {
+              throw const InputRevisionChanged(0, 1);
+            }
+          } else {
+            verifyStableInputRevision(
+              readRevision: readRevision,
+              confirmedRevision: _inputRevision(confirmedData),
+            );
+          }
+        } on InputRevisionChanged {
+          if (attempt == 2) rethrow;
+          continue;
+        }
+        final state = _stateFromData(
+          confirmedData,
+          signals: values[0].docs
+              .map(
+                (document) => signalFromCloud(
+                  document.id,
+                  _normalizeDates(document.data()),
+                ),
+              )
+              .toList(),
+          checkIns: values[1].docs
+              .map(
+                (document) => checkInFromCloud(
+                  document.id,
+                  _normalizeDates(document.data()),
+                ),
+              )
+              .toList(),
+        );
+        _cacheInputState(uid, state);
+        return state;
+      }
+      throw StateError('Inputs changed during account restoration. Retry.');
+    } on Object {
+      _invalidateInputCache();
+      rethrow;
+    }
+  }
+
+  int _inputRevision(Map<String, dynamic> data) {
+    if (data['inputSyncVersion'] != 1) {
+      throw StateError('The account input sync version is unsupported.');
+    }
+    return parseInputRevision(data['inputRevision']);
+  }
+
+  @override
+  Future<void> activateInputSync(String uid) async {
+    final user = _user(uid);
+    if (_cachedInputState(uid)?.inputSyncVersion == 1) return;
+    final activated = await _firestore.runTransaction((transaction) async {
+      final current = await transaction.get(user);
+      _authorize(uid);
+      final data = current.data();
+      if (data == null || _accountPrivacy(data).deletionPending) {
+        throw StateError('The account is unavailable for syncing.');
+      }
+      if (data['inputSyncVersion'] == 1) {
+        _inputRevision(data);
+        return false;
+      }
+      if (data['inputSyncVersion'] != null && data['inputSyncVersion'] != 0) {
+        throw StateError('This account requires a newer sync version.');
+      }
+      transaction.set(user, {
+        'inputSyncVersion': 1,
+        'inputRevision': 0,
+      }, SetOptions(merge: true));
+      return true;
+    });
     _authorize(uid);
-    final profileSnapshot = values[0] as DocumentSnapshot<Map<String, dynamic>>;
-    if (!profileSnapshot.exists) return null;
-    final signalSnapshot = values[1] as QuerySnapshot<Map<String, dynamic>>;
-    final checkInSnapshot = values[2] as QuerySnapshot<Map<String, dynamic>>;
-    return _stateFromData(
-      profileSnapshot.data()!,
-      signals: signalSnapshot.docs
-          .map(
-            (document) =>
-                signalFromCloud(document.id, _normalizeDates(document.data())),
-          )
-          .toList(),
-      checkIns: checkInSnapshot.docs
-          .map(
-            (document) =>
-                checkInFromCloud(document.id, _normalizeDates(document.data())),
-          )
-          .toList(),
-    );
+    if (activated) _invalidateInputCache();
+  }
+
+  @override
+  Future<void> finishHeartRateMigration(String uid) async {
+    final user = _user(uid);
+    if (_cachedInputState(uid)?.heartRateStorageVersion == 1) return;
+    await _firestore.runTransaction((transaction) async {
+      final current = await transaction.get(user);
+      _authorize(uid);
+      final data = current.data();
+      if (data == null || _accountPrivacy(data).deletionPending) {
+        throw StateError('The account is unavailable for syncing.');
+      }
+      _inputRevision(data);
+      if (data['heartRateStorageVersion'] == 1) return;
+      transaction.set(user, {
+        'heartRateStorageVersion': 1,
+      }, SetOptions(merge: true));
+    });
+    _authorize(uid);
+    final cached = _cachedInputState(uid);
+    if (cached != null) {
+      _cacheInputState(uid, cached.copyWith(heartRateStorageVersion: 1));
+    }
+  }
+
+  @override
+  Future<CloudUserState?> readUserSince(
+    String uid, {
+    required InputSyncSnapshot baseline,
+    required int revision,
+  }) async {
+    final user = _user(uid);
+    parseInputRevision(revision);
+    try {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final before = await user.get(const GetOptions(source: Source.server));
+        _authorize(uid);
+        final beforeData = before.data();
+        if (beforeData == null) {
+          _invalidateInputCache();
+          return null;
+        }
+        if (beforeData['inputSyncVersion'] != 1) return readUser(uid);
+        final readRevision = _inputRevision(beforeData);
+        if (readRevision < revision) return readUser(uid);
+        final changes = <InputChangeRecord>[];
+        QueryDocumentSnapshot<Map<String, dynamic>>? after;
+        if (readRevision > revision) {
+          while (true) {
+            Query<Map<String, dynamic>> query = user
+                .collection('inputChanges')
+                .where('revision', isGreaterThan: revision)
+                .where('revision', isLessThanOrEqualTo: readRevision)
+                .orderBy('revision')
+                .orderBy(FieldPath.documentId)
+                .limit(400);
+            if (after != null) query = query.startAfterDocument(after);
+            final page = await query.get(
+              const GetOptions(source: Source.server),
+            );
+            _authorize(uid);
+            for (final document in page.docs) {
+              final change = InputChangeRecord.fromJson(
+                _normalizeDates(document.data()),
+              );
+              if (document.id !=
+                  inputChangeDocumentId(change.collection, change.id)) {
+                throw const FormatException('Input change identity mismatch.');
+              }
+              changes.add(change);
+            }
+            if (page.docs.length < 400) break;
+            after = page.docs.last;
+          }
+        }
+        final confirmed = await user.get(
+          const GetOptions(source: Source.server),
+        );
+        _authorize(uid);
+        final confirmedData = confirmed.data();
+        if (confirmedData == null) {
+          _invalidateInputCache();
+          return null;
+        }
+        final authoritative = _stateFromData(confirmedData);
+        InputReadResult result;
+        try {
+          result = reduceIncrementalInputs(
+            baseline: baseline,
+            baselineRevision: revision,
+            root: InputSyncSnapshot.fromState(authoritative).root,
+            readRevision: readRevision,
+            confirmedRevision: _inputRevision(confirmedData),
+            changes: changes,
+          );
+        } on InputRevisionChanged {
+          if (attempt == 2) rethrow;
+          continue;
+        }
+        final state = result.snapshot.toState(authoritative);
+        _cacheInputState(uid, state);
+        return state;
+      }
+      throw StateError('Inputs changed during cloud refresh. Retry.');
+    } on Object {
+      _invalidateInputCache();
+      rethrow;
+    }
   }
 
   CloudUserState _stateFromData(
@@ -456,6 +714,12 @@ class FirestoreCloudRepository implements CloudRepository {
         data['personalizedEnergyModel'],
       ),
       userUpdatedAt: _dateTimeOrNull(data['updatedAt'])?.toUtc(),
+      inputRevision: data['inputSyncVersion'] == 1
+          ? _inputRevision(data)
+          : null,
+      inputSyncVersion: (data['inputSyncVersion'] as num?)?.toInt() ?? 0,
+      heartRateStorageVersion:
+          (data['heartRateStorageVersion'] as num?)?.toInt() ?? 0,
       privacyConsent: privacy.consent,
       deletionPending: privacy.deletionPending,
       outcomeConsentUpdatedAt: privacy.outcomeConsentUpdatedAt,
@@ -467,6 +731,22 @@ class FirestoreCloudRepository implements CloudRepository {
   @override
   Future<void> replaceUser(String uid, CloudUserState state) async {
     final user = _user(uid);
+    _invalidateInputCache();
+    final existing = await user.get(const GetOptions(source: Source.server));
+    _authorize(uid);
+    if (existing.data()?['inputSyncVersion'] == 1) {
+      final remote = await readUser(uid);
+      _authorize(uid);
+      if (remote == null) throw StateError('The account is unavailable.');
+      await applyInputPatch(
+        uid,
+        InputSyncPatch(
+          InputSyncSnapshot.fromState(remote),
+          InputSyncSnapshot.fromState(state),
+        ),
+      );
+      return;
+    }
     await user.set(
       profileToCloud(
         profile: state.profile,
@@ -504,93 +784,168 @@ class FirestoreCloudRepository implements CloudRepository {
   Future<void> applyInputPatch(String uid, InputSyncPatch patch) async {
     if (patch.isEmpty) return;
     final user = _user(uid);
+    final cached = _cachedInputState(uid);
+    var cacheCanAdvance = cached?.inputSyncVersion == 1;
+    var expectedRevision = cached?.inputRevision;
+    CloudUserState? authoritative;
     final edits = [
       for (final edit in patch.signals) (collection: 'signals', edit: edit),
       for (final edit in patch.checkIns) (collection: 'checkIns', edit: edit),
     ];
     // Chunk commits are idempotent: retry accepts an already-applied value.
     // Never enumerate or delete documents that were not explicitly edited.
-    const chunkSize = 200;
-    for (
-      var offset = 0;
-      offset < edits.length || offset == 0;
-      offset += chunkSize
-    ) {
-      _authorize(uid);
-      final chunk = edits.skip(offset).take(chunkSize).toList();
-      final last = offset + chunk.length >= edits.length;
-      await _firestore.runTransaction((transaction) async {
+    // Each source write checks its journal document in Security Rules.
+    // Sixteen edits plus cached root lookups fit the 20-access-call budget.
+    const chunkSize = 16;
+    try {
+      for (
+        var offset = 0;
+        offset < edits.length || offset == 0;
+        offset += chunkSize
+      ) {
         _authorize(uid);
-        final account = await transaction.get(user);
-        if (!account.exists ||
-            _accountPrivacy(account.data()!).deletionPending) {
-          throw StateError('The account is unavailable for syncing.');
-        }
-        if (last) {
-          final actual = InputSyncSnapshot.fromState(
-            _stateFromData(account.data()!),
-          );
-          patch.checkRootAgainst(actual);
-        }
-        final snapshots = [
-          for (final item in chunk)
-            await transaction.get(
-              user.collection(item.collection).doc(item.edit.id),
-            ),
-        ];
-        for (var i = 0; i < chunk.length; i++) {
-          final item = chunk[i];
-          final data = snapshots[i].data();
-          // Canonical serializers preserve legacy defaults while comparing only
-          // the writable input schema. Unknown fields survive merged writes.
-          final actual = data == null
-              ? null
-              : item.collection == 'signals'
-              ? signalToCloud(
-                  signalFromCloud(item.edit.id, _normalizeDates(data)),
-                )
-              : checkInToCloud(
-                  checkInFromCloud(item.edit.id, _normalizeDates(data)),
-                );
-          checkSyncValue(
-            item.collection == 'signals' ? 'signal' : 'check-in',
-            actual,
-            item.edit.before,
-            item.edit.after,
-          );
-        }
-        _authorize(uid);
-        for (final item in chunk) {
-          final ref = user.collection(item.collection).doc(item.edit.id);
-          if (item.edit.after == null) {
-            transaction.delete(ref);
-          } else {
-            transaction.set(
-              ref,
-              encodeFirestoreDocument({
-                ...syncMergedData(item.edit.before, item.edit.after!),
-                'schemaVersion': cloudSchemaVersion,
-              }),
-              SetOptions(merge: true),
+        final chunk = edits.skip(offset).take(chunkSize).toList();
+        final last = offset + chunk.length >= edits.length;
+        final committed = await _firestore.runTransaction((transaction) async {
+          _authorize(uid);
+          final account = await transaction.get(user);
+          if (!account.exists ||
+              _accountPrivacy(account.data()!).deletionPending) {
+            throw StateError('The account is unavailable for syncing.');
+          }
+          final accountData = account.data()!;
+          if (accountData['inputSyncVersion'] != null &&
+              accountData['inputSyncVersion'] != 0 &&
+              accountData['inputSyncVersion'] != 1) {
+            throw StateError('This account requires a newer sync version.');
+          }
+          final beforeRevision = accountData['inputSyncVersion'] == 1
+              ? _inputRevision(accountData)
+              : 0;
+          final nextRevision = parseInputRevision(beforeRevision + 1);
+          if (last) {
+            final actual = InputSyncSnapshot.fromState(
+              _stateFromData(account.data()!),
+            );
+            patch.checkRootAgainst(actual);
+          }
+          final snapshots = [
+            for (final item in chunk)
+              await transaction.get(
+                user.collection(item.collection).doc(item.edit.id),
+              ),
+          ];
+          for (var i = 0; i < chunk.length; i++) {
+            final item = chunk[i];
+            final data = snapshots[i].data();
+            // Canonical serializers preserve legacy defaults while comparing only
+            // the writable input schema. Unknown fields survive merged writes.
+            final actual = data == null
+                ? null
+                : item.collection == 'signals'
+                ? signalToCloud(
+                    signalFromCloud(item.edit.id, _normalizeDates(data)),
+                  )
+                : checkInToCloud(
+                    checkInFromCloud(item.edit.id, _normalizeDates(data)),
+                  );
+            checkSyncValue(
+              item.collection == 'signals' ? 'signal' : 'check-in',
+              actual,
+              item.edit.before,
+              item.edit.after,
             );
           }
-        }
-        if (last && patch.root.isNotEmpty) {
+          _authorize(uid);
+          for (var i = 0; i < chunk.length; i++) {
+            final item = chunk[i];
+            final ref = user.collection(item.collection).doc(item.edit.id);
+            final nextData = item.edit.after == null
+                ? null
+                : {
+                    // Canonical sync snapshots omit nulls, while merge writes
+                    // retain them on the source. Include those fields in the
+                    // journal so it faithfully represents the final record.
+                    for (final entry
+                        in (snapshots[i].data() ?? <String, dynamic>{}).entries)
+                      if (entry.value == null) entry.key: null,
+                    ...syncMergedData(item.edit.before, item.edit.after!),
+                    ...(item.collection == 'signals'
+                        ? signalToCloud(
+                            signalFromCloud(item.edit.id, item.edit.after!),
+                          )
+                        : checkInToCloud(
+                            checkInFromCloud(item.edit.id, item.edit.after!),
+                          )),
+                    'schemaVersion': cloudSchemaVersion,
+                  };
+            if (item.edit.after == null) {
+              transaction.delete(ref);
+            } else {
+              transaction.set(
+                ref,
+                encodeFirestoreDocument(nextData!),
+                SetOptions(merge: true),
+              );
+            }
+            transaction.set(
+              user
+                  .collection('inputChanges')
+                  .doc(inputChangeDocumentId(item.collection, item.edit.id)),
+              encodeFirestoreDocument({
+                'collection': item.collection,
+                'id': item.edit.id,
+                'revision': nextRevision,
+                'after': nextData,
+              }),
+            );
+          }
           transaction.set(
             user,
             encodeFirestoreDocument({
-              ...syncMergedData(
-                patch.rootData(useBefore: true),
-                patch.rootData(),
-              ),
+              if (last && patch.root.isNotEmpty)
+                ...syncMergedData(
+                  patch.rootData(useBefore: true),
+                  patch.rootData(),
+                ),
               'schemaVersion': cloudSchemaVersion,
+              'inputSyncVersion': 1,
+              'inputRevision': nextRevision,
               'updatedAt': FieldValue.serverTimestamp(),
             }),
             SetOptions(merge: true),
           );
-        }
-      });
-      if (last) break;
+          return (
+            before: beforeRevision,
+            after: nextRevision,
+            metadata: _stateFromData({
+              ...accountData,
+              'inputSyncVersion': 1,
+              'inputRevision': nextRevision,
+            }),
+          );
+        });
+        _authorize(uid);
+        if (committed.before != expectedRevision) cacheCanAdvance = false;
+        expectedRevision = committed.after;
+        authoritative = committed.metadata;
+        if (last) break;
+      }
+      if (cacheCanAdvance && cached != null && authoritative != null) {
+        _cacheInputState(
+          uid,
+          InputSyncSnapshot.fromState(
+            cached,
+          ).overlay(patch).toState(authoritative),
+        );
+      } else {
+        _invalidateInputCache();
+      }
+    } on Object {
+      // Some chunks may already be committed. Only a complete confirmed read
+      // can supply the next baseline after a partial write or conflict.
+      _invalidateInputCache();
+      rethrow;
     }
   }
 
@@ -629,13 +984,43 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime start,
     required DateTime end,
     SignalType? type,
+    bool includeHeartRate = true,
   }) async {
+    final cached = _cachedInputState(uid);
+    if (cached != null) {
+      final values = cached.signals
+          .where(
+            (reading) =>
+                !reading.timestamp.isBefore(start) &&
+                reading.timestamp.isBefore(end) &&
+                (includeHeartRate || reading.type != SignalType.heartRate) &&
+                (type == null || reading.type == type),
+          )
+          .toList();
+      return values..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
     Query<Map<String, dynamic>> query = _user(uid)
         .collection('signals')
         .where('timestamp', isGreaterThanOrEqualTo: start)
         .where('timestamp', isLessThan: end);
-    if (type != null) query = query.where('type', isEqualTo: type.name);
+    if (type != null) {
+      if (!includeHeartRate && type == SignalType.heartRate) return [];
+      query = query.where('type', isEqualTo: type.name);
+    } else if (!includeHeartRate) {
+      // Regular heart rate is displayed from the hydrated device history, but
+      // is not an input to scores, forecasts or Coach. Filter on the
+      // server so each refresh does not bill reads for thousands of raw samples.
+      // Uses the existing type ASC / timestamp DESC collection index.
+      query = query.where(
+        'type',
+        whereIn: [
+          for (final value in SignalType.values)
+            if (value != SignalType.heartRate) value.name,
+        ],
+      );
+    }
     final snapshot = await query.orderBy('timestamp', descending: true).get();
+    _authorize(uid);
     return snapshot.docs
         .map(
           (document) =>
@@ -650,12 +1035,24 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime start,
     required DateTime end,
   }) async {
+    final cached = _cachedInputState(uid);
+    if (cached != null) {
+      final values = cached.checkIns
+          .where(
+            (reading) =>
+                !reading.timestamp.isBefore(start) &&
+                reading.timestamp.isBefore(end),
+          )
+          .toList();
+      return values..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
     final snapshot = await _user(uid)
         .collection('checkIns')
         .where('timestamp', isGreaterThanOrEqualTo: start)
         .where('timestamp', isLessThan: end)
         .orderBy('timestamp', descending: true)
         .get();
+    _authorize(uid);
     return snapshot.docs
         .map(
           (document) =>
@@ -666,11 +1063,18 @@ class FirestoreCloudRepository implements CloudRepository {
 
   @override
   Future<DailyCheckIn?> latestCheckIn(String uid) async {
+    final cached = _cachedInputState(uid);
+    if (cached != null) {
+      final values = [...cached.checkIns]
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return values.firstOrNull;
+    }
     final snapshot = await _user(uid)
         .collection('checkIns')
         .orderBy('timestamp', descending: true)
         .limit(1)
         .get();
+    _authorize(uid);
     if (snapshot.docs.isEmpty) return null;
     final document = snapshot.docs.single;
     return checkInFromCloud(document.id, _normalizeDates(document.data()));
@@ -681,12 +1085,22 @@ class FirestoreCloudRepository implements CloudRepository {
     String uid, {
     int limit = 14,
   }) async {
+    final cached = _cachedInputState(uid);
+    if (cached != null) {
+      final values =
+          cached.signals
+              .where((reading) => reading.type == SignalType.reactionTime)
+              .toList()
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return values.take(limit).toList();
+    }
     final snapshot = await _user(uid)
         .collection('signals')
         .where('type', isEqualTo: SignalType.reactionTime.name)
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .get();
+    _authorize(uid);
     return snapshot.docs
         .map(
           (document) =>
@@ -737,18 +1151,10 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime start,
     required DateTime end,
   }) async {
-    final snapshot = await _user(uid)
-        .collection('forecastPoints')
-        .where('time', isGreaterThanOrEqualTo: start)
-        .where('time', isLessThan: end)
-        .orderBy('time')
-        .get();
-    return snapshot.docs
-        .map(
-          (document) =>
-              forecastPointFromCloud(_normalizeDates(document.data())),
-        )
-        .toList();
+    _authorize(uid);
+    final points = await _forecastDays.readRange(uid, start: start, end: end);
+    _authorize(uid);
+    return points;
   }
 
   @override
@@ -757,31 +1163,9 @@ class FirestoreCloudRepository implements CloudRepository {
     required DateTime day,
     required List<ForecastPoint> points,
   }) async {
-    final start = localDay(day);
-    final end = localDay(start, 1);
-    if (points.any(
-      (point) => point.time.isBefore(start) || !point.time.isBefore(end),
-    )) {
-      throw ArgumentError(
-        'Every forecast point must belong to the target day.',
-      );
-    }
-    final collection = _user(uid).collection('forecastPoints');
-    final existing = await collection
-        .where('time', isGreaterThanOrEqualTo: start)
-        .where('time', isLessThan: end)
-        .get();
-    final desired = {
-      for (final point in points) forecastPointId(point.time): point,
-    };
-    final batch = _firestore.batch();
-    for (final document in existing.docs) {
-      if (!desired.containsKey(document.id)) batch.delete(document.reference);
-    }
-    for (final entry in desired.entries) {
-      batch.set(collection.doc(entry.key), forecastPointToCloud(entry.value));
-    }
-    await batch.commit();
+    _authorize(uid);
+    await _forecastDays.replaceDay(uid, day: day, points: points);
+    _authorize(uid);
   }
 
   @override
@@ -1032,17 +1416,31 @@ class FirestoreCloudRepository implements CloudRepository {
 
   @override
   Future<void> clearGuidance(String uid) async {
-    for (final collectionName in const ['recommendations', 'riskAlerts']) {
-      final collection = _user(uid).collection(collectionName);
-      while (true) {
-        final page = await collection.limit(100).get();
-        if (page.docs.isEmpty) break;
-        final batch = _firestore.batch();
-        for (final document in page.docs) {
-          batch.delete(document.reference);
+    _authorize(uid);
+    _forecastDays.clearOwner(uid);
+    try {
+      for (final collectionName in const [
+        'recommendations',
+        'riskAlerts',
+        'forecastPoints',
+        'forecastDays',
+      ]) {
+        final collection = _user(uid).collection(collectionName);
+        while (true) {
+          final page = await collection
+              .limit(100)
+              .get(const GetOptions(source: Source.server));
+          _authorize(uid);
+          if (page.docs.isEmpty) break;
+          final batch = _firestore.batch();
+          for (final document in page.docs) {
+            batch.delete(document.reference);
+          }
+          await batch.commit();
         }
-        await batch.commit();
       }
+    } finally {
+      _forecastDays.clearOwner(uid);
     }
   }
 
@@ -1051,7 +1449,17 @@ class FirestoreCloudRepository implements CloudRepository {
       _dataLifecycle.exportUser(uid);
 
   @override
-  Future<void> deleteUserTree(String uid) => _dataLifecycle.deleteUserTree(uid);
+  Future<void> deleteUserTree(String uid) async {
+    _authorize(uid);
+    _invalidateInputCache();
+    _forecastDays.clearOwner(uid);
+    try {
+      await _dataLifecycle.deleteUserTree(uid);
+    } finally {
+      _invalidateInputCache();
+      _forecastDays.clearOwner(uid);
+    }
+  }
 
   AccountDataLifecycle get _dataLifecycle => AccountDataLifecycle(
     store: _FirestoreUserDataLifecycleStore(_firestore, _auth),
@@ -1060,6 +1468,36 @@ class FirestoreCloudRepository implements CloudRepository {
 
   static Map<String, dynamic> _normalizeDates(Map<String, dynamic> data) =>
       normalizeFirestoreDocument(data);
+
+  // Compare complete SDK snapshots without sending optional/unknown metadata
+  // through the stricter domain serializer. Invalid optional model maps still
+  // need to be readable, and Timestamp equality must retain nanoseconds.
+  static bool _sameCloudValue(Object? left, Object? right) {
+    if (identical(left, right) || left == right) return true;
+    if (left is double && right is double && left.isNaN && right.isNaN) {
+      return true;
+    }
+    if (left is Map && right is Map) {
+      return left.length == right.length &&
+          left.keys.every(
+            (key) =>
+                right.containsKey(key) &&
+                _sameCloudValue(left[key], right[key]),
+          );
+    }
+    if (left is Iterable && right is Iterable) {
+      final leftValues = left.iterator;
+      final rightValues = right.iterator;
+      while (leftValues.moveNext()) {
+        if (!rightValues.moveNext() ||
+            !_sameCloudValue(leftValues.current, rightValues.current)) {
+          return false;
+        }
+      }
+      return !rightValues.moveNext();
+    }
+    return false;
+  }
 
   static Object? _normalizeCloudValue(Object? value) => switch (value) {
     Timestamp timestamp => timestamp.toDate().toUtc(),

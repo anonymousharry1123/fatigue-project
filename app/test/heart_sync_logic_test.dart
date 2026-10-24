@@ -1,8 +1,54 @@
+import 'package:app/src/heart_derivation_logic.dart';
 import 'package:app/src/heart_sync_logic.dart';
 import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('native resting HR is never deduplicated against a nearby estimate', () {
+    final now = DateTime(2026, 10, 24, 9);
+    final existing = HeartDerivationLogic.reconcile(
+      readings: [
+        for (var hour = 1; hour <= 3; hour++)
+          SignalReading(
+            id: 'healthkit-heart-$hour',
+            type: SignalType.heartRate,
+            value: 60,
+            timestamp: DateTime(2026, 10, 24, hour),
+            source: SignalSource.healthKit,
+          ),
+      ],
+      now: now,
+    );
+    final estimate = existing.estimatedRestingHeartRates.single;
+    final merged = HeartSyncLogic.merge(
+      existing: existing.readings,
+      imported: [
+        SignalReading(
+          id: 'healthkit-native-resting',
+          type: SignalType.restingHeartRate,
+          value: estimate.value,
+          timestamp: estimate.timestamp.add(const Duration(seconds: 30)),
+          source: SignalSource.healthKit,
+        ),
+      ],
+      syncedAt: now,
+    );
+    expect(merged.importedCount, 1);
+    expect(merged.duplicateCount, 0);
+    final reconciled = HeartDerivationLogic.reconcile(
+      readings: merged.readings,
+      now: now,
+    );
+    expect(reconciled.estimatedRestingHeartRates, isEmpty);
+    expect(
+      reconciled.readings
+          .where((r) => r.type == SignalType.restingHeartRate)
+          .single
+          .id,
+      'healthkit-native-resting',
+    );
+  });
+
   test(
     'imports regular heart rate without collapsing nearby equal samples',
     () {

@@ -4,6 +4,7 @@
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/ml_prep_models.dart';
 import 'package:app/src/ml_prep_repository.dart';
+import 'package:app/src/models.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -149,7 +150,9 @@ void main() {
           expect(firestore.calls, [
             'where $field >= ${window.start.toIso8601String()}',
             'where $field < ${window.end.toIso8601String()}',
-            'orderBy $field false',
+            if (collection == PrepCollection.signals)
+              'where type in ${SignalType.values.where((type) => type != SignalType.heartRate).map((type) => type.name).join(',')}',
+            'orderBy $field ${collection == PrepCollection.signals}',
             'limit ${collection == PrepCollection.signals ? 1500 : 100}',
             'query.get users/owner/${collection.name} server',
           ]);
@@ -277,6 +280,11 @@ class _Collection implements CollectionReference<Map<String, dynamic>> {
     final named = invocation.namedArguments;
     switch (invocation.memberName) {
       case #where:
+        final included = named[#whereIn] as Iterable<Object?>?;
+        if (included != null) {
+          store.calls.add('where ${args.single} in ${included.join(',')}');
+          return this;
+        }
         final lower = named[#isGreaterThanOrEqualTo] as DateTime?;
         final upper = named[#isLessThan] as DateTime?;
         if (lower != null && upper == null) {

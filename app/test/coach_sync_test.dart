@@ -928,4 +928,37 @@ void main() {
       controller.setAppForeground(false);
     },
   );
+
+  testWidgets(
+    'quota exhaustion preserves pending changes without connection retry loops',
+    (tester) async {
+      final controller = (await tester.runAsync(load))!;
+      repository.actionFailure = FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'resource-exhausted',
+        message: 'Quota exceeded.',
+      );
+      final id = controller.recommendations.first.id;
+      await controller.setRecommendationStatus(
+        id,
+        RecommendationStatus.completed,
+      );
+      expect(controller.cloudSyncFailureKind, CloudSyncFailureKind.quota);
+      expect(controller.cloudSyncStatusMessage, contains('quota reached'));
+      expect(controller.cloudSyncStatusMessage, isNot(contains('connection')));
+      expect(controller.hasPendingCoachChanges, isTrue);
+      controller.setAppForeground(true);
+      final attempts = repository.actionAttempts;
+      await tester.pump(const Duration(minutes: 2));
+      expect(repository.actionAttempts, attempts);
+
+      // A later explicit retry succeeds once the service quota is available.
+      repository.actionFailure = null;
+      await controller.retryCloudSync();
+      expect(controller.hasPendingCoachChanges, isFalse);
+      expect(controller.cloudSyncFailureKind, isNull);
+      expect((await remote(id)).status, RecommendationStatus.completed);
+      controller.setAppForeground(false);
+    },
+  );
 }

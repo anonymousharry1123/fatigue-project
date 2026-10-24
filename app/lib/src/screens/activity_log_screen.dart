@@ -8,6 +8,7 @@ import '../widgets/translated_text.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/data_source_badge.dart';
 
 class ActivityLogScreen extends StatefulWidget {
   const ActivityLogScreen({super.key, this.initialLog});
@@ -632,6 +633,7 @@ class _ActivityHistoryCard extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
+            DataSourceBadge(source: SignalSource.manual, recordId: log.id),
             if (log.hydrationLiters != null)
               _metric(
                 context,

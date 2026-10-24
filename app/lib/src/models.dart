@@ -224,6 +224,8 @@ class SleepLogEntry {
     required this.wakeTime,
     required this.quality,
     this.kind = SleepKind.mainSleep,
+    this.source = SignalSource.manual,
+    this.recordedDuration,
   });
 
   final String id;
@@ -231,9 +233,14 @@ class SleepLogEntry {
   final DateTime wakeTime;
   final double quality;
   final SleepKind kind;
-  bool get isNap => kind == SleepKind.nap;
+  final SignalSource source;
 
-  Duration get duration => wakeTime.difference(bedtime);
+  /// Device sleep totals exclude awake time within the bedtime/wake interval.
+  final Duration? recordedDuration;
+  bool get isNap => kind == SleepKind.nap;
+  bool get isFromHealth => source == SignalSource.healthKit;
+
+  Duration get duration => recordedDuration ?? wakeTime.difference(bedtime);
   double get durationHours => duration.inMinutes / 60;
 
   /// Places bedtime and wake on one overnight sleep using wake's calendar day

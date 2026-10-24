@@ -29,6 +29,7 @@ class _DelayedRepository extends MemoryCloudRepository {
     required DateTime start,
     required DateTime end,
     SignalType? type,
+    bool includeHeartRate = true,
   }) async {
     await pause();
     return [

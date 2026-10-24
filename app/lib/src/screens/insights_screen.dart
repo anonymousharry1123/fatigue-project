@@ -92,6 +92,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
             metric: _metric,
             onMetricChanged: (value) => setState(() => _metric = value),
           ),
+          if (insights.currentSummary.stagedNightCount > 0) ...[
+            const SectionHeader('Sleep stages'),
+            _SleepStagesCard(days: insights.currentDays),
+          ],
           const SectionHeader('Model associations'),
           _AssociationsCard(associations: insights.associations),
           const SectionHeader('Today’s experimental estimates'),
@@ -400,6 +404,30 @@ class _WeeklyOverview extends StatelessWidget {
         icon: Icons.bedtime_rounded,
         color: TonyoPalette.of(context).primary,
       ),
+      if (current.stagedNightCount > 0) ...[
+        _OverviewValue(
+          label: 'Avg deep sleep',
+          value: _hours(current.averageSleepDeepHours),
+          comparison: _delta(
+            current.averageSleepDeepHours,
+            previous.averageSleepDeepHours,
+            suffix: ' hr',
+          ),
+          icon: Icons.nights_stay_rounded,
+          color: TonyoPalette.of(context).secondary,
+        ),
+        _OverviewValue(
+          label: 'Avg REM sleep',
+          value: _hours(current.averageSleepRemHours),
+          comparison: _delta(
+            current.averageSleepRemHours,
+            previous.averageSleepRemHours,
+            suffix: ' hr',
+          ),
+          icon: Icons.bedtime_rounded,
+          color: TonyoPalette.of(context).primary,
+        ),
+      ],
       _OverviewValue(
         label: 'Training',
         value: _hours(current.trainingHours),
@@ -469,6 +497,18 @@ class _WeeklyOverview extends StatelessWidget {
           ),
           style: TextStyle(color: TonyoPalette.of(context).muted, fontSize: 10),
         ),
+        if (current.stagedNightCount > 0) ...[
+          const SizedBox(height: 5),
+          Text(
+            context.tr(
+              'Sleep stage averages use nights with that stage recorded; missing stages are not zero.',
+            ),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 10,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -774,6 +814,143 @@ class _TrendBar extends StatelessWidget {
         InsightTrendMetric.training => colors.primary,
         InsightTrendMetric.study => colors.secondary,
       };
+}
+
+class _SleepStagesCard extends StatelessWidget {
+  const _SleepStagesCard({required this.days});
+
+  final List<InsightDay> days;
+
+  @override
+  Widget build(BuildContext context) {
+    final stagedDays = days.where((day) => day.hasSleepStages).toList();
+    final maximum = stagedDays.fold<double>(
+      1,
+      (value, day) =>
+          day.recordedStageHours > value ? day.recordedStageHours : value,
+    );
+    return TonyoCard(
+      key: const Key('insights-sleep-stages'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.tr(
+              'Recorded stages for the preferred main sleep on each wake date. Awake time is separate from sleep duration. Device estimates do not change your score.',
+            ),
+            style: TextStyle(
+              color: TonyoPalette.of(context).muted,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+          for (final day in stagedDays) ...[
+            const SizedBox(height: 18),
+            _SleepStageBar(day: day, maximum: maximum),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SleepStageBar extends StatelessWidget {
+  const _SleepStageBar({required this.day, required this.maximum});
+
+  final InsightDay day;
+  final double maximum;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = TonyoPalette.of(context);
+    final stages = <({String name, double? hours, Color color})>[
+      (name: 'Core', hours: day.sleepCoreHours, color: colors.primary),
+      (name: 'Deep', hours: day.sleepDeepHours, color: colors.secondary),
+      (name: 'REM', hours: day.sleepRemHours, color: colors.success),
+      (name: 'Awake', hours: day.sleepAwakeHours, color: colors.warning),
+    ];
+    String stageValue(double? value) => value == null
+        ? context.tr('Not recorded')
+        : context.tr('{hours} hr', args: {'hours': value.toStringAsFixed(1)});
+    final dateLabel =
+        '${context.tr(_TrendBar._dayLabel(day.date))}, '
+        '${formatDate(day.date)}';
+    final stageLabels = [
+      for (final stage in stages)
+        '${context.tr(stage.name)}: ${stageValue(stage.hours)}',
+    ];
+    return Semantics(
+      key: Key('insights-sleep-stage-${day.date.toIso8601String()}'),
+      container: true,
+      excludeSemantics: true,
+      label: '$dateLabel, ${day.date.year}. ${stageLabels.join('. ')}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            dateLabel,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FractionallySizedBox(
+              widthFactor: (day.recordedStageHours / maximum).clamp(0.0, 1.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: SizedBox(
+                  height: 18,
+                  child: Row(
+                    children: [
+                      for (final stage in stages)
+                        if ((stage.hours ?? 0) > 0)
+                          Expanded(
+                            flex: (stage.hours! * 10000).round().clamp(
+                              1,
+                              10000000,
+                            ),
+                            child: ColoredBox(
+                              color: stage.color,
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            children: [
+              for (var index = 0; index < stages.length; index++)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: stages[index].color,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: const SizedBox(width: 8, height: 8),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        stageLabels[index],
+                        style: TextStyle(color: colors.muted, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AssociationsCard extends StatelessWidget {

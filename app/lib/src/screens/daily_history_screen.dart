@@ -6,10 +6,12 @@ import '../widgets/self_report_card.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/translated_text.dart';
 import '../daily_history_logic.dart';
+import '../evidence_provenance.dart';
 import '../models.dart';
 import '../local_day.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/data_source_badge.dart';
 import 'activity_log_screen.dart';
 import 'daily_checkin_screen.dart';
 import 'sleep_log_screen.dart';
@@ -43,6 +45,14 @@ class DailyHistoryScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   _HistorySummary(history: history),
+                  const SizedBox(height: 10),
+                  TranslatedText(
+                    'Auto-synced entries are imported from Apple Health. Manual entries are added in Tonyo.',
+                    style: TextStyle(
+                      color: TonyoPalette.of(context).muted,
+                      fontSize: 12,
+                    ),
+                  ),
                   const SectionHeader('Recent days'),
                   ...history.map(
                     (day) => Padding(
@@ -84,10 +94,12 @@ class DailyHistoryScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const TranslatedText('Delete history entry?'),
         content: TranslatedText(
-          context.tr(
-            '{item} will be permanently removed from this device.',
-            args: {'item': context.tr(_title(item))},
-          ),
+          item.sleep?.isFromHealth == true
+              ? 'This removes the sleep record and its stages from Tonyo. The original stays in Apple Health and may be imported again on a later sync.'
+              : context.tr(
+                  '{item} will be permanently removed from this device.',
+                  args: {'item': context.tr(_title(item))},
+                ),
         ),
         actions: [
           TextButton(
@@ -390,13 +402,26 @@ class _HistoryItemRow extends StatelessWidget {
                           fontSize: 10,
                         ),
                       ),
+                      const SizedBox(height: 5),
+                      DataSourceBadge(
+                        source:
+                            item.signal?.source ??
+                            item.sleep?.source ??
+                            SignalSource.manual,
+                        recordId: item.id,
+                        isDemo:
+                            item.signal != null &&
+                            EvidenceProvenance.signalIsDemo(item.signal!),
+                      ),
                     ],
                   ),
           ),
           if (item.canEdit)
             IconButton(
               tooltip: context.tr(
-                'Edit {item}',
+                item.sleep?.isFromHealth == true
+                    ? 'Review {item}'
+                    : 'Edit {item}',
                 args: {'item': context.tr(_title(item))},
               ),
               onPressed: onEdit,
@@ -429,10 +454,10 @@ String _title(DailyHistoryItem item) => switch (item.kind) {
 String _detail(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => _activityDetail(item.activity!),
   DailyHistoryItemKind.sleep =>
-    '${formatHour(item.sleep!.bedtime)}–${formatHour(item.sleep!.wakeTime)} · ${_duration(item.sleep!.duration)} · quality ${item.sleep!.quality.round()}/5',
+    '${formatHour(item.sleep!.bedtime)}–${formatHour(item.sleep!.wakeTime)} · ${_duration(item.sleep!.duration)} · ${item.sleep!.isFromHealth ? 'Apple Health' : 'quality ${item.sleep!.quality.round()}/5'}',
   DailyHistoryItemKind.checkIn => _checkInDetail(item.checkIn!),
   DailyHistoryItemKind.signal =>
-    '${_number(item.signal!.value)} ${item.signal!.type.unit} · ${_source(item.signal!.source)}',
+    '${_number(item.signal!.value)} ${item.signal!.type.unit}',
 };
 
 String _checkInDetail(DailyCheckIn item) {
@@ -494,9 +519,3 @@ String _duration(Duration duration) =>
 String _number(double value) => value == value.roundToDouble()
     ? '${value.round()}'
     : value.toStringAsFixed(1);
-
-String _source(SignalSource source) => switch (source) {
-  SignalSource.manual => 'Manual',
-  SignalSource.healthKit => 'HealthKit',
-  SignalSource.model => 'Model',
-};

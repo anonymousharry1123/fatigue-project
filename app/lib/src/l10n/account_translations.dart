@@ -1,5 +1,75 @@
 // Account, onboarding, settings, and privacy copy. Stored identifiers remain English.
 const accountTranslations = <String, Map<String, String>>{
+  'Resting HR estimates are informational and do not affect your score or measured baselines.': {
+    'es':
+        'Las estimaciones de FC en reposo son informativas y no afectan a tu puntuación ni a tus valores de referencia medidos.',
+    'zh-Hans': '静息心率估算仅供参考，不影响评分或基于实测数据的基线。',
+    'zh-Hant': '靜息心率估算僅供參考，不影響分數或基於實測資料的基準值。',
+  },
+  'Heart-rate summaries are saved on this device and will sync with the next daily update.': {
+    'es':
+        'Los resúmenes de frecuencia cardíaca están guardados en este dispositivo y se sincronizarán con la próxima actualización diaria.',
+    'zh-Hans': '心率摘要已保存在此设备上，将在下次每日更新时同步。',
+    'zh-Hant': '心率摘要已儲存在此裝置上，將在下次每日更新時同步。',
+  },
+  'Latest estimated resting HR: {value} bpm · {date}': {
+    'es': 'Última FC en reposo estimada: {value} lpm · {date}',
+    'zh-Hans': '最近估算静息心率：{value} 次/分钟 · {date}',
+    'zh-Hant': '最近估算靜息心率：{value} 次/分鐘 · {date}',
+  },
+  'Latest resting HR from Apple Health: {value} bpm · {date}': {
+    'es': 'Última FC en reposo de Apple Salud: {value} lpm · {date}',
+    'zh-Hans': 'Apple 健康中最近的静息心率：{value} 次/分钟 · {date}',
+    'zh-Hant': 'Apple 健康中最近的靜息心率：{value} 次/分鐘 · {date}',
+  },
+  'Latest logged resting HR: {value} bpm · {date}': {
+    'es': 'Última FC en reposo registrada: {value} lpm · {date}',
+    'zh-Hans': '最近记录的静息心率：{value} 次/分钟 · {date}',
+    'zh-Hant': '最近記錄的靜息心率：{value} 次/分鐘 · {date}',
+  },
+  'A resting HR estimate needs at least 3 overnight readings (midnight–8 am). Wear your device overnight, sync its app to Apple Health, then tap Sync now.': {
+    'es':
+        'Para estimar la FC en reposo se necesitan al menos 3 lecturas nocturnas (de medianoche a las 8:00). Usa tu dispositivo durante la noche, sincroniza su app con Apple Salud y toca Sincronizar ahora.',
+    'zh-Hans':
+        '估算静息心率至少需要 3 条夜间读数（午夜至早上 8 点）。请在夜间佩戴设备，将其应用同步到 Apple 健康，然后轻点“立即同步”。',
+    'zh-Hant':
+        '估算靜息心率至少需要 3 筆夜間讀數（午夜至早上 8 點）。請在夜間佩戴裝置，將其 App 同步至 Apple 健康，再點選「立即同步」。',
+  },
+  'No native HRV imported. HRV needs beat-to-beat intervals; ordinary heart-rate samples cannot supply it. Check whether your device shares HRV with Apple Health.': {
+    'es':
+        'No se ha importado VFC nativa. La VFC necesita intervalos entre latidos; las muestras de frecuencia cardíaca no los proporcionan. Comprueba si tu dispositivo comparte la VFC con Apple Salud.',
+    'zh-Hans': '尚未导入原生 HRV。HRV 需要逐次心跳间隔，普通心率读数无法提供。请检查设备是否向 Apple 健康共享 HRV。',
+    'zh-Hant': '尚未匯入原生 HRV。HRV 需要逐次心跳間隔，一般心率讀數無法提供。請檢查裝置是否向 Apple 健康分享 HRV。',
+  },
+  'Latest HRV from Apple Health: {value} ms · {date}': {
+    'es': 'Última VFC de Apple Salud: {value} ms · {date}',
+    'zh-Hans': 'Apple 健康中最近的 HRV：{value} 毫秒 · {date}',
+    'zh-Hant': 'Apple 健康中最近的 HRV：{value} 毫秒 · {date}',
+  },
+  'Sampled heart-rate variation: {value} bpm · {date}': {
+    'es':
+        'Variación entre muestras de frecuencia cardíaca: {value} lpm · {date}',
+    'zh-Hans': '采样心率变化：{value} 次/分钟 · {date}',
+    'zh-Hant': '取樣心率變化：{value} 次/分鐘 · {date}',
+  },
+  'Variation between sampled bpm readings; separate from HRV and not used in your score.': {
+    'es':
+        'Variación entre lecturas de frecuencia cardíaca; es distinta de la VFC y no se usa en tu puntuación.',
+    'zh-Hans': '这是心率采样读数之间的变化，与 HRV 不同，不用于计算评分。',
+    'zh-Hant': '這是心率取樣讀數之間的變化，與 HRV 不同，不用於計算分數。',
+  },
+  'Daytime variation needs at least 6 readings across 2 hours, no more than 45 minutes apart.': {
+    'es':
+        'La variación diurna necesita al menos 6 lecturas a lo largo de 2 horas, separadas por un máximo de 45 minutos.',
+    'zh-Hans': '日间心率变化至少需要跨越 2 小时的 6 条读数，每两条之间不超过 45 分钟。',
+    'zh-Hant': '日間心率變化至少需要跨越 2 小時的 6 筆讀數，每兩筆之間不超過 45 分鐘。',
+  },
+  "Cloud service quota reached. Your changes are saved on this device. Try syncing again later.": {
+    "es":
+        "Se alcanzó la cuota del servicio en la nube. Tus cambios están guardados en este dispositivo. Intenta sincronizar de nuevo más tarde.",
+    "zh-Hans": "云服务配额已用尽。更改已保存在此设备上，请稍后重试同步。",
+    "zh-Hant": "雲端服務配額已用盡。變更已儲存在此裝置上，請稍後重試同步。",
+  },
   "Language": {"es": "Idioma", "zh-Hans": "语言", "zh-Hant": "語言"},
   "Please wait…": {"es": "Espera…", "zh-Hans": "请稍候…", "zh-Hant": "請稍候…"},
   "Continue local profile": {

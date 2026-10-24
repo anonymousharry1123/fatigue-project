@@ -30,6 +30,45 @@ void main() {
   });
 
   test(
+    'clearing guidance removes old and packed forecasts with bounded server reads',
+    () async {
+      for (final name in [
+        'recommendations',
+        'riskAlerts',
+        'forecastPoints',
+        'forecastDays',
+      ]) {
+        store.fill(name, 105);
+      }
+      store.fill('signals', 1);
+      final auth = MemoryAccountAuth(
+        session: const AccountSession(
+          uid: 'owner',
+          email: 'owner@example.test',
+        ),
+      );
+      final firestore = _FirestoreSpy(store);
+      final repository = FirestoreCloudRepository(
+        firestore: firestore,
+        auth: auth,
+      );
+      await repository.clearGuidance('owner');
+      for (final name in [
+        'recommendations',
+        'riskAlerts',
+        'forecastPoints',
+        'forecastDays',
+      ]) {
+        expect(store.children[name], isEmpty);
+      }
+      expect(store.children['signals'], hasLength(1));
+      expect(firestore.sources, everyElement(Source.server));
+      expect(firestore.batchSizes, [100, 5, 100, 5, 100, 5, 100, 5]);
+      expect(firestore.limits, everyElement(100));
+    },
+  );
+
+  test(
     'exports all raw root fields and all known documents with original IDs',
     () async {
       store.root = {
@@ -180,7 +219,7 @@ void main() {
       expect(store.root, isNull);
       expect(
         store.events.where((event) => event.contains(' 1 null')),
-        hasLength(7),
+        hasLength(userDataChildCollections.length),
       );
     },
   );
@@ -645,7 +684,9 @@ void main() {
       expect(minimal?.accountEmail, 'owner@example.test');
       expect(minimal?.onboardingComplete, false);
       expect(minimal?.signals, isEmpty);
-      expect(firestore.sources, [Source.server]);
+      // The second root read verifies that inputs did not change while their
+      // collections were loaded, before accepting an incremental cursor.
+      expect(firestore.sources, [Source.server, Source.server]);
       store.root = {
         'consentFlags': {'wellnessOnlyAcknowledged': true},
       };
@@ -891,6 +932,9 @@ class _CollectionSpy implements CollectionReference<Map<String, dynamic>> {
   @override
   DocumentReference<Map<String, dynamic>> doc([String? path]) =>
       _DocumentSpy(firestoreSpy, name, path!);
+  @override
+  Query<Map<String, dynamic>> limit(int value) =>
+      _QuerySpy(firestoreSpy, name).limit(value);
   @override
   Query<Map<String, dynamic>> orderBy(Object field, {bool descending = false}) {
     firestoreSpy.orderFields.add(field);

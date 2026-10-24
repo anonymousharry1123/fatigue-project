@@ -18,8 +18,10 @@ assert.match(host, /^(127\.0\.0\.1|localhost):\d+$/,
 const [hostname, portText] = host.split(':');
 const projectId = 'demo-tonyo-privacy';
 const childCollections = ['signals', 'checkIns', 'scoreSnapshots',
-  'forecastPoints', 'recommendations', 'outcomes', 'riskAlerts'];
-const ordinaryCollections = childCollections.filter(value => value !== 'outcomes');
+  'forecastPoints', 'forecastDays', 'heartRateDays', 'inputChanges',
+  'recommendations', 'outcomes', 'riskAlerts'];
+const ordinaryCollections = childCollections.filter(value =>
+  !['outcomes', 'forecastDays', 'heartRateDays', 'inputChanges'].includes(value));
 const features = ['sleepDeviation', 'movement', 'hydration', 'studyScreenLoad',
   'caffeine', 'mood', 'stress', 'recoveryDeviation'];
 let environment;
@@ -109,6 +111,251 @@ before(async () => {
 beforeEach(async () => { await environment.clearFirestore(); });
 after(async () => { await environment?.cleanup(); });
 
+const forecastDay = (changes = {}) => ({
+  formatVersion: 1, localDate: '2026-10-24',
+  day: Timestamp.fromDate(new Date('2026-10-24T07:00:00Z')),
+  dayEnd: Timestamp.fromDate(new Date('2026-10-25T07:00:00Z')),
+  utcOffsetMinutes: -420, points: [], ...changes,
+});
+const heartRateDay = (changes = {}) => ({
+  schemaVersion: 1, aggregation: 'utc-day-v1', day: '2026-10-24', source: 'healthKit',
+  sampleCount: 2, sum: 140, min: 65, max: 75,
+  firstAt: '2026-10-24T12:00:00.000Z', latestAt: '2026-10-24T13:00:00.000Z', latestValue: 75,
+  qualitySum: 2, qualityMin: 1, zeroQualityCount: 0,
+  sampleIdDigest: 'a'.repeat(64), contentDigest: 'b'.repeat(64),
+  hours: [{ hour: 12, count: 1 }, { hour: 13, count: 1 }],
+  timezoneProvenance: { kind: 'device-local-at-import', zoneNames: ['America/Los_Angeles'],
+    offsetMinutes: [-420], unknownSampleCount: 0 },
+  writerId: 'fixture-phone', ...changes,
+});
+const addInputChange = (batch, db, collectionName, id, after, revision,
+  { sourceAfter = after, changeId = `${collectionName}__${id}`, changes = {} } = {}) => {
+  const reference = child(db, collectionName, id);
+  if (sourceAfter == null) batch.delete(reference);
+  else batch.set(reference, sourceAfter, { merge: true });
+  batch.set(child(db, 'inputChanges', changeId), {
+    collection: collectionName, id, revision, after, ...changes,
+  });
+};
+const trackedWrite = (db, collectionName, id, after, revision, options) => {
+  const batch = writeBatch(db);
+  batch.update(root(db), { inputSyncVersion: 1, inputRevision: revision });
+  addInputChange(batch, db, collectionName, id, after, revision, options);
+  return batch.commit();
+};
+
+test('packed forecast days preserve owner scope, shape and calendar bounds', async () => {
+  await seed();
+  const db = signedIn();
+  const target = child(db, 'forecastDays', '2026-10-24');
+  await assertSucceeds(setDoc(target, forecastDay()));
+  await assertSucceeds(getDocs(query(collection(db, 'users/owner/forecastDays'),
+    where('localDate', '>=', '2026-10-20'), where('localDate', '<=', '2026-10-30'))));
+  await assertFails(setDoc(target, forecastDay({ formatVersion: 2 })));
+  await assertFails(setDoc(target, forecastDay({ localDate: '2026-10-25' })));
+  await assertFails(setDoc(target, forecastDay({ dayEnd: forecastDay().day })));
+  await assertFails(setDoc(target, forecastDay({ points: Array(49).fill({}) })));
+  await assertFails(getDoc(child(signedIn('other'), 'forecastDays', '2026-10-24')));
+});
+
+test('heart-rate summaries validate daily aggregates and retain the original writer', async () => {
+  await seed();
+  const db = signedIn();
+  const target = child(db, 'heartRateDays', '2026-10-24');
+  await assertSucceeds(setDoc(target, heartRateDay()));
+  await assertSucceeds(updateDoc(target, { contentDigest: 'c'.repeat(64) }));
+  await assertFails(updateDoc(target, { writerId: 'different-phone' }));
+  for (const changes of [{ day: '2026-10-25' }, { sampleCount: 0 }, { sum: 1000 },
+    { sampleIdDigest: 'bad' }, { hours: Array(25).fill({}) }, { qualitySum: 3 }]) {
+    await assertFails(setDoc(target, heartRateDay(changes)));
+  }
+  await assertFails(setDoc(child(signedIn('other'), 'heartRateDays', '2026-10-24'), heartRateDay()));
+});
+
+test('cardiac context extends the same daily summary with native or estimated provenance', async () => {
+  await seed();
+  const db = signedIn();
+  const target = child(db, 'heartRateDays', '2026-10-24');
+  const payload = heartRateDay({ schemaVersion: 2, rawContentDigest: 'd'.repeat(64),
+    cardiacContext: {
+      hrv: { mean: 45, sampleCount: 3, source: 'healthKit', unit: 'ms' },
+      restingHeartRate: { mean: 58, sampleCount: 1, source: 'estimatedFromHeartRate', unit: 'bpm' },
+    } });
+  await assertSucceeds(setDoc(target, payload));
+  await assertSucceeds(setDoc(target, { ...payload, cardiacContext: {
+    restingHeartRate: { mean: 60, sampleCount: 2, source: 'healthKit', unit: 'bpm' },
+  } }));
+  for (const changes of [
+    { schemaVersion: 1 }, { rawContentDigest: 'invalid' }, { cardiacContext: {} },
+    { cardiacContext: { unexpected: 1 } },
+    { cardiacContext: { hrv: { mean: 45, sampleCount: 1, source: 'estimatedFromHeartRate', unit: 'ms' } } },
+    { cardiacContext: { hrv: { mean: 45, sampleCount: 1, source: 'healthKit', unit: 'bpm' } } },
+    { cardiacContext: { hrv: { mean: 0, sampleCount: 1, source: 'healthKit', unit: 'ms' } } },
+    { cardiacContext: { restingHeartRate: { mean: 58, sampleCount: 0, source: 'healthKit', unit: 'bpm' } } },
+  ]) await assertFails(setDoc(target, { ...payload, ...changes }));
+  await assertFails(setDoc(child(signedIn('other'), 'heartRateDays', '2026-10-24'), payload));
+  await assertFails(updateDoc(target, { writerId: 'different-phone' }));
+});
+
+test('sampled bpm variation is bounded and cannot masquerade as HRV', async () => {
+  await seed();
+  const db = signedIn();
+  const target = child(db, 'heartRateDays', '2026-10-24');
+  const variation = {
+    rmsSuccessiveDifferenceBpm: 2.3, sampleCount: 6, pairCount: 5,
+    firstAt: '2026-10-24T12:00:00.000Z', latestAt: '2026-10-24T15:00:00.000Z',
+    source: 'healthKit', unit: 'bpm', method: 'sampled-bpm-successive-difference-v1',
+    timezoneBasis: 'device-local-at-import',
+  };
+  const payload = heartRateDay({ schemaVersion: 2, rawContentDigest: 'd'.repeat(64),
+    sampleCount: 6, sum: 420, qualitySum: 6, latestAt: variation.latestAt,
+    cardiacContext: { sampledHeartRateVariation: variation } });
+  await assertSucceeds(setDoc(target, payload));
+  for (const changes of [{ unit: 'ms' }, { method: 'SDNN' }, { sampleCount: 5 },
+    { sampleCount: 7 }, { pairCount: 6 }, { rmsSuccessiveDifferenceBpm: 281 },
+    { timezoneBasis: 'current-device' }, { firstAt: '2026-10-23T12:00:00.000Z' }]) {
+    await assertFails(setDoc(target, { ...payload,
+      cardiacContext: { sampledHeartRateVariation: { ...variation, ...changes } } }));
+  }
+});
+
+test('sync metadata can activate but cannot downgrade, disappear or skip revisions', async () => {
+  await seed();
+  const db = signedIn();
+  await assertSucceeds(updateDoc(root(db), { inputSyncVersion: 1, inputRevision: 1,
+    heartRateStorageVersion: 1 }));
+  for (const changes of [{ inputSyncVersion: 0 }, { inputSyncVersion: deleteField() },
+    { heartRateStorageVersion: 0 }, { heartRateStorageVersion: deleteField() },
+    { inputRevision: 0 }, { inputRevision: 3 }, { inputRevision: 1.5 }]) {
+    await assertFails(updateDoc(root(db), changes));
+  }
+  await assertSucceeds(updateDoc(root(db), { inputRevision: 2 }));
+  await assertSucceeds(updateDoc(root(db), { profile: { displayName: 'Retained metadata' } }));
+});
+
+test('first atomic patch activates tracked sync and later source writes need a matching journal', async () => {
+  await seed();
+  const db = signedIn();
+  await assertSucceeds(trackedWrite(db, 'signals', 'row', phase1Signal(), 1));
+  await assertFails(updateDoc(child(db), { value: 2 }));
+  await assertFails(deleteDoc(child(db)));
+  await assertFails(setDoc(child(db, 'signals', 'untracked'), phase1Signal()));
+  await assertSucceeds(trackedWrite(db, 'signals', 'row', phase1Signal({ value: 2 }), 2));
+  await assertSucceeds(trackedWrite(db, 'signals', 'row', null, 3));
+  assert.equal((await getDocFromServer(child(db))).exists(), false);
+  assert.equal((await getDocFromServer(child(db, 'inputChanges', 'signals__row'))).data().after, null);
+  await assertFails(deleteDoc(child(db, 'inputChanges', 'signals__row')));
+});
+
+test('tracked source values reject mismatched payloads, identities, revisions and false deletions', async () => {
+  await seed(profile({ inputSyncVersion: 1, inputRevision: 1 }));
+  const db = signedIn();
+  for (const options of [
+    { sourceAfter: phase1Signal({ value: 2 }) },
+    { changeId: 'signals__wrong' },
+    { changes: { collection: 'checkIns' } },
+    { changes: { id: 'wrong' } },
+    { changes: { revision: 1 } },
+    { changes: { unexpected: true } },
+    { changes: { after: null } },
+  ]) {
+    await assertFails(trackedWrite(db, 'signals', 'row', phase1Signal(), 2, options));
+  }
+  await assertFails(trackedWrite(db, 'signals', 'row', null, 2,
+    { changes: { after: phase1Signal() } }));
+});
+
+test('tracked writes preserve unknown source fields and validate research check-ins', async () => {
+  await seed();
+  const db = signedIn();
+  await assertSucceeds(setDoc(child(db), phase1Signal({ futureField: 'preserved' })));
+  await assertSucceeds(trackedWrite(db, 'signals', 'row', phase1Signal({ value: 1 }), 1));
+  assert.equal((await getDocFromServer(child(db))).data().futureField, 'preserved');
+  await assertSucceeds(trackedWrite(db, 'checkIns', 'research', researchCheckIn(), 2));
+  await assertSucceeds(trackedWrite(db, 'checkIns', 'research', researchCheckIn({ note: 'edited' }), 3));
+  await assertFails(trackedWrite(db, 'checkIns', 'research', { energy: 4 }, 4));
+});
+
+test('tracked check-ins cannot omit known answers or bypass bounded questionnaire validation', async () => {
+  await seed(profile({ inputSyncVersion: 1, inputRevision: 1 }));
+  const db = signedIn();
+  const full = researchCheckIn();
+  for (const key of ['energy', 'questionnaireVersion', 'questionnaireSnapshot', 'timestamp']) {
+    const incomplete = { ...full };
+    delete incomplete[key];
+    await assertFails(trackedWrite(db, 'checkIns', 'research', incomplete, 2, { sourceAfter: full }));
+  }
+  for (const mutate of [
+    value => { value.questionnaireSnapshot.items[0].prompt = 'x'.repeat(501); },
+    value => { value.questionnaireSnapshot.items[1].anchors['1'] = []; },
+    value => { value.questionnaireSnapshot.items[2].extra = true; },
+    value => { value.questionnaireSnapshot.items[3].optional = false; },
+    value => { value.answeredItemCount = 6; },
+  ]) {
+    const data = researchCheckIn();
+    mutate(data);
+    await assertFails(trackedWrite(db, 'checkIns', 'research', data, 2));
+  }
+  await assertSucceeds(trackedWrite(db, 'checkIns', 'research', full, 2));
+});
+
+test('sixteen complete research check-ins fit the atomic rules budgets', async () => {
+  await seed(profile({ inputSyncVersion: 1, inputRevision: 1 }));
+  const db = signedIn();
+  const batch = writeBatch(db);
+  batch.update(root(db), { inputRevision: 2 });
+  for (let index = 0; index < 16; index++) {
+    addInputChange(batch, db, 'checkIns', `row-${index}`, researchCheckIn({
+      energy: 7, fatigue: 7, sleepiness: 7, focus: 7, mood: 7, stress: 7,
+      completionStatus: 'complete', answeredItemCount: 6,
+    }), 2);
+  }
+  await assertSucceeds(batch.commit());
+});
+
+test('summary writes and tracked patches retain fail-closed privacy checks', async () => {
+  await seed({ consentFlags: flags(false), inputSyncVersion: 1, inputRevision: 1 });
+  const db = signedIn();
+  await assertFails(setDoc(child(db, 'forecastDays', '2026-10-24'), forecastDay()));
+  await assertFails(setDoc(child(db, 'heartRateDays', '2026-10-24'), heartRateDay()));
+  await assertFails(trackedWrite(db, 'signals', 'row', phase1Signal(), 2));
+  await assertSucceeds(getDocs(collection(db, 'users/owner/forecastDays')));
+  await assertSucceeds(getDocs(collection(db, 'users/owner/heartRateDays')));
+  await assertSucceeds(getDocs(collection(db, 'users/owner/inputChanges')));
+});
+
+test('sixteen source changes plus journals fit the atomic rules access budget', async () => {
+  await seed(profile({ inputSyncVersion: 1, inputRevision: 1 }));
+  const db = signedIn();
+  const batch = writeBatch(db);
+  batch.update(root(db), { inputRevision: 2 });
+  for (let index = 0; index < 16; index++) {
+    addInputChange(batch, db, 'signals', `row-${index}`, phase1Signal({ value: index }), 2);
+  }
+  await assertSucceeds(batch.commit());
+  const changes = await getDocsFromServer(query(collection(db, 'users/owner/inputChanges'),
+    where('revision', '>', 1), where('revision', '<=', 2)));
+  assert.equal(changes.size, 16);
+});
+
+test('summary storage blocks new raw HealthKit heart rates while preserving other observations', async () => {
+  await seed(profile({ inputSyncVersion: 1, inputRevision: 1, heartRateStorageVersion: 1 }));
+  const db = signedIn();
+  await assertFails(trackedWrite(db, 'signals', 'heart', phase1Signal({ type: 'heartRate', source: 'healthKit' }), 2));
+  await assertSucceeds(trackedWrite(db, 'signals', 'hrv', phase1Signal({ type: 'hrv', source: 'healthKit' }), 2));
+  await assertSucceeds(trackedWrite(db, 'signals', 'rest', phase1Signal({ type: 'restingHeartRate', source: 'healthKit' }), 3));
+  await assertSucceeds(trackedWrite(db, 'signals', 'manual', phase1Signal({ type: 'heartRate', source: 'manual' }), 4));
+});
+
+test('privacy deletion permits cleanup of tracked sources and tombstones without journal rewrites', async () => {
+  await seed();
+  const db = signedIn();
+  await assertSucceeds(trackedWrite(db, 'signals', 'row', phase1Signal(), 1));
+  await assertSucceeds(setDoc(root(db), marker(), { merge: true }));
+  await assertSucceeds(deleteDoc(child(db)));
+  await assertSucceeds(deleteDoc(child(db, 'inputChanges', 'signals__row')));
+});
+
 test('unauthenticated requests cannot inspect or mutate any real-user path', async () => {
   await seed(profile(), true);
   const db = environment.unauthenticatedContext().firestore();
@@ -144,7 +391,7 @@ test('user-directory and collection-group queries remain denied even with owner 
   await assertFails(getDocs(collectionGroup(db, 'signals')));
 });
 
-test('legacy and revoked accounts can still inspect, export and delete all seven collections', async () => {
+test('legacy and revoked accounts can still inspect, export and delete all known collections', async () => {
   await seed({ consentFlags: flags(false) }, true);
   const db = signedIn('owner', { auth_time: 1 });
   await assertSucceeds(getDoc(root(db)));

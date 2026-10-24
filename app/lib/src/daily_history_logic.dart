@@ -68,15 +68,18 @@ class DailyHistoryItem {
   bool get isManual =>
       !isFixture &&
       switch (kind) {
-        DailyHistoryItemKind.activity ||
-        DailyHistoryItemKind.sleep ||
-        DailyHistoryItemKind.checkIn => true,
+        DailyHistoryItemKind.activity || DailyHistoryItemKind.checkIn => true,
+        DailyHistoryItemKind.sleep => sleep!.source == SignalSource.manual,
         DailyHistoryItemKind.signal => signal!.source == SignalSource.manual,
       };
 
-  bool get canEdit => isManual && kind != DailyHistoryItemKind.signal;
+  bool get canEdit =>
+      !isFixture &&
+      (kind == DailyHistoryItemKind.sleep ||
+          (isManual && kind != DailyHistoryItemKind.signal));
 
-  bool get canDelete => isManual;
+  bool get canDelete =>
+      !isFixture && (kind == DailyHistoryItemKind.sleep || isManual);
 }
 
 class DailyHistoryDay {
@@ -131,13 +134,12 @@ abstract final class DailyHistoryLogic {
     for (final signal in signals) {
       final groupId = signal.groupId;
       final isImportedSleep =
-          groupId?.startsWith(SleepSyncLogic.importedGroupPrefix) ?? false;
-      if (isImportedSleep) {
-        if (signal.type == SignalType.sleep || signal.type == SignalType.nap) {
-          add(DailyHistoryItem.signal(signal));
-        }
-        continue;
-      }
+          groupId != null &&
+          (groupId.startsWith(SleepSyncLogic.importedGroupPrefix) ||
+              groupId.startsWith(SleepSyncLogic.importedNapGroupPrefix));
+      // Preferred imported nights/naps are semantic sleep records above. Their
+      // stage siblings and competing summaries must not appear a second time.
+      if (isImportedSleep) continue;
       final isGroupedRecord =
           groupId != null &&
           (groupId.startsWith('activity-') || groupId.startsWith('sleep-'));

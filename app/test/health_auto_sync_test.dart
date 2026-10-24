@@ -37,52 +37,56 @@ void main() {
     },
   );
 
-  testWidgets('foreground polls each minute and stops when app is hidden', (
-    tester,
-  ) async {
-    var now = DateTime.utc(2026, 10, 11, 12);
-    final health = _ControlledHealthService();
-    final controller = _controller(health, () => now);
-    addTearDown(controller.dispose);
-    await tester.runAsync(() async {
-      await controller.load();
-      await controller.connectHealth();
-    });
-    controller.setAppForeground(true);
-    health.heartReadings = [
-      SignalReading(
-        id: 'ordinary-heart-rate',
-        type: SignalType.heartRate,
-        value: 73,
-        timestamp: now,
-        source: SignalSource.healthKit,
-      ),
-    ];
-    now = now.add(const Duration(seconds: 59));
-    await tester.pump(const Duration(seconds: 59));
-    expect(health.heartCalls, 1);
-    now = now.add(const Duration(seconds: 1));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-    expect(health.heartCalls, 2);
-    expect(controller.latestHealthKitHeartRate?.value, 73);
-    expect(controller.lastHealthRefreshReason, HealthRefreshReason.foreground);
-    expect(health.recentOnlyRequests, [false, true]);
-    controller.setAppForeground(false);
-    now = now.add(const Duration(minutes: 5));
-    await tester.pump(const Duration(minutes: 5));
-    expect(health.heartCalls, 2);
-    controller.setAppForeground(true);
-    now = now.add(const Duration(minutes: 1));
-    await tester.pump(const Duration(minutes: 1));
-    await tester.pumpAndSettle();
-    expect(health.heartCalls, 3);
-    await controller.disconnectHealth();
-    now = now.add(const Duration(minutes: 1));
-    await tester.pump(const Duration(minutes: 1));
-    expect(health.heartCalls, 3);
-    controller.setAppForeground(false);
-  });
+  testWidgets(
+    'foreground polls every fifteen minutes and stops when app is hidden',
+    (tester) async {
+      var now = DateTime.utc(2026, 10, 11, 12);
+      final health = _ControlledHealthService();
+      final controller = _controller(health, () => now);
+      addTearDown(controller.dispose);
+      await tester.runAsync(() async {
+        await controller.load();
+        await controller.connectHealth();
+      });
+      controller.setAppForeground(true);
+      health.heartReadings = [
+        SignalReading(
+          id: 'ordinary-heart-rate',
+          type: SignalType.heartRate,
+          value: 73,
+          timestamp: now,
+          source: SignalSource.healthKit,
+        ),
+      ];
+      now = now.add(const Duration(minutes: 14, seconds: 59));
+      await tester.pump(const Duration(minutes: 14, seconds: 59));
+      expect(health.heartCalls, 1);
+      now = now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(health.heartCalls, 2);
+      expect(controller.latestHealthKitHeartRate?.value, 73);
+      expect(
+        controller.lastHealthRefreshReason,
+        HealthRefreshReason.foreground,
+      );
+      expect(health.recentOnlyRequests, [false, true]);
+      controller.setAppForeground(false);
+      now = now.add(const Duration(minutes: 5));
+      await tester.pump(const Duration(minutes: 5));
+      expect(health.heartCalls, 2);
+      controller.setAppForeground(true);
+      now = now.add(const Duration(minutes: 15));
+      await tester.pump(const Duration(minutes: 15));
+      await tester.pumpAndSettle();
+      expect(health.heartCalls, 3);
+      await controller.disconnectHealth();
+      now = now.add(const Duration(minutes: 15));
+      await tester.pump(const Duration(minutes: 15));
+      expect(health.heartCalls, 3);
+      controller.setAppForeground(false);
+    },
+  );
 
   test(
     'automatic recent reads retain initial, daily and manual backfills',

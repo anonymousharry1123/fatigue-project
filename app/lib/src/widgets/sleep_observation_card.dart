@@ -7,6 +7,7 @@ import '../models.dart';
 import '../privacy_consent.dart';
 import '../sleep_observation_logic.dart';
 import 'common_widgets.dart';
+import 'data_source_badge.dart';
 
 class SleepObservationCard extends StatefulWidget {
   const SleepObservationCard({
@@ -78,6 +79,14 @@ class _SleepObservationCardState extends State<SleepObservationCard> {
                             : context.tr('Manual entry')}',
             ),
           ),
+          if (latest != null) ...[
+            const SizedBox(height: 5),
+            DataSourceBadge(
+              source: latest.source,
+              recordId: latest.id,
+              isDemo: EvidenceProvenance.signalIsDemo(latest),
+            ),
+          ],
           if (latest?.source == SignalSource.manual)
             Text(
               context.tr(

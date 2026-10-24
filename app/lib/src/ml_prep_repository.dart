@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'cloud_repository.dart';
 import 'ml_prep_models.dart';
+import 'models.dart';
 
 /// The bounded query used by an explicit account-preparation run.
 ///
@@ -102,13 +103,28 @@ class FirestorePrepDataSource implements PrepDataSource {
       window: window,
       requestedLimit: limit,
     );
-    final snapshot = await _firestore
+    Query<Map<String, dynamic>> query = _firestore
         .collection('users')
         .doc(uid)
         .collection(collection.name)
         .where(spec.timestampField, isGreaterThanOrEqualTo: spec.start)
-        .where(spec.timestampField, isLessThan: spec.end)
-        .orderBy(spec.timestampField)
+        .where(spec.timestampField, isLessThan: spec.end);
+    if (collection == PrepCollection.signals) {
+      // Ordinary heart-rate samples do not contribute model features. Filter
+      // before applying the document budget, keeping HRV and resting HR.
+      query = query.where(
+        'type',
+        whereIn: [
+          for (final type in SignalType.values)
+            if (type != SignalType.heartRate) type.name,
+        ],
+      );
+    }
+    final snapshot = await query
+        .orderBy(
+          spec.timestampField,
+          descending: collection == PrepCollection.signals,
+        )
         .limit(spec.limit)
         .get(const GetOptions(source: Source.server));
     PrepQuerySpec.requireAccount(uid, currentUid);

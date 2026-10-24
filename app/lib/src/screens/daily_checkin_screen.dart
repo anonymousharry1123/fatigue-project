@@ -5,6 +5,7 @@ import '../check_in_logic.dart';
 import '../check_in_measurement.dart';
 import '../l10n/app_localizations.dart';
 import '../models.dart';
+import '../widgets/data_source_badge.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/self_report_card.dart';
@@ -235,7 +236,11 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
               ),
               const SizedBox(height: 12),
               if (period == CheckInPeriod.evening) ...[
-                _EveningSleepCard(enabled: !saving, onOpen: _openSleep),
+                _EveningSleepCard(
+                  enabled: !saving,
+                  onOpen: _openSleep,
+                  sleep: _sleepForCheckIn,
+                ),
                 const SizedBox(height: 12),
               ],
               _PeriodPicker(
@@ -409,10 +414,10 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
     }
   }
 
-  Future<void> _openSleep() async {
+  SleepLogEntry? get _sleepForCheckIn {
     final controller = AppScope.of(context);
     final at = widget.initialCheckIn?.timestamp ?? controller.currentTime;
-    final existing = controller.sleepLogs
+    return controller.sleepLogs
         .where(
           (log) =>
               !log.isNap &&
@@ -420,6 +425,12 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
               at.difference(log.wakeTime) <= const Duration(hours: 24),
         )
         .firstOrNull;
+  }
+
+  Future<void> _openSleep() async {
+    final at =
+        widget.initialCheckIn?.timestamp ?? AppScope.of(context).currentTime;
+    final existing = _sleepForCheckIn;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SleepLogScreen(
@@ -434,9 +445,14 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
 }
 
 class _EveningSleepCard extends StatelessWidget {
-  const _EveningSleepCard({required this.enabled, required this.onOpen});
+  const _EveningSleepCard({
+    required this.enabled,
+    required this.onOpen,
+    required this.sleep,
+  });
   final bool enabled;
   final VoidCallback onOpen;
+  final SleepLogEntry? sleep;
 
   @override
   Widget build(BuildContext context) => TonyoCard(
@@ -449,15 +465,50 @@ class _EveningSleepCard extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
-        const TranslatedText(
-          'Log your most recent main sleep here, even if you woke up late. There is no logging deadline. Sleep and Energy are saved separately.',
-        ),
+        if (sleep case final recorded?) ...[
+          TranslatedText(
+            context.tr(
+              '{duration} · {source} · Saved',
+              args: {
+                'duration': context.tr(
+                  '{hours}h {minutes}m',
+                  args: {
+                    'hours': recorded.duration.inHours,
+                    'minutes': recorded.duration.inMinutes.remainder(60),
+                  },
+                ),
+                'source': context.tr(
+                  recorded.isFromHealth ? 'Apple Health' : 'Manual entry',
+                ),
+              },
+            ),
+            key: const Key('evening-sleep-record'),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 5),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: DataSourceBadge(
+              source: recorded.source,
+              recordId: recorded.id,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const TranslatedText(
+            'Your main sleep is already logged. Review it if needed. Sleep and Energy are saved separately.',
+          ),
+        ] else
+          const TranslatedText(
+            'Log your most recent main sleep here, even if you woke up late. There is no logging deadline. Sleep and Energy are saved separately.',
+          ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           key: const Key('checkin-log-sleep'),
           onPressed: enabled ? onOpen : null,
           icon: const Icon(Icons.bedtime_outlined),
-          label: const TranslatedText('Log or review sleep'),
+          label: TranslatedText(
+            sleep == null ? 'Log or review sleep' : 'Review sleep',
+          ),
         ),
       ],
     ),

@@ -2,6 +2,7 @@ part of 'app_controller.dart';
 
 enum CloudSyncFailureKind {
   connection,
+  quota,
   authentication,
   permission,
   conflict,
@@ -257,6 +258,13 @@ extension _CoachSync on AppController {
     // conflict or turn foreground retries back on. The input push/resolution
     // path alone clears this blocking state.
     if (cloudSyncConflict && error is! InputSyncConflict) return;
+    if (error is HeartRateSummaryOwnershipConflict ||
+        error is HeartRateSummaryRevisionConflict) {
+      cloudSyncFailureKind = CloudSyncFailureKind.permission;
+      cloudSyncError =
+          'Some heart-rate readings stay on this iPhone because another saved summary needs review. Other changes can still sync.';
+      return;
+    }
     if (error is StateError &&
         error.message.contains(
           'belongs to another account and cannot be migrated',
@@ -267,6 +275,9 @@ extension _CoachSync on AppController {
       return;
     }
     final code = error is FirebaseException ? error.code.toLowerCase() : '';
+    if (code == 'resource-exhausted') {
+      unawaited(_writeLocal().catchError((Object _) {}));
+    }
     final detail = error.toString().toLowerCase();
     cloudSyncFailureKind = error is InputSyncConflict
         ? CloudSyncFailureKind.conflict
@@ -279,12 +290,13 @@ extension _CoachSync on AppController {
         ? CloudSyncFailureKind.authentication
         : code == 'permission-denied'
         ? CloudSyncFailureKind.permission
+        : code == 'resource-exhausted'
+        ? CloudSyncFailureKind.quota
         : {
                 'unavailable',
                 'deadline-exceeded',
                 'network-request-failed',
                 'aborted',
-                'resource-exhausted',
               }.contains(code) ||
               detail.contains('offline') ||
               detail.contains('disconnect') ||
@@ -304,6 +316,8 @@ extension _CoachSync on AppController {
         'Cloud access was denied. Device changes are kept here. Review account privacy or sign in again.',
       CloudSyncFailureKind.connection =>
         'Saved on this device. Waiting for a connection; sync retries while the app is open.',
+      CloudSyncFailureKind.quota =>
+        'Cloud service quota reached. Your changes are saved on this device. Try syncing again later.',
       CloudSyncFailureKind.deviceStorage =>
         'This device could not save your changes. Keep the app open, free storage, and retry.',
       CloudSyncFailureKind.unknown =>
@@ -327,6 +341,8 @@ extension CloudRetry on AppController {
       guardianConsentBlocker == null &&
       hasAnyPendingCloudChanges &&
       !cloudSyncConflict &&
+      (cloudSyncFailureKind != CloudSyncFailureKind.quota ||
+          _quotaGate?.paused(cloudUid!) != true) &&
       cloudSyncFailureKind != CloudSyncFailureKind.authentication &&
       cloudSyncFailureKind != CloudSyncFailureKind.permission &&
       cloudSyncFailureKind != CloudSyncFailureKind.deviceStorage;
@@ -335,11 +351,25 @@ extension CloudRetry on AppController {
     if (!_retryEligible) {
       _cloudRetryTimer?.cancel();
       _cloudRetryTimer = null;
+      _cloudRetryScheduledAt = null;
       return;
     }
-    if (_cloudRetryTimer != null) return;
-    _cloudRetryTimer = Timer(_cloudRetryDelay, () async {
+    var delay = _cloudRetryDelay;
+    if (_onlyDeferredHeartSummaries) {
+      final clock = _now().toLocal();
+      delay = localDay(clock, 1).difference(clock);
+    }
+    final scheduledAt = _now().add(delay);
+    if (_cloudRetryTimer != null &&
+        _cloudRetryScheduledAt != null &&
+        !_cloudRetryScheduledAt!.isAfter(scheduledAt)) {
+      return;
+    }
+    _cloudRetryTimer?.cancel();
+    _cloudRetryScheduledAt = scheduledAt;
+    _cloudRetryTimer = Timer(delay, () async {
       _cloudRetryTimer = null;
+      _cloudRetryScheduledAt = null;
       if (!_retryEligible) return;
       _cloudRetryDelay = Duration(
         seconds: (_cloudRetryDelay.inSeconds * 2).clamp(5, 60),
@@ -376,6 +406,7 @@ extension CloudRetry on AppController {
   }
 
   Future<void> _syncPendingChangesNow() async {
+    if (_onlyDeferredHeartSummaries) return;
     final revision = _sessionRevision;
     final uid = cloudUid;
     final generation = ++_privacyRefreshGeneration;
