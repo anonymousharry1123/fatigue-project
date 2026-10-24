@@ -66,6 +66,280 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
+    'fresh same-account sign-in reopens owned adult data during Firestore quota',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      await h.controller.signOut();
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.isSignedOut, true);
+      expect(restarted.privacyFeaturesAllowed, false);
+      h.repository.readError = 'resource-exhausted';
+      final writes = h.repository.inputPatchCallCount;
+      await restarted.signIn(email: _session.email, password: 'right');
+      expect(restarted.isSignedOut, false);
+      expect(restarted.isUsingQuotaLocalData, true);
+      expect(restarted.cloudBackupLabel, 'Backup pending');
+      await restarted.addSignal(SignalType.hydration, 2);
+      expect(restarted.signals, hasLength(2));
+      h.health.authorized = true;
+      h.health.imported = [
+        SignalReading(
+          id: 'signed-in-health',
+          type: SignalType.heartRate,
+          value: 70,
+          timestamp: h.now,
+          source: SignalSource.healthKit,
+        ),
+      ];
+      await restarted.refreshHealthAuthorization();
+      await restarted.connectHealth();
+      expect(restarted.signals.map((r) => r.id), contains('signed-in-health'));
+      expect(h.repository.inputPatchCallCount, writes);
+    },
+  );
+
+  for (final blocked in [
+    'wrong-password',
+    'other-account',
+    'user-disabled',
+    'permission-denied',
+    'unavailable',
+    'minor',
+  ]) {
+    test(
+      '$blocked cannot reopen a signed-out cache through quota recovery',
+      () async {
+        final h = _Harness(
+          state: _state(
+            receipt: blocked == 'minor' ? _minor : _adult,
+            onboarded: true,
+          ),
+        );
+        h.auth.grantGuardian = blocked == 'minor';
+        await h.controller.load();
+        await h.controller.signOut();
+        h.repository.readError =
+            const {'permission-denied', 'unavailable'}.contains(blocked)
+            ? blocked
+            : 'resource-exhausted';
+        if (blocked == 'user-disabled') h.auth.claimsError = blocked;
+        await expectLater(
+          h.controller.signIn(
+            email: blocked == 'other-account'
+                ? 'other@example.test'
+                : _session.email,
+            password: blocked == 'wrong-password' ? 'wrong' : 'right',
+          ),
+          throwsA(anything),
+        );
+        expect(h.controller.isSignedOut, true);
+        expect(h.controller.privacyFeaturesAllowed, false);
+        expect(h.controller.signals.single.id, 'saved');
+      },
+    );
+  }
+
+  testWidgets(
+    'stalled account verification permits local startup, but late account rejection revokes it',
+    (tester) async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      final gate = h.auth.claimsGate = Completer<void>();
+      final restarted = h.newController();
+      var loaded = false;
+      final startup = restarted.load().then((_) => loaded = true);
+      await tester.pump();
+      expect(loaded, false);
+      await tester.pump(const Duration(seconds: 8));
+      await startup;
+      expect(restarted.isReady, true);
+      expect(restarted.isUsingOfflineData, true);
+      await restarted.addSignal(SignalType.hydration, 2);
+      gate.completeError(
+        FirebaseException(plugin: 'firebase_auth', code: 'user-disabled'),
+      );
+      await tester.pump();
+      expect(restarted.privacyFeaturesAllowed, false);
+      expect(restarted.offlineAccessExpiresAt, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      final state = jsonDecode(prefs.getString('tonyo_state_v1')!) as Map;
+      expect((state['offlineAccess'] as Map)['lease'], isNull);
+      expect(state['signals'], hasLength(2));
+    },
+  );
+
+  test(
+    'verified adult can restart, save and import Health offline without cloud calls',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      final expires = h.controller.offlineAccessExpiresAt;
+      expect(expires, h.now.add(const Duration(hours: 72)));
+      h.auth.claimsError = 'network-request-failed';
+      h.now = h.now.add(const Duration(hours: 1));
+      final reads = h.repository.userReads + h.repository.privacyReads;
+      final writes = h.repository.inputPatchCallCount;
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.isReady, true);
+      expect(restarted.isUsingOfflineData, true);
+      expect(restarted.cloudBackupLabel, 'Backup pending');
+      await restarted.addSignal(SignalType.hydration, 2);
+      h.health.authorized = true;
+      h.health.imported = [
+        SignalReading(
+          id: 'offline-heart',
+          type: SignalType.heartRate,
+          value: 70,
+          timestamp: h.now,
+          source: SignalSource.healthKit,
+        ),
+      ];
+      await restarted.refreshHealthAuthorization();
+      await restarted.connectHealth();
+      expect(restarted.signals.map((s) => s.id), contains('offline-heart'));
+      expect(h.repository.userReads + h.repository.privacyReads, reads);
+      expect(h.repository.inputPatchCallCount, writes);
+      expect(restarted.offlineAccessExpiresAt, expires);
+      final again = h.newController();
+      await again.load();
+      expect(
+        again.signals.map((s) => s.id).toSet(),
+        restarted.signals.map((s) => s.id).toSet(),
+      );
+      expect(again.offlineAccessExpiresAt, expires);
+      h.auth.claimsError = null;
+      await again.retryCloudSync();
+      expect(again.isUsingDeviceOnlyData, false);
+      expect(again.hasPendingCloudChanges, false);
+      expect(again.cloudBackupLabel, 'Backed up');
+      expect(
+        again.offlineAccessExpiresAt,
+        h.now.add(const Duration(hours: 72)),
+      );
+    },
+  );
+
+  test(
+    'Firestore network failure permits local collection only within verified lease',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.repository.readError = 'unavailable';
+      await h.controller.handleAppResumed();
+      expect(h.controller.isUsingOfflineData, true);
+      await h.controller.addSignal(SignalType.hydration, 2);
+      h.now = _now.add(const Duration(hours: 72));
+      expect(h.controller.privacyFeaturesAllowed, false);
+      await expectLater(
+        h.controller.addSignal(SignalType.hydration, 3),
+        throwsStateError,
+      );
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.privacyFeaturesAllowed, false);
+      expect(restarted.signals, hasLength(2));
+    },
+  );
+
+  for (final failure in [
+    'user-disabled',
+    'invalid-user-token',
+    'permission-denied',
+  ]) {
+    test(
+      '$failure permanently clears offline grant before a later network failure',
+      () async {
+        final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+        await h.controller.load();
+        h.auth.claimsError = failure;
+        await h.controller.handleAppResumed();
+        expect(h.controller.privacyFeaturesAllowed, false);
+        h.auth.claimsError = 'network-request-failed';
+        final restarted = h.newController();
+        await restarted.load();
+        expect(restarted.privacyFeaturesAllowed, false);
+        expect(restarted.offlineAccessExpiresAt, isNull);
+      },
+    );
+  }
+
+  test(
+    'clock rollback, owner change and missing consent cannot borrow an offline grant',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.auth.claimsError = 'network-request-failed';
+      h.now = _now.subtract(const Duration(minutes: 1));
+      await h.controller.handleAppResumed();
+      expect(h.controller.privacyFeaturesAllowed, false);
+      h.now = _now;
+      h.auth.session = const AccountSession(
+        uid: 'other',
+        email: 'other@example.test',
+      );
+      final other = h.newController();
+      await other.load();
+      expect(other.privacyFeaturesAllowed, false);
+    },
+  );
+
+  test(
+    'foreground edits save immediately and upload once after the quiet period',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.controller.setAppForeground(true);
+      final writes = h.repository.inputPatchCallCount;
+      await h.controller.saveActivityLog(
+        id: 'edited-water',
+        hydrationLiters: 2,
+      );
+      await h.controller.saveActivityLog(
+        id: 'edited-water',
+        hydrationLiters: 3,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        (jsonDecode(prefs.getString('tonyo_state_v1')!) as Map)['signals'],
+        hasLength(2),
+      );
+      expect(h.repository.inputPatchCallCount, writes);
+      expect(h.controller.cloudBackupLabel, 'Backup pending');
+      h.now = h.now.add(const Duration(seconds: 3));
+      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      expect(h.repository.inputPatchCallCount, writes + 1);
+      expect(h.controller.hasPendingCloudChanges, false);
+      expect(h.controller.cloudBackupLabel, 'Backed up');
+      final cloud = (await h.repository.readUser('owner'))!;
+      expect(
+        cloud.signals.singleWhere((r) => r.groupId == 'edited-water').value,
+        3,
+      );
+      h.controller.setAppForeground(false);
+    },
+  );
+
+  test(
+    'closing during the quiet period retains changes and restart uploads them',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.controller.setAppForeground(true);
+      final writes = h.repository.inputPatchCallCount;
+      await h.controller.addSignal(SignalType.hydration, 2);
+      h.controller.setAppForeground(false);
+      final restarted = h.newController();
+      await restarted.load();
+      expect(h.repository.inputPatchCallCount, writes + 1);
+      expect(restarted.signals, hasLength(2));
+      expect(restarted.hasPendingCloudChanges, false);
+    },
+  );
+
+  test(
     'quota permits owned adult saves and Health imports across restart, then safely uploads',
     () async {
       final h = _Harness(state: _state(receipt: _adult, onboarded: true));
@@ -160,7 +434,7 @@ void main() {
     },
   );
 
-  for (final failure in ['permission-denied', 'unavailable']) {
+  for (final failure in ['permission-denied']) {
     test(
       '$failure ends quota local permission rather than reusing it',
       () async {
@@ -816,11 +1090,31 @@ class _Auth extends MemoryAccountAuth {
   int deletes = 0;
   bool grantGuardian = false;
   bool failClaims = false;
+  String? claimsError;
+  Completer<void>? claimsGate;
   void Function()? afterReauth;
+  @override
+  Future<AccountSession> signIn({
+    required String email,
+    required String password,
+  }) async {
+    if (password != expectedPassword) {
+      throw FirebaseException(plugin: 'firebase_auth', code: 'wrong-password');
+    }
+    session = email == _session.email
+        ? _session
+        : AccountSession(uid: 'other', email: email);
+    return session!;
+  }
+
   @override
   Future<void> refreshPrivacyClaims() async {
     claimRefreshes++;
+    await claimsGate?.future;
     if (failClaims) throw StateError('offline token verification');
+    if (claimsError != null) {
+      throw FirebaseException(plugin: 'firebase_auth', code: claimsError!);
+    }
     if (session != null) {
       session = AccountSession(
         uid: session!.uid,

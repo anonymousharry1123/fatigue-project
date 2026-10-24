@@ -48,6 +48,7 @@ import 'notification_logic.dart';
 import 'notification_service.dart';
 import 'personal_baseline_logic.dart';
 import 'privacy_consent.dart';
+import 'offline_access_lease.dart';
 import 'reaction_test_logic.dart';
 import 'recommendation_feedback_logic.dart';
 import 'screen_time_service.dart';
@@ -59,6 +60,7 @@ part 'backup_restore.dart';
 part 'sync_conflict_resolution.dart';
 part 'coach_sync.dart';
 part 'efficient_sync.dart';
+part 'local_continuity.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -107,7 +109,7 @@ class AppController extends ChangeNotifier {
     _privacyOwnerUid = _accountAuth.currentSession?.uid;
     _cloudPrivacyVerified = initialPrivacyConsent != null;
     (this.cloudRepository as QuotaCloudRepository?)?.deviceOnly = () =>
-        _quotaLocalAccess;
+        _quotaLocalAccess || _offlineLocalAccess;
   }
 
   static const _storageKey = 'tonyo_state_v1';
@@ -468,7 +470,7 @@ class AppController extends ChangeNotifier {
     writer: energyModelMetadataWriter,
     currentUid: () => cloudUid,
     consentAllowed: () =>
-        outcomeConsent && _canProcessData && !_quotaLocalAccess,
+        outcomeConsent && _canProcessData && !isUsingDeviceOnlyData,
     now: _now,
   );
   PrepRun? _preparedModelRun;
@@ -561,6 +563,8 @@ class AppController extends ChangeNotifier {
       cloudUid != null &&
       cloudUid == _coachSyncOwnerUid &&
       (_pendingCoachWrites.isNotEmpty || _pendingAlertWrites.isNotEmpty);
+  DateTime? _editUploadStartedAt;
+  DateTime? _editUploadNotBefore;
   bool get hasAnyPendingCloudChanges =>
       hasPendingCloudChanges ||
       hasPendingOutcomeChanges ||
@@ -590,6 +594,26 @@ class AppController extends ChangeNotifier {
     return count;
   }
 
+  bool _deviceSaveFailed = false;
+  int _localSaveSequence = 0;
+
+  String get cloudBackupLabel {
+    if (_deviceSaveFailed ||
+        cloudSyncFailureKind == CloudSyncFailureKind.deviceStorage) {
+      return 'Save needs attention';
+    }
+    if (!isCloudAuthenticated || isSignedOut) return 'Saved on iPhone';
+    if (hasAnyPendingCloudChanges ||
+        !_cloudPrivacyVerified ||
+        cloudSyncError != null ||
+        deletionPending) {
+      return 'Backup pending';
+    }
+    return _syncBaseline != null || lastCloudSyncAt != null
+        ? 'Backed up'
+        : 'Saved on iPhone';
+  }
+
   String get cloudSyncStatusMessage {
     if (isSignedOut || !isCloudAuthenticated) {
       return 'Sign in to sync this device.';
@@ -603,6 +627,9 @@ class AppController extends ChangeNotifier {
     }
     if (isUsingQuotaLocalData) {
       return 'Cloud quota reached. Logging and Apple Health continue on this device; cloud sync is paused.';
+    }
+    if (isUsingOfflineData) {
+      return 'Saved on iPhone. Offline access is available for up to 72 hours after verification; cloud backup is pending.';
     }
     if (cloudSyncError != null) return cloudSyncError!;
     if (_onlyDeferredHeartSummaries) {
@@ -621,6 +648,7 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _offlineExpiryTimer?.cancel();
     _unloadAi1Capture();
     _disposed = true;
     _cloudSyncActivities.clear();
@@ -646,6 +674,7 @@ class AppController extends ChangeNotifier {
   /// The app owns foreground retry lifetime; headless controllers create no timers.
   void setAppForeground(bool foreground) {
     _appInForeground = foreground && !_disposed;
+    _scheduleOfflineExpiry();
     _ai1StudyTimer?.cancel();
     _ai1StudyTimer = null;
     _healthForegroundTimer?.cancel();
@@ -662,6 +691,7 @@ class AppController extends ChangeNotifier {
       unawaited(refreshAi1Study());
     }
     if (!_appInForeground) {
+      _clearEditUploadWindow();
       _cloudRetryTimer?.cancel();
       _cloudRetryTimer = null;
       return;
@@ -708,14 +738,33 @@ class AppController extends ChangeNotifier {
   // Ephemeral permission for local work only. Never persist this as cloud
   // verification or infer it from a generic connection/authentication failure.
   bool _quotaLocalAccess = false;
+  bool _offlineLocalAccess = false;
+  OfflineAccessLease? _offlineAccessLease;
+  Timer? _offlineExpiryTimer;
+  bool get isUsingOfflineData =>
+      _offlineLocalAccess &&
+      _ownedAdultCache &&
+      _offlineAccessLease?.allows(
+            owner: cloudUid,
+            currentConsent: _privacyConsent,
+            now: _now(),
+          ) ==
+          true;
+  bool get isUsingDeviceOnlyData => isUsingQuotaLocalData || isUsingOfflineData;
+  DateTime? get offlineAccessExpiresAt => _offlineAccessLease?.expiresAt;
   String? _claimsVerifiedOwner;
   int? _claimsVerifiedRevision;
+  int _claimsRefreshGeneration = 0;
   bool get isUsingQuotaLocalData =>
       _quotaLocalAccess && _eligibleForQuotaLocalData;
-  bool get _eligibleForQuotaLocalData =>
-      cloudUid != null &&
+  bool get _eligibleForQuotaLocalData => _hasVerifiedQuotaCache();
+  bool _hasVerifiedQuotaCache({bool allowSignedOut = false}) =>
+      _hasOwnedAdultCache(allowSignedOut: allowSignedOut) &&
       _claimsVerifiedOwner == cloudUid &&
-      _claimsVerifiedRevision == _sessionRevision &&
+      _claimsVerifiedRevision == _sessionRevision;
+  bool get _ownedAdultCache => _hasOwnedAdultCache();
+  bool _hasOwnedAdultCache({bool allowSignedOut = false}) =>
+      cloudUid != null &&
       _privacyOwnerUid == cloudUid &&
       _syncOwnerUid == cloudUid &&
       _cloudMetadataUid == cloudUid &&
@@ -724,7 +773,7 @@ class AppController extends ChangeNotifier {
       _privacyConsent?.ageBand == PrivacyAgeBand.adult &&
       _privacyConsent?.validAt(_now()) == true &&
       !deletionPending &&
-      !isSignedOut &&
+      (!isSignedOut || allowSignedOut) &&
       !_isSigningOut &&
       !isDeletingAccount;
   bool get _canUseCloudData => _canProcessData && _cloudPrivacyVerified;
@@ -732,37 +781,72 @@ class AppController extends ChangeNotifier {
   Future<void> _refreshPrivacyClaims({bool Function()? current}) async {
     final uid = cloudUid;
     final revision = _sessionRevision;
+    final generation = ++_claimsRefreshGeneration;
+    bool valid() =>
+        uid == cloudUid &&
+        revision == _sessionRevision &&
+        generation == _claimsRefreshGeneration &&
+        (current == null || current());
+    void failed(Object error) {
+      if (!valid()) return;
+      _claimsVerifiedOwner = null;
+      _claimsVerifiedRevision = null;
+      _quotaLocalAccess = false;
+      _cloudPrivacyVerified = false;
+      _handlePrivacyReadFailure(error);
+    }
+
     try {
-      await _accountAuth.refreshPrivacyClaims();
-      if (uid != cloudUid ||
-          revision != _sessionRevision ||
-          (current != null && !current())) {
-        return;
-      }
+      await _accountAuth
+          .refreshPrivacyClaims()
+          .catchError((Object error) {
+            // Even a late disabled-account response must revoke cached access.
+            failed(error);
+            if (valid()) notifyListeners();
+            throw error;
+          })
+          .timeout(const Duration(seconds: 8));
+      if (!valid()) return;
       _claimsVerifiedOwner = uid;
       _claimsVerifiedRevision = revision;
-    } on Object {
-      if (uid == cloudUid &&
-          revision == _sessionRevision &&
-          (current == null || current())) {
-        _claimsVerifiedOwner = null;
-        _claimsVerifiedRevision = null;
-        _quotaLocalAccess = false;
-        _cloudPrivacyVerified = false;
-      }
+    } on Object catch (error) {
+      failed(error);
       rethrow;
     }
   }
 
-  void _handlePrivacyReadFailure(Object error) {
-    final wasLocalOnly = _quotaLocalAccess;
+  void _handlePrivacyReadFailure(
+    Object error, {
+    bool allowSignedOutQuotaRestore = false,
+  }) {
+    final wasLocalOnly = isUsingDeviceOnlyData;
     _cloudPrivacyVerified = false;
     _quotaLocalAccess =
         error is FirebaseException &&
         error.plugin == 'cloud_firestore' &&
         error.code.toLowerCase() == 'resource-exhausted' &&
-        _eligibleForQuotaLocalData;
-    if (isUsingQuotaLocalData) {
+        _hasVerifiedQuotaCache(allowSignedOut: allowSignedOutQuotaRestore);
+    _offlineLocalAccess =
+        _isTransientConnectionFailure(error) &&
+        _ownedAdultCache &&
+        _offlineAccessLease?.allows(
+              owner: cloudUid,
+              currentConsent: _privacyConsent,
+              now: _now(),
+            ) ==
+            true;
+    if (_offlineAccessLease?.uid == cloudUid &&
+        !_isTransientConnectionFailure(error) &&
+        !(error is FirebaseException &&
+            error.plugin == 'cloud_firestore' &&
+            error.code == 'resource-exhausted')) {
+      _offlineAccessLease = null;
+      if (_privacyOwnerUid == cloudUid) {
+        unawaited(_writeLocal().catchError((Object _) {}));
+      }
+    }
+    _scheduleOfflineExpiry();
+    if (isUsingDeviceOnlyData) {
       privacyOperationError = null;
       if (!wasLocalOnly) {
         // Old cloud responses must not overwrite the local calculations that
@@ -807,7 +891,7 @@ class AppController extends ChangeNotifier {
       _privacyConsent?.validAt(_now()) == true &&
       guardianConsentBlocker == null &&
       (!isCloudAuthenticated ||
-          ((_cloudPrivacyVerified || isUsingQuotaLocalData) &&
+          ((_cloudPrivacyVerified || isUsingDeviceOnlyData) &&
               _privacyOwnerUid == cloudUid));
   bool get privacyReviewRequired => !privacyFeaturesAllowed;
   bool get _canProcessData =>
@@ -887,6 +971,8 @@ class AppController extends ChangeNotifier {
       _privacyConsent = saved;
       _privacyOwnerUid = uid;
       _cloudPrivacyVerified = uid != null;
+      _offlineLocalAccess = false;
+      _recordOfflineVerification();
       _quotaLocalAccess = false;
       // This notice never opts anyone into optional learning.
       outcomeConsent = false;
@@ -1175,7 +1261,7 @@ class AppController extends ChangeNotifier {
       return guardianConsentBlocker ??
           'Review your privacy choices before preparing a model.';
     }
-    if (isUsingQuotaLocalData) {
+    if (isUsingDeviceOnlyData) {
       return 'Cloud sync must recover before preparing a model. Device logging remains available.';
     }
     return null;
@@ -1555,6 +1641,8 @@ class AppController extends ChangeNotifier {
       value.day != null &&
       sameLocalDay(value.day!, at) &&
       value.calculatedAt != null &&
+      (lastCloudSyncAt == null ||
+          !value.calculatedAt!.isBefore(lastCloudSyncAt!)) &&
       !value.calculatedAt!.isAfter(at) &&
       at.difference(value.calculatedAt!) < const Duration(minutes: 1);
 
@@ -2610,17 +2698,24 @@ class AppController extends ChangeNotifier {
     }
     if (isCloudAuthenticated) {
       _cloudPrivacyVerified = false;
+      var freshAuthVerified = false;
       try {
         await _refreshPrivacyClaims();
+        freshAuthVerified = true;
       } on Object catch (error) {
         privacyOperationError =
             'Account privacy could not be verified. Reconnect and retry.';
         _recordCloudFailure(error);
-        isReady = true;
-        notifyListeners();
-        return;
+        if (!isUsingOfflineData) {
+          isReady = true;
+          notifyListeners();
+          return;
+        }
+        privacyOperationError = null;
       }
-      if (_cloudInputsPullDue) {
+      if (!freshAuthVerified) {
+        // No server requests until fresh Auth verification succeeds.
+      } else if (_cloudInputsPullDue) {
         await _hydrateOrMigrateCloud();
       } else {
         final revision = _sessionRevision;
@@ -2749,7 +2844,7 @@ class AppController extends ChangeNotifier {
         if (!current()) return;
         _cloudPrivacyVerified = false;
         _recordCloudFailure(error);
-        privacyOperationError = isUsingQuotaLocalData
+        privacyOperationError = isUsingDeviceOnlyData
             ? null
             : 'Privacy status could not be verified. Reconnect and reopen Tonyo before new collection.';
       }
@@ -2833,7 +2928,16 @@ class AppController extends ChangeNotifier {
     if (!current() || deletionPending) return false;
     AccountPrivacySnapshot state;
     try {
-      state = await repository.readAccountPrivacy(uid);
+      state = await repository
+          .readAccountPrivacy(uid)
+          .catchError((Object error) {
+            if (current()) {
+              _handlePrivacyReadFailure(error);
+              notifyListeners();
+            }
+            throw error;
+          })
+          .timeout(const Duration(seconds: 8));
     } on Object catch (error) {
       if (current()) _handlePrivacyReadFailure(error);
       rethrow;
@@ -2859,12 +2963,14 @@ class AppController extends ChangeNotifier {
     _privacyConsent = state.consent;
     _privacyOwnerUid = uid;
     _cloudPrivacyVerified = true;
+    _offlineLocalAccess = false;
     _quotaLocalAccess = false;
     privacyOperationError = null;
     outcomeConsent = state.outcomeConsent;
     outcomeConsentUpdatedAt = state.outcomeConsentUpdatedAt;
     _reconcileOutcomeSync();
     if (state.deletionPending) await _saveDeletionJournal(uid, 'requested');
+    _recordOfflineVerification();
     if (!current()) return false;
     if (!outcomeConsent) await _discardPersonalizedModel();
     if (!current()) return false;
@@ -2925,6 +3031,7 @@ class AppController extends ChangeNotifier {
         );
         _privacyOwnerUid = uid;
         _cloudPrivacyVerified = true;
+        _offlineLocalAccess = false;
         _quotaLocalAccess = false;
         if (_heartRateSummaryEnabled) {
           await _loadRawHeartRate(
@@ -2980,7 +3087,7 @@ class AppController extends ChangeNotifier {
       checkIns = buildDemoCheckIns(DateTime.now());
     }
     await _setSignedOut(false);
-    await _commit(energyInputsChanged: true);
+    await _commit(energyInputsChanged: true, immediateCloudUpload: true);
     await _loadAi1Capture();
   }
 
@@ -3012,8 +3119,13 @@ class AppController extends ChangeNotifier {
     }
     await _clearModelPreparationWindow();
     await _invalidateModelPreparation();
-    await _hydrateOrMigrateCloud();
-    if (cloudSyncError != null) {
+    await _hydrateOrMigrateCloud(allowSignedOutQuotaRestore: true);
+    // A fresh credential sign-in and claims check may reopen only this adult
+    // account's owned cache when Firestore specifically reports quota. The
+    // signed-out gate remains closed until this explicit sign-in reaches here.
+    final quotaRestore =
+        _quotaLocalAccess && _hasVerifiedQuotaCache(allowSignedOut: true);
+    if (cloudSyncError != null && !quotaRestore) {
       throw StateError(
         'Your account data could not be restored. Please retry.',
       );
@@ -3128,6 +3240,9 @@ class AppController extends ChangeNotifier {
     }
     if (isSignedOut || _isSigningOut) return;
     _isSigningOut = true;
+    _offlineLocalAccess = false;
+    _offlineAccessLease = null;
+    _offlineExpiryTimer?.cancel();
     _notificationScheduleConfirmed = false;
     _notificationPlan = NotificationPlan(
       state: notificationsEnabled
@@ -3136,6 +3251,7 @@ class AppController extends ChangeNotifier {
     );
     _cloudRetryTimer?.cancel();
     _cloudRetryTimer = null;
+    _clearEditUploadWindow();
     _sessionRevision += 1;
     _unloadAi1Capture();
     _invalidateHealthWork();
@@ -3223,7 +3339,7 @@ class AppController extends ChangeNotifier {
         rethrow;
       }
       ensureCurrent();
-      await _pushCloud();
+      if (!_queueEditUpload()) await _pushCloud();
       ensureCurrent();
       // Language is a presentation preference. It does not invalidate scores,
       // training preparation or the user's protected-sleep schedule.
@@ -3745,7 +3861,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    await _retryOutcomeSync();
+    if (!_queueEditUpload()) await _retryOutcomeSync();
     ensureCurrent();
     notifyListeners();
   }
@@ -3811,7 +3927,7 @@ class AppController extends ChangeNotifier {
     isOutcomeLoading = false;
     await _writeLocal();
     ensureCurrent();
-    await _retryOutcomeSync();
+    if (!_queueEditUpload()) await _retryOutcomeSync();
     ensureCurrent();
     notifyListeners();
   }
@@ -3840,7 +3956,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    await _retryCoachSync();
+    if (!_queueEditUpload()) await _retryCoachSync();
     ensureCurrent();
     notifyListeners();
   }
@@ -3866,7 +3982,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    await _retryCoachSync();
+    if (!_queueEditUpload()) await _retryCoachSync();
     ensureCurrent();
     notifyListeners();
   }
@@ -3894,7 +4010,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal();
     ensureCurrent();
-    await _retryCoachSync();
+    if (!_queueEditUpload()) await _retryCoachSync();
     ensureCurrent();
     await refreshNotifications();
     ensureCurrent();
@@ -4686,6 +4802,7 @@ class AppController extends ChangeNotifier {
         'pendingCoach': hasPendingCoachChanges,
         'cloudVerifiedForSession': _cloudPrivacyVerified,
         'quotaLocalDataOnly': isUsingQuotaLocalData,
+        'offlineLocalDataOnly': isUsingOfflineData,
         'cloudSyncInProgress': isCloudSyncing,
       },
       if (savedRecovery is Map && savedRecovery['ownerUid'] == uid)
@@ -5096,6 +5213,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    _clearEditUploadWindow();
     _cloudSyncActivities.clear();
     isCloudSyncing = false;
     _cloudRetryTimer?.cancel();
@@ -5176,6 +5294,9 @@ class AppController extends ChangeNotifier {
     outcomeConsentUpdatedAt = null;
     _privacyConsent = null;
     _privacyOwnerUid = null;
+    _offlineAccessLease = null;
+    _offlineLocalAccess = false;
+    _offlineExpiryTimer?.cancel();
     _cloudPrivacyVerified = false;
     _quotaLocalAccess = false;
     _claimsVerifiedOwner = null;
@@ -5263,6 +5384,7 @@ class AppController extends ChangeNotifier {
 
   Map<String, Object?> _json({bool includeRawHeartRate = true}) => {
     'cloudQuotaCooldown': _quotaGate?.toJson(),
+    'offlineAccess': {'version': 1, 'lease': _offlineAccessLease?.toJson()},
     if (_heartRateSummaryEnabled) 'efficientSync': _efficientSyncJson(),
     if (_coachSyncOwnerUid != null) 'coachSync': _coachSyncJson(),
     if (_lastCloudSyncOwnerUid != null)
@@ -5347,6 +5469,7 @@ class AppController extends ChangeNotifier {
     bool energyInputsChanged = false,
     bool forecastInputsChanged = false,
     bool forceHeartSummary = false,
+    bool immediateCloudUpload = false,
     _Ai1CaptureIntent? ai1Capture,
   }) async {
     _heartRateSummarySource = null;
@@ -5382,7 +5505,9 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _writeLocal(ai1Capture: ai1Capture);
     if (!current()) return;
-    await _pushCloud(forceHeartSummary: forceHeartSummary);
+    if (immediateCloudUpload || forceHeartSummary || !_queueEditUpload()) {
+      await _pushCloud(forceHeartSummary: forceHeartSummary);
+    }
     if (!current()) return;
     if (energyInputsChanged && onboardingComplete) {
       await refreshScores(forceRecalculate: true);
@@ -5402,6 +5527,7 @@ class AppController extends ChangeNotifier {
   Future<void> _writeLocal({_Ai1CaptureIntent? ai1Capture}) async {
     if (deletionPending || isDeletingAccount) return;
     final revision = _sessionRevision;
+    final saveSequence = ++_localSaveSequence;
     // Language, observations and background refresh share one state document.
     // Preserve request order, and capture current state only when its write can
     // start, so a late preference snapshot cannot erase a newer observation.
@@ -5484,12 +5610,24 @@ class AppController extends ChangeNotifier {
     _localWriteQueue = tail;
     try {
       await pending;
+      if (revision == _sessionRevision && saveSequence == _localSaveSequence) {
+        _deviceSaveFailed = false;
+      }
+    } on Object {
+      if (revision == _sessionRevision && saveSequence == _localSaveSequence) {
+        _deviceSaveFailed = true;
+        notifyListeners();
+      }
+      rethrow;
     } finally {
       if (identical(_localWriteQueue, tail)) _localWriteQueue = null;
     }
   }
 
-  Future<void> _hydrateOrMigrateCloud({bool Function()? isCurrent}) async {
+  Future<void> _hydrateOrMigrateCloud({
+    bool Function()? isCurrent,
+    bool allowSignedOutQuotaRestore = false,
+  }) async {
     final session = _accountAuth.currentSession;
     final repository = cloudRepository;
     if (session == null || repository == null) return;
@@ -5509,7 +5647,9 @@ class AppController extends ChangeNotifier {
     CloudUserState? observedPrivacy;
     var didReadAccount = false;
     try {
-      final remote = await _readCloudInputs(session.uid);
+      final remote = await _readCloudInputs(
+        session.uid,
+      ).timeout(const Duration(seconds: 8));
       if (cloudUid != session.uid ||
           _sessionRevision != revision ||
           (isCurrent != null && !isCurrent()) ||
@@ -5603,6 +5743,7 @@ class AppController extends ChangeNotifier {
         }
         _syncOwnerUid = session.uid;
         _cloudPrivacyVerified = true;
+        _offlineLocalAccess = false;
         _quotaLocalAccess = false;
         if (remote.deletionPending) {
           await _saveDeletionJournal(session.uid, 'requested');
@@ -5623,6 +5764,7 @@ class AppController extends ChangeNotifier {
           _lastInputHydrationOwner = session.uid;
           _lastInputHydrationAt = metadataFetchedAt;
         }
+        _recordOfflineVerification();
       }
     } on Object catch (error) {
       if (cloudUid == session.uid &&
@@ -5630,7 +5772,7 @@ class AppController extends ChangeNotifier {
           (isCurrent == null || isCurrent())) {
         // A later summary/storage failure cannot revive privacy that the
         // account response already withdrew. Preserve the pending inputs.
-        if (didReadAccount) {
+        if (didReadAccount && _privacyOwnerUid == session.uid) {
           _privacyConsent = observedPrivacy?.privacyConsent;
           _privacyOwnerUid = session.uid;
           outcomeConsent = observedPrivacy?.outcomeConsent ?? false;
@@ -5641,7 +5783,10 @@ class AppController extends ChangeNotifier {
           }
           if (!outcomeConsent) await _discardPersonalizedModel();
         }
-        _handlePrivacyReadFailure(error);
+        _handlePrivacyReadFailure(
+          error,
+          allowSignedOutQuotaRestore: allowSignedOutQuotaRestore,
+        );
         _recordCloudFailure(error);
       }
     } finally {
@@ -5650,6 +5795,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _pushCloud({bool forceHeartSummary = false}) async {
+    _clearEditUploadWindow();
     // Serialize commits; a later local edit is compared against the last
     // acknowledged snapshot after the current request finishes.
     final revision = _sessionRevision;
@@ -5738,6 +5884,7 @@ class AppController extends ChangeNotifier {
     if (isSignedOut || _isSigningOut || deletionPending || isPrivacyBusy) {
       throw StateError('Finish the current account operation before syncing.');
     }
+    _clearEditUploadWindow();
     final uid = cloudUid;
     if (uid != null) _quotaGate?.retryNow(uid);
     final revision = _sessionRevision;
@@ -5764,7 +5911,7 @@ class AppController extends ChangeNotifier {
         if (current()) {
           _cloudPrivacyVerified = false;
           _recordCloudFailure(error);
-          privacyOperationError = isUsingQuotaLocalData
+          privacyOperationError = isUsingDeviceOnlyData
               ? null
               : 'Account privacy could not be verified. Reconnect and retry.';
         }
@@ -6061,6 +6208,24 @@ class AppController extends ChangeNotifier {
           : null;
       _cloudEnergySummary = EnergyModelSummary.tryParse(
         metadata['personalizedEnergyModel'],
+      );
+    }
+    final offline = json['offlineAccess'];
+    _offlineAccessLease = offline is Map && offline['version'] == 1
+        ? OfflineAccessLease.tryParse(offline['lease'])
+        : null;
+    // Upgrade only a previous authoritative owner-matched account snapshot;
+    // retain its original time, never grant a new 72 hours from installation.
+    if (!json.containsKey('offlineAccess') &&
+        _cloudMetadataFetchedAt != null &&
+        _cloudMetadataUid == _privacyOwnerUid &&
+        _syncOwnerUid == _privacyOwnerUid &&
+        _privacyConsent?.ageBand == PrivacyAgeBand.adult &&
+        _privacyOwnerUid != null) {
+      _offlineAccessLease = OfflineAccessLease(
+        uid: _privacyOwnerUid!,
+        verifiedAt: _cloudMetadataFetchedAt!,
+        consent: _privacyConsent!,
       );
     }
     _scoreSnapshot = null;

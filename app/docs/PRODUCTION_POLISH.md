@@ -475,3 +475,75 @@ restart each phone, reconnect and confirm both edits persist. Then edit the same
 record on both phones, review each phone/cloud choice, and confirm convergence.
 Also save an offline backup, restore it into the same account, retry twice and
 confirm no duplicate inputs or Coach actions appear.
+
+### Offline continuity, backup labels and upload coalescing — 2026-10-24
+
+The network-failure path now supports a 72-hour owner/consent-bound device
+access grant after successful verification. This supersedes the earlier
+quota-only release's requirement for fresh online Auth on every startup;
+unknown/permanent account failures still pause collection. The grant is local
+only, persists its original verification time across restarts, and is revoked
+when an authoritative account/consent check requires it. Privacy verification
+has an eight-second deadline; late account failures cannot restore access.
+
+Source badges now say Apple Health or Manual, while Profile independently shows
+device-save/cloud-backup status. Foreground edits persist first, coalesce for
+two quiet seconds (ten-second maximum), and then upload the final values.
+Account setup and explicit recovery actions bypass the delay. Journals survive
+interruption and account/privacy checks still precede recovery uploads.
+
+A read-only audit confirmed the exhausted daily read quota: 50,447 operations
+against 50,000, with 3,273 writes and 26.4 MiB stored. The reusable audit tool,
+measured snapshot, scope and operational behavior are documented in
+[FIREBASE_USAGE.md](FIREBASE_USAGE.md). Billing was not changed.
+
+Validation: static analysis and whitespace checks pass. The 169 affected tests
+pass across sign-in/setup, account isolation, privacy races, local saves,
+Health imports, upload coalescing and recovery (the final two-file rerun passed
+40 tests, including the new eight-second timeout/late rejection case). The full
+suite run reported 1,719 passed and one skipped; four new regressions were
+fixed and rerun successfully. Four pre-existing UI assertions remain failing in
+`input_accessibility_test.dart` and `ai1_capture_ui_test.dart`; this is not an
+all-green full-suite result.
+
+Physical verification exposed a returning-user edge case: the phone was signed
+out, and quota failure during restoration blocked an otherwise authenticated
+same-account sign-in. Explicit credential sign-in plus fresh Auth verification
+can now reopen only that account's owned adult cache on a specific Firestore
+quota error. Startup while signed out still pauses collection; wrong passwords,
+other owners, minors, unknown failures and permission/account errors cannot use
+this path. The seven additional regression cases and existing authentication,
+privacy-race and cache-isolation tests passed (91 tests in the final run).
+
+#### Paused checkpoint — user requested stop on October 24, 2026
+
+- The offline-continuity, source/backup-label and edit-coalescing release was
+  built, signature-verified and installed on Harry’s iPhone (`com.ios.tonyo`,
+  version `0.35.0+37`). The new installed process was confirmed running.
+- Both post-install preservation audits passed: all 4,223 original raw heart-rate
+  records, 835 other signals and five check-ins remain intact, including raw
+  provenance and account ownership. SQLite integrity passed.
+- The user confirmed the phone is at Welcome / Sign in. The signed-out gate
+  correctly prevented a fresh Health import; physical offline-save/Health
+  recovery is therefore **not yet verified**.
+- **Source is newer than the installed binary.** The final same-account
+  sign-in-during-quota fix described above is saved and tested, but has NOT
+  been rebuilt or installed. Latest validation: 91 tests pass and Flutter
+  analysis reports no issues. Working-tree changes are not committed.
+- Stop here. Do not continue installation or request credentials while paused.
+
+To resume: build the current source with `flutter build ios --release`, verify
+its signature, take a fresh private device-data backup and install on Harry’s
+iPhone only (UDID `00008140-0006045E0C81801C`, team `G3QGQ7ABM5`). Ask the user
+to sign in with their existing account **on the iPhone**, then verify that the
+dashboard opens, a genuine manual entry persists, and Apple Health refresh
+advances while cloud backup remains pending if the daily quota is still
+exhausted. Compare saved records against the fresh backup; remove temporary
+private copies after verification. Never uninstall the app or replace its data.
+
+Temporary health-data copies from this completed installation audit were
+removed at this checkpoint. Aggregate-only audit JSON and scripts remain in
+`/private/tmp/tonyo-offline-backup-rollout`. Test/build/install logs use the
+`/tmp/tonyo-offline-backup-` and `/tmp/tonyo-returning-account-quota-` prefixes.
+Firebase usage evidence and the reusable read-only audit command are in
+[FIREBASE_USAGE.md](FIREBASE_USAGE.md).

@@ -82,6 +82,55 @@ const accountTranslations = <String, Map<String, String>>{
     'zh-Hans': '云同步恢复后才能准备模型。仍可在设备上记录数据。',
     'zh-Hant': '雲端同步恢復後才能準備模型。仍可在裝置上記錄資料。',
   },
+  "Saved on iPhone": {
+    "es": "Guardado en el iPhone",
+    "zh-Hans": "已保存在 iPhone",
+    "zh-Hant": "已儲存在 iPhone",
+  },
+  "Backup pending": {
+    "es": "Copia de seguridad pendiente",
+    "zh-Hans": "等待备份",
+    "zh-Hant": "等待備份",
+  },
+  "Backed up": {
+    "es": "Copia de seguridad completada",
+    "zh-Hans": "已备份",
+    "zh-Hant": "已備份",
+  },
+  "Save needs attention": {
+    "es": "Revisa el guardado",
+    "zh-Hans": "保存需要处理",
+    "zh-Hant": "儲存需要處理",
+  },
+  "Cloud backup": {
+    "es": "Copia de seguridad en la nube",
+    "zh-Hans": "云备份",
+    "zh-Hant": "雲端備份",
+  },
+  "Health imports and cloud backup are separate. A pending backup does not mean your entry failed to save.": {
+    "es":
+        "Las importaciones de Salud y las copias en la nube son independientes. Una copia pendiente no significa que tu registro no se haya guardado.",
+    "zh-Hans": "健康数据导入与云备份是独立的。等待备份不代表记录保存失败。",
+    "zh-Hant": "健康資料匯入與雲端備份是獨立的。等待備份不代表記錄儲存失敗。",
+  },
+  "Saved on iPhone. Offline access is available for up to 72 hours after verification; cloud backup is pending.": {
+    "es":
+        "Guardado en el iPhone. El acceso sin conexión está disponible durante 72 horas tras la verificación; la copia en la nube está pendiente.",
+    "zh-Hans": "已保存在 iPhone。验证后最多可离线使用 72 小时；云备份待处理。",
+    "zh-Hant": "已儲存在 iPhone。驗證後最多可離線使用 72 小時；雲端備份待處理。",
+  },
+  "Offline access expired. Reconnect to verify your account; saved records are kept on this iPhone.": {
+    "es":
+        "El acceso sin conexión caducó. Conéctate para verificar tu cuenta; los registros se conservan en este iPhone.",
+    "zh-Hans": "离线访问已到期。请联网验证账户；已保存的记录仍保留在此 iPhone 上。",
+    "zh-Hant": "離線存取已到期。請連線驗證帳戶；已儲存的記錄仍保留在此 iPhone 上。",
+  },
+  "Apple Health entries are imported automatically. Manual entries are added in Tonyo. Cloud backup status is shown separately in Profile.": {
+    "es":
+        "Los registros de Apple Health se importan automáticamente. Los manuales se añaden en Tonyo. El estado de la copia en la nube se muestra por separado en Perfil.",
+    "zh-Hans": "Apple 健康记录会自动导入。手动记录在 Tonyo 中添加。云备份状态单独显示在个人资料中。",
+    "zh-Hant": "Apple 健康記錄會自動匯入。手動記錄在 Tonyo 中新增。雲端備份狀態單獨顯示在個人資料中。",
+  },
   "Language": {"es": "Idioma", "zh-Hans": "语言", "zh-Hant": "語言"},
   "Please wait…": {"es": "Espera…", "zh-Hans": "请稍候…", "zh-Hant": "請稍候…"},
   "Continue local profile": {

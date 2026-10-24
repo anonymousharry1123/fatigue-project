@@ -200,10 +200,16 @@ void main() {
       expect(controller.isCloudAuthenticated, isTrue);
       expect(find.byType(AccountSignInDialog), findsNothing);
       await tester.scrollUntilVisible(
-        find.text('● Private cloud sync active'),
+        find.byKey(const Key('profile-backup-status')),
         -200,
       );
-      expect(find.text('● Private cloud sync active'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('profile-backup-status')))
+            .data,
+        // Authentication alone is not evidence of a completed cloud backup.
+        'Backup pending',
+      );
     },
   );
 

@@ -329,6 +329,29 @@ extension _CoachSync on AppController {
 }
 
 extension CloudRetry on AppController {
+  // The journal is already durable. Headless/background callers retain their
+  // explicit await behavior; foreground UI saves return without waiting online.
+  bool _queueEditUpload() {
+    if (!_appInForeground || cloudUid == null || cloudRepository == null) {
+      return false;
+    }
+    final now = _now();
+    _editUploadStartedAt ??= now;
+    final maximum = _editUploadStartedAt!.add(const Duration(seconds: 10));
+    final quiet = now.add(const Duration(seconds: 2));
+    _editUploadNotBefore = quiet.isBefore(maximum) ? quiet : maximum;
+    _cloudRetryTimer?.cancel();
+    _cloudRetryTimer = null;
+    _cloudRetryScheduledAt = null;
+    scheduleCloudRetry();
+    return true;
+  }
+
+  void _clearEditUploadWindow() {
+    _editUploadStartedAt = null;
+    _editUploadNotBefore = null;
+  }
+
   bool get _retryEligible =>
       !_disposed &&
       _appInForeground &&
@@ -356,7 +379,10 @@ extension CloudRetry on AppController {
       _cloudRetryScheduledAt = null;
       return;
     }
-    var delay = _cloudRetryDelay;
+    var delay = _editUploadNotBefore == null
+        ? _cloudRetryDelay
+        : _editUploadNotBefore!.difference(_now());
+    if (delay.isNegative) delay = Duration.zero;
     if (_onlyDeferredHeartSummaries) {
       final clock = _now().toLocal();
       delay = localDay(clock, 1).difference(clock);
@@ -388,6 +414,7 @@ extension CloudRetry on AppController {
 
   /// Upload the durable journals without regenerating every derived view.
   Future<void> syncPendingChanges() async {
+    _clearEditUploadWindow();
     if (_pendingSyncCycle != null) return _pendingSyncCycle;
     if (_disposed ||
         isSignedOut ||

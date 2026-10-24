@@ -47,7 +47,7 @@ class DailyHistoryScreen extends StatelessWidget {
                   _HistorySummary(history: history),
                   const SizedBox(height: 10),
                   TranslatedText(
-                    'Auto-synced entries are imported from Apple Health. Manual entries are added in Tonyo.',
+                    'Apple Health entries are imported automatically. Manual entries are added in Tonyo. Cloud backup status is shown separately in Profile.',
                     style: TextStyle(
                       color: TonyoPalette.of(context).muted,
                       fontSize: 12,

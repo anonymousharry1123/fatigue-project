@@ -40,9 +40,9 @@ class DataSourceBadge extends StatelessWidget {
               palette.primary,
             ),
             SignalSource.healthKit => (
-              'Auto-synced',
+              'Apple Health',
               'Imported from Apple Health.',
-              Icons.sync_rounded,
+              Icons.favorite_outline_rounded,
               palette.success,
             ),
             SignalSource.model => (

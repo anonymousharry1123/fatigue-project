@@ -1,0 +1,32 @@
+{
+  "project": "fatigue-project-e28a3",
+  "checkedAt": "2026-10-24T21:47:59.153Z",
+  "interval": {
+    "start": "2026-10-24T07:00:00.000Z",
+    "end": "2026-10-24T21:47:58.042Z"
+  },
+  "readOnly": true,
+  "summary": {
+    "billingEnabled": false,
+    "reads": {
+      "usage": 50447,
+      "limit": "50000"
+    },
+    "writes": {
+      "usage": 3273,
+      "limit": "20000"
+    },
+    "storage": {
+      "bytes": 27699757,
+      "measuredAt": "2026-10-24T21:45:00Z",
+      "freeAllowanceBytes": 1073741824
+    },
+    "confirmedExceeded": [
+      {
+        "quota": "firestore.googleapis.com/read_operations_per_project",
+        "limitName": "ReadOperationsPerProjectPerDay",
+        "observedAt": "2026-10-24T21:27:32.520866Z"
+      }
+    ]
+  }
+}

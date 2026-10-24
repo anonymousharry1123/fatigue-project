@@ -130,13 +130,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        controller.isCloudAuthenticated
-                            ? controller.cloudSyncConflict
-                                  ? context.tr('● Cloud sync needs review')
-                                  : syncNeedsAttention
-                                  ? context.tr('● Cloud sync pending')
-                                  : context.tr('● Private cloud sync active')
-                            : context.tr('● Local demo profile'),
+                        context.tr(controller.cloudBackupLabel),
+                        key: const Key('profile-backup-status'),
                         style: TextStyle(
                           color: syncNeedsAttention
                               ? TonyoPalette.of(context).warning
@@ -204,10 +199,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    context.tr('Cloud sync'),
+                    context.tr('Cloud backup'),
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
+                  Text(
+                    context.tr(controller.cloudBackupLabel),
+                    key: const Key('cloud-backup-label'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    context.tr(
+                      'Health imports and cloud backup are separate. A pending backup does not mean your entry failed to save.',
+                    ),
+                  ),
                   Semantics(
                     liveRegion: true,
                     child: Text(context.tr(controller.cloudSyncStatusMessage)),
