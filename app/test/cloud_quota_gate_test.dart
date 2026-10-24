@@ -157,6 +157,45 @@ void main() {
     }
     expect(inner.calls.length, 4);
   });
+
+  test(
+    'device-only permission keeps data blocked after cooldown until privacy is verified',
+    () async {
+      inner.seed(
+        'owner',
+        const CloudUserState(
+          profile: UserProfile(),
+          accountEmail: 'owner@example.test',
+          onboardingComplete: true,
+          notificationsEnabled: false,
+          outcomeConsent: false,
+          healthAuthorized: false,
+          signals: [],
+          checkIns: [],
+        ),
+      );
+      inner.nextError = 'resource-exhausted';
+      await expectLater(repository.readUser('owner'), throwsA(quotaFailure));
+      var localOnly = true;
+      repository.deviceOnly = () => localOnly;
+      now = now.add(const Duration(hours: 2));
+      await expectLater(
+        repository.applyInputPatch('owner', InputSyncPatch(empty, empty)),
+        throwsA(quotaFailure),
+      );
+      await expectLater(
+        repository.signalsByRange('owner', start: now, end: now),
+        throwsA(quotaFailure),
+      );
+      expect(gate.paused('owner'), false);
+      expect(inner.calls, ['readUser owner']);
+      await repository.readAccountPrivacy('owner');
+      expect(inner.calls.last, 'readAccountPrivacy owner');
+      localOnly = false;
+      await repository.applyInputPatch('owner', InputSyncPatch(empty, empty));
+      expect(inner.calls.last, 'applyInputPatch owner');
+    },
+  );
 }
 
 class _CountingRepository extends MemoryCloudRepository {

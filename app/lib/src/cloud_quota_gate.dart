@@ -56,6 +56,20 @@ class QuotaCloudRepository implements CloudRepository {
     : gate = gate ?? CloudQuotaGate();
   final CloudRepository inner;
   final CloudQuotaGate gate;
+  bool Function()? deviceOnly;
+
+  Future<T> _runData<T>(String uid, Future<T> Function() operation) async {
+    if (deviceOnly?.call() == true) {
+      // Expiring a quota timer is not fresh privacy verification. Do not extend
+      // the cooldown here; account reads must be able to attempt recovery.
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'resource-exhausted',
+        message: 'Local changes await cloud privacy verification.',
+      );
+    }
+    return gate.run(uid, operation);
+  }
 
   @override
   Future<CloudUserState?> readUser(String uid) =>
@@ -73,15 +87,15 @@ class QuotaCloudRepository implements CloudRepository {
 
   @override
   Future<DateTime> saveOutcomeConsent(String uid, bool enabled) =>
-      gate.run(uid, () => inner.saveOutcomeConsent(uid, enabled));
+      _runData(uid, () => inner.saveOutcomeConsent(uid, enabled));
 
   @override
   Future<void> replaceUser(String uid, CloudUserState state) =>
-      gate.run(uid, () => inner.replaceUser(uid, state));
+      _runData(uid, () => inner.replaceUser(uid, state));
 
   @override
   Future<void> applyInputPatch(String uid, InputSyncPatch patch) =>
-      gate.run(uid, () => inner.applyInputPatch(uid, patch));
+      _runData(uid, () => inner.applyInputPatch(uid, patch));
 
   @override
   Future<List<SignalReading>> signalsByRange(
@@ -90,7 +104,7 @@ class QuotaCloudRepository implements CloudRepository {
     required DateTime end,
     SignalType? type,
     bool includeHeartRate = true,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.signalsByRange(
       uid,
@@ -106,36 +120,36 @@ class QuotaCloudRepository implements CloudRepository {
     String uid, {
     required DateTime start,
     required DateTime end,
-  }) => gate.run(uid, () => inner.checkInsByRange(uid, start: start, end: end));
+  }) => _runData(uid, () => inner.checkInsByRange(uid, start: start, end: end));
 
   @override
   Future<DailyCheckIn?> latestCheckIn(String uid) =>
-      gate.run(uid, () => inner.latestCheckIn(uid));
+      _runData(uid, () => inner.latestCheckIn(uid));
 
   @override
   Future<List<SignalReading>> reactionBaselineWindow(
     String uid, {
     int limit = 14,
-  }) => gate.run(uid, () => inner.reactionBaselineWindow(uid, limit: limit));
+  }) => _runData(uid, () => inner.reactionBaselineWindow(uid, limit: limit));
 
   @override
   Future<void> upsertScoreSnapshot(String uid, ScoreSnapshot snapshot) =>
-      gate.run(uid, () => inner.upsertScoreSnapshot(uid, snapshot));
+      _runData(uid, () => inner.upsertScoreSnapshot(uid, snapshot));
 
   @override
   Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day) =>
-      gate.run(uid, () => inner.scoreSnapshotForDay(uid, day));
+      _runData(uid, () => inner.scoreSnapshotForDay(uid, day));
 
   @override
   Future<void> clearScoreSnapshots(String uid) =>
-      gate.run(uid, () => inner.clearScoreSnapshots(uid));
+      _runData(uid, () => inner.clearScoreSnapshots(uid));
 
   @override
   Future<List<ForecastPoint>> forecastPointsByRange(
     String uid, {
     required DateTime start,
     required DateTime end,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.forecastPointsByRange(uid, start: start, end: end),
   );
@@ -145,7 +159,7 @@ class QuotaCloudRepository implements CloudRepository {
     String uid, {
     required DateTime day,
     required List<ForecastPoint> points,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.replaceForecastPoints(uid, day: day, points: points),
   );
@@ -154,14 +168,14 @@ class QuotaCloudRepository implements CloudRepository {
   Future<List<Recommendation>> recommendationsForDay(
     String uid,
     DateTime day,
-  ) => gate.run(uid, () => inner.recommendationsForDay(uid, day));
+  ) => _runData(uid, () => inner.recommendationsForDay(uid, day));
 
   @override
   Future<List<Recommendation>> recommendationsByRange(
     String uid, {
     required DateTime start,
     required DateTime end,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.recommendationsByRange(uid, start: start, end: end),
   );
@@ -171,7 +185,7 @@ class QuotaCloudRepository implements CloudRepository {
     String uid, {
     required DateTime day,
     required List<Recommendation> recommendations,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.replaceRecommendationsForDay(
       uid,
@@ -185,7 +199,7 @@ class QuotaCloudRepository implements CloudRepository {
     String uid,
     String recommendationId, {
     required RecommendationStatus status,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.setRecommendationStatus(uid, recommendationId, status: status),
   );
@@ -195,7 +209,7 @@ class QuotaCloudRepository implements CloudRepository {
     String uid,
     String recommendationId, {
     required bool helpful,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.setRecommendationFeedback(
       uid,
@@ -210,7 +224,7 @@ class QuotaCloudRepository implements CloudRepository {
     Recommendation record, {
     RecommendationStatus? status,
     bool? helpful,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.applyRecommendationAction(
       uid,
@@ -222,37 +236,37 @@ class QuotaCloudRepository implements CloudRepository {
 
   @override
   Future<void> applyRiskAlertDismissal(String uid, RiskAlert record) =>
-      gate.run(uid, () => inner.applyRiskAlertDismissal(uid, record));
+      _runData(uid, () => inner.applyRiskAlertDismissal(uid, record));
 
   @override
   Future<void> upsertOutcome(String uid, OutcomeRecord outcome) =>
-      gate.run(uid, () => inner.upsertOutcome(uid, outcome));
+      _runData(uid, () => inner.upsertOutcome(uid, outcome));
 
   @override
   Future<List<OutcomeRecord>> outcomesByRange(
     String uid, {
     required DateTime start,
     required DateTime end,
-  }) => gate.run(uid, () => inner.outcomesByRange(uid, start: start, end: end));
+  }) => _runData(uid, () => inner.outcomesByRange(uid, start: start, end: end));
 
   @override
   Future<void> clearOutcomes(String uid) =>
-      gate.run(uid, () => inner.clearOutcomes(uid));
+      _runData(uid, () => inner.clearOutcomes(uid));
 
   @override
   Future<void> deleteOutcome(String uid, String outcomeId) =>
-      gate.run(uid, () => inner.deleteOutcome(uid, outcomeId));
+      _runData(uid, () => inner.deleteOutcome(uid, outcomeId));
 
   @override
   Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) =>
-      gate.run(uid, () => inner.riskAlertsForDay(uid, day));
+      _runData(uid, () => inner.riskAlertsForDay(uid, day));
 
   @override
   Future<void> replaceRiskAlertsForDay(
     String uid, {
     required DateTime day,
     required List<RiskAlert> alerts,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.replaceRiskAlertsForDay(uid, day: day, alerts: alerts),
   );
@@ -262,14 +276,14 @@ class QuotaCloudRepository implements CloudRepository {
     String uid,
     String alertId, {
     required bool dismissed,
-  }) => gate.run(
+  }) => _runData(
     uid,
     () => inner.setRiskAlertDismissed(uid, alertId, dismissed: dismissed),
   );
 
   @override
   Future<void> clearGuidance(String uid) =>
-      gate.run(uid, () => inner.clearGuidance(uid));
+      _runData(uid, () => inner.clearGuidance(uid));
 
   @override
   Future<Map<String, Object?>> exportUser(String uid) =>

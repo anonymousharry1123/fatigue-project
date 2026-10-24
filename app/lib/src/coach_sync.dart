@@ -159,6 +159,7 @@ extension _CoachSync on AppController {
   }
 
   Future<void> _retryCoachSync() async {
+    if (!_canUseCloudData) return;
     final uid = cloudUid;
     final revision = _sessionRevision;
     while (_pendingCoachPush != null || _pendingGuidanceWrite != null) {
@@ -187,6 +188,7 @@ extension _CoachSync on AppController {
   }
 
   Future<void> _flushCoachSync() async {
+    if (!_canUseCloudData) return;
     final uid = cloudUid;
     final repository = cloudRepository;
     if (uid == null || repository == null) return;
@@ -197,7 +199,7 @@ extension _CoachSync on AppController {
         generation == _coachSyncGeneration &&
         uid == cloudUid &&
         uid == _coachSyncOwnerUid &&
-        _canProcessData;
+        _canUseCloudData;
     try {
       await _writeLocal();
       if (!current()) return;

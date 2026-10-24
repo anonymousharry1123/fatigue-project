@@ -125,6 +125,42 @@ Explicit retry can reverify privacy after an offline launch before uploading;
 it does not require an already-verified connection. Newer privacy responses,
 consent changes and account changes invalidate stale recovery requests.
 
+### Quota failure and local operation — 2026-10-24
+
+The former privacy gate paused new manual saves and Health imports whenever
+Firestore privacy verification failed, even with an existing consented account.
+Quota exhaustion now permits local collection for a previously onboarded adult
+with current explicit consent, matching privacy/input/metadata ownership and a
+saved input baseline, after a fresh successful Firebase Auth verification.
+This permission is established only by a Firestore `resource-exhausted` response
+(including the persisted quota cooldown). It is ephemeral and separate from
+cloud privacy verification. New accounts, minors, ownership mismatches, missing
+or expired consent, deletion, Auth failures and other privacy-read failures
+remain paused.
+
+Manual entries, Health imports and local derived views can continue in this
+mode. Cloud data operations and model preparation remain blocked even after the
+quota timer expires, until fresh account privacy verification succeeds. Retry
+failure leaves local use available for a quota error; a successful recovery
+merges and uploads pending changes only when consent still permits it. Observed
+revocation or deletion takes effect before any upload, including when a later
+summary read fails. Profile explicitly describes local use with cloud sync
+paused. This is not a guarantee of unrestricted offline startup: Firebase Auth
+must still verify the current account.
+
+Validation: 179 affected controller/repository regressions pass, including
+manual save, Health import, restart, stale hydration, cooldown expiry, failed
+retry, recovery, revocation, deletion, ownership and authentication cases.
+Static analysis, formatting, signed iOS release build and strict signature
+verification also pass. The update is installed on Harry's iPhone without
+uninstalling Tonyo. A post-install readback confirms all 4,223 raw readings,
+835 other signals and 5 check-ins remain intact, with valid SQLite integrity,
+ownership and raw-data separation. Physical saving/Health refresh verification
+is still awaiting the user opening the updated app: iOS blocked launch because
+the phone had locked. The pre-update Health timestamp has not advanced in the
+post-install snapshot, so data preservation alone is not claimed as functional
+on-device verification.
+
 Firestore `resource-exhausted` displays **Cloud service quota reached** instead
 of claiming the phone has no connection. One owner-scoped circuit breaker covers
 ordinary repository reads and writes, including automatic Health refresh and
