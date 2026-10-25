@@ -3,6 +3,11 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Spark-safe heart condensation batches stay bounded', () {
+    expect(ContinuousRefreshLogic.maxHeartSummaryDaysPerSync, 3);
+    expect(ContinuousRefreshLogic.maxLegacyHeartRateDeletesPerSync, 48);
+  });
+
   test('refreshes on launch and after fifteen minutes in the foreground', () {
     final now = DateTime(2026, 8, 20, 12);
 

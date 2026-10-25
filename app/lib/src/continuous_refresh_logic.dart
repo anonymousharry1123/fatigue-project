@@ -9,6 +9,13 @@ abstract final class ContinuousRefreshLogic {
   static const cloudInputRefreshInterval = Duration(hours: 3);
   static const fullHeartHistoryInterval = Duration(days: 1);
 
+  /// Spark-safe batching for legacy heart-rate condensation. One Retry sync
+  /// uploads at most this many daily summaries, then deletes at most this many
+  /// acknowledged legacy raw signal docs, so a free-tier day is not exhausted
+  /// by a single cleanup pass over thousands of historical samples.
+  static const maxHeartSummaryDaysPerSync = 3;
+  static const maxLegacyHeartRateDeletesPerSync = 48;
+
   static bool shouldRefresh({
     required DateTime now,
     DateTime? lastAttempt,

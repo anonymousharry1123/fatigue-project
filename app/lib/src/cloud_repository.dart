@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'cloud_schema.dart';
 import 'cloud_sync.dart';
+import 'incremental_inputs.dart';
 import 'models.dart';
 import 'privacy_consent.dart';
 
@@ -616,7 +617,8 @@ Map<String, Object?> buildUserDataExport({
 };
 
 /// A uid-enforcing repository for deterministic unit tests and offline demos.
-class MemoryCloudRepository implements CloudRepository {
+class MemoryCloudRepository
+    implements CloudRepository, EfficientInputRepository {
   MemoryCloudRepository({required this.signedInUid, DateTime Function()? now})
     : _now = now ?? DateTime.now;
 
@@ -635,6 +637,34 @@ class MemoryCloudRepository implements CloudRepository {
 
   void seed(String uid, CloudUserState state) {
     _users[uid] = state;
+  }
+
+  @override
+  Future<void> activateInputSync(String uid) async {
+    _authorize(uid);
+    final old = _users[uid];
+    if (old == null) return;
+    if (old.inputSyncVersion == 1) return;
+    _users[uid] = old.copyWith(inputSyncVersion: 1, inputRevision: 0);
+  }
+
+  @override
+  Future<void> finishHeartRateMigration(String uid) async {
+    _authorize(uid);
+    final old = _users[uid];
+    if (old == null || old.heartRateStorageVersion == 1) return;
+    _users[uid] = old.copyWith(heartRateStorageVersion: 1);
+  }
+
+  @override
+  Future<CloudUserState?> readUserSince(
+    String uid, {
+    required InputSyncSnapshot baseline,
+    required int revision,
+  }) async {
+    // Memory tests keep a full snapshot; callers still exercise the cursor path.
+    _authorize(uid);
+    return _users[uid];
   }
 
   void _authorize(String uid) {

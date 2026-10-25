@@ -5,6 +5,7 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/cloud_sync.dart';
+import 'package:app/src/continuous_refresh_logic.dart';
 import 'package:app/src/heart_rate_cloud.dart';
 import 'package:app/src/heart_rate_summary.dart';
 import 'package:app/src/models.dart';
@@ -141,6 +142,20 @@ class _Repository extends MemoryCloudRepository {
   Future<CloudUserState?> readUser(String uid) {
     inputReads += 1;
     return super.readUser(uid);
+  }
+
+  @override
+  Future<CloudUserState?> readUserSince(
+    String uid, {
+    required InputSyncSnapshot baseline,
+    required int revision,
+  }) {
+    inputReads += 1;
+    return super.readUserSince(
+      uid,
+      baseline: baseline,
+      revision: revision,
+    );
   }
 
   @override
@@ -738,6 +753,43 @@ void main() {
       expect(repository.inputReads, initialReads + 1);
       await app.retryCloudSync();
       expect(repository.inputReads, initialReads + 2);
+    },
+  );
+
+  test(
+    'legacy raw deletes are batched under the Spark-safe sync limit',
+    () async {
+      final limit = ContinuousRefreshLogic.maxLegacyHeartRateDeletesPerSync;
+      final samples = [
+        for (var i = 0; i < limit + 7; i++)
+          _heart('healthkit-batch-$i', minute: i, value: 60 + (i % 10)),
+      ];
+      final state = _state(signals: samples);
+      _legacyPreferences(cloud: state);
+      final raw = MemoryRawHeartRateStore();
+      final events = <String>[];
+      final days = _CloudDays(events);
+      final repository = _Repository(events, raw, days)..seed('owner', state);
+      final app = _app(repository: repository, raw: raw, days: days);
+      addTearDown(app.dispose);
+
+      await app.load();
+
+      expect(repository.rawDeletePatches, 1);
+      expect(app.pendingLegacyHeartRateSampleCount, 7);
+      expect(app.heartRateCloudMigrationComplete, isFalse);
+      expect(app.cloudSyncStatusMessage, contains('legacy heart-rate'));
+
+      await app.retryCloudSync();
+
+      expect(repository.rawDeletePatches, 2);
+      expect(app.pendingLegacyHeartRateSampleCount, 0);
+      expect(app.heartRateStorageVersion, 1);
+      expect(app.heartRateCloudMigrationComplete, isTrue);
+      expect(
+        (await repository.readUser('owner'))!.signals.where(isRawHeartRate),
+        isEmpty,
+      );
     },
   );
 }

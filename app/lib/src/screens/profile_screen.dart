@@ -236,6 +236,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     key: const Key('cloud-sync-last-success'),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
+                  if (controller.pendingHeartRateSummaryDayCount > 0 ||
+                      controller.pendingLegacyHeartRateSampleCount > 0 ||
+                      controller.heartRateCloudMigrationComplete) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      key: const Key('cloud-sync-heart-migration'),
+                      context.tr(
+                        controller.heartRateCloudMigrationComplete
+                            ? 'Heart-rate cloud upgrade complete. Raw samples stay on this device; cloud keeps daily summaries only.'
+                            : controller.pendingHeartRateSummaryDayCount > 0
+                            ? "Heart-rate upgrade: {value0} day summaries still need upload. Save a device backup first, then Retry sync once when quota allows."
+                            : "Heart-rate upgrade: {value0} legacy cloud samples left to remove after summaries. Do not delete data in the Firebase console.",
+                        args: {
+                          'value0': controller.pendingHeartRateSummaryDayCount >
+                                  0
+                              ? controller.pendingHeartRateSummaryDayCount
+                              : controller.pendingLegacyHeartRateSampleCount,
+                        },
+                      ),
+                      style: TextStyle(
+                        color: TonyoPalette.of(context).muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
