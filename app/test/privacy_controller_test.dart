@@ -13,6 +13,7 @@ import 'package:app/src/notification_service.dart';
 import 'package:app/src/privacy_consent.dart';
 import 'package:app/src/screen_time_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final _now = DateTime.utc(2026, 9, 7, 18);
@@ -28,38 +29,240 @@ final _minor = PrivacyConsent(
   acceptedAt: _now.subtract(const Duration(days: 1)),
 );
 
-CloudUserState _state({PrivacyConsent? receipt, bool consent = false}) =>
-    CloudUserState(
-      profile: const UserProfile(name: 'Private owner'),
-      accountEmail: _session.email,
-      onboardingComplete: false,
-      notificationsEnabled: false,
-      outcomeConsent: consent,
-      healthAuthorized: false,
-      signals: [
-        SignalReading(
-          id: 'saved',
-          type: SignalType.hydration,
-          value: 1.5,
-          timestamp: _now,
-        ),
-      ],
-      checkIns: [
-        DailyCheckIn(
-          id: 'saved-checkin',
-          energy: 7,
-          mood: 6,
-          stress: 3,
-          timestamp: _now,
-        ),
-      ],
-      migrationVersion: localMigrationVersion,
-      privacyConsent: receipt,
-    );
+CloudUserState _state({
+  PrivacyConsent? receipt,
+  bool consent = false,
+  bool onboarded = false,
+}) => CloudUserState(
+  profile: const UserProfile(name: 'Private owner'),
+  accountEmail: _session.email,
+  onboardingComplete: onboarded,
+  notificationsEnabled: false,
+  outcomeConsent: consent,
+  healthAuthorized: false,
+  signals: [
+    SignalReading(
+      id: 'saved',
+      type: SignalType.hydration,
+      value: 1.5,
+      timestamp: _now,
+    ),
+  ],
+  checkIns: [
+    DailyCheckIn(
+      id: 'saved-checkin',
+      energy: 7,
+      mood: 6,
+      stress: 3,
+      timestamp: _now,
+    ),
+  ],
+  migrationVersion: localMigrationVersion,
+  privacyConsent: receipt,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test(
+    'quota permits owned adult saves and Health imports across restart, then safely uploads',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.repository.readError = 'resource-exhausted';
+      await h.controller.handleAppResumed();
+      expect(h.controller.isUsingQuotaLocalData, true);
+      expect(h.controller.privacyFeaturesAllowed, true);
+      expect(h.controller.privacyOperationError, isNull);
+      final writes = h.repository.inputPatchCallCount;
+      final scores = h.repository.scoreUpsertCallCount;
+      await h.controller.addSignal(SignalType.hydration, 2);
+      await h.controller.addCheckIn(energy: 8, mood: 7, stress: 2);
+      h.health.authorized = true;
+      h.health.imported = [
+        SignalReading(
+          id: 'healthkit-quota-heart',
+          type: SignalType.heartRate,
+          value: 71,
+          timestamp: h.now,
+          source: SignalSource.healthKit,
+        ),
+      ];
+      await h.controller.refreshHealthAuthorization();
+      await h.controller.connectHealth();
+      expect(h.health.imports, greaterThan(0));
+      expect(
+        h.controller.signals.map((r) => r.id),
+        contains('healthkit-quota-heart'),
+      );
+      expect(h.controller.hasPendingCloudChanges, true);
+      expect(h.repository.inputPatchCallCount, writes);
+      expect(h.repository.scoreUpsertCallCount, scores);
+      expect(
+        h.controller.cloudSyncStatusMessage,
+        contains('Logging and Apple Health continue'),
+      );
+      final signalIds = h.controller.signals.map((r) => r.id).toSet();
+      final checkInIds = h.controller.checkIns.map((r) => r.id).toSet();
+      // Restored cooldown must still require a fresh Auth check on restart.
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.isUsingQuotaLocalData, true);
+      expect(restarted.signals.map((r) => r.id).toSet(), signalIds);
+      expect(restarted.checkIns.map((r) => r.id).toSet(), checkInIds);
+      await expectLater(
+        restarted.retryCloudSync(),
+        throwsA(isA<FirebaseException>()),
+      );
+      expect(restarted.isUsingQuotaLocalData, true);
+      expect(restarted.privacyOperationError, isNull);
+      // Timer expiry alone is not permission to upload or query derived data.
+      h.now = h.now.add(const Duration(hours: 2));
+      h.repository.readError = null;
+      await restarted.addSignal(SignalType.hydration, 3);
+      expect(h.repository.inputPatchCallCount, writes);
+      expect(h.repository.scoreUpsertCallCount, scores);
+      await restarted.retryCloudSync();
+      expect(restarted.isUsingQuotaLocalData, false);
+      expect(restarted.hasPendingCloudChanges, false);
+      final cloud = (await h.repository.readUser('owner'))!;
+      expect(
+        cloud.signals.map((r) => r.id).toSet(),
+        restarted.signals.map((r) => r.id).toSet(),
+      );
+      expect(cloud.checkIns.map((r) => r.id).toSet(), checkInIds);
+    },
+  );
+
+  test(
+    'stale startup hydration quota still allows a durable local save',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.now = h.now.add(const Duration(hours: 4));
+      h.repository.readError = 'resource-exhausted';
+      final reads = h.repository.userReads;
+      final restarted = h.newController();
+      await restarted.load();
+      expect(h.repository.userReads, reads + 1);
+      expect(restarted.isUsingQuotaLocalData, true);
+      await restarted.addSignal(SignalType.hydration, 2);
+      final saved =
+          jsonDecode(
+                (await SharedPreferences.getInstance()).getString(
+                  'tonyo_state_v1',
+                )!,
+              )
+              as Map;
+      expect(saved['signals'], hasLength(2));
+      expect(restarted.hasPendingCloudChanges, true);
+    },
+  );
+
+  for (final failure in ['permission-denied', 'unavailable']) {
+    test(
+      '$failure ends quota local permission rather than reusing it',
+      () async {
+        final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+        await h.controller.load();
+        h.repository.readError = 'resource-exhausted';
+        await h.controller.handleAppResumed();
+        expect(h.controller.isUsingQuotaLocalData, true);
+        h.repository.readError = failure;
+        await expectLater(
+          h.controller.retryCloudSync(),
+          throwsA(isA<FirebaseException>()),
+        );
+        expect(h.controller.privacyFeaturesAllowed, false);
+        await expectLater(
+          h.controller.addSignal(SignalType.hydration, 2),
+          throwsStateError,
+        );
+      },
+    );
+  }
+
+  test(
+    'quota fallback cannot bypass failed fresh Auth on resume or restart',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.repository.readError = 'resource-exhausted';
+      await h.controller.handleAppResumed();
+      expect(h.controller.isUsingQuotaLocalData, true);
+      h.auth.failClaims = true;
+      await h.controller.handleAppResumed();
+      expect(h.controller.privacyFeaturesAllowed, false);
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.privacyFeaturesAllowed, false);
+      await expectLater(
+        restarted.addSignal(SignalType.hydration, 2),
+        throwsStateError,
+      );
+    },
+  );
+
+  for (final receipt in [null, _minor]) {
+    test(
+      'quota never grants local collection for missing or guardian consent: ${receipt?.ageBand}',
+      () async {
+        final h = _Harness(state: _state(receipt: receipt, onboarded: true));
+        h.auth.grantGuardian = true;
+        await h.controller.load();
+        h.repository.readError = 'resource-exhausted';
+        await h.controller.handleAppResumed();
+        expect(h.controller.privacyFeaturesAllowed, false);
+        expect(h.controller.isUsingQuotaLocalData, false);
+        await expectLater(
+          h.controller.addSignal(SignalType.hydration, 2),
+          throwsStateError,
+        );
+      },
+    );
+  }
+
+  test(
+    'quota does not adopt another account cached consent or inputs',
+    () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      h.auth.session = const AccountSession(
+        uid: 'other',
+        email: 'other@example.test',
+      );
+      h.repository.readError = 'resource-exhausted';
+      final restarted = h.newController();
+      await restarted.load();
+      expect(restarted.privacyFeaturesAllowed, false);
+      expect(restarted.isUsingQuotaLocalData, false);
+    },
+  );
+
+  for (final deleted in [false, true]) {
+    test(
+      'recovery observes ${deleted ? 'deletion' : 'revoked consent'} before uploading local edits',
+      () async {
+        final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+        await h.controller.load();
+        h.repository.readError = 'resource-exhausted';
+        await h.controller.handleAppResumed();
+        await h.controller.addSignal(SignalType.hydration, 2);
+        final writes = h.repository.inputPatchCallCount;
+        h.repository.seed(
+          'owner',
+          _state(onboarded: true).copyWith(deletionPending: deleted),
+        );
+        h.repository.readError = null;
+        await expectLater(h.controller.retryCloudSync(), throwsStateError);
+        expect(h.controller.privacyFeaturesAllowed, false);
+        expect(h.controller.isUsingQuotaLocalData, false);
+        expect(h.repository.inputPatchCallCount, writes);
+        expect(h.controller.signals, hasLength(2));
+      },
+    );
+  }
 
   test(
     'legacy account with no receipt never imports, uploads or adds personal records',
@@ -581,6 +784,7 @@ class _Harness {
     controller = newController();
   }
   final events = <String>[];
+  DateTime now = _now;
   late final _Auth auth;
   late final _Repository repository;
   late final _Health health;
@@ -597,7 +801,7 @@ class _Harness {
       screenTimeService: screen,
       notificationService: notifications,
       energyModelStore: models,
-      clock: () => _now,
+      clock: () => now,
     );
     addTearDown(controller.dispose);
     return controller;
@@ -651,17 +855,26 @@ class _Repository extends MemoryCloudRepository {
   int outcomeWrites = 0;
   int deletes = 0;
   bool failPrivacyRead = false;
+  String? readError;
+  void checkRead() {
+    if (readError != null) {
+      throw FirebaseException(plugin: 'cloud_firestore', code: readError!);
+    }
+  }
+
   bool failDelete = false;
   Completer<Map<String, Object?>>? pendingExport;
   @override
   Future<CloudUserState?> readUser(String uid) {
     userReads++;
+    checkRead();
     return super.readUser(uid);
   }
 
   @override
   Future<AccountPrivacySnapshot> readAccountPrivacy(String uid) {
     privacyReads++;
+    checkRead();
     if (failPrivacyRead) throw StateError('offline');
     return super.readAccountPrivacy(uid);
   }
@@ -702,10 +915,32 @@ class _Health extends HealthService {
   final List<String> events;
   int reads = 0;
   int disables = 0;
+  bool authorized = false;
+  int imports = 0;
+  List<SignalReading> imported = [];
+  @override
+  Future<HealthAuthorizationState> requestAuthorization() =>
+      authorizationStatus();
+  @override
+  Future<bool> enableBackgroundUpdates(Future<void> Function() changed) async =>
+      true;
+  @override
+  Future<List<SignalReading>> sync({bool recentOnly = false}) async {
+    imports++;
+    return imported;
+  }
+
+  @override
+  Future<List<SignalReading>> syncSleep() async => [];
+  @override
+  Future<List<SignalReading>> syncActivity() async => [];
+
   @override
   Future<HealthAuthorizationState> authorizationStatus() async {
     reads++;
-    return HealthAuthorizationState.unavailable;
+    return authorized
+        ? HealthAuthorizationState.authorized
+        : HealthAuthorizationState.unavailable;
   }
 
   @override

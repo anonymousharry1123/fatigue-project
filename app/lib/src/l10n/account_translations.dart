@@ -104,6 +104,18 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "云服务配额已用尽。更改已保存在此设备上，请稍后重试同步。",
     "zh-Hant": "雲端服務配額已用盡。變更已儲存在此裝置上，請稍後重試同步。",
   },
+  'Cloud quota reached. Logging and Apple Health continue on this device; cloud sync is paused.': {
+    'es':
+        'Se alcanzó la cuota de la nube. Los registros y Apple Health siguen funcionando en este dispositivo; la sincronización con la nube está pausada.',
+    'zh-Hans': '云服务配额已用尽。此设备仍可记录数据和导入 Apple 健康数据；云同步已暂停。',
+    'zh-Hant': '雲端服務配額已用盡。此裝置仍可記錄資料和匯入 Apple 健康資料；雲端同步已暫停。',
+  },
+  'Cloud sync must recover before preparing a model. Device logging remains available.': {
+    'es':
+        'La sincronización con la nube debe recuperarse antes de preparar un modelo. Puedes seguir registrando datos en el dispositivo.',
+    'zh-Hans': '云同步恢复后才能准备模型。仍可在设备上记录数据。',
+    'zh-Hant': '雲端同步恢復後才能準備模型。仍可在裝置上記錄資料。',
+  },
   "Language": {"es": "Idioma", "zh-Hans": "语言", "zh-Hant": "語言"},
   "Please wait…": {"es": "Espera…", "zh-Hans": "请稍候…", "zh-Hant": "請稍候…"},
   "Continue local profile": {
