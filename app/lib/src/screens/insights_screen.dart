@@ -10,6 +10,8 @@ import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/personal_baseline_card.dart';
 import '../widgets/self_report_trends_card.dart';
+import 'daily_history_screen.dart';
+import 'heart_metrics_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -64,6 +66,51 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 icon: const Icon(Icons.refresh_rounded),
               ),
             ],
+          ),
+          const SectionHeader('History'),
+          TonyoCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: MetricIcon(
+                    icon: Icons.calendar_month_rounded,
+                    color: TonyoPalette.of(context).primary,
+                    size: 40,
+                  ),
+                  title: Text(context.tr('Daily history')),
+                  subtitle: Text(
+                    context.tr('Signals, check-ins, and daily completion'),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DailyHistoryScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: MetricIcon(
+                    icon: Icons.monitor_heart_outlined,
+                    color: TonyoPalette.of(context).error,
+                    size: 40,
+                  ),
+                  title: Text(context.tr('Heart metrics')),
+                  subtitle: Text(
+                    context.tr('Heart rate, resting heart rate, and HRV'),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const HeartMetricsScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           _InsightsSourceCard(controller: controller, insights: insights),

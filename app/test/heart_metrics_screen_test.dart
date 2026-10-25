@@ -4,6 +4,7 @@ import 'package:app/src/models.dart';
 import 'package:app/src/screens/add_data_screen.dart';
 import 'package:app/src/screens/daily_history_screen.dart';
 import 'package:app/src/screens/heart_metrics_screen.dart';
+import 'package:app/src/screens/insights_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,9 +58,13 @@ void main() {
   }
 
   testWidgets(
-    'heart metrics is reachable from Add and exposes resting HR and HRV',
+    'heart metrics moves from Add to Insights and exposes resting HR and HRV',
     (tester) async {
       await pump(tester, const AddDataScreen());
+      expect(find.text('Heart metrics'), findsNothing);
+      expect(find.text('Daily history'), findsNothing);
+      await pump(tester, const InsightsScreen());
+      expect(find.text('History'), findsOneWidget);
       await tester.tap(find.text('Heart metrics'));
       await tester.pumpAndSettle();
       expect(find.byType(HeartMetricsScreen), findsOneWidget);

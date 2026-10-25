@@ -76,11 +76,8 @@ const loggingTranslations = <String, Map<String, String>>{
     'zh-Hans': '{count} 条读数',
     'zh-Hant': '{count} 筆讀數',
   },
-  "Add & Explore": {
-    'es': "Añadir y explorar",
-    'zh-Hans': "添加与探索",
-    'zh-Hant': "新增與探索",
-  },
+  "Add data": {'es': "Añadir datos", 'zh-Hans': "添加数据", 'zh-Hant': "新增資料"},
+  "History": {'es': "Historial", 'zh-Hans': "历史记录", 'zh-Hant': "歷史記錄"},
   "Log how you feel and run your daily reaction benchmark.": {
     'es': "Registra cómo te sientes y realiza tu prueba diaria de reacción.",
     'zh-Hans': "记录感受并进行每日反应测试。",

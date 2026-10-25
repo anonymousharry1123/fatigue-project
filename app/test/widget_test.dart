@@ -62,7 +62,7 @@ void main() {
 
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
-    expect(find.text('Add & Explore'), findsOneWidget);
+    expect(find.text('Add data'), findsOneWidget);
 
     await tester.tap(
       find.descendant(
@@ -1074,7 +1074,19 @@ void main() {
       final activityId = controller.activityLogs.single.id;
 
       await tester.pumpWidget(TonyoApp(controller: controller));
-      await tester.tap(find.text('Add'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Forecast'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SegmentedButton<int>),
+          matching: find.text('Insights'),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Daily history'));
       await tester.pumpAndSettle();
