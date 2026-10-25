@@ -63,6 +63,7 @@ part 'sync_conflict_resolution.dart';
 part 'coach_sync.dart';
 part 'efficient_sync.dart';
 part 'local_continuity.dart';
+part 'learning_setup.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -118,6 +119,8 @@ class AppController extends ChangeNotifier {
   // Device navigation state, deliberately separate from profile/cloud data.
   static const _signedOutKey = 'tonyo_signed_out_v1';
   static const _deletionKey = 'tonyo_privacy_deletion_v1';
+  static const _learningSetupKeyPrefix = 'tonyo_learning_setup_v1_';
+  bool _learningSetupSaving = false;
   static const _deviceRecoveryKeyPrefix = 'tonyo_device_recovery_v1_';
   static const _prepWindowKeyPrefix = 'tonyo_ml_prep_window_v1_';
   static const forecastDayCount = 7;
@@ -5616,6 +5619,7 @@ class AppController extends ChangeNotifier {
           key == _signedOutKey ||
           key.startsWith(_deviceRecoveryKeyPrefix) ||
           key.startsWith(_prepWindowKeyPrefix) ||
+          key.startsWith(_learningSetupKeyPrefix) ||
           key.startsWith('tonyo_ml_prep_v1_') ||
           key.startsWith('tonyo_energy_model_v1_'),
     )) {

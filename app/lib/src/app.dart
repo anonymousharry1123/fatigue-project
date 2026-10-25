@@ -7,6 +7,7 @@ import 'l10n/app_localizations.dart';
 import 'notification_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/privacy_center_screen.dart';
+import 'screens/learning_consent_gate.dart';
 import 'screens/shell_screen.dart';
 import 'theme.dart';
 import 'theme_controller.dart';
@@ -205,11 +206,18 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
                       requireReview: true,
                     )
                   : controller.onboardingComplete && !controller.isSignedOut
-                  ? ShellScreen(
-                      coachOpenRequest: _coachOpenRequest,
-                      studyOpenRequest: _studyOpenRequest,
-                      studyDestination: _studyDestination,
-                      notificationNavigation: _notificationNavigation,
+                  ? LearningConsentGate(
+                      key: ValueKey((
+                        controller.sessionRevision,
+                        controller.cloudUid,
+                      )),
+                      controller: controller,
+                      child: ShellScreen(
+                        coachOpenRequest: _coachOpenRequest,
+                        studyOpenRequest: _studyOpenRequest,
+                        studyDestination: _studyDestination,
+                        notificationNavigation: _notificationNavigation,
+                      ),
                     )
                   : const OnboardingScreen(),
             );

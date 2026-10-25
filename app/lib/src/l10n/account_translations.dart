@@ -1,5 +1,78 @@
 // Account, onboarding, settings, and privacy copy. Stored identifiers remain English.
 const accountTranslations = <String, Map<String, String>>{
+  'Enable optional learning?': {
+    'es': '¿Activar el aprendizaje opcional?',
+    'zh-Hans': '启用可选学习功能？',
+    'zh-Hant': '啟用選用學習功能？',
+  },
+  'With your permission, Tonyo can turn on both settings below. This is optional and does not start model training.': {
+    'es':
+        'Con tu permiso, Tonyo puede activar ambos ajustes siguientes. Es opcional y no inicia el entrenamiento del modelo.',
+    'zh-Hans': '经你允许，Tonyo 可以开启以下两项设置。这是可选功能，不会开始模型训练。',
+    'zh-Hant': '經你允許，Tonyo 可以開啟以下兩項設定。這是選用功能，不會開始模型訓練。',
+  },
+  'Keep future sleep and check-in revisions on this iPhone, including save times and edits. This history is not uploaded.': {
+    'es':
+        'Guarda en este iPhone las futuras versiones de registros de sueño y de estado, incluidas las horas de guardado y las modificaciones. Este historial no se sube.',
+    'zh-Hans': '在此 iPhone 上保留今后的睡眠和状态记录版本，包括保存时间和修改。这些历史记录不会上传。',
+    'zh-Hant': '在此 iPhone 上保留今後的睡眠與狀態記錄版本，包括儲存時間和修改。這些歷史記錄不會上傳。',
+  },
+  'Save eligible future outcome records to your private account for model preparation. Model training is a separate action, and model weights stay on this device.': {
+    'es':
+        'Guarda los futuros resultados aptos en tu cuenta privada para preparar el modelo. El entrenamiento es una acción independiente y los pesos del modelo permanecen en este dispositivo.',
+    'zh-Hans': '将今后符合条件的结果记录保存到你的私人账户，用于模型准备。模型训练需要单独操作，模型权重保留在此设备上。',
+    'zh-Hant': '將今後符合條件的結果記錄儲存到你的私人帳戶，用於模型準備。模型訓練需要單獨操作，模型權重保留在此裝置上。',
+  },
+  'Save eligible future outcome records on this device for model preparation. Model training is a separate action.': {
+    'es':
+        'Guarda los futuros resultados aptos en este dispositivo para preparar el modelo. El entrenamiento del modelo es una acción independiente.',
+    'zh-Hans': '在此设备上保存今后符合条件的结果记录，用于模型准备。模型训练需要单独操作。',
+    'zh-Hant': '在此裝置上儲存今後符合條件的結果記錄，用於模型準備。模型訓練需要單獨操作。',
+  },
+  'You can turn either setting off in Profile → Privacy center. Turning off local study history clears that history; your ordinary logs remain.': {
+    'es':
+        'Puedes desactivar cualquiera de los ajustes en Perfil → Centro de privacidad. Desactivar el historial de estudio local borra ese historial; tus registros habituales se conservan.',
+    'zh-Hans': '你可以在个人资料 → 隐私中心关闭任一设置。关闭本地研究历史会清除该历史，但会保留普通记录。',
+    'zh-Hant': '你可以在個人檔案 → 隱私中心關閉任一設定。關閉本機研究歷史會清除該歷史，但會保留一般記錄。',
+  },
+  'Could not load your learning choice. Your settings have not changed.': {
+    'es':
+        'No se pudo cargar tu elección de aprendizaje. Tus ajustes no han cambiado.',
+    'zh-Hans': '无法加载你的学习功能选择。设置未更改。',
+    'zh-Hant': '無法載入你的學習功能選擇。設定未變更。',
+  },
+  'Setup did not finish. Check the settings below, then retry or keep your current settings.': {
+    'es':
+        'La configuración no terminó. Revisa los ajustes siguientes y vuelve a intentarlo o conserva tus ajustes actuales.',
+    'zh-Hans': '设置未完成。请检查下方设置，然后重试或保留当前设置。',
+    'zh-Hant': '設定未完成。請檢查下方設定，然後重試或保留目前設定。',
+  },
+  'Allow and enable both': {
+    'es': 'Permitir y activar ambos',
+    'zh-Hans': '允许并启用两项功能',
+    'zh-Hant': '允許並啟用兩項功能',
+  },
+  'Keep current settings': {
+    'es': 'Conservar los ajustes actuales',
+    'zh-Hans': '保留当前设置',
+    'zh-Hant': '保留目前設定',
+  },
+  'Your settings are unchanged. Your choice could not be saved, so you may be asked again.': {
+    'es':
+        'Tus ajustes no han cambiado. No se pudo guardar tu elección, así que es posible que se te vuelva a preguntar.',
+    'zh-Hans': '设置未更改。无法保存你的选择，因此可能会再次询问。',
+    'zh-Hant': '設定未變更。無法儲存你的選擇，因此可能會再次詢問。',
+  },
+  'Currently on': {
+    'es': 'Actualmente activado',
+    'zh-Hans': '当前已开启',
+    'zh-Hant': '目前已開啟',
+  },
+  'Currently off': {
+    'es': 'Actualmente desactivado',
+    'zh-Hans': '当前已关闭',
+    'zh-Hant': '目前已關閉',
+  },
   'Resting HR estimates are informational and do not affect your score or measured baselines.': {
     'es':
         'Las estimaciones de FC en reposo son informativas y no afectan a tu puntuación ni a tus valores de referencia medidos.',
@@ -33,18 +106,14 @@ const accountTranslations = <String, Map<String, String>>{
   'Heart-rate upgrade: {value0} day summaries still need upload. Save a device backup first, then Retry sync once when quota allows.': {
     'es':
         'Actualización de frecuencia cardíaca: quedan {value0} resúmenes diarios por subir. Guarda primero una copia de seguridad del dispositivo y, cuando la cuota lo permita, pulsa Reintentar sincronización una vez.',
-    'zh-Hans':
-        '心率升级：仍有 {value0} 个日摘要待上传。请先保存设备备份，配额恢复后只点一次“重试同步”。',
-    'zh-Hant':
-        '心率升級：仍有 {value0} 個日摘要待上傳。請先儲存裝置備份，配額恢復後只點一次「重試同步」。',
+    'zh-Hans': '心率升级：仍有 {value0} 个日摘要待上传。请先保存设备备份，配额恢复后只点一次“重试同步”。',
+    'zh-Hant': '心率升級：仍有 {value0} 個日摘要待上傳。請先儲存裝置備份，配額恢復後只點一次「重試同步」。',
   },
   'Heart-rate upgrade: {value0} legacy cloud samples left to remove after summaries. Do not delete data in the Firebase console.': {
     'es':
         'Actualización de frecuencia cardíaca: quedan {value0} muestras antiguas en la nube por eliminar tras los resúmenes. No borres datos en la consola de Firebase.',
-    'zh-Hans':
-        '心率升级：摘要之后仍有 {value0} 条旧云端样本待删除。请勿在 Firebase 控制台手动删除数据。',
-    'zh-Hant':
-        '心率升級：摘要之後仍有 {value0} 筆舊雲端樣本待刪除。請勿在 Firebase 主控台手動刪除資料。',
+    'zh-Hans': '心率升级：摘要之后仍有 {value0} 条旧云端样本待删除。请勿在 Firebase 控制台手动删除数据。',
+    'zh-Hant': '心率升級：摘要之後仍有 {value0} 筆舊雲端樣本待刪除。請勿在 Firebase 主控台手動刪除資料。',
   },
   'Latest estimated resting HR: {value} bpm · {date}': {
     'es': 'Última FC en reposo estimada: {value} lpm · {date}',

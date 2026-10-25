@@ -172,6 +172,15 @@ require **Profile → Privacy center → Outcome learning** consent before they 
 Readiness also checks provenance, units, historical availability, feature
 coverage and chronological holdout days. Cognitive remains report-only.
 
+On supported iPhones, the first eligible launch after account/privacy setup
+offers **Allow and enable both** for local study history and outcome learning.
+Neither is enabled by opening the prompt. Accepting uses the existing consent
+controls; **Keep current settings** leaves both settings as they are. The choice
+is remembered per account on that device, and later opt-outs are never undone
+automatically. Either setting remains editable in **Profile → Privacy center**.
+This setup does not start training or make incompatible research check-ins into
+legacy Energy labels.
+
 The ignored `build/ml-prep/REPORT.md` and `coverage.json` contain the verified
 account result. To reproduce the report entirely locally from the simulator's
 saved preferences:
