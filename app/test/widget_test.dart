@@ -340,6 +340,58 @@ void main() {
     );
   });
 
+  testWidgets('Screen Time auto-sync is disabled until Apple approval', (
+    tester,
+  ) async {
+    final controller = readyController()
+      ..screenTimeSyncAvailability =
+          ScreenTimeSyncAvailability.entitlementRequired;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('screen-time-source-card')),
+      200,
+      scrollable: activeVerticalScrollable(),
+    );
+    await tester.tap(find.byKey(const Key('screen-time-source-card')));
+    await tester.pumpAndSettle();
+    final toggle = tester.widget<SwitchListTile>(
+      find.byKey(const Key('screen-time-auto-sync-toggle')),
+    );
+    expect(toggle.value, isFalse);
+    expect(toggle.onChanged, isNull);
+    expect(find.textContaining('Apple approval is required'), findsOneWidget);
+    expect(find.textContaining('eligible EU device'), findsOneWidget);
+  });
+
+  testWidgets('Screen Time auto-sync requests data access only after opt-in', (
+    tester,
+  ) async {
+    final service = _WidgetScreenTimeService();
+    final controller = readyController(screenTimeService: service)
+      ..screenTimeSyncAvailability = ScreenTimeSyncAvailability.notDetermined;
+    await tester.pumpWidget(TonyoApp(controller: controller));
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('screen-time-source-card')),
+      200,
+      scrollable: activeVerticalScrollable(),
+    );
+    await tester.tap(find.byKey(const Key('screen-time-source-card')));
+    await tester.pumpAndSettle();
+    expect(service.syncAuthorizationRequests, 0);
+    await tester.tap(find.byKey(const Key('screen-time-auto-sync-toggle')));
+    await tester.pumpAndSettle();
+    expect(service.syncAuthorizationRequests, 1);
+    expect(controller.screenTimeAutoSyncEnabled, isTrue);
+    expect(service.authorizationRequests, 0);
+    await tester.tap(find.byKey(const Key('screen-time-auto-sync-toggle')));
+    await tester.pumpAndSettle();
+    expect(controller.screenTimeAutoSyncEnabled, isFalse);
+  });
+
   testWidgets('syncs heart, sleep, workout, steps, and water data', (
     tester,
   ) async {
@@ -1237,6 +1289,20 @@ class _WidgetHealthService extends HealthService {
 class _WidgetScreenTimeService extends ScreenTimeService {
   int authorizationRequests = 0;
   int reportRequests = 0;
+  int syncAuthorizationRequests = 0;
+
+  @override
+  Future<ScreenTimeSyncAvailability> syncAvailability() async =>
+      ScreenTimeSyncAvailability.authorized;
+
+  @override
+  Future<ScreenTimeSyncAvailability> requestSyncAuthorization() async {
+    syncAuthorizationRequests++;
+    return ScreenTimeSyncAvailability.authorized;
+  }
+
+  @override
+  Future<List<ScreenTimeDailyTotal>> readDailyTotals() async => [];
 
   @override
   Future<ScreenTimeAuthorizationState> authorizationStatus() async =>

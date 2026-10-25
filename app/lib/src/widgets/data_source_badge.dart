@@ -45,6 +45,12 @@ class DataSourceBadge extends StatelessWidget {
               Icons.favorite_outline_rounded,
               palette.success,
             ),
+            SignalSource.appleScreenTime => (
+              'Apple Screen Time',
+              'Daily total imported with your permission.',
+              Icons.smartphone_rounded,
+              palette.success,
+            ),
             SignalSource.model => (
               'Estimated',
               'Calculated from your recorded data.',

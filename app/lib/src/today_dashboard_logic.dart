@@ -2,6 +2,7 @@ import 'local_day.dart';
 import 'activity_sync_logic.dart';
 import 'models.dart';
 import 'sleep_sync_logic.dart';
+import 'screen_time_logic.dart';
 
 enum TodayFatigueStatus { fresh, moderate, fatigued }
 
@@ -98,6 +99,9 @@ abstract final class TodayDashboardLogic {
           }
           final matches = type == SignalType.sleep
               ? SleepSyncLogic.preferredSleepReadings(readings)
+              : type == SignalType.screenTime
+              ? (ScreenTimeLogic.modelReadings(readings)
+                  ..sort((a, b) => b.timestamp.compareTo(a.timestamp)))
               : (readings.where((item) => item.type == type).toList()
                   ..sort((a, b) => b.timestamp.compareTo(a.timestamp)));
           if (matches.isEmpty) {

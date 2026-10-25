@@ -657,28 +657,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   static String _screenTimeSourceDetail(AppController controller) =>
-      switch (controller.screenTimeAuthorization) {
-        ScreenTimeAuthorizationState.authorized =>
-          'Private daily-total report · manual model input',
-        ScreenTimeAuthorizationState.notDetermined =>
-          'Optional private report · manual logging active',
-        ScreenTimeAuthorizationState.denied =>
-          'Report off · manual logging active',
-        ScreenTimeAuthorizationState.entitlementRequired =>
-          'Awaiting Apple entitlement · manual logging active',
-        ScreenTimeAuthorizationState.error =>
-          'Report needs attention · manual logging active',
-        ScreenTimeAuthorizationState.unavailable =>
-          'Unavailable here · manual logging active',
-      };
+      controller.screenTimeAutoSyncEnabled
+      ? (controller.screenTimeSyncError != null
+            ? 'Automatic sync needs attention · manual entry available'
+            : 'Apple daily totals · automatic sync on')
+      : switch (controller.screenTimeAuthorization) {
+          ScreenTimeAuthorizationState.authorized =>
+            'Private daily-total report · manual model input',
+          ScreenTimeAuthorizationState.notDetermined =>
+            'Optional private report · manual logging active',
+          ScreenTimeAuthorizationState.denied =>
+            'Report off · manual logging active',
+          ScreenTimeAuthorizationState.entitlementRequired =>
+            'Awaiting Apple entitlement · manual logging active',
+          ScreenTimeAuthorizationState.error =>
+            'Report needs attention · manual logging active',
+          ScreenTimeAuthorizationState.unavailable =>
+            'Unavailable here · manual logging active',
+        };
 
   static String _screenTimeSourceStatus(AppController controller) =>
-      switch (controller.screenTimeAuthorization) {
-        ScreenTimeAuthorizationState.authorized => 'View',
-        ScreenTimeAuthorizationState.notDetermined => 'Set up',
-        ScreenTimeAuthorizationState.error => 'Check',
-        _ => 'Manual',
-      };
+      controller.screenTimeAutoSyncEnabled
+      ? (controller.screenTimeSyncError != null ? 'Check' : 'Auto')
+      : switch (controller.screenTimeAuthorization) {
+          ScreenTimeAuthorizationState.authorized => 'View',
+          ScreenTimeAuthorizationState.notDetermined => 'Set up',
+          ScreenTimeAuthorizationState.error => 'Check',
+          _ => 'Manual',
+        };
 
   static void _healthPermissions(BuildContext context) =>
       showModalBottomSheet<void>(
@@ -1411,6 +1417,8 @@ class _ScreenTimeReportSheet extends StatelessWidget {
     final state = controller.screenTimeAuthorization;
     final canAuthorize = state == ScreenTimeAuthorizationState.notDetermined;
     final canView = state == ScreenTimeAuthorizationState.authorized;
+    final syncAvailability = controller.screenTimeSyncAvailability;
+    final autoSync = controller.screenTimeAutoSyncEnabled;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
@@ -1422,7 +1430,7 @@ class _ScreenTimeReportSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    context.tr('Private Screen Time report'),
+                    context.tr('Screen Time'),
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
@@ -1436,7 +1444,7 @@ class _ScreenTimeReportSheet extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               context.tr(
-                'Manual screen time remains Tonyo’s dependable model input. The optional Apple report is a separate, view-only daily total.',
+                'Log hours manually, or connect Apple Screen Time to import daily totals automatically where available.',
               ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
@@ -1444,25 +1452,114 @@ class _ScreenTimeReportSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            SwitchListTile.adaptive(
+              key: const Key('screen-time-auto-sync-toggle'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Auto-sync with Apple')),
+              subtitle: Text(
+                context.tr(
+                  'Sync this device’s last 7 days when Tonyo opens and every 15 minutes while open. Daily totals are saved with your activity data and used in your scores.',
+                ),
+              ),
+              value: autoSync,
+              onChanged:
+                  controller.isScreenTimeSyncAuthorizing ||
+                      (!autoSync && !syncAvailability.canRequest)
+                  ? null
+                  : controller.setScreenTimeAutoSync,
+            ),
+            Text(
+              context.tr(
+                controller.isScreenTimeSyncAuthorizing
+                    ? 'Requesting Apple data access…'
+                    : syncAvailability.message,
+              ),
+              key: const Key('screen-time-auto-sync-status'),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.tr(
+                'Requires iOS 26.4+ and an eligible EU device and Apple Account. Apple allows only one app at a time to hold this data access.',
+              ),
+              style: TextStyle(
+                color: TonyoPalette.of(context).muted,
+                fontSize: 11,
+              ),
+            ),
+            if (autoSync && controller.lastScreenTimeSync != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.tr(
+                  'Last synced: {value0}',
+                  args: {
+                    'value0':
+                        '${MaterialLocalizations.of(context).formatShortDate(controller.lastScreenTimeSync!)} ${TimeOfDay.fromDateTime(controller.lastScreenTimeSync!).format(context)}',
+                  },
+                ),
+              ),
+            ],
+            if (controller.screenTimeSyncError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                context.tr(controller.screenTimeSyncError!),
+                style: TextStyle(color: TonyoPalette.of(context).error),
+              ),
+            ],
+            if (autoSync) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const Key('screen-time-sync-now'),
+                onPressed:
+                    controller.isScreenTimeSyncing ||
+                        controller.isScreenTimeSyncAuthorizing
+                    ? null
+                    : () =>
+                          syncAvailability ==
+                              ScreenTimeSyncAvailability.authorized
+                          ? controller.syncScreenTimeIfDue(force: true)
+                          : controller.setScreenTimeAutoSync(true),
+                icon: const Icon(Icons.sync_rounded),
+                label: Text(
+                  context.tr(
+                    controller.isScreenTimeSyncing
+                        ? 'Syncing…'
+                        : syncAvailability ==
+                              ScreenTimeSyncAvailability.authorized
+                        ? 'Sync now'
+                        : 'Reconnect Apple Screen Time',
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
             const _ScreenTimePrivacyRow(
               icon: Icons.edit_note_rounded,
               title: 'Manual input stays in control',
               detail:
-                  'Hours you enter in Activity log are saved as private screen-time signals and used by the model.',
+                  'Hours you enter in Activity log override imported Apple totals for the same day. Turning off auto-sync stops new imports and keeps saved entries.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.lock_outline_rounded,
               title: 'Protected details stay with Apple',
               detail:
-                  'App names, categories, websites, pickups, and notifications remain inside the Device Activity report extension.',
+                  'Tonyo imports only daily totals, never app names, websites, categories, pickups, or notifications.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.cloud_off_outlined,
               title: 'No protected report data in Firebase',
               detail:
-                  'The report renders only today’s total duration and exports no Device Activity details to Tonyo or Firestore.',
+                  'The optional private report below is view-only and exports no data. Auto-sync separately saves daily totals using your existing data and cloud-sync choices.',
             ),
             const SizedBox(height: 12),
+            Text(
+              context.tr('Private Screen Time report'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(13),

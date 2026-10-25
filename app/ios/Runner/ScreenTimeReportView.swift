@@ -31,7 +31,7 @@ struct TonyoScreenTimeReportView: View {
         .foregroundStyle(.secondary)
         DeviceActivityReport(.tonyoDailyTotal, filter: filter)
           .frame(maxWidth: .infinity, minHeight: 180)
-        Text("Manual screen time remains the value used by Tonyo’s model.")
+        Text("This view-only report does not sync to Tonyo. Manage manual entry or automatic daily-total imports in Profile → Screen Time.")
           .font(.caption)
           .foregroundStyle(.secondary)
         Spacer()

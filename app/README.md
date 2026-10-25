@@ -368,6 +368,14 @@ Firebase. The report remains default-off until Apple approves Family Controls,
 while manual logging works on every supported platform. See
 [docs/SCREEN_TIME_SETUP.md](docs/SCREEN_TIME_SETUP.md) for activation steps.
 
+Profile → Screen Time now also offers opt-in automatic daily-total imports via
+Apple’s separate iOS 26.4+ data-access API. Eligible users can sync on launch,
+resume, and every 15 minutes while the app is open. Manual corrections take
+priority for the same day. This requires Apple’s App and Website Usage
+entitlement and an eligible EU device/account for customer installations; both
+activation flags remain off until approved provisioning is configured. The
+setup guide covers the supported path and physical-device validation.
+
 Version 0.29 promotes AI Coach into a generated eight-block
 morning-to-evening plan. Firebase-backed scores and peak, dip, and recovery
 windows schedule morning setup, deep work, hydration, a brief nap, training,

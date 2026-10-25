@@ -525,6 +525,7 @@ class _ForecastEvidenceRow extends StatelessWidget {
         ? 'Demo / synthetic example'
         : switch (evidence.source) {
             SignalSource.healthKit => 'HealthKit',
+            SignalSource.appleScreenTime => 'Apple Screen Time',
             SignalSource.model => 'Model',
             SignalSource.manual => 'Manual',
             null => 'Manual',

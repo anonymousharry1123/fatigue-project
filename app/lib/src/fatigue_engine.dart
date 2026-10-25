@@ -584,7 +584,7 @@ abstract final class FatigueEngine {
         maximumAge: maximumAge,
       );
       final sourceWeight = switch (reading.source) {
-        SignalSource.healthKit => 1.0,
+        SignalSource.healthKit || SignalSource.appleScreenTime => 1.0,
         SignalSource.manual => .95,
         SignalSource.model => .8,
       };

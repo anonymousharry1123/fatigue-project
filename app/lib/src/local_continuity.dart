@@ -52,6 +52,7 @@ extension _LocalContinuity on AppController {
         }
         _offlineLocalAccess = false;
         _invalidateHealthWork();
+        _invalidateScreenTimeWork();
         _unloadAi1Capture();
         _energyModelService.unload();
         await _disableContinuousHealthUpdates();

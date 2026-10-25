@@ -2,6 +2,7 @@ import Flutter
 import CryptoKit
 import Darwin
 import FamilyControls
+import DeviceActivity
 import HealthKit
 import SwiftUI
 import UIKit
@@ -107,8 +108,108 @@ import UserNotifications
       requestScreenTimeAuthorization(result: result)
     case "showReport":
       showScreenTimeReport(result: result)
+    case "syncAvailability":
+      result(screenTimeSyncAvailability())
+    case "requestSyncAuthorization":
+      requestScreenTimeSyncAuthorization(result: result)
+    case "readDailyTotals":
+      readScreenTimeDailyTotals(result: result)
     default:
       result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func screenTimeSyncAvailability() -> String {
+    guard #available(iOS 26.4, *) else { return "unsupportedOS" }
+    // This opt-in build flag must accompany the separately approved signed
+    // app-and-website-usage entitlement. The Apple API enforces entitlement,
+    // region and account eligibility; never infer eligibility from locale.
+    guard hasFamilyControlsEntitlement,
+      Bundle.main.object(forInfoDictionaryKey: "TonyoScreenTimeDataAccessApproved")
+        as? Bool == true
+    else { return "entitlementRequired" }
+    switch AuthorizationCenter.shared.authorizationStatus {
+    case .approvedWithDataAccess: return "authorized"
+    case .denied: return "denied"
+    case .notDetermined, .approved: return "notDetermined"
+    default: return "error"
+    }
+  }
+
+  private func requestScreenTimeSyncAuthorization(result: @escaping FlutterResult) {
+    let state = screenTimeSyncAvailability()
+    guard state == "notDetermined" || state == "denied" else {
+      result(state)
+      return
+    }
+    Task { @MainActor in
+      do {
+        try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        let updated = screenTimeSyncAvailability()
+        // Standard report approval is insufficient for importing totals.
+        result(updated == "notDetermined" ? "denied" : updated)
+      } catch FamilyControlsError.unavailable {
+        result("regionUnavailable")
+      } catch FamilyControlsError.authorizationCanceled {
+        result("denied")
+      } catch {
+        result("error")
+      }
+    }
+  }
+
+  private func readScreenTimeDailyTotals(result: @escaping FlutterResult) {
+    guard #available(iOS 26.4, *), screenTimeSyncAvailability() == "authorized" else {
+      result(FlutterError(code: "unauthorized", message: "Screen Time data access is required.", details: nil))
+      return
+    }
+    Task { @MainActor in
+      do {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = Date.now
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -6, to: today)!
+        // Omitting users/devices limits the import to the current user/device.
+        let filter = DeviceActivityFilter(segment: .daily(during: DateInterval(start: start, end: now)))
+        var totals: [Date: (seconds: TimeInterval, updatedAt: Date)] = [:]
+        for try await activity in DeviceActivityData.activityData(filteredBy: filter, using: .live) {
+          for await segment in activity.activitySegments {
+            let day = calendar.startOfDay(for: segment.dateInterval.start)
+            guard day >= start, day <= today else { continue }
+            let previous = totals[day]
+            totals[day] = (
+              (previous?.seconds ?? 0) + segment.totalActivityDuration,
+              max(previous?.updatedAt ?? .distantPast, min(activity.lastUpdatedDate, now))
+            )
+          }
+        }
+        guard screenTimeSyncAvailability() == "authorized" else {
+          result(FlutterError(code: "unauthorized", message: "Screen Time access changed.", details: nil))
+          return
+        }
+        let dayFormatter = DateFormatter()
+        dayFormatter.calendar = calendar
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = calendar.timeZone
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        let iso = ISO8601DateFormatter()
+        // No app names, domains, category, pickup or notification records leave
+        // native code. This does not read from the private report extension.
+        result(totals.keys.sorted().map { day -> [String: Any] in
+          let total = totals[day]!
+          return ["day": dayFormatter.string(from: day), "seconds": total.seconds,
+                  "updatedAt": iso.string(from: total.updatedAt)]
+        })
+      } catch DeviceActivityData.Error.unavailable {
+        result(FlutterError(code: "regionUnavailable", message: "Apple Screen Time data access is unavailable for this device or account.", details: nil))
+      } catch DeviceActivityData.Error.unauthorized {
+        result(FlutterError(code: "unauthorized", message: "Allow Screen Time data access again.", details: nil))
+      } catch DeviceActivityData.Error.missingData {
+        result(FlutterError(code: "missingData", message: "Apple has no Screen Time data available yet.", details: nil))
+      } catch {
+        result(FlutterError(code: "syncFailed", message: "Apple Screen Time could not be refreshed.", details: nil))
+      }
     }
   }
 

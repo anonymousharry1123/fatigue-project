@@ -21,7 +21,7 @@ enum SignalType {
   sleepUnspecified,
 }
 
-enum SignalSource { manual, healthKit, model }
+enum SignalSource { manual, healthKit, model, appleScreenTime }
 
 extension SignalTypeInfo on SignalType {
   String get label => switch (this) {

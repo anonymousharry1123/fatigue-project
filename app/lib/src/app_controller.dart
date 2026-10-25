@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,6 +53,7 @@ import 'offline_access_lease.dart';
 import 'reaction_test_logic.dart';
 import 'recommendation_feedback_logic.dart';
 import 'screen_time_service.dart';
+import 'screen_time_logic.dart';
 import 'schedule_logic.dart';
 import 'sleep_sync_logic.dart';
 import 'today_dashboard_logic.dart';
@@ -656,6 +658,7 @@ class AppController extends ChangeNotifier {
     _appInForeground = false;
     _sessionRevision++;
     _invalidateHealthWork();
+    _invalidateScreenTimeWork();
     _cloudRetryTimer?.cancel();
     _ai1StudyTimer?.cancel();
     _healthForegroundTimer?.cancel();
@@ -682,7 +685,10 @@ class AppController extends ChangeNotifier {
     if (_appInForeground) {
       _healthForegroundTimer = Timer.periodic(
         ContinuousRefreshLogic.foregroundRefreshInterval,
-        (_) => unawaited(_pollForegroundHealth()),
+        (_) {
+          unawaited(_pollForegroundHealth());
+          if (isReady) unawaited(syncScreenTimeIfDue());
+        },
       );
       _ai1StudyTimer = Timer.periodic(
         const Duration(minutes: 1),
@@ -1007,6 +1013,19 @@ class AppController extends ChangeNotifier {
   bool healthAuthorized = false;
   bool isHealthAuthorizing = false;
   bool isScreenTimeAuthorizing = false;
+  bool isScreenTimeSyncAuthorizing = false;
+  bool isScreenTimeSyncing = false;
+  bool _screenTimeAutoSyncEnabled = false;
+  String? _screenTimeSyncOwner;
+  int _screenTimeSyncGeneration = 0;
+  DateTime? lastScreenTimeSync;
+  DateTime? _lastScreenTimeSyncAttempt;
+  String? screenTimeSyncError;
+  ScreenTimeSyncAvailability screenTimeSyncAvailability =
+      ScreenTimeSyncAvailability.unavailable;
+  bool get screenTimeAutoSyncEnabled =>
+      _screenTimeAutoSyncEnabled &&
+      _screenTimeSyncOwner == (cloudUid ?? 'local');
   bool isSyncing = false;
   bool isCloudSyncing = false;
   bool isEnergyScoreLoading = false;
@@ -2742,6 +2761,7 @@ class AppController extends ChangeNotifier {
     await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
     await _energyModelService.load();
+    await syncScreenTimeIfDue();
     if (outcomeConsent || hasPendingOutcomeChanges) {
       await refreshOutcomes(notify: false);
     }
@@ -2853,6 +2873,7 @@ class AppController extends ChangeNotifier {
     if (!_canProcessData) {
       _unloadAi1Capture();
       _invalidateHealthWork();
+      _invalidateScreenTimeWork();
       await _invalidateModelPreparation();
       await _disableContinuousHealthUpdates();
       healthBackgroundRefreshEnabled = false;
@@ -2883,6 +2904,8 @@ class AppController extends ChangeNotifier {
     scheduleCloudRetry();
     final status = await refreshHealthAuthorization(notify: false);
     await refreshScreenTimeAuthorization(notify: false);
+    if (!current()) return;
+    await syncScreenTimeIfDue();
     if (!current()) return;
     if ((derivedViewsNeedRefresh ||
             _scoreSnapshot == null ||
@@ -3102,6 +3125,7 @@ class AppController extends ChangeNotifier {
     _unloadAi1Capture();
     _sessionRevision++;
     _invalidateHealthWork();
+    _invalidateScreenTimeWork();
     _cloudPrivacyVerified = false;
     try {
       await _refreshPrivacyClaims();
@@ -3255,6 +3279,7 @@ class AppController extends ChangeNotifier {
     _sessionRevision += 1;
     _unloadAi1Capture();
     _invalidateHealthWork();
+    _invalidateScreenTimeWork();
     isForecastLoading = false;
     isGuidanceLoading = false;
     isInsightsLoading = false;
@@ -4326,7 +4351,25 @@ class AppController extends ChangeNotifier {
   Future<ScreenTimeAuthorizationState> refreshScreenTimeAuthorization({
     bool notify = true,
   }) async {
-    screenTimeAuthorization = await _screenTimeService.authorizationStatus();
+    final revision = _sessionRevision;
+    final status = await _screenTimeService.authorizationStatus();
+    if (_disposed || revision != _sessionRevision) {
+      return screenTimeAuthorization;
+    }
+    // An unavailable report platform or missing base capability cannot support
+    // the importer either. Avoid another platform round-trip in that case.
+    final availability = switch (status) {
+      ScreenTimeAuthorizationState.unavailable =>
+        ScreenTimeSyncAvailability.unavailable,
+      ScreenTimeAuthorizationState.entitlementRequired =>
+        ScreenTimeSyncAvailability.entitlementRequired,
+      _ => await _screenTimeService.syncAvailability(),
+    };
+    if (_disposed || revision != _sessionRevision) {
+      return screenTimeAuthorization;
+    }
+    screenTimeAuthorization = status;
+    screenTimeSyncAvailability = availability;
     screenTimeError = switch (screenTimeAuthorization) {
       ScreenTimeAuthorizationState.error =>
         'Screen Time report status could not be checked.',
@@ -4334,6 +4377,161 @@ class AppController extends ChangeNotifier {
     };
     if (notify) notifyListeners();
     return screenTimeAuthorization;
+  }
+
+  Future<void> setScreenTimeAutoSync(bool enabled) async {
+    if (_isClearingTrackingData || _disposed) return;
+    if (enabled) _requirePrivacy();
+    if (enabled && isScreenTimeSyncAuthorizing) return;
+    final generation = ++_screenTimeSyncGeneration;
+    final revision = _sessionRevision;
+    final owner = cloudUid ?? 'local';
+    bool current() =>
+        !_disposed &&
+        revision == _sessionRevision &&
+        generation == _screenTimeSyncGeneration &&
+        owner == (cloudUid ?? 'local') &&
+        _canProcessData;
+    isScreenTimeSyncing = false;
+    screenTimeSyncError = null;
+    if (!enabled) {
+      _screenTimeAutoSyncEnabled = false;
+      isScreenTimeSyncAuthorizing = false;
+      _lastScreenTimeSyncAttempt = null;
+      notifyListeners();
+      try {
+        await _writeLocal();
+      } on Object {
+        if (_disposed || revision != _sessionRevision) return;
+        screenTimeSyncError =
+            'Sync is off for this session, but the setting could not be saved. Retry before closing Tonyo.';
+        notifyListeners();
+      }
+      return;
+    }
+    isScreenTimeSyncAuthorizing = true;
+    notifyListeners();
+    try {
+      final availability = await _screenTimeService.requestSyncAuthorization();
+      if (!current()) return;
+      screenTimeSyncAvailability = availability;
+      if (availability != ScreenTimeSyncAvailability.authorized) {
+        screenTimeSyncError = availability.message;
+        return;
+      }
+      _screenTimeAutoSyncEnabled = true;
+      _screenTimeSyncOwner = owner;
+      await _writeLocal();
+      if (!current()) return;
+      isScreenTimeSyncAuthorizing = false;
+      await syncScreenTimeIfDue(force: true);
+    } on Object {
+      if (!current()) return;
+      _screenTimeAutoSyncEnabled = false;
+      screenTimeSyncError =
+          'Could not enable automatic Screen Time sync. Please retry.';
+    } finally {
+      if (current()) {
+        isScreenTimeSyncAuthorizing = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> syncScreenTimeIfDue({bool force = false}) async {
+    if (_disposed ||
+        _isClearingTrackingData ||
+        !_canProcessData ||
+        isPrivacyBusy ||
+        !screenTimeAutoSyncEnabled ||
+        isScreenTimeSyncing ||
+        isScreenTimeSyncAuthorizing) {
+      return;
+    }
+    final now = _now();
+    final previous = _lastScreenTimeSyncAttempt;
+    if (!force &&
+        previous != null &&
+        ScreenTimeLogic.dayKey(previous) == ScreenTimeLogic.dayKey(now) &&
+        now.difference(previous) >= Duration.zero &&
+        now.difference(previous) < const Duration(minutes: 15)) {
+      return;
+    }
+    final generation = _screenTimeSyncGeneration;
+    final revision = _sessionRevision;
+    final owner = cloudUid ?? 'local';
+    bool current() =>
+        !_disposed &&
+        !_isClearingTrackingData &&
+        revision == _sessionRevision &&
+        generation == _screenTimeSyncGeneration &&
+        owner == (cloudUid ?? 'local') &&
+        _canProcessData &&
+        screenTimeAutoSyncEnabled;
+    _lastScreenTimeSyncAttempt = now;
+    final previousSuccess = lastScreenTimeSync;
+    isScreenTimeSyncing = true;
+    screenTimeSyncError = null;
+    notifyListeners();
+    try {
+      final availability = await _screenTimeService.syncAvailability();
+      if (!current()) return;
+      screenTimeSyncAvailability = availability;
+      if (availability != ScreenTimeSyncAvailability.authorized) {
+        screenTimeSyncError = availability.message;
+        return;
+      }
+      final totals = await _screenTimeService.readDailyTotals().timeout(
+        const Duration(seconds: 30),
+      );
+      if (!current()) return;
+      if (totals.isEmpty) {
+        screenTimeSyncError =
+            'Apple has no Screen Time totals available yet. Your saved entries are unchanged.';
+        return;
+      }
+      final merged = ScreenTimeLogic.merge(
+        existing: signals,
+        totals: totals,
+        now: _now(),
+      );
+      final changed = !listEquals(signals, merged);
+      signals = merged;
+      lastScreenTimeSync = _now();
+      if (changed) {
+        await _commit(energyInputsChanged: true);
+      } else {
+        // Status is device-local. An unchanged import creates no cloud writes.
+        await _writeLocal();
+      }
+    } on PlatformException catch (error) {
+      if (!current()) return;
+      if (error.code == 'regionUnavailable') {
+        screenTimeSyncAvailability =
+            ScreenTimeSyncAvailability.regionUnavailable;
+        screenTimeSyncError = screenTimeSyncAvailability.message;
+      } else if (error.code == 'unauthorized') {
+        screenTimeSyncAvailability = ScreenTimeSyncAvailability.denied;
+        screenTimeSyncError = screenTimeSyncAvailability.message;
+      } else if (error.code == 'missingData') {
+        screenTimeSyncError =
+            'Apple has no Screen Time totals available yet. Your saved entries are unchanged.';
+      } else {
+        screenTimeSyncError =
+            'Screen Time could not sync. Your saved entries are unchanged; try again later.';
+      }
+    } on Object {
+      if (current()) {
+        lastScreenTimeSync = previousSuccess;
+        screenTimeSyncError =
+            'Screen Time sync could not finish. Retry to save and refresh your totals.';
+      }
+    } finally {
+      if (current()) {
+        isScreenTimeSyncing = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<ScreenTimeAuthorizationState> authorizeScreenTimeReport() async {
@@ -4671,6 +4869,13 @@ class AppController extends ChangeNotifier {
       _canProcessData &&
       context == _healthContext;
 
+  void _invalidateScreenTimeWork() {
+    _screenTimeSyncGeneration++;
+    isScreenTimeSyncing = false;
+    isScreenTimeSyncAuthorizing = false;
+    _lastScreenTimeSyncAttempt = null;
+  }
+
   void _invalidateHealthWork() {
     _healthConnectionGeneration++;
     _healthSyncContext = null;
@@ -4974,6 +5179,7 @@ class AppController extends ChangeNotifier {
     if (_isClearingTrackingData) return;
     _isClearingTrackingData = true;
     _invalidateHealthWork();
+    _invalidateScreenTimeWork();
     try {
       await _clearTrackingDataNow();
     } finally {
@@ -5007,6 +5213,10 @@ class AppController extends ChangeNotifier {
     ensureCurrent();
     _explicitRawHeartRateDeletes.addAll(_legacyHeartRateCloud.keys);
     _blockedHeartRateDays.clear();
+    _screenTimeAutoSyncEnabled = false;
+    _screenTimeSyncOwner = null;
+    lastScreenTimeSync = null;
+    screenTimeSyncError = null;
     signals = [];
     checkIns = [];
     _outcomes = [];
@@ -5115,6 +5325,7 @@ class AppController extends ChangeNotifier {
       _sessionRevision++;
       _unloadAi1Capture();
       _invalidateHealthWork();
+      _invalidateScreenTimeWork();
       _scoreRefreshGeneration++;
       _energyModelService.unload();
       await _invalidateModelPreparation();
@@ -5199,6 +5410,7 @@ class AppController extends ChangeNotifier {
       _sessionRevision++;
       _unloadAi1Capture();
       _invalidateHealthWork();
+      _invalidateScreenTimeWork();
       await reset();
       final prefs = await SharedPreferences.getInstance();
       if (!await prefs.remove(_deletionKey)) {
@@ -5226,6 +5438,7 @@ class AppController extends ChangeNotifier {
     _sessionRevision++;
     _unloadAi1Capture();
     _invalidateHealthWork();
+    _invalidateScreenTimeWork();
     // A preference platform write already in progress cannot be canceled.
     // Invalidate its session, then drain it before removing the account cache,
     // so a completed deletion cannot be undone by a late language save.
@@ -5310,6 +5523,11 @@ class AppController extends ChangeNotifier {
     isScreenTimeAuthorizing = false;
     screenTimeAuthorization = ScreenTimeAuthorizationState.notDetermined;
     screenTimeError = null;
+    _screenTimeAutoSyncEnabled = false;
+    _screenTimeSyncOwner = null;
+    screenTimeSyncAvailability = ScreenTimeSyncAvailability.unavailable;
+    screenTimeSyncError = null;
+    lastScreenTimeSync = null;
     healthAuthorization = healthAvailable
         ? HealthAuthorizationState.revoked
         : HealthAuthorizationState.unavailable;
@@ -5423,6 +5641,9 @@ class AppController extends ChangeNotifier {
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
     'healthAuthorizationState': healthAuthorization.name,
+    'screenTimeAutoSyncEnabled': _screenTimeAutoSyncEnabled,
+    'screenTimeSyncOwner': _screenTimeSyncOwner,
+    'lastScreenTimeSync': lastScreenTimeSync?.toUtc().toIso8601String(),
     'lastHealthImportCount': lastHealthImportCount,
     'lastHealthDuplicateCount': lastHealthDuplicateCount,
     'lastHealthRejectedCount': lastHealthRejectedCount,
@@ -6245,6 +6466,11 @@ class AppController extends ChangeNotifier {
     _recommendationFeedback.clear();
     _dismissedRiskAlertIds.clear();
     onboardingComplete = json['onboardingComplete'] as bool? ?? false;
+    _screenTimeAutoSyncEnabled = json['screenTimeAutoSyncEnabled'] == true;
+    _screenTimeSyncOwner = json['screenTimeSyncOwner'] as String?;
+    lastScreenTimeSync = DateTime.tryParse(
+      json['lastScreenTimeSync'] as String? ?? '',
+    )?.toLocal();
     final notificationPrefsVersion =
         (json['notificationPreferencesVersion'] as num?)?.round() ?? 0;
     notificationsEnabled =

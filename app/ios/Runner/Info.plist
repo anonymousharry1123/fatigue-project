@@ -30,6 +30,8 @@
 	<string>Tonyo reads sleep, heart, workout, and hydration data to personalize wellness estimates and forecasts. Manual logging remains available.</string>
 	<key>TonyoFamilyControlsEntitlementApproved</key>
 	<false/>
+	<key>TonyoScreenTimeDataAccessApproved</key>
+	<false/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
