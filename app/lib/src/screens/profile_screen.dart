@@ -18,6 +18,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/heart_data_details.dart';
 import 'account_sign_in_dialog.dart';
 import 'appearance_screen.dart';
+import 'oura_connection_screen.dart';
 import 'change_password_dialog.dart';
 import 'admin/admin_cohort_screen.dart';
 import 'device_backup_flow.dart';
@@ -254,8 +255,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ? "Heart-rate upgrade: {value0} day summaries still need upload. Save a device backup first, then Retry sync once when quota allows."
                             : "Heart-rate upgrade: {value0} legacy cloud samples left to remove after summaries. Do not delete data in the Firebase console.",
                         args: {
-                          'value0': controller.pendingHeartRateSummaryDayCount >
-                                  0
+                          'value0':
+                              controller.pendingHeartRateSummaryDayCount > 0
                               ? controller.pendingHeartRateSummaryDayCount
                               : controller.pendingLegacyHeartRateSampleCount,
                         },
@@ -327,6 +328,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             detail: _healthSourceDetail(controller),
             status: _healthSourceStatus(controller),
             onTap: () => _healthPermissions(context),
+          ),
+          const SizedBox(height: 9),
+          _SourceCard(
+            key: const Key('oura-source-card'),
+            icon: Icons.favorite_border,
+            color: TonyoPalette.of(context).secondary,
+            title: 'Oura',
+            detail: 'Nighttime HRV and resting heart rate',
+            status: controller.isOuraBusy
+                ? 'Syncing…'
+                : !controller.ouraAvailable
+                ? 'Unavailable'
+                : controller.ouraError != null
+                ? 'Check'
+                : controller.ouraConnected
+                ? 'Connected'
+                : 'Connect',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const OuraConnectionScreen(),
+                ),
+              );
+              controller.syncOura(automatic: true);
+            },
           ),
           const SizedBox(height: 9),
           _SourceCard(

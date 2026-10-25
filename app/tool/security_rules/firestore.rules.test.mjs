@@ -247,6 +247,39 @@ test('first atomic patch activates tracked sync and later source writes need a m
   await assertFails(deleteDoc(child(db, 'inputChanges', 'signals__row')));
 });
 
+test('Oura OAuth credentials and handshake states are never accessible to client accounts', async () => {
+  const paths = ['ouraConnections/owner', 'ouraOAuthStates/opaque-state-hash'];
+  await environment.withSecurityRulesDisabled(async context => {
+    for (const path of paths) await setDoc(doc(context.firestore(), path), { accessToken: 'invented-secret' });
+  });
+  for (const db of [signedIn(), signedIn('other'), signedIn('owner', guardianClaims),
+    signedIn('operator', { syntheticLabAdmin: true }), environment.unauthenticatedContext().firestore()]) {
+    for (const path of paths) {
+      const reference = doc(db, path);
+      await assertFails(getDoc(reference));
+      await assertFails(setDoc(reference, { accessToken: 'replacement' }));
+      await assertFails(deleteDoc(reference));
+      await assertFails(getDocs(collection(db, path.split('/')[0])));
+    }
+  }
+});
+
+test('Oura source metadata must match the atomic input journal', async () => {
+  await seed();
+  const db = signedIn();
+  const observation = phase1Signal({ type: 'hrv', value: 45, unit: 'ms', source: 'oura',
+    sourceName: 'Oura', sourceBundleId: null, measurementMethod: 'rmssd',
+    sourceDay: '2026-10-25', sourceRecordId: 'oura-session' });
+  await assertSucceeds(trackedWrite(db, 'signals', 'oura-row', observation, 1));
+  for (const field of ['sourceName', 'sourceBundleId', 'measurementMethod', 'sourceDay', 'sourceRecordId']) {
+    const after = { ...observation };
+    delete after[field];
+    await assertFails(trackedWrite(db, 'signals', 'oura-row', after, 2, { sourceAfter: observation }));
+  }
+  await assertFails(trackedWrite(db, 'signals', 'oura-row', observation, 2,
+    { sourceAfter: { ...observation, measurementMethod: 'sdnn' } }));
+});
+
 test('tracked source values reject mismatched payloads, identities, revisions and false deletions', async () => {
   await seed(profile({ inputSyncVersion: 1, inputRevision: 1 }));
   const db = signedIn();

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'models.dart';
+import 'oura_data.dart';
 
 enum RestingHeartRateDerivationStatus {
   native,
@@ -130,6 +131,7 @@ class HeartDerivationLogic {
         }
         dates.add(day);
       } else if (reading.type == SignalType.restingHeartRate &&
+          !OuraData.isOuraOrigin(reading) &&
           _validRestingHeartRate(reading)) {
         existingRestingByDay.putIfAbsent(day, () => []).add(reading);
         dates.add(day);

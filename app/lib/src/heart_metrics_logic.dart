@@ -2,6 +2,7 @@ import 'heart_derivation_logic.dart';
 import 'evidence_provenance.dart';
 import 'local_day.dart';
 import 'models.dart';
+import 'oura_data.dart';
 
 class HeartMetricAverage {
   HeartMetricAverage(List<SignalReading> readings)
@@ -10,12 +11,16 @@ class HeartMetricAverage {
           readings.length,
       sampleCount = readings.length,
       containsDemo = readings.any(EvidenceProvenance.signalIsDemo),
-      sources = Set.unmodifiable(readings.map((item) => item.source));
+      sources = Set.unmodifiable(readings.map((item) => item.source)),
+      measurementMethods = Set.unmodifiable(
+        readings.map((item) => item.measurementMethod).whereType<String>(),
+      );
 
   final double mean;
   final int sampleCount;
   final bool containsDemo;
   final Set<SignalSource> sources;
+  final Set<String> measurementMethods;
 }
 
 class HeartMetricsDay {
@@ -26,6 +31,8 @@ class HeartMetricsDay {
     this.estimatedRestingHeartRate,
     this.hrv,
     this.variation,
+    this.ouraHrv,
+    this.ouraRestingHeartRate,
   });
 
   final DateTime date;
@@ -34,6 +41,8 @@ class HeartMetricsDay {
   final HeartMetricAverage? estimatedRestingHeartRate;
   final HeartMetricAverage? hrv;
   final SampledHeartRateVariation? variation;
+  final HeartMetricAverage? ouraHrv;
+  final HeartMetricAverage? ouraRestingHeartRate;
 }
 
 /// Presentation-only averages. Original observations remain unchanged.
@@ -58,13 +67,23 @@ abstract final class HeartMetricsLogic {
         unique[key] = reading;
       }
     }
+    final ordinary = OuraData.withoutHealthKitMirrors(
+      unique.values,
+      now: now,
+    ).where((reading) => reading.source != SignalSource.oura).toList();
     final derivation = includeDerivations
-        ? HeartDerivationLogic.reconcile(readings: unique.values, now: now)
+        ? HeartDerivationLogic.reconcile(readings: ordinary, now: now)
         : null;
     final byDay = <DateTime, List<SignalReading>>{};
-    for (final reading in derivation?.readings ?? unique.values) {
+    for (final reading in [
+      ...derivation?.readings ?? ordinary,
+      ...unique.values.where((item) => item.source == SignalSource.oura),
+    ]) {
       if (!_valid(reading, now)) continue;
-      byDay.putIfAbsent(localDay(reading.timestamp), () => []).add(reading);
+      final day = reading.source == SignalSource.oura
+          ? OuraData.sourceDate(reading.sourceDay)!
+          : localDay(reading.timestamp);
+      byDay.putIfAbsent(day, () => []).add(reading);
     }
     final variations = {
       for (final day in derivation?.days ?? <HeartDerivationDay>[])
@@ -86,13 +105,30 @@ abstract final class HeartMetricsLogic {
             entry.value.where(
               (r) =>
                   r.type == SignalType.restingHeartRate &&
+                  r.source != SignalSource.oura &&
                   !HeartDerivationLogic.isEstimatedRestingHeartRate(r),
             ),
           ),
           estimatedRestingHeartRate: average(
             entry.value.where(HeartDerivationLogic.isEstimatedRestingHeartRate),
           ),
-          hrv: average(entry.value.where((r) => r.type == SignalType.hrv)),
+          hrv: average(
+            entry.value.where(
+              (r) => r.type == SignalType.hrv && r.source != SignalSource.oura,
+            ),
+          ),
+          ouraHrv: average(
+            entry.value.where(
+              (r) => r.type == SignalType.hrv && r.source == SignalSource.oura,
+            ),
+          ),
+          ouraRestingHeartRate: average(
+            entry.value.where(
+              (r) =>
+                  r.type == SignalType.restingHeartRate &&
+                  r.source == SignalSource.oura,
+            ),
+          ),
           variation: variations[entry.key],
         ),
     ]..sort((a, b) => b.date.compareTo(a.date));
@@ -112,6 +148,9 @@ abstract final class HeartMetricsLogic {
     final measured =
         reading.source == SignalSource.healthKit ||
         reading.source == SignalSource.manual;
+    if (reading.source == SignalSource.oura) {
+      return OuraData.isValidOuraReading(reading, now);
+    }
     return switch (reading.type) {
       SignalType.heartRate =>
         measured && reading.value >= 20 && reading.value <= 300,

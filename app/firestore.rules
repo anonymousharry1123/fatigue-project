@@ -102,7 +102,9 @@ service cloud.firestore {
     function completeInputPayload(collection, after) {
       let known = collection == 'signals'
         ? ['type', 'value', 'unit', 'timestamp', 'source', 'quality', 'note',
-          'groupId', 'syncedAt', 'recordedAt', 'schemaVersion']
+          'groupId', 'syncedAt', 'recordedAt', 'schemaVersion',
+          'sourceName', 'sourceBundleId', 'measurementMethod', 'sourceDay',
+          'sourceRecordId']
         : ['energy', 'fatigue', 'sleepiness', 'focus', 'mood', 'stress', 'period',
           'note', 'timestamp', 'recordedAt', 'localDate', 'timezone',
           'utcOffsetMinutes', 'questionnaireVersion', 'questionnaireLanguage',
@@ -544,6 +546,15 @@ service cloud.firestore {
 
     match /syntheticCohort/{docId} {
       allow read, create, update, delete: if isSyntheticLabAdmin();
+    }
+
+    // OAuth credentials and one-use authorization state are Admin-SDK only.
+    // A user may connect/disconnect solely through the authenticated endpoint.
+    match /ouraConnections/{uid} {
+      allow read, write: if false;
+    }
+    match /ouraOAuthStates/{stateHash} {
+      allow read, write: if false;
     }
 
     // No collection-group or other top-level access is granted.

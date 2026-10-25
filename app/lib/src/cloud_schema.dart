@@ -28,6 +28,12 @@ Map<String, Object?> signalToCloud(SignalReading signal) => {
   'groupId': signal.groupId,
   'syncedAt': signal.syncedAt,
   if (signal.recordedAt != null) 'recordedAt': signal.recordedAt,
+  if (signal.sourceName != null) 'sourceName': signal.sourceName,
+  if (signal.sourceBundleId != null) 'sourceBundleId': signal.sourceBundleId,
+  if (signal.sourceRecordId != null) 'sourceRecordId': signal.sourceRecordId,
+  if (signal.sourceDay != null) 'sourceDay': signal.sourceDay,
+  if (signal.measurementMethod != null)
+    'measurementMethod': signal.measurementMethod,
   'schemaVersion': cloudSchemaVersion,
 };
 
@@ -56,6 +62,11 @@ SignalReading signalFromCloud(String id, Map<String, dynamic> data) {
     recordedAt: data['recordedAt'] == null
         ? null
         : cloudDateTime(data['recordedAt'], field: 'recordedAt'),
+    sourceName: data['sourceName'] as String?,
+    sourceBundleId: data['sourceBundleId'] as String?,
+    sourceRecordId: data['sourceRecordId'] as String?,
+    sourceDay: data['sourceDay'] as String?,
+    measurementMethod: data['measurementMethod'] as String?,
   );
 }
 

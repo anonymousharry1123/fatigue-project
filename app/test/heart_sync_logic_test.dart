@@ -4,6 +4,105 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('HealthKit normalization preserves measurement and origin metadata', () {
+    final time = DateTime.utc(2026, 10, 24, 8);
+    final imported = SignalReading(
+      id: ' healthkit-source ',
+      type: SignalType.hrv,
+      value: 45,
+      timestamp: time,
+      source: SignalSource.healthKit,
+      sourceName: 'Apple Watch',
+      sourceBundleId: 'com.apple.health',
+      sourceRecordId: 'native-sample',
+      sourceDay: '2026-10-24',
+      measurementMethod: 'sdnn',
+    );
+    final result = HeartSyncLogic.merge(
+      existing: [],
+      imported: [imported],
+      syncedAt: time,
+    );
+    final normalized = result.readings.single;
+    expect(normalized.id, 'healthkit-source');
+    expect(normalized.sourceName, imported.sourceName);
+    expect(normalized.sourceBundleId, imported.sourceBundleId);
+    expect(normalized.sourceRecordId, imported.sourceRecordId);
+    expect(normalized.sourceDay, imported.sourceDay);
+    expect(normalized.measurementMethod, 'sdnn');
+    expect(normalized.source, SignalSource.healthKit);
+  });
+
+  test(
+    'direct Oura never absorbs a nearby equal Apple HRV or resting value',
+    () {
+      final time = DateTime.utc(2026, 10, 24, 8);
+      for (final type in [SignalType.hrv, SignalType.restingHeartRate]) {
+        final oura = SignalReading(
+          id: 'oura-${type.name}-2026-10-24',
+          type: type,
+          value: 50,
+          timestamp: time,
+          source: SignalSource.oura,
+          sourceName: 'Oura',
+          sourceDay: '2026-10-24',
+        );
+        final apple = SignalReading(
+          id: 'healthkit-${type.name}',
+          type: type,
+          value: 50,
+          timestamp: time.add(const Duration(seconds: 10)),
+          source: SignalSource.healthKit,
+        );
+        final result = HeartSyncLogic.merge(
+          existing: [oura],
+          imported: [apple],
+          syncedAt: time,
+        );
+        expect(result.importedCount, 1);
+        expect(result.duplicateCount, 0);
+        expect(result.readings, hasLength(2));
+        expect(result.readings, contains(oura));
+        final repeat = HeartSyncLogic.merge(
+          existing: result.readings,
+          imported: [apple],
+          syncedAt: time,
+        );
+        expect(repeat.importedCount, 0);
+        expect(repeat.duplicateCount, 1);
+        expect(repeat.readings, hasLength(2));
+      }
+    },
+  );
+
+  test('known distinct HealthKit producers keep equal nearby measurements', () {
+    final time = DateTime.utc(2026, 10, 24, 8);
+    for (final type in [SignalType.hrv, SignalType.restingHeartRate]) {
+      SignalReading record(String id, String bundle) => SignalReading(
+        id: id,
+        type: type,
+        value: 50,
+        timestamp: time,
+        source: SignalSource.healthKit,
+        sourceBundleId: bundle,
+      );
+      final first = record('oura-mirror', 'com.ouraring.oura');
+      final second = record('apple-watch', 'com.apple.health');
+      final third = record('apple-nearby', 'com.apple.health');
+      final result = HeartSyncLogic.merge(
+        existing: [first],
+        imported: [second, third],
+        syncedAt: time,
+      );
+      expect(result.importedCount, 1);
+      expect(result.duplicateCount, 1);
+      expect(
+        result.readings.map((r) => r.id),
+        unorderedEquals(['oura-mirror', 'apple-watch']),
+      );
+    }
+  });
+
   test('native resting HR is never deduplicated against a nearby estimate', () {
     final now = DateTime(2026, 10, 24, 9);
     final existing = HeartDerivationLogic.reconcile(

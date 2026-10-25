@@ -1,3 +1,4 @@
+import 'oura_data.dart';
 import 'dart:math' as math;
 
 import 'fatigue_engine.dart';
@@ -539,7 +540,14 @@ abstract final class MlPrepBuilder {
         !row.at.isAfter(outcome.observedAt) &&
         (row.availableAt == null ||
             !row.availableAt!.isAfter(outcome.observedAt));
-    final signalRows = records['signals']!.values.where(usable).toList();
+    final signalRows = records['signals']!.values
+        .where(
+          (row) =>
+              usable(row) &&
+              row.signal != null &&
+              !OuraData.isOuraOrigin(row.signal!),
+        )
+        .toList();
     final checkRows = records['checkIns']!.values.where(usable).toList();
     final signals = signalRows.map((row) => row.signal!).toList()
       ..sort((a, b) {
@@ -785,6 +793,11 @@ abstract final class MlPrepBuilder {
         quality: quality,
         note: raw['note'] as String?,
         groupId: raw['groupId'] as String?,
+        sourceName: raw['sourceName'] as String?,
+        sourceBundleId: raw['sourceBundleId'] as String?,
+        sourceRecordId: raw['sourceRecordId'] as String?,
+        sourceDay: raw['sourceDay'] as String?,
+        measurementMethod: raw['measurementMethod'] as String?,
       );
     } else if (collection == 'checkIns') {
       if (DailyCheckIn.researchFields.any(raw.containsKey)) {

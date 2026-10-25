@@ -1,3 +1,4 @@
+import 'oura_data.dart';
 import 'heart_derivation_logic.dart';
 import 'local_day.dart';
 import 'models.dart';
@@ -18,6 +19,7 @@ abstract final class PersonalBaselineLogic {
     final historical = signals
         .where(
           (item) =>
+              !OuraData.isOuraOrigin(item) &&
               !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
               !item.timestamp.isBefore(start) &&
               item.timestamp.isBefore(cutoff),
@@ -59,6 +61,7 @@ abstract final class PersonalBaselineLogic {
     final readings = signals
         .where(
           (item) =>
+              !OuraData.isOuraOrigin(item) &&
               !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
               !item.timestamp.isBefore(start) &&
               item.timestamp.isBefore(end),

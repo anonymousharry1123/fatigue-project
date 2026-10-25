@@ -17,6 +17,8 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A28000000000000000000001 /* ScreenTimeReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000011 /* ScreenTimeReportView.swift */; };
+		A29000000000000000000001 /* OuraAuthorizationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000011 /* OuraAuthorizationBridge.swift */; };
+		A29000000000000000000002 /* OuraAuthorizationURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000012 /* OuraAuthorizationURL.swift */; };
 		A28000000000000000000002 /* ScreenTimeReportExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000012 /* ScreenTimeReportExtension.swift */; };
 		A28000000000000000000003 /* TonyoDailyTotalReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000013 /* TonyoDailyTotalReport.swift */; };
 		A28000000000000000000004 /* TonyoDailyTotalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000014 /* TonyoDailyTotalView.swift */; };
@@ -83,6 +85,8 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A28000000000000000000011 /* ScreenTimeReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeReportView.swift; sourceTree = "<group>"; };
+		A29000000000000000000011 /* OuraAuthorizationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationBridge.swift; sourceTree = "<group>"; };
+		A29000000000000000000012 /* OuraAuthorizationURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationURL.swift; sourceTree = "<group>"; };
 		A28000000000000000000012 /* ScreenTimeReportExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeReportExtension.swift; sourceTree = "<group>"; };
 		A28000000000000000000013 /* TonyoDailyTotalReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonyoDailyTotalReport.swift; sourceTree = "<group>"; };
 		A28000000000000000000014 /* TonyoDailyTotalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonyoDailyTotalView.swift; sourceTree = "<group>"; };
@@ -163,6 +167,8 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				A28000000000000000000011 /* ScreenTimeReportView.swift */,
+				A29000000000000000000011 /* OuraAuthorizationBridge.swift */,
+				A29000000000000000000012 /* OuraAuthorizationURL.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -372,6 +378,8 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				A28000000000000000000001 /* ScreenTimeReportView.swift in Sources */,
+				A29000000000000000000001 /* OuraAuthorizationBridge.swift in Sources */,
+				A29000000000000000000002 /* OuraAuthorizationURL.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

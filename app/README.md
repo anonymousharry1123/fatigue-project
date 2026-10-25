@@ -12,6 +12,42 @@ As of October 18, 2026, new **Morning** check-ins collect **Energy only**. **Eve
 
 The [experimental sleep → Evening Energy preparation](tool/prepare_experimental_sleep_data.py) uses the separate `flexible-evening-retrospective-v1` policy: no 10 a.m. cutoff or 6–10 p.m. window, while retaining valid timestamps, source separation and sleep-before-response chronology. Sleep can be logged after Energy, so these are retrospective pairs rather than proof of prospective prediction. **Local study tools → Open measurement export** provides the saved observations. Any previously saved fixed-schedule plan remains reviewable in a collapsed historical section; new fixed plans are no longer offered in the ordinary flow. See the [collection-policy update](docs/PREDICTION_CONTRACT.md).
 
+## Oura alongside Apple Health
+
+On iPhone, **Profile → Connected data sources → Oura** opens an independent,
+optional Oura sign-in. Apple Health stays connected. After authorization, Oura
+imports on app launch/resume and at most every 15 minutes while open; **Sync now**
+can retry sooner. The ring must first sync to Oura. The bounded history request
+includes timezone boundary dates around the last 30 days.
+
+**Forecast → Insights → Heart metrics** and **Daily history** retain Oura source
+labels and its original sleep date. Oura nightly HRV (RMSSD) and nightly minimum
+heart rate are separate from HealthKit HRV (SDNN) and resting heart rate. An API
+minimum fallback is labeled when five-minute heart-rate samples are unavailable.
+Repeated sync updates stable daily records without duplicating them; a complete
+provider response also removes corrected/deleted Oura values in its date window.
+Identified Oura copies in Apple Health are suppressed only in presentation when
+the matching direct Oura day/metric exists. Stored Apple records remain intact.
+Oura measurements do not enter the existing Apple-based recovery baselines or
+legacy model features; this change does not activate model training.
+
+Live sign-in requires the [Oura server setup](functions/README.md), including a
+registered Oura OAuth application and backend secrets. These changes do not
+register an application or deploy the backend. After deployment, build using:
+
+```sh
+./run.sh --dart-define=OURA_API_BASE_URL=https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/ouraIntegration
+```
+
+This endpoint is public configuration; the Oura client secret and provider
+tokens remain server-side. Without it, the Oura screen states that connection is
+unavailable. Disconnect stops future imports while keeping saved observations.
+Clearing tracking history pauses Oura to prevent historical records being
+silently reimported; reconnect explicitly to start again. Privacy/account deletion
+also removes server connection credentials through the deployed cleanup hooks.
+Update all installations sharing the account before importing the new `oura`
+source; earlier builds do not recognize it.
+
 ## Appearance
 
 Swipe left or right to move between **Today**, **Forecast**, **Add**, **Coach**,

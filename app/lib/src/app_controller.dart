@@ -34,6 +34,8 @@ import 'energy_model_repository.dart';
 import 'energy_model_service.dart';
 import 'energy_model_summary.dart';
 import 'health_service.dart';
+import 'oura_service.dart';
+import 'oura_data.dart';
 import 'heart_sync_logic.dart';
 import 'heart_derivation_logic.dart';
 import 'insights_logic.dart';
@@ -64,10 +66,12 @@ part 'coach_sync.dart';
 part 'efficient_sync.dart';
 part 'local_continuity.dart';
 part 'learning_setup.dart';
+part 'oura_sync.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
     HealthService? healthService,
+    OuraService? ouraService,
     ScreenTimeService? screenTimeService,
     AccountAuth? accountAuth,
     NotificationService? notificationService,
@@ -93,6 +97,7 @@ class AppController extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _heartRateCloudStore = heartRateCloudStore,
        _healthService = healthService ?? const HealthService(),
+       _ouraService = ouraService ?? OuraService(),
        _screenTimeService = screenTimeService ?? const ScreenTimeService(),
        _accountAuth = accountAuth ?? const LocalOnlyAccountAuth(),
        _notificationService = notificationService ?? LocalNotificationService(),
@@ -127,6 +132,15 @@ class AppController extends ChangeNotifier {
   static const forecastFreshnessWindow = Duration(hours: 12);
   static const outcomeHistoryWindow = Duration(days: 90);
   final HealthService _healthService;
+  final OuraService _ouraService;
+  bool ouraConnected = false;
+  bool isOuraBusy = false;
+  bool ouraDisconnectPending = false;
+  String? ouraError;
+  DateTime? lastOuraSync;
+  DateTime? _lastOuraAttempt;
+  int _ouraGeneration = 0;
+  static const _ouraPauseKeyPrefix = 'tonyo_oura_paused_v1_';
   final ScreenTimeService _screenTimeService;
   final AccountAuth _accountAuth;
   final NotificationService _notificationService;
@@ -690,6 +704,7 @@ class AppController extends ChangeNotifier {
     isCloudSyncing = false;
     _appInForeground = false;
     _sessionRevision++;
+    _invalidateOuraWork();
     _invalidateHealthWork();
     _invalidateScreenTimeWork();
     _cloudRetryTimer?.cancel();
@@ -720,7 +735,10 @@ class AppController extends ChangeNotifier {
         ContinuousRefreshLogic.foregroundRefreshInterval,
         (_) {
           unawaited(_pollForegroundHealth());
-          if (isReady) unawaited(syncScreenTimeIfDue());
+          if (isReady) {
+            unawaited(syncScreenTimeIfDue());
+            unawaited(syncOura(automatic: true));
+          }
         },
       );
       _ai1StudyTimer = Timer.periodic(
@@ -2796,6 +2814,7 @@ class AppController extends ChangeNotifier {
     await refreshScreenTimeAuthorization(notify: false);
     await _energyModelService.load();
     await syncScreenTimeIfDue();
+    await syncOura(automatic: true);
     if (outcomeConsent || hasPendingOutcomeChanges) {
       await refreshOutcomes(notify: false);
     }
@@ -2906,6 +2925,7 @@ class AppController extends ChangeNotifier {
     if (!current()) return;
     if (!_canProcessData) {
       _unloadAi1Capture();
+      _invalidateOuraWork();
       _invalidateHealthWork();
       _invalidateScreenTimeWork();
       await _invalidateModelPreparation();
@@ -2967,6 +2987,8 @@ class AppController extends ChangeNotifier {
       _localClockChanged = false;
       await _writeLocal();
     }
+    await syncOura(automatic: true);
+    if (!current()) return;
     if (status == HealthAuthorizationState.authorized && healthAuthorized) {
       await _ensureContinuousHealthUpdates();
       await refreshHealthIfDue(reason: HealthRefreshReason.foreground);
@@ -3158,6 +3180,7 @@ class AppController extends ChangeNotifier {
     await _accountAuth.signIn(email: email, password: password);
     _unloadAi1Capture();
     _sessionRevision++;
+    _invalidateOuraWork();
     _invalidateHealthWork();
     _invalidateScreenTimeWork();
     _cloudPrivacyVerified = false;
@@ -3311,6 +3334,7 @@ class AppController extends ChangeNotifier {
     _cloudRetryTimer = null;
     _clearEditUploadWindow();
     _sessionRevision += 1;
+    _invalidateOuraWork();
     _unloadAi1Capture();
     _invalidateHealthWork();
     _invalidateScreenTimeWork();
@@ -5211,10 +5235,14 @@ class AppController extends ChangeNotifier {
   /// profile so the user can start a fresh manual tracking period.
   Future<void> clearTrackingData() async {
     if (_isClearingTrackingData) return;
+    final ensureCurrent = _beginMutation();
     _isClearingTrackingData = true;
+    _invalidateOuraWork();
     _invalidateHealthWork();
     _invalidateScreenTimeWork();
     try {
+      await _pauseOuraForClear();
+      ensureCurrent();
       await _clearTrackingDataNow();
     } finally {
       _isClearingTrackingData = false;
@@ -5357,6 +5385,7 @@ class AppController extends ChangeNotifier {
         await _saveDeletionJournal(uid ?? 'local', 'requested');
       }
       _sessionRevision++;
+      _invalidateOuraWork();
       _unloadAi1Capture();
       _invalidateHealthWork();
       _invalidateScreenTimeWork();
@@ -5442,6 +5471,7 @@ class AppController extends ChangeNotifier {
     isDeletingAccount = true;
     try {
       _sessionRevision++;
+      _invalidateOuraWork();
       _unloadAi1Capture();
       _invalidateHealthWork();
       _invalidateScreenTimeWork();
@@ -5470,6 +5500,7 @@ class AppController extends ChangeNotifier {
     cloudSyncFailureKind = null;
     cloudSyncError = null;
     _sessionRevision++;
+    _invalidateOuraWork();
     _unloadAi1Capture();
     _invalidateHealthWork();
     _invalidateScreenTimeWork();
@@ -5620,6 +5651,7 @@ class AppController extends ChangeNotifier {
           key.startsWith(_deviceRecoveryKeyPrefix) ||
           key.startsWith(_prepWindowKeyPrefix) ||
           key.startsWith(_learningSetupKeyPrefix) ||
+          key.startsWith(_ouraPauseKeyPrefix) ||
           key.startsWith('tonyo_ml_prep_v1_') ||
           key.startsWith('tonyo_energy_model_v1_'),
     )) {

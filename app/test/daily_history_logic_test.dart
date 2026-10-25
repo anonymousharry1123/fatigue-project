@@ -1,8 +1,85 @@
 import 'package:app/src/daily_history_logic.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/oura_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Oura uses original sleep day while other signals keep local dates', () {
+    final timestamp = DateTime(2026, 10, 24, 9);
+    final oura = SignalReading(
+      id: 'oura-hrv-2026-10-23',
+      type: SignalType.hrv,
+      value: 50,
+      timestamp: timestamp,
+      source: SignalSource.oura,
+      sourceDay: '2026-10-23',
+      measurementMethod: OuraData.hrvMethod,
+    );
+    final apple = oura.copyWith(
+      id: 'apple',
+      source: SignalSource.healthKit,
+      measurementMethod: 'sdnn',
+    );
+    final history = DailyHistoryLogic.build(
+      signals: [oura, apple],
+      checkIns: [],
+      activityLogs: [],
+      sleepLogs: [],
+      now: DateTime(2026, 10, 25),
+    );
+    expect(history.map((day) => day.date), [
+      DateTime(2026, 10, 24),
+      DateTime(2026, 10, 23),
+    ]);
+    expect(history.first.items.single.signal, apple);
+    expect(history.last.items.single.signal, oura);
+    expect(history.last.items.single.canDelete, isFalse);
+  });
+
+  test(
+    'history suppresses identified Oura mirrors without changing raw records',
+    () {
+      final timestamp = DateTime(2026, 10, 24, 9);
+      final oura = SignalReading(
+        id: 'oura-hrv-2026-10-24',
+        type: SignalType.hrv,
+        value: 50,
+        timestamp: timestamp,
+        source: SignalSource.oura,
+        sourceDay: '2026-10-24',
+        measurementMethod: OuraData.hrvMethod,
+      );
+      final mirror = oura.copyWith(
+        id: 'mirror',
+        source: SignalSource.healthKit,
+        sourceBundleId: 'com.ouraring.oura',
+      );
+      final apple = oura.copyWith(
+        id: 'apple',
+        source: SignalSource.healthKit,
+        sourceBundleId: 'com.apple.health',
+        measurementMethod: 'sdnn',
+      );
+      final signals = [oura, mirror, apple];
+      List<DailyHistoryDay> history(List<SignalReading> values) =>
+          DailyHistoryLogic.build(
+            signals: values,
+            checkIns: [],
+            activityLogs: [],
+            sleepLogs: [],
+            now: DateTime(2026, 10, 25),
+          );
+      expect(
+        history(signals).single.items.map((item) => item.id),
+        unorderedEquals([oura.id, apple.id]),
+      );
+      expect(signals, hasLength(3));
+      expect(history([mirror]).single.items.single.signal, mirror);
+      final futureOura = oura.copyWith(timestamp: DateTime(2026, 10, 26));
+      expect(history([futureOura, mirror]).single.items.single.signal, mirror);
+    },
+  );
+
   group('DailyHistoryLogic', () {
     test(
       'groups semantic entries by date without grouped-signal duplicates',

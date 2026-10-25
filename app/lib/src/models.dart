@@ -21,7 +21,7 @@ enum SignalType {
   sleepUnspecified,
 }
 
-enum SignalSource { manual, healthKit, model, appleScreenTime }
+enum SignalSource { manual, healthKit, model, appleScreenTime, oura }
 
 extension SignalTypeInfo on SignalType {
   String get label => switch (this) {
@@ -78,6 +78,11 @@ class SignalReading {
     this.groupId,
     this.syncedAt,
     this.recordedAt,
+    this.sourceName,
+    this.sourceBundleId,
+    this.sourceRecordId,
+    this.sourceDay,
+    this.measurementMethod,
   });
 
   final String id;
@@ -94,6 +99,15 @@ class SignalReading {
   /// time. Legacy records stay unknown; never infer this from [timestamp].
   final DateTime? recordedAt;
 
+  /// Original producer and measurement semantics, independent of import route.
+  /// Older records retain unknown metadata rather than acquiring a guessed
+  /// device, day or measurement method.
+  final String? sourceName;
+  final String? sourceBundleId;
+  final String? sourceRecordId;
+  final String? sourceDay;
+  final String? measurementMethod;
+
   SignalReading copyWith({
     String? id,
     SignalType? type,
@@ -105,6 +119,11 @@ class SignalReading {
     String? groupId,
     DateTime? syncedAt,
     DateTime? recordedAt,
+    String? sourceName,
+    String? sourceBundleId,
+    String? sourceRecordId,
+    String? sourceDay,
+    String? measurementMethod,
   }) => SignalReading(
     id: id ?? this.id,
     type: type ?? this.type,
@@ -116,6 +135,11 @@ class SignalReading {
     groupId: groupId ?? this.groupId,
     syncedAt: syncedAt ?? this.syncedAt,
     recordedAt: recordedAt ?? this.recordedAt,
+    sourceName: sourceName ?? this.sourceName,
+    sourceBundleId: sourceBundleId ?? this.sourceBundleId,
+    sourceRecordId: sourceRecordId ?? this.sourceRecordId,
+    sourceDay: sourceDay ?? this.sourceDay,
+    measurementMethod: measurementMethod ?? this.measurementMethod,
   );
 
   /// Age of the underlying observation. A recent import never makes an old
@@ -133,6 +157,11 @@ class SignalReading {
     'groupId': groupId,
     'syncedAt': syncedAt?.toUtc().toIso8601String(),
     if (recordedAt != null) 'recordedAt': recordedAt!.toUtc().toIso8601String(),
+    if (sourceName != null) 'sourceName': sourceName,
+    if (sourceBundleId != null) 'sourceBundleId': sourceBundleId,
+    if (sourceRecordId != null) 'sourceRecordId': sourceRecordId,
+    if (sourceDay != null) 'sourceDay': sourceDay,
+    if (measurementMethod != null) 'measurementMethod': measurementMethod,
   };
 
   factory SignalReading.fromJson(Map<String, dynamic> json) => SignalReading(
@@ -150,6 +179,11 @@ class SignalReading {
     recordedAt: json['recordedAt'] == null
         ? null
         : DateTime.parse(json['recordedAt'] as String).toLocal(),
+    sourceName: json['sourceName'] as String?,
+    sourceBundleId: json['sourceBundleId'] as String?,
+    sourceRecordId: json['sourceRecordId'] as String?,
+    sourceDay: json['sourceDay'] as String?,
+    measurementMethod: json['measurementMethod'] as String?,
   );
 }
 

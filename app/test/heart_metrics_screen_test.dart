@@ -1,6 +1,7 @@
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/models.dart';
+import 'package:app/src/oura_data.dart';
 import 'package:app/src/screens/add_data_screen.dart';
 import 'package:app/src/screens/daily_history_screen.dart';
 import 'package:app/src/screens/heart_metrics_screen.dart';
@@ -115,4 +116,108 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Oura nightly metrics stay distinct from Apple measurements', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const HeartMetricsScreen(),
+      readings: [
+        reading(
+          'apple-hrv',
+          SignalType.hrv,
+          45,
+        ).copyWith(measurementMethod: 'sdnn'),
+        reading('apple-resting', SignalType.restingHeartRate, 55),
+        reading('oura-hrv', SignalType.hrv, 70).copyWith(
+          source: SignalSource.oura,
+          sourceDay: '2026-01-24',
+          measurementMethod: OuraData.hrvMethod,
+        ),
+        reading('oura-resting', SignalType.restingHeartRate, 48).copyWith(
+          source: SignalSource.oura,
+          sourceDay: '2026-01-24',
+          measurementMethod: OuraData.restingMethod,
+        ),
+      ],
+    );
+    expect(find.text('55.0 bpm'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Oura HRV (RMSSD)'), 200);
+    expect(find.text('45.0 ms'), findsOneWidget);
+    expect(find.text('70.0 ms'), findsOneWidget);
+    expect(find.text('57.5 ms'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Oura resting heart rate (nightly minimum)'),
+      200,
+    );
+    expect(find.text('48.0 bpm'), findsOneWidget);
+    expect(find.textContaining('not averaged together'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Oura API fallback explains why the ring app can differ', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const HeartMetricsScreen(),
+      readings: [
+        reading('oura-resting', SignalType.restingHeartRate, 43).copyWith(
+          source: SignalSource.oura,
+          sourceDay: '2026-01-24',
+          measurementMethod: OuraData.apiRestingMethod,
+        ),
+      ],
+      textScale: 1.6,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Oura lowest sleeping heart rate (API)'),
+      250,
+    );
+    expect(find.text('43.0 bpm'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining('Five-minute samples were unavailable'),
+      250,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('daily history names Oura measurements and hides known mirrors', (
+    tester,
+  ) async {
+    final ouraHrv = reading('oura-hrv', SignalType.hrv, 70).copyWith(
+      source: SignalSource.oura,
+      sourceDay: '2026-01-24',
+      measurementMethod: OuraData.hrvMethod,
+    );
+    final mirror = ouraHrv.copyWith(
+      id: 'oura-mirror',
+      source: SignalSource.healthKit,
+      sourceBundleId: 'com.ouraring.oura',
+    );
+    final controller = await pump(
+      tester,
+      const DailyHistoryScreen(),
+      readings: [
+        ouraHrv,
+        mirror,
+        reading('oura-resting', SignalType.restingHeartRate, 43).copyWith(
+          source: SignalSource.oura,
+          sourceDay: '2026-01-24',
+          measurementMethod: OuraData.apiRestingMethod,
+        ),
+      ],
+    );
+    await tester.scrollUntilVisible(find.text('Oura HRV (RMSSD)'), 200);
+    expect(find.text('70 ms'), findsOneWidget);
+    expect(find.byKey(const Key('history-item-oura-mirror')), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Oura lowest sleeping heart rate (API)'),
+      200,
+    );
+    expect(find.text('43 bpm'), findsOneWidget);
+    expect(controller.signals, hasLength(3));
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -1454,6 +1454,7 @@ class _RankedDriverRow extends StatelessWidget {
   static String _sourceLabel(ScoreDriver driver) => switch (driver.source) {
     SignalSource.manual => 'Manual',
     SignalSource.healthKit => 'HealthKit',
+    SignalSource.oura => 'Oura',
     SignalSource.appleScreenTime => 'Apple Screen Time',
     SignalSource.model => 'Model',
     null => driver.evidenceAt == null ? 'Legacy snapshot' : 'Check-in',

@@ -1,4 +1,10 @@
 {
+  "functions": [{
+    "source": "functions",
+    "codebase": "oura",
+    "ignore": ["node_modules", ".git", "test", "*.local", "README.md"],
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" test"]
+  }],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

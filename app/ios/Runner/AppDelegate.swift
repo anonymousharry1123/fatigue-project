@@ -17,6 +17,8 @@ import UserNotifications
   private var timezoneChannel: FlutterMethodChannel?
   private var backupChannel: FlutterMethodChannel?
   private var ai1CaptureChannel: FlutterMethodChannel?
+  private var ouraChannel: FlutterMethodChannel?
+  private let ouraAuthorization = OuraAuthorizationBridge()
   private let backupExporter = DeviceBackupExporter()
   private let ai1CaptureStore = Ai1CaptureFileStore()
   private var healthObserverQueries: [HKObserverQuery] = []
@@ -95,6 +97,19 @@ import UserNotifications
       self.ai1CaptureStore.handle(call, result: result)
     }
     self.ai1CaptureChannel = ai1CaptureChannel
+
+    let ouraChannel = FlutterMethodChannel(
+      name: "tonyo/oura",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    ouraChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterError(code: "oura_unavailable", message: "The app is unavailable.", details: nil))
+        return
+      }
+      self.ouraAuthorization.handle(call, result: result)
+    }
+    self.ouraChannel = ouraChannel
   }
 
   private func handleScreenTimeCall(
@@ -514,6 +529,11 @@ import UserNotifications
             "value": value,
             "timestamp": formatter.string(from: sample.endDate),
             "source": "healthKit",
+            "sourceName": sample.sourceRevision.source.name,
+            "sourceBundleId": sample.sourceRevision.source.bundleIdentifier,
+            "sourceRecordId": sample.uuid.uuidString.lowercased(),
+            "measurementMethod": signalType == "hrv" ? "sdnn"
+              : (signalType == "restingHeartRate" ? "healthkit_resting" : "instantaneous"),
             "quality": 1.0,
             "note": "Apple Health · \(sample.sourceRevision.source.name)",
           ])

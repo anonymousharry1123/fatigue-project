@@ -45,6 +45,7 @@ class HeartSyncLogic {
             .where(
               (item) =>
                   item.type == type &&
+                  item.source != SignalSource.oura &&
                   !HeartDerivationLogic.isEstimatedRestingHeartRate(item),
             )
             .toList(),
@@ -63,6 +64,9 @@ class HeartSyncLogic {
           ids.contains(candidate.id) ||
           (comparableReadings[candidate.type]?.any(
                 (item) =>
+                    (item.sourceBundleId == null ||
+                        candidate.sourceBundleId == null ||
+                        item.sourceBundleId == candidate.sourceBundleId) &&
                     item.timestamp
                             .difference(candidate.timestamp)
                             .inMilliseconds
@@ -104,7 +108,7 @@ class HeartSyncLogic {
     final quality = reading.quality.isFinite
         ? reading.quality.clamp(0, 1).toDouble()
         : 1.0;
-    return SignalReading(
+    return reading.copyWith(
       id: reading.id.trim(),
       type: reading.type,
       value: reading.value,

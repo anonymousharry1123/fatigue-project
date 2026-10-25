@@ -7,6 +7,7 @@ import 'core_translations.dart';
 import 'forecast_translations.dart';
 import 'logging_translations.dart';
 import 'measurement_translations.dart';
+import 'oura_translations.dart';
 import 'research_tools_translations.dart';
 import 'self_report_reference_translations.dart';
 import 'self_report_trends_translations.dart';
@@ -41,6 +42,7 @@ class AppLocalizations {
     ...forecastTranslations,
     ...loggingTranslations,
     ...measurementTranslations,
+    ...ouraTranslations,
     ...researchToolsTranslations,
     ...selfReportReferenceTranslations,
     ...selfReportTrendsTranslations,

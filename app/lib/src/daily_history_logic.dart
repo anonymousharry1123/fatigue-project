@@ -1,5 +1,6 @@
 import 'models.dart';
 import 'heart_metrics_logic.dart';
+import 'oura_data.dart';
 import 'sleep_sync_logic.dart';
 
 enum DailyHistoryItemKind { activity, sleep, checkIn, signal }
@@ -114,11 +115,12 @@ abstract final class DailyHistoryLogic {
     required List<SleepLogEntry> sleepLogs,
     DateTime? now,
   }) {
+    final asOf = now ?? DateTime.now();
     final itemsByDay = <DateTime, List<DailyHistoryItem>>{};
     final heartRates = {
       for (final day in HeartMetricsLogic.build(
         readings: signals.where((item) => item.type == SignalType.heartRate),
-        now: now ?? DateTime.now(),
+        now: asOf,
         includeDerivations: false,
       ))
         if (day.heartRate != null) day.date: day.heartRate!,
@@ -130,6 +132,8 @@ abstract final class DailyHistoryLogic {
     void add(DailyHistoryItem item) {
       final capturedDate = item.checkIn?.isResearchCheckIn == true
           ? item.checkIn?.localDate
+          : item.signal?.source == SignalSource.oura
+          ? item.signal?.sourceDay
           : null;
       final day = capturedDate == null
           ? dayFor(item.timestamp)
@@ -146,7 +150,11 @@ abstract final class DailyHistoryLogic {
     for (final checkIn in checkIns) {
       add(DailyHistoryItem.checkIn(checkIn));
     }
-    for (final signal in signals) {
+    for (final signal in OuraData.withoutHealthKitMirrors(signals, now: asOf)) {
+      if (signal.source == SignalSource.oura &&
+          !OuraData.isValidOuraReading(signal, asOf)) {
+        continue;
+      }
       // A read-only daily average replaces the individual pulse rows.
       if (signal.type == SignalType.heartRate) continue;
       final groupId = signal.groupId;

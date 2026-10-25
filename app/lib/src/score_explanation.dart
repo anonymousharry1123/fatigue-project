@@ -356,7 +356,8 @@ EvidenceKind _kind(ScoreDriver driver, DateTime? calculatedAt) {
   }
   return switch (sources.single) {
     SignalSource.healthKit ||
-    SignalSource.appleScreenTime => EvidenceKind.measured,
+    SignalSource.appleScreenTime ||
+    SignalSource.oura => EvidenceKind.measured,
     SignalSource.manual => EvidenceKind.selfReported,
     SignalSource.model => EvidenceKind.estimated,
   };
@@ -364,6 +365,7 @@ EvidenceKind _kind(ScoreDriver driver, DateTime? calculatedAt) {
 
 String _sourceName(SignalSource source) => switch (source) {
   SignalSource.healthKit => 'Apple Health',
+  SignalSource.oura => 'Oura',
   SignalSource.appleScreenTime => 'Apple Screen Time',
   SignalSource.manual => 'App entry / check-in',
   SignalSource.model => 'Model estimate',

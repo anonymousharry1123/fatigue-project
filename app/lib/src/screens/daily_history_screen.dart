@@ -8,6 +8,7 @@ import '../widgets/translated_text.dart';
 import '../daily_history_logic.dart';
 import '../evidence_provenance.dart';
 import '../models.dart';
+import '../oura_data.dart';
 import '../local_day.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -491,7 +492,17 @@ String _title(DailyHistoryItem item) => switch (item.kind) {
   DailyHistoryItemKind.activity => 'Activity log',
   DailyHistoryItemKind.sleep => item.sleep!.isNap ? 'Nap' : 'Main sleep',
   DailyHistoryItemKind.checkIn => '${item.checkIn!.period.label} check-in',
-  DailyHistoryItemKind.signal => item.signal!.type.label,
+  DailyHistoryItemKind.signal =>
+    item.signal!.source == SignalSource.oura
+        ? switch (item.signal!.type) {
+            SignalType.hrv => 'Oura HRV (RMSSD)',
+            SignalType.restingHeartRate =>
+              item.signal!.measurementMethod == OuraData.apiRestingMethod
+                  ? 'Oura lowest sleeping heart rate (API)'
+                  : 'Oura resting heart rate (nightly minimum)',
+            _ => item.signal!.type.label,
+          }
+        : item.signal!.type.label,
 };
 
 String _detail(DailyHistoryItem item) => switch (item.kind) {

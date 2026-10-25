@@ -6,6 +6,49 @@ import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'Oura and identified Health mirrors stay outside legacy model features',
+    () {
+      final observed = _checkIn(20, 20);
+      final measured = [
+        for (var day = 10; day <= 20; day++) ...[
+          {..._signal(day, 7, 'hrv', 50), 'source': 'healthKit'},
+          {..._signal(day, 7, 'restingHeartRate', 60), 'source': 'healthKit'},
+        ],
+      ];
+      final extra = [
+        for (var day = 10; day <= 20; day++) ...[
+          {
+            ..._signal(day, 6, 'hrv', 200),
+            'id': 'oura-hrv-$day',
+            'source': 'oura',
+            'provenance': 'observed',
+          },
+          {
+            ..._signal(day, 6, 'restingHeartRate', 30),
+            'id': 'oura-mirror-$day',
+            'source': 'healthKit',
+            'sourceBundleId': 'com.ouraring.oura',
+            'sourceName': 'Oura',
+            'measurementMethod': 'sleep_minimum_5min',
+          },
+        ],
+      ];
+      PrepReport report(List<Map<String, dynamic>> rows) => MlPrepBuilder.build(
+        _snapshot(
+          signals: rows,
+          checkIns: [observed],
+          outcomes: [_energy(observed)],
+        ),
+      );
+      final original = report(measured).examples.single;
+      final withOura = report([...measured, ...extra]).examples.single;
+      expect(withOura.features, original.features);
+      expect(withOura.featureSources, original.featureSources);
+      expect(withOura.reference, original.reference);
+    },
+  );
+
   test('estimated resting HR is excluded from training and live features', () {
     final observed = _checkIn(20, 20);
     final measured = [
