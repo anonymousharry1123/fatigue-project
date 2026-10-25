@@ -4,6 +4,8 @@ Implementation status: the four work items below are implemented and regression-
 
 The existing sync, SQLite, serialization, daily summary, incremental input, forecast, and quota work is preserved. These changes extend that implementation.
 
+**Legacy cloud cleanup on Spark:** see [docs/SAFE_CONDENSE_PURGE.md](docs/SAFE_CONDENSE_PURGE.md). Condense into `heartRateDays`, then purge only HealthKit raw `heartRate` signals after digest ack. Profile → Cloud sync shows upgrade progress. Do not delete other collections in the Firebase console.
+
 ## Approved behavior
 
 - Device-imported main sleep is a sleep record for Sleep Log, Evening check-in, and Daily History.

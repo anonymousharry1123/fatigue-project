@@ -12,6 +12,40 @@ const accountTranslations = <String, Map<String, String>>{
     'zh-Hans': '心率摘要已保存在此设备上，将在下次每日更新时同步。',
     'zh-Hant': '心率摘要已儲存在此裝置上，將在下次每日更新時同步。',
   },
+  'Heart-rate cloud storage upgraded. All device changes are synced.': {
+    'es':
+        'Almacenamiento de frecuencia cardíaca en la nube actualizado. Todos los cambios del dispositivo están sincronizados.',
+    'zh-Hans': '云端心率存储已升级。此设备的所有更改均已同步。',
+    'zh-Hant': '雲端心率儲存已升級。此裝置的所有變更均已同步。',
+  },
+  'Heart-rate cloud storage upgraded. No pending device changes.': {
+    'es':
+        'Almacenamiento de frecuencia cardíaca en la nube actualizado. No hay cambios pendientes en este dispositivo.',
+    'zh-Hans': '云端心率存储已升级。此设备没有待同步的更改。',
+    'zh-Hant': '雲端心率儲存已升級。此裝置沒有待同步的變更。',
+  },
+  'Heart-rate cloud upgrade complete. Raw samples stay on this device; cloud keeps daily summaries only.': {
+    'es':
+        'Actualización de frecuencia cardíaca en la nube completa. Las muestras crudas permanecen en este dispositivo; la nube solo guarda resúmenes diarios.',
+    'zh-Hans': '云端心率升级已完成。原始样本保留在本设备；云端仅保留每日摘要。',
+    'zh-Hant': '雲端心率升級已完成。原始樣本保留在本裝置；雲端僅保留每日摘要。',
+  },
+  'Heart-rate upgrade: {value0} day summaries still need upload. Save a device backup first, then Retry sync once when quota allows.': {
+    'es':
+        'Actualización de frecuencia cardíaca: quedan {value0} resúmenes diarios por subir. Guarda primero una copia de seguridad del dispositivo y, cuando la cuota lo permita, pulsa Reintentar sincronización una vez.',
+    'zh-Hans':
+        '心率升级：仍有 {value0} 个日摘要待上传。请先保存设备备份，配额恢复后只点一次“重试同步”。',
+    'zh-Hant':
+        '心率升級：仍有 {value0} 個日摘要待上傳。請先儲存裝置備份，配額恢復後只點一次「重試同步」。',
+  },
+  'Heart-rate upgrade: {value0} legacy cloud samples left to remove after summaries. Do not delete data in the Firebase console.': {
+    'es':
+        'Actualización de frecuencia cardíaca: quedan {value0} muestras antiguas en la nube por eliminar tras los resúmenes. No borres datos en la consola de Firebase.',
+    'zh-Hans':
+        '心率升级：摘要之后仍有 {value0} 条旧云端样本待删除。请勿在 Firebase 控制台手动删除数据。',
+    'zh-Hant':
+        '心率升級：摘要之後仍有 {value0} 筆舊雲端樣本待刪除。請勿在 Firebase 主控台手動刪除資料。',
+  },
   'Latest estimated resting HR: {value} bpm · {date}': {
     'es': 'Última FC en reposo estimada: {value} lpm · {date}',
     'zh-Hans': '最近估算静息心率：{value} 次/分钟 · {date}',

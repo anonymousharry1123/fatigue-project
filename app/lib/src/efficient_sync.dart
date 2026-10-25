@@ -163,6 +163,7 @@ extension _EfficientSync on AppController {
     'lastHeartSummaryUploadAt': _lastHeartSummaryUploadAt
         ?.toUtc()
         .toIso8601String(),
+    'heartRateStorageVersion': _heartRateStorageVersion,
     'ownedHeartRateDays': _ownedHeartRateDays.toList(),
     'blockedHeartRateDays': _blockedHeartRateDays.toList(),
     'explicitRawDeletes': _explicitRawHeartRateDeletes.toList(),
@@ -196,6 +197,8 @@ extension _EfficientSync on AppController {
       _lastHeartSummaryUploadAt = DateTime.tryParse(
         value['lastHeartSummaryUploadAt'] as String? ?? '',
       );
+      _heartRateStorageVersion =
+          (value['heartRateStorageVersion'] as num?)?.toInt() ?? 0;
       _rawHeartRateSnapshotExpected = _rawHeartRateOwner != null;
       _explicitRawHeartRateDeletes.addAll(
         (value['explicitRawDeletes'] as List? ?? []).cast<String>(),
@@ -244,6 +247,7 @@ extension _EfficientSync on AppController {
       _heartRateAcknowledged.clear();
       _cloudHeartRateDays.clear();
       _legacyHeartRateCloud.clear();
+      _heartRateStorageVersion = 0;
     }
   }
 
@@ -360,11 +364,16 @@ extension _EfficientSync on AppController {
     }
     var acknowledgedBatch = false;
     final summariesDue = force || _heartSummaryPushDue;
+    var summaryUploads = 0;
     for (final summary in durableDays.where(
       (day) =>
           summariesDue && _heartRateAcknowledged[day.day] != day.contentDigest,
     )) {
       if (_blockedHeartRateDays.contains(summary.day)) continue;
+      if (summaryUploads >=
+          ContinuousRefreshLogic.maxHeartSummaryDaysPerSync) {
+        break;
+      }
       final HeartRateSummaryAcknowledgement ack;
       try {
         ack = await _quotaGate!.run(
@@ -402,6 +411,7 @@ extension _EfficientSync on AppController {
       _cloudHeartRateDays[summary.day] = ack.summary;
       _heartRateAcknowledged[summary.day] = ack.summary.contentDigest;
       acknowledgedBatch = true;
+      summaryUploads++;
       _markCloudUploadSuccess();
       await _writeLocal();
       if (!current()) return;
@@ -439,15 +449,20 @@ extension _EfficientSync on AppController {
       }
     }
     if (removable.isNotEmpty) {
+      final batch = Map<String, Map<String, dynamic>>.fromEntries(
+        removable.entries.take(
+          ContinuousRefreshLogic.maxLegacyHeartRateDeletesPerSync,
+        ),
+      );
       await cloudRepository!.applyInputPatch(
         uid,
         InputSyncPatch(
-          InputSyncSnapshot(root: {}, signals: removable, checkIns: {}),
+          InputSyncSnapshot(root: {}, signals: batch, checkIns: {}),
           InputSyncSnapshot(root: {}, signals: {}, checkIns: {}),
         ),
       );
       if (!current()) return;
-      for (final id in removable.keys) {
+      for (final id in batch.keys) {
         _legacyHeartRateCloud.remove(id);
         _explicitRawHeartRateDeletes.remove(id);
       }
@@ -459,6 +474,9 @@ extension _EfficientSync on AppController {
         _legacyHeartRateCloud.isEmpty &&
         _pendingHeartRateDays.isEmpty) {
       await _quotaGate!.run(uid, () => efficient.finishHeartRateMigration(uid));
+      if (!current()) return;
+      _heartRateStorageVersion = 1;
+      await _writeLocal();
     }
   }
 }

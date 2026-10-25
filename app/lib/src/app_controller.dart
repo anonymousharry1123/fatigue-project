@@ -151,12 +151,29 @@ class AppController extends ChangeNotifier {
   Map<String, HeartRateDailySummary> _cloudHeartRateDays = {};
   Map<String, String> _heartRateAcknowledged = {};
   Map<String, Map<String, dynamic>> _legacyHeartRateCloud = {};
+  int _heartRateStorageVersion = 0;
   InputSyncSnapshot? _remoteInputSnapshot;
   int? _remoteInputRevision;
   String? _remoteInputOwner;
   String? _lastInputHydrationOwner;
   DateTime? _lastInputHydrationAt;
   DateTime? _lastHeartSummaryUploadAt;
+
+  /// Legacy HealthKit heart-rate signal docs still queued for safe cloud purge.
+  int get pendingLegacyHeartRateSampleCount => _legacyHeartRateCloud.length;
+
+  /// Local calendar UTC days whose `heartRateDays` summary is not yet acknowledged.
+  int get pendingHeartRateSummaryDayCount => _pendingHeartRateDays.length;
+
+  /// Server `heartRateStorageVersion` mirrored on this device (1 = migration done).
+  int get heartRateStorageVersion => _heartRateStorageVersion;
+
+  /// True when summaries are acked, legacy raw HR is gone, and storage version is 1.
+  bool get heartRateCloudMigrationComplete =>
+      _heartRateSummaryEnabled &&
+      _heartRateStorageVersion >= 1 &&
+      _legacyHeartRateCloud.isEmpty &&
+      _pendingHeartRateDays.isEmpty;
 
   final MlPrepService? _mlPrepService;
   final EnergyModelStore _energyModelStore;
@@ -637,11 +654,24 @@ class AppController extends ChangeNotifier {
     if (_onlyDeferredHeartSummaries) {
       return 'Heart-rate summaries are saved on this device and will sync with the next daily update.';
     }
+    if (_pendingHeartRateDays.isNotEmpty) {
+      final n = _pendingHeartRateDays.length;
+      return 'Condensing heart rate: $n day ${n == 1 ? "summary" : "summaries"} waiting to upload. Save a device backup, then tap Retry sync once after quota resets.';
+    }
+    if (_legacyHeartRateCloud.isNotEmpty) {
+      final n = _legacyHeartRateCloud.length;
+      return 'Removing $n legacy heart-rate cloud ${n == 1 ? "sample" : "samples"} after summaries. Retry sync again later if Spark quota pauses the batch.';
+    }
     if (hasAnyPendingCloudChanges) {
       return '$pendingCloudRecordCount ${pendingCloudRecordCount == 1 ? "record" : "records"} saved on this device · waiting to sync';
     }
     if (!_cloudPrivacyVerified) {
       return 'Reconnect to verify account privacy and resume sync.';
+    }
+    if (heartRateCloudMigrationComplete) {
+      return lastCloudSyncAt == null
+          ? 'Heart-rate cloud storage upgraded. No pending device changes.'
+          : 'Heart-rate cloud storage upgraded. All device changes are synced.';
     }
     return lastCloudSyncAt == null
         ? 'No pending device changes.'
@@ -5464,6 +5494,7 @@ class AppController extends ChangeNotifier {
     _lastHeartSummaryUploadAt = null;
     _cloudHeartRateDays.clear();
     _legacyHeartRateCloud.clear();
+    _heartRateStorageVersion = 0;
     _heartRateProvenance.clear();
     _remoteInputOwner = null;
     _lastInputHydrationOwner = null;
@@ -5927,6 +5958,7 @@ class AppController extends ChangeNotifier {
             syncCanonical(signalToCloud(sample)) as Map,
           );
         }
+        _heartRateStorageVersion = remote.heartRateStorageVersion;
       }
       if (remote == null) {
         if (onboardingComplete &&
