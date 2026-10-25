@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'heart_metrics_logic.dart';
 import 'sleep_sync_logic.dart';
 
 enum DailyHistoryItemKind { activity, sleep, checkIn, signal }
@@ -87,11 +88,13 @@ class DailyHistoryDay {
     required this.date,
     required this.items,
     required this.completedCategories,
+    this.heartRateAverage,
   });
 
   final DateTime date;
   final List<DailyHistoryItem> items;
   final Set<DailyCompletionCategory> completedCategories;
+  final HeartMetricAverage? heartRateAverage;
 
   int get completionCount => completedCategories.length;
   int get completionTotal => DailyCompletionCategory.values.length;
@@ -109,8 +112,20 @@ abstract final class DailyHistoryLogic {
     required List<DailyCheckIn> checkIns,
     required List<ActivityLogEntry> activityLogs,
     required List<SleepLogEntry> sleepLogs,
+    DateTime? now,
   }) {
     final itemsByDay = <DateTime, List<DailyHistoryItem>>{};
+    final heartRates = {
+      for (final day in HeartMetricsLogic.build(
+        readings: signals.where((item) => item.type == SignalType.heartRate),
+        now: now ?? DateTime.now(),
+        includeDerivations: false,
+      ))
+        if (day.heartRate != null) day.date: day.heartRate!,
+    };
+    for (final day in heartRates.keys) {
+      itemsByDay[day] = [];
+    }
 
     void add(DailyHistoryItem item) {
       final capturedDate = item.checkIn?.isResearchCheckIn == true
@@ -132,6 +147,8 @@ abstract final class DailyHistoryLogic {
       add(DailyHistoryItem.checkIn(checkIn));
     }
     for (final signal in signals) {
+      // A read-only daily average replaces the individual pulse rows.
+      if (signal.type == SignalType.heartRate) continue;
       final groupId = signal.groupId;
       final isImportedSleep =
           groupId != null &&
@@ -153,6 +170,7 @@ abstract final class DailyHistoryLogic {
         date: entry.key,
         items: List.unmodifiable(items),
         completedCategories: Set.unmodifiable(_completedCategories(items)),
+        heartRateAverage: heartRates[entry.key],
       );
     }).toList();
     days.sort((left, right) => right.date.compareTo(left.date));

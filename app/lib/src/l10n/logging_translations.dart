@@ -1,4 +1,81 @@
 const loggingTranslations = <String, Map<String, String>>{
+  'Heart metrics': {
+    'es': 'Métricas cardíacas',
+    'zh-Hans': '心脏指标',
+    'zh-Hant': '心臟指標',
+  },
+  'Heart rate, resting heart rate, and HRV': {
+    'es': 'Frecuencia cardíaca, frecuencia en reposo y VFC',
+    'zh-Hans': '心率、静息心率和心率变异性',
+    'zh-Hant': '心率、靜息心率與心率變異性',
+  },
+  'Daily averages': {
+    'es': 'Promedios diarios',
+    'zh-Hans': '每日平均值',
+    'zh-Hant': '每日平均值',
+  },
+  'Your heart data': {
+    'es': 'Tus datos cardíacos',
+    'zh-Hans': '你的心脏数据',
+    'zh-Hant': '你的心臟資料',
+  },
+  'Daily averages from your recorded readings. Dates use your local time.': {
+    'es':
+        'Promedios diarios de tus lecturas registradas. Las fechas usan tu hora local.',
+    'zh-Hans': '根据已记录读数计算每日平均值，日期采用本地时间。',
+    'zh-Hant': '根據已記錄讀數計算每日平均值，日期採用本地時間。',
+  },
+  'Missing a measurement? Open Profile → Apple Health, allow access, then tap Sync now.': {
+    'es':
+        '¿Falta una medición? Abre Perfil → Apple Salud, permite el acceso y pulsa Sincronizar ahora.',
+    'zh-Hans': '缺少测量数据？打开个人资料 → Apple 健康，允许访问，然后点击立即同步。',
+    'zh-Hant': '缺少測量資料？開啟個人檔案 → Apple 健康，允許存取，然後點選立即同步。',
+  },
+  'No heart data yet': {
+    'es': 'Aún no hay datos cardíacos',
+    'zh-Hans': '暂无心脏数据',
+    'zh-Hant': '尚無心臟資料',
+  },
+  'Today so far': {
+    'es': 'Hoy hasta ahora',
+    'zh-Hans': '今天截至目前',
+    'zh-Hant': '今天截至目前',
+  },
+  'Average heart rate': {
+    'es': 'Frecuencia cardíaca media',
+    'zh-Hans': '平均心率',
+    'zh-Hant': '平均心率',
+  },
+  'Resting heart rate': {
+    'es': 'Frecuencia cardíaca en reposo',
+    'zh-Hans': '静息心率',
+    'zh-Hant': '靜息心率',
+  },
+  'Estimated resting heart rate': {
+    'es': 'Frecuencia cardíaca en reposo estimada',
+    'zh-Hans': '估算静息心率',
+    'zh-Hant': '估算靜息心率',
+  },
+  'Heart rate variability (HRV)': {
+    'es': 'Variabilidad de la frecuencia cardíaca (VFC)',
+    'zh-Hans': '心率变异性（HRV）',
+    'zh-Hant': '心率變異性（HRV）',
+  },
+  'Sampled heart-rate variation': {
+    'es': 'Variación entre muestras de frecuencia cardíaca',
+    'zh-Hans': '心率采样变化',
+    'zh-Hant': '心率取樣變化',
+  },
+  'No readings for this day': {
+    'es': 'No hay lecturas para este día',
+    'zh-Hans': '当天暂无读数',
+    'zh-Hant': '當天尚無讀數',
+  },
+  '{count} readings': {
+    'es': '{count} lecturas',
+    'zh-Hans': '{count} 条读数',
+    'zh-Hant': '{count} 筆讀數',
+  },
   "Add & Explore": {
     'es': "Añadir y explorar",
     'zh-Hans': "添加与探索",

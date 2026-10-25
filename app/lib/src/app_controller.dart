@@ -1682,6 +1682,7 @@ class AppController extends ChangeNotifier {
     checkIns: checkIns,
     activityLogs: activityLogs,
     sleepLogs: sleepLogs,
+    now: _now(),
   );
 
   bool _currentScoreReference(ScoreSnapshot value, DateTime at) =>

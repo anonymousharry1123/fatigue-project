@@ -10,6 +10,7 @@ import 'activity_log_screen.dart';
 import 'coach_screen.dart';
 import 'daily_checkin_screen.dart';
 import 'daily_history_screen.dart';
+import 'heart_metrics_screen.dart';
 import 'reaction_test_screen.dart';
 import 'sleep_log_screen.dart';
 
@@ -41,6 +42,15 @@ class AddDataScreen extends StatelessWidget {
             detail: 'Signals, check-ins, and daily completion',
             badge: '${controller.dailyHistory.length} days',
             onTap: () => _push(context, const DailyHistoryScreen()),
+          ),
+          const SizedBox(height: 10),
+          _LaunchCard(
+            icon: Icons.monitor_heart_outlined,
+            color: TonyoPalette.of(context).error,
+            title: 'Heart metrics',
+            detail: 'Heart rate, resting heart rate, and HRV',
+            badge: 'Daily averages',
+            onTap: () => _push(context, const HeartMetricsScreen()),
           ),
           const SectionHeader('Activity and sleep logs'),
           _LaunchCard(

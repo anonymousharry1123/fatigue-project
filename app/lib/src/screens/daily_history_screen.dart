@@ -15,6 +15,7 @@ import '../widgets/data_source_badge.dart';
 import 'activity_log_screen.dart';
 import 'daily_checkin_screen.dart';
 import 'sleep_log_screen.dart';
+import 'heart_metrics_screen.dart';
 
 class DailyHistoryScreen extends StatelessWidget {
   const DailyHistoryScreen({super.key});
@@ -44,6 +45,15 @@ class DailyHistoryScreen extends StatelessWidget {
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
                   const SizedBox(height: 18),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const HeartMetricsScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.monitor_heart_outlined),
+                    label: const TranslatedText('Heart metrics'),
+                  ),
                   _HistorySummary(history: history),
                   const SizedBox(height: 10),
                   TranslatedText(
@@ -287,6 +297,39 @@ class _HistoryDayCard extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, color: TonyoPalette.of(context).border),
           ),
+          if (day.heartRateAverage != null)
+            Padding(
+              key: Key(
+                'history-heart-average-${DailyHistoryScreen._dateKey(day.date)}',
+              ),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  MetricIcon(
+                    icon: Icons.favorite_rounded,
+                    color: TonyoPalette.of(context).error,
+                    size: 36,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const TranslatedText(
+                          'Average heart rate',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${day.heartRateAverage!.mean.toStringAsFixed(1)} bpm',
+                        ),
+                        if (day.heartRateAverage!.containsDemo)
+                          const TranslatedText('Demo'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ...day.items.map(
             (item) => _HistoryItemRow(
               key: Key('history-item-${item.id}'),
