@@ -50,13 +50,35 @@ Screen Time capabilities. Consequently, this build displays the option and its
 availability explanation but cannot enable real imports. Compilation and mocked
 tests do not prove Apple approval or physical-device data access.
 
-## Activate with approved provisioning
+## Local signing blocker verified on 2026-11-07
+
+The connected iPhone runs iOS 27.0.1, so it meets the import API's OS requirement.
+The installed build uses a seven-day Personal Team development profile. Neither
+Screen Time entitlement is present in that profile or the app's signature.
+
+A signing attempt with both required Runner entitlements failed with Xcode's
+explicit error: "Personal development teams ... do not support the Family
+Controls (Development) and Family Controls App and Website Usage capabilities."
+The temporary entitlement changes were reverted; no replacement app was
+installed. The 14 Screen Time sync/logic tests passed, but mocked tests cannot
+verify access to Apple's data.
+
+Use an Apple Developer Program team with profiles supporting these capabilities
+to unblock development testing. Reinstalling the current Personal Team build,
+retrying sync, or changing the activation flags alone cannot grant access.
+Until signing is configured, enter the daily total from iPhone Settings →
+Screen Time into Tonyo's Activity log.
+
+## Activate with supported provisioning
 
 1. Confirm the registered identifiers for `Runner` and
    `ScreenTimeReportExtension` in Xcode.
-2. Obtain Family Controls distribution approval for the app and report
-   extension; add `com.apple.developer.family-controls = true` to both signed
-   targets with matching provisioning profiles.
+2. Use an Apple Developer Program team and enable Family Controls for the app
+   and report extension. Add `com.apple.developer.family-controls = true` to
+   both signed targets with matching provisioning profiles. Development
+   testing and distribution are separate: before TestFlight/App Store or
+   other distribution, obtain Family Controls distribution approval for the
+   app and extension.
 3. For automatic sync, add the **Family Controls App and Website Usage**
    capability to Runner and obtain a matching profile with
    `com.apple.developer.family-controls.app-and-website-usage = true`.
@@ -81,3 +103,5 @@ tests do not prove Apple approval or physical-device data access.
 - [approvedWithDataAccess and region restrictions](https://developer.apple.com/documentation/familycontrols/authorizationstatus/approvedwithdataaccess)
 - [App and Website Usage entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.family-controls.app-and-website-usage)
 - [Requesting Family Controls distribution approval](https://developer.apple.com/documentation/familycontrols/requesting-the-family-controls-entitlement)
+- [Configuring Family Controls for development](https://developer.apple.com/documentation/xcode/configuring-family-controls)
+- [Capabilities available by membership](https://developer.apple.com/help/account/reference/supported-capabilities-ios/)
