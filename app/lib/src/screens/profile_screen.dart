@@ -1254,6 +1254,7 @@ class _NotificationSheet extends StatefulWidget {
 
 class _NotificationSheetState extends State<_NotificationSheet> {
   String? _error;
+  bool _testing = false;
 
   Future<void> _update(
     BuildContext context,
@@ -1268,6 +1269,65 @@ class _NotificationSheetState extends State<_NotificationSheet> {
         () =>
             _error = 'Could not save notification settings. Please try again.',
       );
+    }
+  }
+
+  Future<void> _chooseReminderTime(
+    AppController controller, {
+    required bool morning,
+  }) async {
+    final minutes = morning
+        ? controller.morningCheckInReminderMinutes
+        : controller.eveningCheckInReminderMinutes;
+    final chosen = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+      helpText: context.tr(
+        morning ? 'Morning reminder time' : 'Evening reminder time',
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final selected = chosen.hour * 60 + chosen.minute;
+    await _update(
+      context,
+      () => controller.setCheckInReminderTimes(
+        morningMinutes: morning
+            ? selected
+            : controller.morningCheckInReminderMinutes,
+        eveningMinutes: morning
+            ? controller.eveningCheckInReminderMinutes
+            : selected,
+      ),
+    );
+  }
+
+  Future<void> _testNotification(AppController controller) async {
+    setState(() {
+      _testing = true;
+      _error = null;
+    });
+    try {
+      final sent = await controller.sendTestNotification();
+      if (!mounted) return;
+      if (sent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr(
+                'Test sent. If no banner appears, check system notification settings.',
+              ),
+            ),
+          ),
+        );
+      }
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not send a test notification. Please retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _testing = false);
     }
   }
 
@@ -1299,7 +1359,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             const SizedBox(height: 4),
             Text(
               context.tr(
-                'Choose optional daily plan reminders. Open Tonyo each day to refresh them. Experimental forecasts are uncalibrated, so precise lower-energy and recovery alerts are disabled.',
+                'Choose daily Morning and Evening check-in reminders. They repeat even when Tonyo is closed. Daily Coach reminders refresh when you open the app.',
               ),
               style: TextStyle(
                 color: TonyoPalette.of(context).muted,
@@ -1387,10 +1447,10 @@ class _NotificationSheetState extends State<_NotificationSheet> {
             SwitchListTile(
               key: const Key('notification-study-log-switch'),
               contentPadding: EdgeInsets.zero,
-              title: Text(context.tr('Study log reminders')),
+              title: Text(context.tr('Morning and Evening check-ins')),
               subtitle: Text(
                 context.tr(
-                  'Optional reminders at 18:00 for main sleep and 19:00 for Evening Energy, for the next 14 days. Save either at any time; reminders are skipped once that day’s entry is saved.',
+                  'Two daily reminders at your chosen local times. Tap a reminder to open the matching check-in.',
                 ),
                 style: TextStyle(
                   color: TonyoPalette.of(context).muted,
@@ -1407,6 +1467,70 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                     )
                   : null,
             ),
+            ListTile(
+              key: const Key('notification-morning-time'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Morning reminder time')),
+              trailing: Text(
+                TimeOfDay(
+                  hour: controller.morningCheckInReminderMinutes ~/ 60,
+                  minute: controller.morningCheckInReminderMinutes % 60,
+                ).format(context),
+              ),
+              onTap: controller.isNotificationSyncing
+                  ? null
+                  : () => _chooseReminderTime(controller, morning: true),
+            ),
+            ListTile(
+              key: const Key('notification-evening-time'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.tr('Evening reminder time')),
+              trailing: Text(
+                TimeOfDay(
+                  hour: controller.eveningCheckInReminderMinutes ~/ 60,
+                  minute: controller.eveningCheckInReminderMinutes % 60,
+                ).format(context),
+              ),
+              onTap: controller.isNotificationSyncing
+                  ? null
+                  : () => _chooseReminderTime(controller, morning: false),
+            ),
+            if (controller.notificationDiagnosticsAvailable) ...[
+              OutlinedButton.icon(
+                key: const Key('notification-test-button'),
+                onPressed: controller.isNotificationSyncing || _testing
+                    ? null
+                    : () => _testNotification(controller),
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: Text(
+                  context.tr(
+                    _testing ? 'Sending test…' : 'Send test notification',
+                  ),
+                ),
+              ),
+              TextButton(
+                key: const Key('notification-system-settings'),
+                onPressed: () async {
+                  final opened = await controller.openNotificationSettings();
+                  if (!opened && mounted) {
+                    setState(
+                      () => _error =
+                          'Open your device settings → Notifications → Tonyo.',
+                    );
+                  }
+                },
+                child: Text(context.tr('Open system notification settings')),
+              ),
+              Text(
+                context.tr(
+                  'If reminders are quiet, check Allow Notifications, Sounds, Focus and Scheduled Summary in system settings.',
+                ),
+                style: TextStyle(
+                  color: TonyoPalette.of(context).muted,
+                  fontSize: 11,
+                ),
+              ),
+            ],
             SwitchListTile(
               key: const Key('notification-crash-switch'),
               contentPadding: EdgeInsets.zero,

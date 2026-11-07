@@ -37,6 +37,62 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  testWidgets(
+    'check-in reminder settings enable both periods, edit times and send a test',
+    (tester) async {
+      final notifications = _DiagnosticNotificationService();
+      final controller = readyController(notificationService: notifications);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(TonyoApp(controller: controller));
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Notifications').hitTestable(),
+        200,
+        scrollable: activeVerticalScrollable(),
+      );
+      await tester.tap(find.text('Notifications'));
+      await tester.pumpAndSettle();
+      expect(controller.morningCheckInReminderMinutes, 540);
+      expect(controller.eveningCheckInReminderMinutes, 1140);
+      await tester.ensureVisible(
+        find.byKey(const Key('notification-study-log-switch')),
+      );
+      await tester.tap(find.byKey(const Key('notification-study-log-switch')));
+      await tester.pumpAndSettle();
+      expect(controller.notificationsEnabled, isTrue);
+      expect(controller.studyLogNotificationsEnabled, isTrue);
+      expect(controller.scheduledNotificationCount, 2);
+      await tester.ensureVisible(
+        find.byKey(const Key('notification-morning-time')),
+      );
+      await tester.tap(find.byKey(const Key('notification-morning-time')));
+      await tester.pumpAndSettle();
+      final picker = find.byType(TimePickerDialog);
+      expect(picker, findsOneWidget);
+      Navigator.of(
+        tester.element(picker),
+      ).pop(const TimeOfDay(hour: 8, minute: 15));
+      await tester.pumpAndSettle();
+      expect(controller.morningCheckInReminderMinutes, 495);
+      expect(controller.eveningCheckInReminderMinutes, 1140);
+      await tester.ensureVisible(
+        find.byKey(const Key('notification-test-button')),
+      );
+      await tester.tap(find.byKey(const Key('notification-test-button')));
+      await tester.pumpAndSettle();
+      expect(notifications.testsSent, 1);
+      expect(controller.scheduledNotificationCount, 2);
+      await tester.ensureVisible(
+        find.byKey(const Key('notification-system-settings')),
+      );
+      await tester.tap(find.byKey(const Key('notification-system-settings')));
+      await tester.pumpAndSettle();
+      expect(notifications.settingsOpened, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('shell exposes all Version 0.5 destinations', (tester) async {
     await tester.pumpWidget(TonyoApp(controller: readyController()));
     expect(find.textContaining(', Maya'), findsOneWidget);
@@ -1256,6 +1312,22 @@ class _WidgetNotificationService implements NotificationService {
   Future<NotificationPermissionState> requestPermission() async {
     permissionRequests += 1;
     return NotificationPermissionState.granted;
+  }
+}
+
+class _DiagnosticNotificationService extends _WidgetNotificationService
+    implements NotificationDiagnostics {
+  int testsSent = 0;
+  int settingsOpened = 0;
+  @override
+  Future<void> showTestNotification() async {
+    testsSent++;
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    settingsOpened++;
+    return true;
   }
 }
 

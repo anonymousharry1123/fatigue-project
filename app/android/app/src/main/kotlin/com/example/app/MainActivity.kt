@@ -29,6 +29,21 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tonyo/notifications")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "openSettings") {
+                    result.notImplemented()
+                } else {
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (_: Exception) {
+                        result.success(false)
+                    }
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tonyo/timezone")
             .setMethodCallHandler { call, result ->
                 if (call.method == "getTimezone") {

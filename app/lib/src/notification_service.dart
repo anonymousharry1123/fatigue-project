@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as timezone;
 
@@ -12,14 +13,16 @@ enum GuidanceNotificationKind {
   coachPlan,
   studySleep,
   studyEnergy,
+  studyMorning,
 }
 
-enum StudyReminderDestination { sleepLog, eveningCheckIn }
+enum StudyReminderDestination { sleepLog, morningCheckIn, eveningCheckIn }
 
 StudyReminderDestination? studyReminderDestination(String payload) =>
     switch (payload) {
       'tonyo-guidance:study:sleep' => StudyReminderDestination.sleepLog,
       'tonyo-guidance:study:energy' => StudyReminderDestination.eveningCheckIn,
+      'tonyo-guidance:study:morning' => StudyReminderDestination.morningCheckIn,
       _ => null,
     };
 
@@ -33,6 +36,8 @@ class GuidanceNotification {
     required this.body,
     this.sourceRiskAlertIds = const [],
     this.sourceRecommendationId,
+    this.repeatsDaily = false,
+    this.timezoneName,
   });
 
   final String id;
@@ -43,14 +48,78 @@ class GuidanceNotification {
   final String body;
   final List<String> sourceRiskAlertIds;
   final String? sourceRecommendationId;
+  final bool repeatsDaily;
+  final String? timezoneName;
 
   String get payload => switch (kind) {
     GuidanceNotificationKind.coachPlan when sourceRecommendationId != null =>
       'tonyo-guidance:coach:${Uri.encodeComponent(sourceRecommendationId!)}',
     GuidanceNotificationKind.studySleep => 'tonyo-guidance:study:sleep',
     GuidanceNotificationKind.studyEnergy => 'tonyo-guidance:study:energy',
+    GuidanceNotificationKind.studyMorning => 'tonyo-guidance:study:morning',
     _ => 'tonyo-guidance:$id',
   };
+
+  DateTime nextOccurrence(DateTime now) {
+    if (!repeatsDaily || scheduledAt.isAfter(now)) return scheduledAt;
+    final zone = timezoneName;
+    if (zone != null) {
+      initializeTimezoneDatabase();
+      final location = timezone.getLocation(zone);
+      final localNow = timezone.TZDateTime.from(now, location);
+      final time = timezone.TZDateTime.from(scheduledAt, location);
+      var next = timezone.TZDateTime(
+        location,
+        localNow.year,
+        localNow.month,
+        localNow.day,
+        time.hour,
+        time.minute,
+      );
+      if (!next.isAfter(now)) {
+        next = timezone.TZDateTime(
+          location,
+          localNow.year,
+          localNow.month,
+          localNow.day + 1,
+          time.hour,
+          time.minute,
+        );
+      }
+      return next;
+    }
+    final local = now.toLocal();
+    var next = DateTime(
+      local.year,
+      local.month,
+      local.day,
+      scheduledAt.hour,
+      scheduledAt.minute,
+    );
+    if (!next.isAfter(now)) {
+      next = DateTime(
+        local.year,
+        local.month,
+        local.day + 1,
+        scheduledAt.hour,
+        scheduledAt.minute,
+      );
+    }
+    return next;
+  }
+
+  GuidanceNotification atNextOccurrence(DateTime now) => GuidanceNotification(
+    id: id,
+    platformId: platformId,
+    kind: kind,
+    scheduledAt: nextOccurrence(now),
+    title: title,
+    body: body,
+    sourceRiskAlertIds: sourceRiskAlertIds,
+    sourceRecommendationId: sourceRecommendationId,
+    repeatsDaily: repeatsDaily,
+    timezoneName: timezoneName,
+  );
 }
 
 abstract interface class NotificationService {
@@ -74,12 +143,21 @@ abstract interface class NotificationResponseSource {
   Future<void> initializeResponses(void Function(String payload) onTap);
 }
 
+abstract interface class NotificationDiagnostics {
+  Future<void> showTestNotification();
+  Future<bool> openSettings();
+}
+
 class LocalNotificationService
-    implements NotificationService, NotificationResponseSource {
+    implements
+        NotificationService,
+        NotificationResponseSource,
+        NotificationDiagnostics {
   LocalNotificationService({FlutterLocalNotificationsPlugin? plugin})
     : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const _payloadPrefix = 'tonyo-guidance:';
+  static const _settingsChannel = MethodChannel('tonyo/notifications');
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
   Future<void>? _initialization;
@@ -173,6 +251,9 @@ class LocalNotificationService
     return task;
   }
 
+  static bool? _alertsEnabled(NotificationsEnabledOptions? settings) =>
+      settings == null ? null : settings.isEnabled && settings.isAlertEnabled;
+
   @override
   Future<NotificationPermissionState> permissionStatus() async {
     if (!supportsScheduling) return NotificationPermissionState.unavailable;
@@ -184,20 +265,20 @@ class LocalNotificationService
               AndroidFlutterLocalNotificationsPlugin
             >()
             ?.areNotificationsEnabled(),
-      TargetPlatform.iOS =>
-        (await _plugin
-                .resolvePlatformSpecificImplementation<
-                  IOSFlutterLocalNotificationsPlugin
-                >()
-                ?.checkPermissions())
-            ?.isEnabled,
-      TargetPlatform.macOS =>
-        (await _plugin
-                .resolvePlatformSpecificImplementation<
-                  MacOSFlutterLocalNotificationsPlugin
-                >()
-                ?.checkPermissions())
-            ?.isEnabled,
+      TargetPlatform.iOS => _alertsEnabled(
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >()
+            ?.checkPermissions(),
+      ),
+      TargetPlatform.macOS => _alertsEnabled(
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              MacOSFlutterLocalNotificationsPlugin
+            >()
+            ?.checkPermissions(),
+      ),
       TargetPlatform.windows => true,
       _ => false,
     };
@@ -259,6 +340,11 @@ class LocalNotificationService
           'Every reminder needs a distinct signed-32-bit ID.',
         );
       }
+      if (item.repeatsDaily && item.timezoneName == null) {
+        throw StateError(
+          'The device timezone is required for daily reminders.',
+        );
+      }
     }
     await _initialize();
     try {
@@ -267,16 +353,23 @@ class LocalNotificationService
         final coach = notification.kind == GuidanceNotificationKind.coachPlan;
         final study =
             notification.kind == GuidanceNotificationKind.studySleep ||
-            notification.kind == GuidanceNotificationKind.studyEnergy;
+            notification.kind == GuidanceNotificationKind.studyEnergy ||
+            notification.kind == GuidanceNotificationKind.studyMorning;
         await _plugin.zonedSchedule(
           id: notification.platformId,
           title: notification.title,
           body: notification.body,
-          // One-shot instants retain their meaning across DST gaps/repeats.
+          // Recurring reminders follow local wall-clock time across DST.
+          // One-shot Coach instants retain their original UTC meaning.
           scheduledDate: timezone.TZDateTime.from(
             notification.scheduledAt.toUtc(),
-            timezone.UTC,
+            notification.repeatsDaily
+                ? timezone.getLocation(notification.timezoneName!)
+                : timezone.UTC,
           ),
+          matchDateTimeComponents: notification.repeatsDaily
+              ? DateTimeComponents.time
+              : null,
           notificationDetails: NotificationDetails(
             android: AndroidNotificationDetails(
               study
@@ -285,12 +378,12 @@ class LocalNotificationService
                   ? 'tonyo_coach_plan'
                   : 'tonyo_forecast_guidance',
               study
-                  ? 'Study log reminders'
+                  ? 'Check-in reminders'
                   : coach
                   ? 'Daily Coach plan'
                   : 'Forecast guidance',
               channelDescription: study
-                  ? 'Optional evening reminders for main sleep and Energy. Entries can be saved at any time.'
+                  ? 'Daily morning and evening check-in reminders.'
                   : coach
                   ? 'Opt-in reminders for the scheduled steps in your daily Coach plan.'
                   : 'Opt-in reminders for predicted energy and recovery windows.',
@@ -300,6 +393,8 @@ class LocalNotificationService
             iOS: const DarwinNotificationDetails(
               presentAlert: true,
               presentSound: true,
+              presentBanner: true,
+              presentList: true,
             ),
             macOS: const DarwinNotificationDetails(
               presentAlert: true,
@@ -320,6 +415,49 @@ class LocalNotificationService
         /* preserve original failure */
       }
       Error.throwWithStackTrace(error, stack);
+    }
+  }
+
+  @override
+  Future<void> showTestNotification() async {
+    await _serializeMutation(() async {
+      await _initialize();
+      await _plugin.show(
+        id: 0x20000300,
+        title: 'Tonyo reminder test',
+        body: 'Your check-in reminders can appear here.',
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'tonyo_study_reminders',
+            'Check-in reminders',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentSound: true,
+            presentBanner: true,
+            presentList: true,
+          ),
+          macOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentSound: true,
+          ),
+          windows: WindowsNotificationDetails(),
+        ),
+        payload: 'tonyo-guidance:study:morning',
+      );
+    });
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    try {
+      return await _settingsChannel.invokeMethod<bool>('openSettings') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
     }
   }
 

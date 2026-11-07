@@ -1165,6 +1165,10 @@ class MemoryCloudRepository
               coachPlanNotificationsEnabled:
                   state.coachPlanNotificationsEnabled,
               studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
+              morningCheckInReminderMinutes:
+                  state.morningCheckInReminderMinutes,
+              eveningCheckInReminderMinutes:
+                  state.eveningCheckInReminderMinutes,
               notificationPrefsVersion: state.notificationPrefsVersion,
               outcomeConsent: state.outcomeConsent,
               healthAuthorized: state.healthAuthorized,

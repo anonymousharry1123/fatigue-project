@@ -90,6 +90,9 @@ class _ShellScreenState extends State<ShellScreen> {
         MaterialPageRoute<void>(
           builder: (_) => switch (destination) {
             StudyReminderDestination.sleepLog => const SleepLogScreen(),
+            StudyReminderDestination.morningCheckIn => const DailyCheckInScreen(
+              initialPeriod: CheckInPeriod.morning,
+            ),
             StudyReminderDestination.eveningCheckIn => const DailyCheckInScreen(
               initialPeriod: CheckInPeriod.evening,
             ),

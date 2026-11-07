@@ -691,6 +691,14 @@ class FirestoreCloudRepository
           prefs['coachPlanNotificationsEnabled'] as bool? ?? false,
       studyLogNotificationsEnabled:
           prefs['studyLogNotificationsEnabled'] as bool? ?? false,
+      morningCheckInReminderMinutes: validReminderMinutes(
+        prefs['morningCheckInReminderMinutes'],
+        defaultMorningCheckInReminderMinutes,
+      ),
+      eveningCheckInReminderMinutes: validReminderMinutes(
+        prefs['eveningCheckInReminderMinutes'],
+        defaultEveningCheckInReminderMinutes,
+      ),
       notificationPrefsVersion: notificationPrefsVersion,
       outcomeConsent:
           consent['outcomeCollection'] == true &&
@@ -757,6 +765,8 @@ class FirestoreCloudRepository
         recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
         coachPlanNotificationsEnabled: state.coachPlanNotificationsEnabled,
         studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
+        morningCheckInReminderMinutes: state.morningCheckInReminderMinutes,
+        eveningCheckInReminderMinutes: state.eveningCheckInReminderMinutes,
         notificationPrefsVersion: state.notificationPrefsVersion,
         outcomeConsent: state.outcomeConsent,
         healthAuthorized: state.healthAuthorized,

@@ -1,5 +1,70 @@
 // Account, onboarding, settings, and privacy copy. Stored identifiers remain English.
 const accountTranslations = <String, Map<String, String>>{
+  "Morning and Evening check-ins": {
+    'es': "Registros de mañana y noche",
+    'zh-Hans': "早晨和晚间打卡",
+    'zh-Hant': "早晨和晚間打卡",
+  },
+  "Morning reminder time": {
+    'es': "Hora del recordatorio de mañana",
+    'zh-Hans': "早晨提醒时间",
+    'zh-Hant': "早晨提醒時間",
+  },
+  "Evening reminder time": {
+    'es': "Hora del recordatorio de noche",
+    'zh-Hans': "晚间提醒时间",
+    'zh-Hant': "晚間提醒時間",
+  },
+  "Send test notification": {
+    'es': "Enviar notificación de prueba",
+    'zh-Hans': "发送测试通知",
+    'zh-Hant': "傳送測試通知",
+  },
+  "Sending test…": {
+    'es': "Enviando prueba…",
+    'zh-Hans': "正在发送测试…",
+    'zh-Hant': "正在傳送測試…",
+  },
+  "Open system notification settings": {
+    'es': "Abrir ajustes de notificaciones del sistema",
+    'zh-Hans': "打开系统通知设置",
+    'zh-Hant': "開啟系統通知設定",
+  },
+  "Two daily reminders at your chosen local times. Tap a reminder to open the matching check-in.": {
+    'es':
+        "Dos recordatorios diarios a las horas locales elegidas. Toca uno para abrir el registro correspondiente.",
+    'zh-Hans': "每天按您选择的当地时间提醒两次。点击提醒即可打开对应的打卡。",
+    'zh-Hant': "每天按您選擇的當地時間提醒兩次。點擊提醒即可開啟對應的打卡。",
+  },
+  "Test sent. If no banner appears, check system notification settings.": {
+    'es':
+        "Prueba enviada. Si no aparece un aviso, revisa los ajustes de notificaciones del sistema.",
+    'zh-Hans': "测试已发送。如果未显示横幅，请检查系统通知设置。",
+    'zh-Hant': "測試已傳送。如果未顯示橫幅，請檢查系統通知設定。",
+  },
+  "Could not send a test notification. Please retry.": {
+    'es': "No se pudo enviar la notificación de prueba. Inténtalo de nuevo.",
+    'zh-Hans': "无法发送测试通知，请重试。",
+    'zh-Hant': "無法傳送測試通知，請重試。",
+  },
+  "Open your device settings → Notifications → Tonyo.": {
+    'es': "Abre los ajustes del dispositivo → Notificaciones → Tonyo.",
+    'zh-Hans': "打开设备设置 → 通知 → Tonyo。",
+    'zh-Hant': "開啟裝置設定 → 通知 → Tonyo。",
+  },
+  "If reminders are quiet, check Allow Notifications, Sounds, Focus and Scheduled Summary in system settings.": {
+    'es':
+        "Si los recordatorios no suenan, revisa Permitir notificaciones, Sonidos, Concentración y Resumen programado en los ajustes del sistema.",
+    'zh-Hans': "如果提醒没有声音，请在系统设置中检查允许通知、声音、专注模式和定时推送摘要。",
+    'zh-Hant': "如果提醒沒有聲音，請在系統設定中檢查允許通知、聲音、專注模式和排程摘要。",
+  },
+  "Choose daily Morning and Evening check-in reminders. They repeat even when Tonyo is closed. Daily Coach reminders refresh when you open the app.": {
+    'es':
+        "Elige recordatorios diarios para los registros de mañana y noche. Se repiten aunque Tonyo esté cerrado. Los recordatorios del plan diario se actualizan al abrir la app.",
+    'zh-Hans': "选择每天早晨和晚间的打卡提醒。关闭 Tonyo 后提醒仍会重复。每日计划提醒会在打开应用时更新。",
+    'zh-Hant': "選擇每天早晨和晚間的打卡提醒。關閉 Tonyo 後提醒仍會重複。每日計畫提醒會在開啟應用程式時更新。",
+  },
+
   'Enable optional learning?': {
     'es': '¿Activar el aprendizaje opcional?',
     'zh-Hans': '启用可选学习功能？',

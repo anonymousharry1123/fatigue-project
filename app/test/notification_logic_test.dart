@@ -530,159 +530,162 @@ void main() {
     });
   });
 
-  group('study log reminders', () {
-    test('study reminders use optional evening times without deadlines', () {
-      final plan = NotificationLogic.build(
-        now: DateTime(2026, 8, 15, 8),
-        points: points(),
-        windows: windows(),
-        riskAlerts: const [],
-        enabled: true,
-        crashEnabled: false,
-        recoveryEnabled: false,
-        studyLogEnabled: true,
-      );
-      final study = plan.notifications
-          .where(
-            (item) =>
-                item.kind == GuidanceNotificationKind.studySleep ||
-                item.kind == GuidanceNotificationKind.studyEnergy,
-          )
-          .toList();
+  group('daily check-in reminders', () {
+    NotificationPlan plan({
+      DateTime? now,
+      bool enabled = true,
+      bool checkInsEnabled = true,
+      int morning = 540,
+      int evening = 1140,
+      String? zone,
+      List<DailyCheckIn> checkIns = const [],
+    }) => NotificationLogic.build(
+      now: now ?? DateTime(2026, 8, 15, 8),
+      points: const [],
+      windows: const [],
+      riskAlerts: const [],
+      enabled: enabled,
+      crashEnabled: false,
+      recoveryEnabled: false,
+      studyLogEnabled: checkInsEnabled,
+      morningReminderMinutes: morning,
+      eveningReminderMinutes: evening,
+      timezoneName: zone,
+      checkIns: checkIns,
+    );
 
-      expect(study.map((item) => item.scheduledAt).take(2), [
-        DateTime(2026, 8, 15, 18),
-        DateTime(2026, 8, 15, 19),
+    test(
+      'two daily requests work without a forecast and route to both periods',
+      () {
+        final result = plan();
+        expect(result.state, NotificationPlanState.ready);
+        expect(result.notifications, hasLength(2));
+        expect(result.notifications.map((n) => n.scheduledAt), [
+          DateTime(2026, 8, 15, 9),
+          DateTime(2026, 8, 15, 19),
+        ]);
+        expect(
+          result.notifications.map((n) => n.repeatsDaily),
+          everyElement(true),
+        );
+        expect(result.notifications.map((n) => n.payload), [
+          'tonyo-guidance:study:morning',
+          'tonyo-guidance:study:energy',
+        ]);
+      },
+    );
+
+    test('custom minutes and expired morning roll over independently', () {
+      final result = plan(
+        now: DateTime(2026, 8, 15, 12),
+        morning: 7 * 60 + 15,
+        evening: 21 * 60 + 30,
+      );
+      expect(result.notifications.map((n) => n.scheduledAt), [
+        DateTime(2026, 8, 15, 21, 30),
+        DateTime(2026, 8, 16, 7, 15),
       ]);
+      final tomorrow = plan(now: DateTime(2026, 8, 16, 12));
       expect(
-        study.where((item) => item.kind == GuidanceNotificationKind.studySleep),
-        hasLength(14),
-      );
-      expect(
-        study.where(
-          (item) => item.kind == GuidanceNotificationKind.studyEnergy,
-        ),
-        hasLength(14),
-      );
-      expect(study.first.payload, 'tonyo-guidance:study:sleep');
-      expect(
-        study.first.body,
-        'Log your main sleep whenever it suits you. There is no deadline.',
-      );
-      expect(
-        study
-            .firstWhere(
-              (item) => item.kind == GuidanceNotificationKind.studyEnergy,
-            )
-            .body,
-        'Choose Evening and rate your Energy whenever it suits you.',
-      );
-      expect(
-        study
-            .firstWhere(
-              (item) => item.kind == GuidanceNotificationKind.studyEnergy,
-            )
-            .payload,
-        'tonyo-guidance:study:energy',
+        result.notifications.map((n) => n.platformId).toSet(),
+        tomorrow.notifications.map((n) => n.platformId).toSet(),
       );
     });
 
-    test('late-wake sleep and afternoon Evening Energy skip that day', () {
-      final afternoon = DateTime(2026, 8, 15, 17);
-      final plan = NotificationLogic.build(
-        now: afternoon,
-        points: points(),
-        windows: windows(),
-        riskAlerts: const [],
-        enabled: true,
-        crashEnabled: false,
-        recoveryEnabled: false,
-        studyLogEnabled: true,
-        signals: [
-          SignalReading(
-            id: 'sleep',
-            type: SignalType.sleep,
-            value: 7.5,
-            timestamp: DateTime(2026, 8, 15, 14),
-          ),
-          SignalReading(
-            id: 'nap',
-            type: SignalType.nap,
-            value: 0.4,
-            timestamp: DateTime(2026, 8, 16, 14),
-          ),
-        ],
+    test('saving a check-in does not remove future daily requests', () {
+      final result = plan(
         checkIns: [
           DailyCheckIn(
-            id: 'afternoon',
-            timestamp: DateTime(2026, 8, 15, 14, 30),
-            period: CheckInPeriod.evening,
-            energy: 6,
-          ),
-        ],
-      );
-      final study = plan.notifications
-          .where(
-            (item) =>
-                item.kind == GuidanceNotificationKind.studySleep ||
-                item.kind == GuidanceNotificationKind.studyEnergy,
-          )
-          .toList();
-
-      expect(study.map((item) => (item.kind, item.scheduledAt)).take(2), [
-        (GuidanceNotificationKind.studySleep, DateTime(2026, 8, 16, 18)),
-        (GuidanceNotificationKind.studyEnergy, DateTime(2026, 8, 16, 19)),
-      ]);
-      expect(study, hasLength(26));
-    });
-
-    test('Morning Energy does not suppress the Evening reminder', () {
-      final plan = NotificationLogic.build(
-        now: DateTime(2026, 8, 15, 17),
-        points: points(),
-        windows: windows(),
-        riskAlerts: const [],
-        enabled: true,
-        crashEnabled: false,
-        recoveryEnabled: false,
-        studyLogEnabled: true,
-        checkIns: [
-          DailyCheckIn(
-            id: 'late-morning',
-            timestamp: DateTime(2026, 8, 15, 14, 30),
+            id: 'saved',
+            timestamp: DateTime(2026, 8, 15, 7),
             period: CheckInPeriod.morning,
             energy: 6,
           ),
         ],
       );
-
-      final energy = plan.notifications.where(
-        (item) => item.kind == GuidanceNotificationKind.studyEnergy,
-      );
-      expect(energy.first.scheduledAt, DateTime(2026, 8, 15, 19));
-      expect(energy, hasLength(14));
+      expect(result.notifications, hasLength(2));
+      expect(result.notifications.every((n) => n.repeatsDaily), isTrue);
     });
 
-    test('study reminders stay off until the switch is enabled', () {
-      final plan = NotificationLogic.build(
-        now: DateTime(2026, 8, 15, 8),
-        points: points(),
-        windows: windows(),
-        riskAlerts: const [],
-        enabled: true,
-        crashEnabled: false,
-        recoveryEnabled: false,
-      );
+    test(
+      'wall-clock reminders and next occurrence survive DST and long closure',
+      () {
+        final before = plan(
+          now: DateTime.utc(2026, 10, 31, 18),
+          zone: 'America/Los_Angeles',
+        );
+        final morning = before.notifications.firstWhere(
+          (n) => n.kind == GuidanceNotificationKind.studyMorning,
+        );
+        expect(morning.scheduledAt.hour, 9);
+        expect(morning.scheduledAt.toUtc(), DateTime.utc(2026, 11, 1, 17));
+        final later = morning.nextOccurrence(DateTime.utc(2026, 11, 20, 20));
+        expect(later.hour, 9);
+        expect(later.toUtc(), DateTime.utc(2026, 11, 21, 17));
+      },
+    );
 
-      expect(
-        plan.notifications.where(
-          (item) =>
-              item.kind == GuidanceNotificationKind.studySleep ||
-              item.kind == GuidanceNotificationKind.studyEnergy,
-        ),
-        isEmpty,
-      );
+    test('both opt-ins are required and invalid clock values are rejected', () {
+      expect(plan(enabled: false).notifications, isEmpty);
+      expect(plan(checkInsEnabled: false).notifications, isEmpty);
+      expect(() => plan(morning: -1), throwsArgumentError);
+      expect(() => plan(evening: 1440), throwsArgumentError);
     });
+
+    test(
+      'returning from settings rechecks a changed system permission',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final service = _FakeNotificationService();
+        final app = AppController(
+          initialPrivacyConsent: testAdultPrivacyConsent,
+          notificationService: service,
+        )..onboardingComplete = true;
+        addTearDown(app.dispose);
+        await app.setStudyLogNotifications(true);
+        expect(app.scheduledNotificationCount, 2);
+        service.permission = NotificationPermissionState.denied;
+        await app.handleAppResumed();
+        expect(app.scheduledNotificationCount, 0);
+        expect(app.notificationError, contains('blocked'));
+        service.permission = NotificationPermissionState.granted;
+        await app.handleAppResumed();
+        expect(app.scheduledNotificationCount, 2);
+      },
+    );
+
+    test(
+      'custom reminder times survive restart without requesting permission',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final service = _FakeNotificationService();
+        final app = AppController(
+          initialPrivacyConsent: testAdultPrivacyConsent,
+          notificationService: service,
+        );
+        await app.load();
+        await app.setCheckInReminderTimes(
+          morningMinutes: 435,
+          eveningMinutes: 1275,
+        );
+        await app.setStudyLogNotifications(true);
+        final requests = service.permissionRequests;
+        final restored = AppController(
+          initialPrivacyConsent: testAdultPrivacyConsent,
+          notificationService: service,
+        );
+        await restored.load();
+        expect(restored.morningCheckInReminderMinutes, 435);
+        expect(restored.eveningCheckInReminderMinutes, 1275);
+        expect(restored.studyLogNotificationsEnabled, isTrue);
+        expect(service.permissionRequests, requests);
+        await restored.refreshNotifications();
+        expect(restored.scheduledNotificationCount, 2);
+        expect(restored.notificationPlan.state, NotificationPlanState.ready);
+        app.dispose();
+        restored.dispose();
+      },
+    );
   });
 }
 

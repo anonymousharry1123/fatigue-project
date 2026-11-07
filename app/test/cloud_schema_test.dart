@@ -1,8 +1,33 @@
+import 'package:app/src/cloud_sync.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('reminder clock times survive cloud projection and export', () {
+    final original = CloudUserState(
+      profile: const UserProfile(),
+      accountEmail: 'test@example.com',
+      onboardingComplete: true,
+      notificationsEnabled: true,
+      studyLogNotificationsEnabled: true,
+      morningCheckInReminderMinutes: 435,
+      eveningCheckInReminderMinutes: 1275,
+      outcomeConsent: false,
+      healthAuthorized: false,
+      signals: const [],
+      checkIns: const [],
+    );
+    final snapshot = InputSyncSnapshot.fromState(original);
+    final restored = snapshot.toState(original);
+    expect(restored.morningCheckInReminderMinutes, 435);
+    expect(restored.eveningCheckInReminderMinutes, 1275);
+    expect(
+      restored.copyWith().toExportJson()['morningCheckInReminderMinutes'],
+      435,
+    );
+  });
+
   group('Version 0.10-a Firestore schema', () {
     test(
       'regular heart rate round-trips separately from resting heart rate',

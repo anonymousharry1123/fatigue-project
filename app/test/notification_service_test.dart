@@ -227,6 +227,69 @@ void main() {
     );
 
     test(
+      'daily check-in preserves local timezone and repeats without an expiry',
+      () async {
+        await service.reconcile([
+          GuidanceNotification(
+            id: 'morning',
+            platformId: 0x20000100,
+            kind: GuidanceNotificationKind.studyMorning,
+            scheduledAt: DateTime.utc(2026, 11, 8, 17),
+            title: 'Morning check-in',
+            body: 'Check in',
+            repeatsDaily: true,
+            timezoneName: 'America/Los_Angeles',
+          ),
+        ]);
+        final arguments =
+            calls.singleWhere((c) => c.method == 'zonedSchedule').arguments
+                as Map;
+        expect(arguments['timeZoneName'], 'America/Los_Angeles');
+        expect(
+          arguments['matchDateTimeComponents'],
+          DateTimeComponents.time.index,
+        );
+        expect(
+          arguments['scheduledDateTimeISO8601'],
+          '2026-11-08T09:00:00.000-0800',
+        );
+        expect(arguments['payload'], 'tonyo-guidance:study:morning');
+        expect(pending.keys.toSet(), {99, 0x20000100});
+      },
+    );
+
+    test('test notification does not replace the recurring schedule', () async {
+      await service.reconcile([reminder(1)]);
+      calls.clear();
+      await service.showTestNotification();
+      expect(calls.where((c) => c.method == 'show'), hasLength(1));
+      expect(calls.where((c) => c.method == 'cancel'), isEmpty);
+      expect(pending.keys.toSet(), {99, 1});
+    });
+
+    test(
+      'unknown daily timezone fails before removing an existing plan',
+      () async {
+        await service.reconcile([reminder(1)]);
+        await expectLater(
+          service.reconcile([
+            GuidanceNotification(
+              id: 'morning',
+              platformId: 2,
+              kind: GuidanceNotificationKind.studyMorning,
+              scheduledAt: DateTime.utc(2030, 1, 1, 9),
+              title: 'Morning',
+              body: 'Test',
+              repeatsDaily: true,
+            ),
+          ]),
+          throwsStateError,
+        );
+        expect(pending.keys.toSet(), {99, 1});
+      },
+    );
+
+    test(
       'permission and response initialization share one native initialization',
       () async {
         final gate = initializeGate = Completer<void>();
@@ -297,6 +360,50 @@ void main() {
       },
     );
   });
+
+  test(
+    'iOS authorization with alerts disabled is reported as blocked',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      IOSFlutterLocalNotificationsPlugin.registerWith();
+      const channel = MethodChannel(
+        'dexterous.com/flutter/local_notifications',
+      );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var alerts = false;
+      messenger.setMockMethodCallHandler(
+        channel,
+        (call) async => switch (call.method) {
+          'initialize' => true,
+          'checkPermissions' => {
+            'isEnabled': true,
+            'isAlertEnabled': alerts,
+            'isSoundEnabled': true,
+            'isBadgeEnabled': false,
+            'isProvisionalEnabled': false,
+            'isCriticalEnabled': false,
+            'isProvidesAppNotificationSettingsEnabled': false,
+          },
+          _ => null,
+        },
+      );
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = null;
+      });
+      final service = LocalNotificationService();
+      expect(
+        await service.permissionStatus(),
+        NotificationPermissionState.denied,
+      );
+      alerts = true;
+      expect(
+        await service.permissionStatus(),
+        NotificationPermissionState.granted,
+      );
+    },
+  );
 
   testWidgets('unsupported cancellation does not depend on its creation zone', (
     tester,

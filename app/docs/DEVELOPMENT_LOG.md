@@ -1,6 +1,17 @@
 # Tonyo Development Log
 
-Latest entry: [October 17, 2026 — AI-3 synthetic comparison preparation](#october-17-2026--ai-3-synthetic-comparison-preparation). Current preparation verification is in [AI3_SYNTHETIC_PREPARATION.md](AI3_SYNTHETIC_PREPARATION.md); the separate AI-1/AI-2 verification remains in [DATA_READINESS_REPORT.md](DATA_READINESS_REPORT.md). Earlier dated results below remain historical.
+Latest entry: [November 7, 2026 — recurring check-in reminders](#november-7-2026--recurring-check-in-reminders). Earlier dated results below remain historical.
+
+
+## November 7, 2026 — recurring check-in reminders
+
+**Problem:** The existing opt-in scheduled only 18:00 sleep and 19:00 Energy prompts for a finite 14-day window. There was no Morning check-in reminder. Returning from system notification settings did not always refresh authorization unless derived views also needed rebuilding.
+
+**Change:** The existing check-in opt-in now schedules two OS-managed daily calendar notifications, defaulting to 09:00 Morning and 19:00 Evening. Profile → Notifications exposes both editable local clock times, a test notification, and a system-settings shortcut. Times persist locally and through the existing cloud profile/sync representation, with defaults for older records. Morning and Evening taps preselect their respective forms; old sleep reminder taps remain compatible. Completing a check-in does not cancel the repeating request for future days. Recurrence uses the device's IANA timezone, including DST, while Coach reminders retain one-shot UTC scheduling. Returning to the app rechecks notification permission without repeating derived-view refreshes. iOS authorization with alerts disabled is shown as blocked.
+
+**Validation:** Static analysis passed. The final focused run passed 96 notification, navigation, settings race, cloud-schema, Coach and timezone tests; the new end-to-end settings widget test also passed. A signed iPhone release build succeeded. The full-suite run passed 1,817 tests and skipped one; five failures were reproduced against unchanged HEAD (two input-accessibility tests, two historical-study UI tests, and the weekly-insights widget test). Its additional timezone-controller regression was repaired and passed in the final focused run. Logs are under `/private/tmp/tonyo-notifications-*.log`. No app data, learning settings or model behavior was changed by this implementation.
+
+**Device check:** The final signed release build was installed over `com.ios.tonyo` on the paired iPhone using CoreDevice; no uninstall or data reset was performed. Notification delivery is still controlled by iOS permissions, Focus and Scheduled Summary. The test button requests ordinary notification permission through explicit interaction and submits a visible local test. A successful scheduling call does not prove that a banner was seen on a physical device.
 
 ## September 19, 2026 — Version 0.35 production polish
 

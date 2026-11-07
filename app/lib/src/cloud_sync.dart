@@ -60,6 +60,8 @@ class InputSyncSnapshot {
             recoveryNotificationsEnabled: state.recoveryNotificationsEnabled,
             coachPlanNotificationsEnabled: state.coachPlanNotificationsEnabled,
             studyLogNotificationsEnabled: state.studyLogNotificationsEnabled,
+            morningCheckInReminderMinutes: state.morningCheckInReminderMinutes,
+            eveningCheckInReminderMinutes: state.eveningCheckInReminderMinutes,
             notificationPrefsVersion: state.notificationPrefsVersion,
             outcomeConsent: state.outcomeConsent,
             healthAuthorized: state.healthAuthorized,
@@ -151,6 +153,14 @@ class InputSyncSnapshot {
           prefs['coachPlanNotificationsEnabled'] == true,
       studyLogNotificationsEnabled:
           prefs['studyLogNotificationsEnabled'] == true,
+      morningCheckInReminderMinutes: validReminderMinutes(
+        prefs['morningCheckInReminderMinutes'],
+        defaultMorningCheckInReminderMinutes,
+      ),
+      eveningCheckInReminderMinutes: validReminderMinutes(
+        prefs['eveningCheckInReminderMinutes'],
+        defaultEveningCheckInReminderMinutes,
+      ),
       notificationPrefsVersion:
           (prefs['notificationPreferencesVersion'] as num?)?.toInt() ?? 0,
       healthAuthorized: prefs['healthAuthorized'] == true,

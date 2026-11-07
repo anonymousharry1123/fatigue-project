@@ -1059,6 +1059,8 @@ class AppController extends ChangeNotifier {
   bool recoveryNotificationsEnabled = true;
   bool coachPlanNotificationsEnabled = false;
   bool studyLogNotificationsEnabled = false;
+  int morningCheckInReminderMinutes = defaultMorningCheckInReminderMinutes;
+  int eveningCheckInReminderMinutes = defaultEveningCheckInReminderMinutes;
   bool outcomeConsent = false;
   bool healthAvailable = false;
   bool healthAuthorized = false;
@@ -1484,7 +1486,9 @@ class AppController extends ChangeNotifier {
   NotificationPlan get notificationPlan => _notificationPlan;
   int get scheduledNotificationCount => _notificationsConfirmed
       ? _notificationPlan.notifications
-            .where((item) => item.scheduledAt.isAfter(_now()))
+            .where(
+              (item) => item.repeatsDaily || item.scheduledAt.isAfter(_now()),
+            )
             .length
       : 0;
   bool get _notificationsConfirmed =>
@@ -1514,12 +1518,18 @@ class AppController extends ChangeNotifier {
                   item.scheduledAt.isAfter(_now()),
             )
             .firstOrNull;
-  GuidanceNotification? get nextScheduledNotification =>
-      scheduledNotificationCount == 0
-      ? null
-      : _notificationPlan.notifications
-            .where((item) => item.scheduledAt.isAfter(_now()))
-            .firstOrNull;
+  GuidanceNotification? get nextScheduledNotification {
+    if (!_notificationsConfirmed) return null;
+    final now = _now();
+    final next =
+        _notificationPlan.notifications
+            .where((item) => item.repeatsDaily || item.scheduledAt.isAfter(now))
+            .map((item) => item.atNextOccurrence(now))
+            .toList()
+          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    return next.firstOrNull;
+  }
+
   List<OutcomeRecord> get outcomes => List.unmodifiable(_outcomes);
   int get observedEnergyOutcomeCount => _outcomes
       .where((outcome) => outcome.type == OutcomeType.observedEnergy)
@@ -2466,6 +2476,10 @@ class AppController extends ChangeNotifier {
     if (notify) notifyListeners();
 
     try {
+      if (studyLogNotificationsEnabled) {
+        await _deviceTimezoneService.refresh();
+        if (!currentRequest()) return;
+      }
       final now = _now();
       _notificationPlan = NotificationLogic.build(
         now: now,
@@ -2480,6 +2494,9 @@ class AppController extends ChangeNotifier {
         currentEvidenceEligible:
             score.canEstimateEnergy || score.canEstimateCognitive,
         studyLogEnabled: studyLogNotificationsEnabled,
+        morningReminderMinutes: morningCheckInReminderMinutes,
+        eveningReminderMinutes: eveningCheckInReminderMinutes,
+        timezoneName: deviceTimezoneIdentifier,
         signals: signals,
         checkIns: checkIns,
       );
@@ -2961,6 +2978,7 @@ class AppController extends ChangeNotifier {
     if (!current()) return;
     await syncScreenTimeIfDue();
     if (!current()) return;
+    final reminderGenerationBeforeViews = _notificationRefreshGeneration;
     if ((derivedViewsNeedRefresh ||
             _scoreSnapshot == null ||
             (hadPendingInputs && !hasPendingCloudChanges)) &&
@@ -2986,6 +3004,11 @@ class AppController extends ChangeNotifier {
       if (!current()) return;
       _localClockChanged = false;
       await _writeLocal();
+    }
+    if (notificationsEnabled &&
+        reminderGenerationBeforeViews == _notificationRefreshGeneration) {
+      await refreshNotifications();
+      if (!current()) return;
     }
     await syncOura(automatic: true);
     if (!current()) return;
@@ -4117,6 +4140,59 @@ class AppController extends ChangeNotifier {
     );
   }
 
+  Future<void> setCheckInReminderTimes({
+    required int morningMinutes,
+    required int eveningMinutes,
+  }) async {
+    for (final minutes in [morningMinutes, eveningMinutes]) {
+      if (minutes < 0 || minutes >= 24 * 60) {
+        throw ArgumentError.value(
+          minutes,
+          'minutes',
+          'Choose a valid local time.',
+        );
+      }
+    }
+    await _setNotificationPreferences(
+      morningMinutes: morningMinutes,
+      eveningMinutes: eveningMinutes,
+    );
+  }
+
+  bool get notificationDiagnosticsAvailable =>
+      _notificationService is NotificationDiagnostics;
+
+  Future<bool> sendTestNotification() async {
+    _requirePrivacy();
+    final revision = _sessionRevision;
+    final uid = cloudUid;
+    if (_notificationService case NotificationDiagnostics diagnostics) {
+      await setNotifications(true);
+      if (revision != _sessionRevision ||
+          uid != cloudUid ||
+          !_canProcessData ||
+          !notificationsEnabled ||
+          notificationPermission != NotificationPermissionState.granted) {
+        return false;
+      }
+      try {
+        await diagnostics.showTestNotification();
+        return true;
+      } on Object {
+        notificationError = 'Could not send a test notification. Please retry.';
+        notifyListeners();
+      }
+    }
+    return false;
+  }
+
+  Future<bool> openNotificationSettings() async {
+    if (_notificationService case NotificationDiagnostics diagnostics) {
+      return diagnostics.openSettings();
+    }
+    return false;
+  }
+
   Future<void> setCrashNotifications(bool value) async {
     await _setNotificationPreferences(crash: value);
   }
@@ -4129,6 +4205,8 @@ class AppController extends ChangeNotifier {
     bool? enabled,
     bool? coachPlan,
     bool? studyLog,
+    int? morningMinutes,
+    int? eveningMinutes,
     bool? crash,
     bool? recovery,
   }) async {
@@ -4146,6 +4224,8 @@ class AppController extends ChangeNotifier {
       enabled: notificationsEnabled,
       coach: coachPlanNotificationsEnabled,
       studyLog: studyLogNotificationsEnabled,
+      morning: morningCheckInReminderMinutes,
+      evening: eveningCheckInReminderMinutes,
       crash: crashNotificationsEnabled,
       recovery: recoveryNotificationsEnabled,
     );
@@ -4153,6 +4233,8 @@ class AppController extends ChangeNotifier {
     _notificationScheduleConfirmed = false;
     if (coachPlan != null) coachPlanNotificationsEnabled = coachPlan;
     if (studyLog != null) studyLogNotificationsEnabled = studyLog;
+    if (morningMinutes != null) morningCheckInReminderMinutes = morningMinutes;
+    if (eveningMinutes != null) eveningCheckInReminderMinutes = eveningMinutes;
     if (crash != null) crashNotificationsEnabled = crash;
     if (recovery != null) recoveryNotificationsEnabled = recovery;
     isNotificationSyncing = true;
@@ -4214,6 +4296,8 @@ class AppController extends ChangeNotifier {
         notificationsEnabled = previous.enabled;
         coachPlanNotificationsEnabled = previous.coach;
         studyLogNotificationsEnabled = previous.studyLog;
+        morningCheckInReminderMinutes = previous.morning;
+        eveningCheckInReminderMinutes = previous.evening;
         crashNotificationsEnabled = previous.crash;
         recoveryNotificationsEnabled = previous.recovery;
         notificationError = 'Could not save reminder settings. Please retry.';
@@ -5563,6 +5647,8 @@ class AppController extends ChangeNotifier {
     recoveryNotificationsEnabled = true;
     coachPlanNotificationsEnabled = false;
     studyLogNotificationsEnabled = false;
+    morningCheckInReminderMinutes = defaultMorningCheckInReminderMinutes;
+    eveningCheckInReminderMinutes = defaultEveningCheckInReminderMinutes;
     isNotificationSyncing = false;
     notificationError = null;
     notificationPermission = NotificationPermissionState.unknown;
@@ -5705,6 +5791,8 @@ class AppController extends ChangeNotifier {
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
     'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
+    'morningCheckInReminderMinutes': morningCheckInReminderMinutes,
+    'eveningCheckInReminderMinutes': eveningCheckInReminderMinutes,
     'notificationPreferencesVersion': notificationPreferencesVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,
@@ -6310,6 +6398,8 @@ class AppController extends ChangeNotifier {
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
     coachPlanNotificationsEnabled: coachPlanNotificationsEnabled,
     studyLogNotificationsEnabled: studyLogNotificationsEnabled,
+    morningCheckInReminderMinutes: morningCheckInReminderMinutes,
+    eveningCheckInReminderMinutes: eveningCheckInReminderMinutes,
     notificationPrefsVersion: notificationPreferencesVersion,
     outcomeConsent: outcomeConsent,
     healthAuthorized: healthAuthorized,
@@ -6404,6 +6494,14 @@ class AppController extends ChangeNotifier {
     recoveryNotificationsEnabled = state.recoveryNotificationsEnabled;
     coachPlanNotificationsEnabled = state.coachPlanNotificationsEnabled;
     studyLogNotificationsEnabled = state.studyLogNotificationsEnabled;
+    morningCheckInReminderMinutes = validReminderMinutes(
+      state.morningCheckInReminderMinutes,
+      defaultMorningCheckInReminderMinutes,
+    );
+    eveningCheckInReminderMinutes = validReminderMinutes(
+      state.eveningCheckInReminderMinutes,
+      defaultEveningCheckInReminderMinutes,
+    );
     if (!notificationsEnabled || !onboardingComplete) {
       // Account restoration can return to setup without regenerating guidance.
       // Queue cancellation now so a former device plan cannot remain active.
@@ -6553,6 +6651,14 @@ class AppController extends ChangeNotifier {
         json['coachPlanNotificationsEnabled'] as bool? ?? false;
     studyLogNotificationsEnabled =
         json['studyLogNotificationsEnabled'] as bool? ?? false;
+    morningCheckInReminderMinutes = validReminderMinutes(
+      json['morningCheckInReminderMinutes'],
+      defaultMorningCheckInReminderMinutes,
+    );
+    eveningCheckInReminderMinutes = validReminderMinutes(
+      json['eveningCheckInReminderMinutes'],
+      defaultEveningCheckInReminderMinutes,
+    );
     notificationPermission = NotificationPermissionState.unknown;
     notificationError = null;
     _notificationPlan = const NotificationPlan(

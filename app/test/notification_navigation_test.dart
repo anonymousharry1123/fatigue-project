@@ -104,6 +104,29 @@ void main() {
     );
   });
 
+  testWidgets('morning reminder opens Morning and evening opens Evening', (
+    tester,
+  ) async {
+    final (_, service) = await showApp(tester);
+    service.tap('tonyo-guidance:study:morning');
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const Key('checkin-period-morning')))
+          .selected,
+      isTrue,
+    );
+    service.tap('tonyo-guidance:study:energy');
+    await tester.pumpAndSettle();
+    expect(find.byType(DailyCheckInScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const Key('checkin-period-evening')))
+          .selected,
+      isTrue,
+    );
+  });
+
   testWidgets('cold-launch study tap waits for loading before entry', (
     tester,
   ) async {

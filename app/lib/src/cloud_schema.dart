@@ -7,6 +7,11 @@ import 'privacy_consent.dart';
 const int cloudSchemaVersion = 16;
 
 const int notificationPreferencesVersion = 1;
+const int defaultMorningCheckInReminderMinutes = 9 * 60;
+const int defaultEveningCheckInReminderMinutes = 19 * 60;
+
+int validReminderMinutes(Object? value, int fallback) =>
+    value is int && value >= 0 && value < 24 * 60 ? value : fallback;
 
 /// SharedPreferences-to-Firestore migration version.
 const int localMigrationVersion = 1;
@@ -101,6 +106,8 @@ Map<String, Object?> profileToCloud({
   bool recoveryNotificationsEnabled = true,
   bool coachPlanNotificationsEnabled = false,
   bool studyLogNotificationsEnabled = false,
+  int morningCheckInReminderMinutes = defaultMorningCheckInReminderMinutes,
+  int eveningCheckInReminderMinutes = defaultEveningCheckInReminderMinutes,
   int notificationPrefsVersion = notificationPreferencesVersion,
   required bool outcomeConsent,
   required bool healthAuthorized,
@@ -121,6 +128,8 @@ Map<String, Object?> profileToCloud({
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
     'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
+    'morningCheckInReminderMinutes': morningCheckInReminderMinutes,
+    'eveningCheckInReminderMinutes': eveningCheckInReminderMinutes,
     'notificationPreferencesVersion': notificationPrefsVersion,
     'healthAuthorized': healthAuthorized,
   },
@@ -199,6 +208,8 @@ class CloudUserState {
     this.recoveryNotificationsEnabled = true,
     this.coachPlanNotificationsEnabled = false,
     this.studyLogNotificationsEnabled = false,
+    this.morningCheckInReminderMinutes = defaultMorningCheckInReminderMinutes,
+    this.eveningCheckInReminderMinutes = defaultEveningCheckInReminderMinutes,
     this.notificationPrefsVersion = 0,
     this.personalizedEnergyModel,
     this.userUpdatedAt,
@@ -218,6 +229,8 @@ class CloudUserState {
   final bool recoveryNotificationsEnabled;
   final bool coachPlanNotificationsEnabled;
   final bool studyLogNotificationsEnabled;
+  final int morningCheckInReminderMinutes;
+  final int eveningCheckInReminderMinutes;
   final int notificationPrefsVersion;
   final bool outcomeConsent;
   final bool healthAuthorized;
@@ -260,6 +273,8 @@ class CloudUserState {
     recoveryNotificationsEnabled: recoveryNotificationsEnabled,
     coachPlanNotificationsEnabled: coachPlanNotificationsEnabled,
     studyLogNotificationsEnabled: studyLogNotificationsEnabled,
+    morningCheckInReminderMinutes: morningCheckInReminderMinutes,
+    eveningCheckInReminderMinutes: eveningCheckInReminderMinutes,
     notificationPrefsVersion: notificationPrefsVersion,
     outcomeConsent: outcomeConsent ?? this.outcomeConsent,
     healthAuthorized: healthAuthorized,
@@ -294,6 +309,8 @@ class CloudUserState {
     'recoveryNotificationsEnabled': recoveryNotificationsEnabled,
     'coachPlanNotificationsEnabled': coachPlanNotificationsEnabled,
     'studyLogNotificationsEnabled': studyLogNotificationsEnabled,
+    'morningCheckInReminderMinutes': morningCheckInReminderMinutes,
+    'eveningCheckInReminderMinutes': eveningCheckInReminderMinutes,
     'notificationPreferencesVersion': notificationPrefsVersion,
     'outcomeConsent': outcomeConsent,
     'healthAuthorized': healthAuthorized,

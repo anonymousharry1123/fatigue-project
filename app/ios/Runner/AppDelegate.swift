@@ -14,6 +14,7 @@ import UserNotifications
   private let healthStore = HKHealthStore()
   private var healthChannel: FlutterMethodChannel?
   private var screenTimeChannel: FlutterMethodChannel?
+  private var notificationSettingsChannel: FlutterMethodChannel?
   private var timezoneChannel: FlutterMethodChannel?
   private var backupChannel: FlutterMethodChannel?
   private var ai1CaptureChannel: FlutterMethodChannel?
@@ -50,6 +51,29 @@ import UserNotifications
       self?.handleScreenTimeCall(call, result: result)
     }
     self.screenTimeChannel = screenTimeChannel
+
+    let notificationSettingsChannel = FlutterMethodChannel(
+      name: "tonyo/notifications",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    notificationSettingsChannel.setMethodCallHandler { call, result in
+      guard call.method == "openSettings" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let settingsURL: String
+      if #available(iOS 16.0, *) {
+        settingsURL = UIApplication.openNotificationSettingsURLString
+      } else {
+        settingsURL = UIApplication.openSettingsURLString
+      }
+      guard let url = URL(string: settingsURL) else {
+        result(false)
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+    }
+    self.notificationSettingsChannel = notificationSettingsChannel
 
     let timezoneChannel = FlutterMethodChannel(
       name: "tonyo/timezone",

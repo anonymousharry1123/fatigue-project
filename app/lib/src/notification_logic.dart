@@ -1,3 +1,5 @@
+import 'package:timezone/timezone.dart' as timezone;
+import 'timezone_database.dart';
 import 'models.dart';
 import 'daily_plan_logic.dart';
 import 'local_day.dart';
@@ -33,9 +35,8 @@ abstract final class NotificationLogic {
   static const maximumForecastAge = Duration(hours: 12);
   static const maximumCoachPlanAge = Duration(hours: 12);
   static const maximumCoachReminders = 12;
-  // Optional evening prompts only; entries can be saved at any time.
-  static const studySleepHour = 18;
-  static const studyEnergyHour = 19;
+  static const defaultMorningMinutes = 9 * 60;
+  static const defaultEveningMinutes = 19 * 60;
   static const _coachIdNamespace = 0x40000000;
   static const _studyIdNamespace = 0x20000000;
   static const _idMask = _coachIdNamespace - 1;
@@ -52,6 +53,9 @@ abstract final class NotificationLogic {
     bool coachPlanEnabled = false,
     bool currentEvidenceEligible = false,
     bool studyLogEnabled = false,
+    int morningReminderMinutes = defaultMorningMinutes,
+    int eveningReminderMinutes = defaultEveningMinutes,
+    String? timezoneName,
     List<SignalReading> signals = const [],
     List<DailyCheckIn> checkIns = const [],
   }) {
@@ -68,7 +72,12 @@ abstract final class NotificationLogic {
         ? _coachReminders(now, recommendations)
         : const <GuidanceNotification>[];
     final study = enabled && studyLogEnabled
-        ? _studyReminders(now: now, signals: signals, checkIns: checkIns)
+        ? _studyReminders(
+            now: now,
+            morningMinutes: morningReminderMinutes,
+            eveningMinutes: eveningReminderMinutes,
+            timezoneName: timezoneName,
+          )
         : const <GuidanceNotification>[];
     if (coach.isEmpty && study.isEmpty) return forecast;
     final notifications = [...forecast.notifications, ...coach, ...study]
@@ -77,7 +86,7 @@ abstract final class NotificationLogic {
         return time != 0 ? time : left.id.compareTo(right.id);
       });
     return NotificationPlan(
-      state: coach.isEmpty ? forecast.state : NotificationPlanState.ready,
+      state: NotificationPlanState.ready,
       notifications: List.unmodifiable(notifications),
       dismissedRiskAlertCount: forecast.dismissedRiskAlertCount,
     );
@@ -212,89 +221,89 @@ abstract final class NotificationLogic {
 
   static List<GuidanceNotification> _studyReminders({
     required DateTime now,
-    required List<SignalReading> signals,
-    required List<DailyCheckIn> checkIns,
+    required int morningMinutes,
+    required int eveningMinutes,
+    required String? timezoneName,
   }) {
-    final reminders = <GuidanceNotification>[];
-    final sleepTimes = _upcomingStudyInstants(
-      now: now,
-      hour: studySleepHour,
-      satisfied: (day) => _mainSleepSavedOn(signals, day),
-    );
-    for (final (offset, sleepAt) in sleepTimes.indexed) {
-      reminders.add(
-        GuidanceNotification(
-          id: '${_dayId(localDay(sleepAt))}-study-sleep',
-          platformId: _studyIdNamespace | 0x100 | offset,
-          kind: GuidanceNotificationKind.studySleep,
-          scheduledAt: sleepAt,
-          title: 'Log main sleep',
-          body:
-              'Log your main sleep whenever it suits you. There is no deadline.',
-        ),
-      );
+    for (final minutes in [morningMinutes, eveningMinutes]) {
+      if (minutes < 0 || minutes >= 24 * 60) {
+        throw ArgumentError.value(
+          minutes,
+          'minutes',
+          'Use a local time within one day.',
+        );
+      }
     }
-    final energyTimes = _upcomingStudyInstants(
-      now: now,
-      hour: studyEnergyHour,
-      satisfied: (day) => _eveningEnergySavedOn(checkIns, day),
-    );
-    for (final (offset, energyAt) in energyTimes.indexed) {
-      reminders.add(
-        GuidanceNotification(
-          id: '${_dayId(localDay(energyAt))}-study-energy',
-          platformId: _studyIdNamespace | 0x200 | offset,
-          kind: GuidanceNotificationKind.studyEnergy,
-          scheduledAt: energyAt,
-          title: 'Rate evening Energy',
-          body: 'Choose Evening and rate your Energy whenever it suits you.',
-        ),
+    DateTime next(int minutes) {
+      if (timezoneName != null) {
+        initializeTimezoneDatabase();
+        final location = timezone.getLocation(timezoneName);
+        final local = timezone.TZDateTime.from(now, location);
+        var at = timezone.TZDateTime(
+          location,
+          local.year,
+          local.month,
+          local.day,
+          minutes ~/ 60,
+          minutes % 60,
+        );
+        if (!at.isAfter(now)) {
+          at = timezone.TZDateTime(
+            location,
+            local.year,
+            local.month,
+            local.day + 1,
+            minutes ~/ 60,
+            minutes % 60,
+          );
+        }
+        return at;
+      }
+      final local = now.toLocal();
+      var at = DateTime(
+        local.year,
+        local.month,
+        local.day,
+        minutes ~/ 60,
+        minutes % 60,
       );
+      if (!at.isAfter(now)) {
+        at = DateTime(
+          local.year,
+          local.month,
+          local.day + 1,
+          minutes ~/ 60,
+          minutes % 60,
+        );
+      }
+      return at;
     }
-    return reminders;
+
+    // Two OS-managed daily requests do not expire when the app stays closed.
+    // Completed entries do not cancel tomorrow's recurring reminder.
+    return [
+      GuidanceNotification(
+        id: 'daily-morning-check-in',
+        platformId: _studyIdNamespace | 0x100,
+        kind: GuidanceNotificationKind.studyMorning,
+        scheduledAt: next(morningMinutes),
+        repeatsDaily: true,
+        timezoneName: timezoneName,
+        title: 'Morning check-in',
+        body: 'Take a moment to record how energetic you feel this morning.',
+      ),
+      GuidanceNotification(
+        id: 'daily-evening-check-in',
+        platformId: _studyIdNamespace | 0x200,
+        kind: GuidanceNotificationKind.studyEnergy,
+        scheduledAt: next(eveningMinutes),
+        repeatsDaily: true,
+        timezoneName: timezoneName,
+        title: 'Evening check-in',
+        body: 'Record your evening Energy and review your main sleep.',
+      ),
+    ];
   }
-
-  /// Upcoming optional reminder instants over the next 14 local days. A day is
-  /// skipped once its entry is already saved, and a time inside the one-minute
-  /// lead window waits until the next open day.
-  static List<DateTime> _upcomingStudyInstants({
-    required DateTime now,
-    required int hour,
-    required bool Function(DateTime day) satisfied,
-  }) {
-    final threshold = now.add(minimumLeadTime);
-    final times = <DateTime>[];
-    for (var offset = 0; offset < 14; offset++) {
-      final day = localDay(now, offset);
-      final at = DateTime(day.year, day.month, day.day, hour);
-      if (!at.isAfter(threshold) || satisfied(day)) continue;
-      times.add(at);
-    }
-    return times;
-  }
-
-  static bool _mainSleepSavedOn(List<SignalReading> signals, DateTime day) =>
-      signals.any(
-        (item) =>
-            item.type == SignalType.sleep && sameLocalDay(item.timestamp, day),
-      );
-
-  static bool _eveningEnergySavedOn(
-    List<DailyCheckIn> checkIns,
-    DateTime day,
-  ) => checkIns.any((item) {
-    final energy = item.energy;
-    if (item.period != CheckInPeriod.evening || energy == null) return false;
-    if (!energy.isFinite ||
-        energy < 1 ||
-        energy > 10 ||
-        energy != energy.roundToDouble()) {
-      return false;
-    }
-    // The user's selected period, rather than their clock time, identifies
-    // an Evening entry for flexible schedules.
-    return sameLocalDay(item.timestamp, day);
-  });
 
   static String _dayId(DateTime day) =>
       '${day.year.toString().padLeft(4, '0')}-'
