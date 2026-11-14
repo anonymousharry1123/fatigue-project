@@ -168,8 +168,35 @@ void main() {
         expect(find.text('Privacy center'), findsOneWidget);
         expect(controller.isCloudAuthenticated, isTrue);
         expect(controller.onboardingComplete, isFalse);
+        expect(controller.privacyConsent, isNull);
         expect(repository.writes, 0);
 
+        // Privacy center builds its long list lazily. Scroll as a user would
+        // before asking the shared form helper to interact with its fields.
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('privacy-age-band')),
+          500,
+          scrollable: find.descendant(
+            of: find.byKey(const Key('privacy-center-scroll')),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        expect(
+          tester
+              .widget<CheckboxListTile>(
+                find.byKey(const Key('privacy-acknowledgement')),
+              )
+              .value,
+          isFalse,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.byKey(const Key('privacy-accept-button')),
+              )
+              .onPressed,
+          isNull,
+        );
         await acknowledgeAdultPrivacy(tester);
         await tester.ensureVisible(
           find.byKey(const Key('privacy-accept-button')),

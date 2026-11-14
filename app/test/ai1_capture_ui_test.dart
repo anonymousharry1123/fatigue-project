@@ -68,9 +68,8 @@ void main() {
       MaterialApp(
         theme: buildTonyoTheme(),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
           child: child!,
         ),
         home: PrivacyCenterScreen(controller: controller),
@@ -94,12 +93,27 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('capture readable Apple Health sleep evidence'),
+      find.textContaining(
+        'Turning this off clears this study history. '
+        'Your ordinary sleep logs and check-ins stay.',
+      ),
       findsOneWidget,
     );
     expect(
       find.textContaining(
-        'History is excluded from ordinary backups and exports;',
+        'Any earlier fixed-schedule plan keeps its original timing rules.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'Review or export its retained history in Study tools.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'This history is excluded from ordinary backups and exports.',
       ),
       findsOneWidget,
     );
@@ -245,10 +259,10 @@ void main() {
       'Off · no study history is being saved.',
       'Saved revisions: {count}',
       'Turning this off clears this study history. Your ordinary sleep logs '
-          'and check-ins stay. Study tools can separately schedule morning '
-          'snapshots and capture readable Apple Health sleep evidence. History '
-          'is excluded from ordinary backups and exports; a private study '
-          'export is available in Study tools.',
+          'and check-ins stay. Any earlier fixed-schedule plan keeps its '
+          'original timing rules. Review or export its retained history in '
+          'Study tools. This history is excluded from ordinary backups and '
+          'exports.',
       'Could not update local study history. Please try again.',
       'Clear local history',
       'Local history could not be read. Clear it before starting again.',
