@@ -6,7 +6,7 @@ import 'package:app/src/models.dart';
 import 'package:app/src/screens/reaction_test_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/widgets/common_widgets.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'privacy_test_support.dart';

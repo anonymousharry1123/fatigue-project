@@ -1,4 +1,5 @@
 import 'local_day.dart';
+
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -309,9 +310,11 @@ class FirestoreCloudRepository
           )
           .toList();
     },
-    writeDay: (uid, id, data) => _user(
-      uid,
-    ).collection('forecastDays').doc(id).set(encodeFirestoreDocument(data)),
+    writeDay: (uid, id, data) =>
+        _user(uid)
+            .collection('forecastDays')
+            .doc(id)
+            .set(encodeFirestoreDocument(data)),
   );
 
   DocumentReference<Map<String, dynamic>> _user(String uid) {
@@ -338,9 +341,8 @@ class FirestoreCloudRepository
 
   @override
   Future<AccountPrivacySnapshot> readAccountPrivacy(String uid) async {
-    final snapshot = await _user(
-      uid,
-    ).get(const GetOptions(source: Source.server));
+    final snapshot = await _user(uid)
+        .get(const GetOptions(source: Source.server));
     _authorize(uid);
     final data = snapshot.data();
     if (data == null) {
@@ -433,9 +435,8 @@ class FirestoreCloudRepository
           flags is Map &&
           flags['outcomeCollection'] == true &&
           flags['trainingRecordUse'] == true,
-      outcomeConsentUpdatedAt: _dateTimeOrNull(
-        data['outcomeConsentUpdatedAt'],
-      )?.toUtc(),
+      outcomeConsentUpdatedAt: _dateTimeOrNull(data['outcomeConsentUpdatedAt'])
+          ?.toUtc(),
     );
   }
 
@@ -590,9 +591,9 @@ class FirestoreCloudRepository
           _invalidateInputCache();
           return null;
         }
-        if (beforeData['inputSyncVersion'] != 1) return readUser(uid);
+        if (beforeData['inputSyncVersion'] != 1) return await readUser(uid);
         final readRevision = _inputRevision(beforeData);
-        if (readRevision < revision) return readUser(uid);
+        if (readRevision < revision) return await readUser(uid);
         final changes = <InputChangeRecord>[];
         QueryDocumentSnapshot<Map<String, dynamic>>? after;
         if (readRevision > revision) {
@@ -944,9 +945,9 @@ class FirestoreCloudRepository
       if (cacheCanAdvance && cached != null && authoritative != null) {
         _cacheInputState(
           uid,
-          InputSyncSnapshot.fromState(
-            cached,
-          ).overlay(patch).toState(authoritative),
+          InputSyncSnapshot.fromState(cached)
+              .overlay(patch)
+              .toState(authoritative),
         );
       } else {
         _invalidateInputCache();
@@ -1134,9 +1135,10 @@ class FirestoreCloudRepository
 
   @override
   Future<ScoreSnapshot?> scoreSnapshotForDay(String uid, DateTime day) async {
-    final document = await _user(
-      uid,
-    ).collection('scoreSnapshots').doc(scoreSnapshotId(day)).get();
+    final document = await _user(uid)
+        .collection('scoreSnapshots')
+        .doc(scoreSnapshotId(day))
+        .get();
     final data = document.data();
     return data == null ? null : scoreSnapshotFromCloud(_normalizeDates(data));
   }
@@ -1184,9 +1186,10 @@ class FirestoreCloudRepository
     DateTime day,
   ) async {
     final start = localDay(day);
-    final snapshot = await _user(
-      uid,
-    ).collection('recommendations').where('day', isEqualTo: start).get();
+    final snapshot = await _user(uid)
+        .collection('recommendations')
+        .where('day', isEqualTo: start)
+        .get();
     final values = snapshot.docs
         .map(
           (document) => recommendationFromCloud(
@@ -1263,18 +1266,22 @@ class FirestoreCloudRepository
     String uid,
     String recommendationId, {
     required RecommendationStatus status,
-  }) => _user(uid).collection('recommendations').doc(recommendationId).update({
-    'status': status.name,
-  });
+  }) =>
+      _user(uid)
+          .collection('recommendations')
+          .doc(recommendationId)
+          .update({'status': status.name});
 
   @override
   Future<void> setRecommendationFeedback(
     String uid,
     String recommendationId, {
     required bool helpful,
-  }) => _user(uid).collection('recommendations').doc(recommendationId).update({
-    'feedback': helpful,
-  });
+  }) =>
+      _user(uid)
+          .collection('recommendations')
+          .doc(recommendationId)
+          .update({'feedback': helpful});
 
   @override
   Future<void> applyRecommendationAction(
@@ -1378,9 +1385,10 @@ class FirestoreCloudRepository
   @override
   Future<List<RiskAlert>> riskAlertsForDay(String uid, DateTime day) async {
     final start = localDay(day);
-    final snapshot = await _user(
-      uid,
-    ).collection('riskAlerts').where('day', isEqualTo: start).get();
+    final snapshot = await _user(uid)
+        .collection('riskAlerts')
+        .where('day', isEqualTo: start)
+        .get();
     final values = snapshot.docs
         .map(
           (document) =>
@@ -1420,9 +1428,11 @@ class FirestoreCloudRepository
     String uid,
     String alertId, {
     required bool dismissed,
-  }) => _user(uid).collection('riskAlerts').doc(alertId).set({
-    'dismissed': dismissed,
-  }, SetOptions(merge: true));
+  }) =>
+      _user(uid)
+          .collection('riskAlerts')
+          .doc(alertId)
+          .set({'dismissed': dismissed}, SetOptions(merge: true));
 
   @override
   Future<void> clearGuidance(String uid) async {
@@ -1617,9 +1627,8 @@ class _FirestoreUserDataLifecycleStore implements UserDataLifecycleStore {
 
   @override
   Future<Map<String, Object?>?> readUserDocument(String uid) async {
-    final document = await _user(
-      uid,
-    ).get(const GetOptions(source: Source.server));
+    final document = await _user(uid)
+        .get(const GetOptions(source: Source.server));
     _authorize(uid);
     final data = document.data();
     return data == null

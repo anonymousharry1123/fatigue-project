@@ -8,9 +8,8 @@ import 'package:app/src/l10n/app_localizations.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screens/research_export_screen.dart';
 import 'package:app/src/theme.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -241,15 +240,12 @@ Future<void> _pump(
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
       ],
       theme: buildTonyoTheme(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(large ? 2 : 1)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(large ? 2 : 1)),
         child: child!,
       ),
       home: ResearchExportScreen(controller: app, service: service),

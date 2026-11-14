@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Adds feedback inside the button's existing Material and InkWell, keeping
 /// layout, hit targets, keyboard handling, and the native ripple intact.

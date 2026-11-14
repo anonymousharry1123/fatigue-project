@@ -9,7 +9,7 @@ import 'package:app/src/screens/account_sign_in_dialog.dart';
 import 'package:app/src/screens/profile_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

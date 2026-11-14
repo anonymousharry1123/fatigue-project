@@ -4,7 +4,7 @@ import 'package:app/src/app_controller.dart';
 import 'package:app/src/l10n/app_localizations.dart';
 import 'package:app/src/screens/privacy_center_screen.dart';
 import 'package:app/src/theme.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -6,7 +6,39 @@ App icon: [Tonyo wave icon](assets/branding/tonyo-app-icon.png) ·
 [source, platform exports, and preparation prompt](assets/branding/tonyo-icon-design.md).
 Installed in the Android, iOS, macOS, Windows, and web launcher assets.
 
+Current app release: **0.36.1+40**, using **Flutter 3.50.0 stable / Dart 3.14.0**.
+The iOS app and Screen Time extension use matching version numbers. This release
+includes the Sleep & Energy experiment and retains the existing K12 signing team.
+The experiment's private prediction storage is available on iPhone; other
+platforms can inspect readiness. Use the fixed web port `7357` when launching a
+browser preview so existing browser data remains at the same origin.
+
 ## Flexible daily collection
+
+**Profile → Sleep & Energy experiment** shows saved record counts, compatible
+sleep/Evening Energy pairs, exclusions, and whether new paired days have arrived.
+The training button saves a device-local chronological regression experiment,
+including its holdout size and errors against the frozen training mean and last
+training rating. Small samples are exploratory; these fits do not alter Tonyo's
+normal Energy score. Sources, questionnaire definitions, languages, and timezones
+remain separate.
+
+Optional future prediction logging is off by default. After an explicit fit and
+opt-in, the iPhone can save predictions while the app is foregrounded and after
+successful record saves. A native durable receipt must precede the Evening
+answer; logging pauses while any check-in editor is open. Estimates stay hidden
+until a valid later answer is saved. Failed captures reserve an unscored day;
+source or target edits invalidate the old result permanently. These private,
+owner-scoped native files are excluded from ordinary cloud sync and app exports.
+Turning logging off retains results; removing experiment history keeps ordinary
+records. Withdrawing Outcome learning, clearing tracking data, and account reset
+erase experiment history. Disconnecting Health retires Health-derived results.
+
+The activity comparison uses **explicitly logged previous-day workout hours**
+that were already available with the sleep features. Missing activity is never
+zero. It requires at least 25 complete compatible pairs and five held-out days,
+then compares sleep-only and sleep-plus-activity on identical rows. This is an
+engineering collection guard, not a claim that 25 days establish reliability.
 
 As of October 18, 2026, new **Morning** check-ins collect **Energy only**. **Evening** check-ins keep the full optional questionnaire and a link to log or review the last main sleep. Both periods can be saved at any time. Enter actual sleep/wake dates and times; existing answers are preserved.
 

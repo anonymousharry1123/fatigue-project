@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -28,6 +28,7 @@ import 'ml_prep_screen.dart';
 import 'model_transparency_screen.dart';
 import 'privacy_center_screen.dart';
 import 'research_export_screen.dart';
+import 'sleep_energy_screen.dart';
 import 'questionnaire_library_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -73,9 +74,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               CircleAvatar(
                 radius: 34,
-                backgroundColor: TonyoPalette.of(
-                  context,
-                ).primary.withValues(alpha: .22),
+                backgroundColor: TonyoPalette.of(context).primary
+                    .withValues(alpha: .22),
                 child: Text(
                   profile.name.trim().isEmpty
                       ? 'T'
@@ -559,6 +559,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           _SettingTile(
+            key: const Key('sleep-energy-setting'),
+            icon: Icons.science_outlined,
+            title: 'Sleep & Energy experiment',
+            subtitle: 'Paired days, training results & future predictions',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SleepEnergyScreen(controller: controller),
+              ),
+            ),
+          ),
+          _SettingTile(
             key: const Key('privacy-center-setting'),
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy center',
@@ -988,9 +999,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (_) => ChangePasswordDialog(controller: controller),
     );
     if (changed != true || !context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.tr('Password updated.'))));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(context.tr('Password updated.'))));
   }
 
   Future<void> _saveDeviceBackup(AppController controller) async {
@@ -1098,20 +1108,17 @@ class _OutcomeLearningSheet extends StatelessWidget {
             const _ScreenTimePrivacyRow(
               icon: Icons.bolt_rounded,
               title: 'Observed energy',
-              detail:
-                  'Future check-in energy and optional ratings after completed Coach blocks become linked private outcomes.',
+              detail: 'Future check-in energy and optional ratings after completed Coach blocks become linked private outcomes.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.timer_outlined,
               title: 'Cognitive outcomes',
-              detail:
-                  'Future reaction-test results remain signals and are linked as cognitive outcome records.',
+              detail: 'Future reaction-test results remain signals and are linked as cognitive outcome records.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.lock_outline_rounded,
               title: 'Explicit and owner-only',
-              detail:
-                  'Firestore rejects new outcome records unless both consent flags are on. Other users cannot read your records.',
+              detail: 'Firestore rejects new outcome records unless both consent flags are on. Other users cannot read your records.',
             ),
             const SizedBox(height: 8),
             SwitchListTile(
@@ -1686,20 +1693,17 @@ class _ScreenTimeReportSheet extends StatelessWidget {
             const _ScreenTimePrivacyRow(
               icon: Icons.edit_note_rounded,
               title: 'Manual input stays in control',
-              detail:
-                  'Hours you enter in Activity log override imported Apple totals for the same day. Turning off auto-sync stops new imports and keeps saved entries.',
+              detail: 'Hours you enter in Activity log override imported Apple totals for the same day. Turning off auto-sync stops new imports and keeps saved entries.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.lock_outline_rounded,
               title: 'Protected details stay with Apple',
-              detail:
-                  'Tonyo imports only daily totals, never app names, websites, categories, pickups, or notifications.',
+              detail: 'Tonyo imports only daily totals, never app names, websites, categories, pickups, or notifications.',
             ),
             const _ScreenTimePrivacyRow(
               icon: Icons.cloud_off_outlined,
               title: 'No protected report data in Firebase',
-              detail:
-                  'The optional private report below is view-only and exports no data. Auto-sync separately saves daily totals using your existing data and cloud-sync choices.',
+              detail: 'The optional private report below is view-only and exports no data. Auto-sync separately saves daily totals using your existing data and cloud-sync choices.',
             ),
             const SizedBox(height: 12),
             Text(
@@ -1824,10 +1828,8 @@ class _ScreenTimeReportSheet extends StatelessWidget {
       'Permission is optional and does not replace manual screen-time logging.',
     ScreenTimeAuthorizationState.denied =>
       'Tonyo continues using only the manual hours you choose to enter.',
-    ScreenTimeAuthorizationState.entitlementRequired =>
-      'This report activates only after Apple approves Family Controls access for this app.',
-    ScreenTimeAuthorizationState.error =>
-      'Manual screen-time logging remains available while the report is unavailable.',
+    ScreenTimeAuthorizationState.entitlementRequired => 'This report activates only after Apple approves Family Controls access for this app.',
+    ScreenTimeAuthorizationState.error => 'Manual screen-time logging remains available while the report is unavailable.',
     ScreenTimeAuthorizationState.unavailable =>
       'Device Activity reports require a supported iPhone or iPad.',
   };
@@ -2540,8 +2542,7 @@ class _NotificationStatus extends StatelessWidget {
       'The forecast is stale, so alerts are suppressed.',
     NotificationPlanState.lowConfidence =>
       'Data coverage is limited, so forecast alerts are suppressed.',
-    NotificationPlanState.uncalibratedForecast =>
-      'Forecast timing is uncalibrated. Only eligible schedule reminders can be sent.',
+    NotificationPlanState.uncalibratedForecast => 'Forecast timing is uncalibrated. Only eligible schedule reminders can be sent.',
     NotificationPlanState.noFutureWindows =>
       'No eligible upcoming reminders are available today.',
   };
@@ -2671,7 +2672,7 @@ class _CloudSyncRecoveryCardState extends State<_CloudSyncRecoveryCard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(
-            header: true,
+            headingLevel: 2,
             child: Text(
               conflict
                   ? context.tr('Cloud sync needs review')

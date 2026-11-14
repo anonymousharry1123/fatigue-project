@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../app_controller.dart';
 import '../theme.dart';
@@ -188,7 +188,7 @@ class _ConflictCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Semantics(
-          header: true,
+          headingLevel: 2,
           child: Text(
             item.title,
             style: Theme.of(context).textTheme.titleMedium,

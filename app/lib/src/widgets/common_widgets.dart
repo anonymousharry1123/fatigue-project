@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -39,7 +39,7 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final titleWidget = Semantics(
-      header: true,
+      headingLevel: 2,
       child: Text(
         context.tr(title),
         style: Theme.of(context).textTheme.titleLarge,

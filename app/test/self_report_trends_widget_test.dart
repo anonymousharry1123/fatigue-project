@@ -9,10 +9,9 @@ import 'package:app/src/models.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/typography.dart';
 import 'package:app/src/widgets/self_report_trends_card.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'font_test_support.dart';
@@ -230,52 +229,48 @@ void main() {
     },
   );
 
-  testWidgets(
-    'synthetic screenshot QA',
-    (tester) async {
-      await tester.runAsync(() async {
-        await loadAppearanceFonts();
-        const cjkPath = String.fromEnvironment('TRENDS_CJK_FONT');
-        if (cjkPath.isNotEmpty) {
-          final cjk = FontLoader('TrendsCjk')
-            ..addFont(File(cjkPath).readAsBytes().then(ByteData.sublistView));
-          await cjk.load();
-        }
-      });
-      for (final largeText in [false, true]) {
-        await _pump(
-          tester,
-          reports: [
-            for (var day = 0; day < 9; day++)
-              _report(daysAgo: day, energy: 1 + day.toDouble()),
-          ],
-          signals: [for (var day = 0; day < 9; day++) _sleep(day)],
-          largeText: largeText,
-          realFont: true,
-        );
-        if (!largeText) {
-          await _capture(
-            tester,
-            'trends-qa-card',
-            '/tmp/self-report-trends-full-390.png',
-          );
-        }
-        for (final kind in ['rating', 'sleep']) {
-          await Scrollable.ensureVisible(
-            tester.element(find.byKey(Key('self-report-$kind-chart'))),
-            alignment: .3,
-          );
-          await tester.pumpAndSettle();
-          await _capture(
-            tester,
-            'trends-qa-viewport',
-            '/tmp/self-report-trends-$kind-${largeText ? '320-large' : '390'}.png',
-          );
-        }
+  testWidgets('synthetic screenshot QA', (tester) async {
+    await tester.runAsync(() async {
+      await loadAppearanceFonts();
+      const cjkPath = String.fromEnvironment('TRENDS_CJK_FONT');
+      if (cjkPath.isNotEmpty) {
+        final cjk = FontLoader('TrendsCjk')
+          ..addFont(File(cjkPath).readAsBytes().then(ByteData.sublistView));
+        await cjk.load();
       }
-    },
-    skip: !const bool.fromEnvironment('CAPTURE_TRENDS_QA'),
-  );
+    });
+    for (final largeText in [false, true]) {
+      await _pump(
+        tester,
+        reports: [
+          for (var day = 0; day < 9; day++)
+            _report(daysAgo: day, energy: 1 + day.toDouble()),
+        ],
+        signals: [for (var day = 0; day < 9; day++) _sleep(day)],
+        largeText: largeText,
+        realFont: true,
+      );
+      if (!largeText) {
+        await _capture(
+          tester,
+          'trends-qa-card',
+          '/tmp/self-report-trends-full-390.png',
+        );
+      }
+      for (final kind in ['rating', 'sleep']) {
+        await Scrollable.ensureVisible(
+          tester.element(find.byKey(Key('self-report-$kind-chart'))),
+          alignment: .3,
+        );
+        await tester.pumpAndSettle();
+        await _capture(
+          tester,
+          'trends-qa-viewport',
+          '/tmp/self-report-trends-$kind-${largeText ? '320-large' : '390'}.png',
+        );
+      }
+    }
+  }, skip: !const bool.fromEnvironment('CAPTURE_TRENDS_QA'));
 
   for (final brightness in Brightness.values) {
     for (final language in ['en', 'es', 'zh-Hans', 'zh-Hant']) {
@@ -378,15 +373,12 @@ Future<void> _pump(
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
       ],
       theme: _theme(brightness, realFont),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
         child: child!,
       ),
       home: RepaintBoundary(

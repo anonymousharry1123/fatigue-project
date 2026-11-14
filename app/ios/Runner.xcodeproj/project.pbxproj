@@ -17,12 +17,12 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A28000000000000000000001 /* ScreenTimeReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000011 /* ScreenTimeReportView.swift */; };
-		A29000000000000000000001 /* OuraAuthorizationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000011 /* OuraAuthorizationBridge.swift */; };
-		A29000000000000000000002 /* OuraAuthorizationURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000012 /* OuraAuthorizationURL.swift */; };
-		A30000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000011 /* PrivacyInfo.xcprivacy */; };
 		A28000000000000000000002 /* ScreenTimeReportExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000012 /* ScreenTimeReportExtension.swift */; };
 		A28000000000000000000003 /* TonyoDailyTotalReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000013 /* TonyoDailyTotalReport.swift */; };
 		A28000000000000000000004 /* TonyoDailyTotalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28000000000000000000014 /* TonyoDailyTotalView.swift */; };
+		A29000000000000000000001 /* OuraAuthorizationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000011 /* OuraAuthorizationBridge.swift */; };
+		A29000000000000000000002 /* OuraAuthorizationURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29000000000000000000012 /* OuraAuthorizationURL.swift */; };
+		A30000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000011 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,15 +67,15 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A28000000000000000000011 /* ScreenTimeReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeReportView.swift; sourceTree = "<group>"; };
-		A29000000000000000000011 /* OuraAuthorizationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationBridge.swift; sourceTree = "<group>"; };
-		A29000000000000000000012 /* OuraAuthorizationURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationURL.swift; sourceTree = "<group>"; };
 		A28000000000000000000012 /* ScreenTimeReportExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeReportExtension.swift; sourceTree = "<group>"; };
 		A28000000000000000000013 /* TonyoDailyTotalReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonyoDailyTotalReport.swift; sourceTree = "<group>"; };
 		A28000000000000000000014 /* TonyoDailyTotalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonyoDailyTotalView.swift; sourceTree = "<group>"; };
 		A28000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A28000000000000000000016 /* ScreenTimeReportExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = ScreenTimeReportExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		B32A22012F45A00100A02200 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		A29000000000000000000011 /* OuraAuthorizationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationBridge.swift; sourceTree = "<group>"; };
+		A29000000000000000000012 /* OuraAuthorizationURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuraAuthorizationURL.swift; sourceTree = "<group>"; };
 		A30000000000000000000011 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B32A22012F45A00100A02200 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -450,7 +450,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -583,7 +583,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -635,7 +635,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -706,14 +706,14 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				INFOPLIST_FILE = ScreenTimeReportExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.35.0;
+				MARKETING_VERSION = 0.36.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ios.tonyo.ScreenTimeReportExtension;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -730,14 +730,14 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				INFOPLIST_FILE = ScreenTimeReportExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.35.0;
+				MARKETING_VERSION = 0.36.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ios.tonyo.ScreenTimeReportExtension;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -752,14 +752,14 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				INFOPLIST_FILE = ScreenTimeReportExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.35.0;
+				MARKETING_VERSION = 0.36.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ios.tonyo.ScreenTimeReportExtension;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";

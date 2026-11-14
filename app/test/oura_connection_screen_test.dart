@@ -4,7 +4,7 @@ import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/oura_service.dart';
 import 'package:app/src/screens/oura_connection_screen.dart';
 import 'package:app/src/theme.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

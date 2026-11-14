@@ -8,8 +8,7 @@ import 'package:app/src/models.dart';
 import 'package:app/src/self_report_reference_logic.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/widgets/self_report_card.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -215,72 +214,69 @@ void main() {
     });
   }
 
-  test(
-    'local reload, edits and deletion recompute references without model inputs',
-    () async {
-      var clock = _now.subtract(const Duration(days: 7));
-      AppController controller() {
-        final app = AppController(
+  test('local reload, edits and deletion recompute references without model inputs', () async {
+    var clock = _now.subtract(const Duration(days: 7));
+    AppController controller() {
+      final app = AppController(
+        clock: () => clock,
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        deviceTimezoneService: DeviceTimezoneService(
           clock: () => clock,
-          initialPrivacyConsent: testAdultPrivacyConsent,
-          deviceTimezoneService: DeviceTimezoneService(
-            clock: () => clock,
-            readIdentifier: () async => 'Etc/UTC',
-          ),
-        );
-        addTearDown(app.dispose);
-        return app;
-      }
+          readIdentifier: () async => 'Etc/UTC',
+        ),
+      );
+      addTearDown(app.dispose);
+      return app;
+    }
 
-      final first = controller();
-      await first.load();
-      for (var day = 7; day >= 0; day--) {
-        clock = _now.subtract(Duration(days: day));
-        await first.saveSelfReportCheckIn(
-          id: 'saved-$day',
-          period: CheckInPeriod.morning,
-          energy: day == 0 ? 9 : 4,
-          fatigue: 6,
-          questionnaireLanguage: 'en',
-          questionnaireSnapshot: CheckInMeasurement.snapshot(
-            language: 'en',
-            translate: (text) => text,
-          ),
-        );
-      }
-      final restarted = controller();
-      await restarted.load();
-      SelfReportReferenceMetric metric(AppController app, String id) =>
-          SelfReportReferenceLogic.build(
-            checkIns: app.checkIns,
-            current: app.checkIns.singleWhere((row) => row.id == 'saved-0'),
-            asOf: clock,
-          ).metrics[id]!;
-      expect(metric(restarted, 'energy').average, 4);
-      expect(metric(restarted, 'energy').sampleCount, 7);
-      await restarted.saveSelfReportCheckIn(
-        id: 'saved-1',
+    final first = controller();
+    await first.load();
+    for (var day = 7; day >= 0; day--) {
+      clock = _now.subtract(Duration(days: day));
+      await first.saveSelfReportCheckIn(
+        id: 'saved-$day',
         period: CheckInPeriod.morning,
-        fatigue: 3,
+        energy: day == 0 ? 9 : 4,
+        fatigue: 6,
         questionnaireLanguage: 'en',
         questionnaireSnapshot: CheckInMeasurement.snapshot(
           language: 'en',
           translate: (text) => text,
         ),
       );
-      expect(metric(restarted, 'energy').average, isNull);
-      expect(metric(restarted, 'energy').sampleCount, 6);
-      expect(metric(restarted, 'fatigue').sampleCount, 7);
-      await restarted.deleteCheckIn('saved-2');
-      final afterDeletion = controller();
-      await afterDeletion.load();
-      expect(metric(afterDeletion, 'energy').sampleCount, 5);
-      expect(metric(afterDeletion, 'fatigue').average, isNull);
-      expect(afterDeletion.outcomes, isEmpty);
-      expect(afterDeletion.score.canEstimateEnergy, isFalse);
-      expect(afterDeletion.score.canEstimateCognitive, isFalse);
-    },
-  );
+    }
+    final restarted = controller();
+    await restarted.load();
+    SelfReportReferenceMetric metric(AppController app, String id) =>
+        SelfReportReferenceLogic.build(
+          checkIns: app.checkIns,
+          current: app.checkIns.singleWhere((row) => row.id == 'saved-0'),
+          asOf: clock,
+        ).metrics[id]!;
+    expect(metric(restarted, 'energy').average, 4);
+    expect(metric(restarted, 'energy').sampleCount, 7);
+    await restarted.saveSelfReportCheckIn(
+      id: 'saved-1',
+      period: CheckInPeriod.morning,
+      fatigue: 3,
+      questionnaireLanguage: 'en',
+      questionnaireSnapshot: CheckInMeasurement.snapshot(
+        language: 'en',
+        translate: (text) => text,
+      ),
+    );
+    expect(metric(restarted, 'energy').average, isNull);
+    expect(metric(restarted, 'energy').sampleCount, 6);
+    expect(metric(restarted, 'fatigue').sampleCount, 7);
+    await restarted.deleteCheckIn('saved-2');
+    final afterDeletion = controller();
+    await afterDeletion.load();
+    expect(metric(afterDeletion, 'energy').sampleCount, 5);
+    expect(metric(afterDeletion, 'fatigue').average, isNull);
+    expect(afterDeletion.outcomes, isEmpty);
+    expect(afterDeletion.score.canEstimateEnergy, isFalse);
+    expect(afterDeletion.score.canEstimateCognitive, isFalse);
+  });
 }
 
 Future<void> _expand(WidgetTester tester) async {
@@ -305,15 +301,12 @@ Future<void> _pump(
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
       ],
       theme: buildTonyoTheme(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
         child: child!,
       ),
       home: Scaffold(

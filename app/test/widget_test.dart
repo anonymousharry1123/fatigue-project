@@ -6,7 +6,7 @@ import 'package:app/src/health_service.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
 import 'package:app/src/screen_time_service.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

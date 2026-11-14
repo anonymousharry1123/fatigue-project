@@ -5,8 +5,7 @@ import 'package:app/src/l10n/app_localizations.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/screens/forecast_screen.dart';
 import 'package:app/src/widgets/common_widgets.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'privacy_test_support.dart';
@@ -47,9 +46,7 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
         ],
         home: AppScope(
           controller: controller,
@@ -162,8 +159,7 @@ void main() {
                 id: 'demo-sleep-0',
                 kind: ForecastEvidenceKind.signal,
                 label: 'Sleep',
-                detail:
-                    'Main-sleep completion at 8:00 AM; timing only in this curve',
+                detail: 'Main-sleep completion at 8:00 AM; timing only in this curve',
                 timestamp: now,
                 signalType: SignalType.sleep,
                 source: SignalSource.healthKit,
@@ -172,8 +168,7 @@ void main() {
                 id: 'health-sleep-import-123',
                 kind: ForecastEvidenceKind.signal,
                 label: 'Sleep',
-                detail:
-                    'Main-sleep completion at 7:00 AM; timing only in this curve',
+                detail: 'Main-sleep completion at 7:00 AM; timing only in this curve',
                 timestamp: now,
                 signalType: SignalType.sleep,
                 source: SignalSource.healthKit,

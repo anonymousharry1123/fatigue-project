@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_controller.dart';
 import 'l10n/app_localizations.dart';
@@ -169,9 +168,7 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: const [
                 AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
+                ...GlobalMaterialLocalizations.delegates,
               ],
               debugShowCheckedModeBanner: false,
               scrollBehavior: const TonyoScrollBehavior(),
@@ -230,9 +227,8 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
 
 bool _isGuidanceNotification(String payload) {
   if (studyReminderDestination(payload) != null) return true;
-  if (RegExp(
-    r'^tonyo-guidance:\d{4}-\d{2}-\d{2}-(?:crash|recovery)$',
-  ).hasMatch(payload)) {
+  if (RegExp(r'^tonyo-guidance:\d{4}-\d{2}-\d{2}-(?:crash|recovery)$')
+      .hasMatch(payload)) {
     return true;
   }
   const coachPrefix = 'tonyo-guidance:coach:';

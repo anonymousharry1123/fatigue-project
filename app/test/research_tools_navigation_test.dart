@@ -6,8 +6,7 @@ import 'package:app/src/screens/profile_screen.dart';
 import 'package:app/src/screens/questionnaire_library_screen.dart';
 import 'package:app/src/screens/research_export_screen.dart';
 import 'package:app/src/theme.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -145,9 +144,7 @@ Future<void> _pumpProfile(
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
         ],
         theme: buildTonyoTheme(),
         home: Scaffold(body: ProfileScreen(backupService: service)),

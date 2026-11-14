@@ -8,8 +8,7 @@ import 'package:app/src/screens/sleep_log_screen.dart';
 import 'package:app/src/screens/today_screen.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/widgets/self_report_card.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -534,23 +533,20 @@ Future<void> _pump(
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
         ],
         theme: buildTonyoTheme(),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
           child: child!,
         ),
         home: Builder(
           builder: (context) => Scaffold(
             body: FilledButton(
-              onPressed: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute<void>(builder: (_) => screen)),
+              onPressed: () =>
+                  Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => screen)),
               child: const Text('Open test screen'),
             ),
           ),

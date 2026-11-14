@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../app.dart';
+import '../app_controller.dart';
 import '../check_in_logic.dart';
 import '../check_in_measurement.dart';
 import '../l10n/app_localizations.dart';
@@ -40,6 +41,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   String? _validationError;
   String? _pendingCreateId;
   DateTime? _pendingCreateTimestamp;
+  AppController? _studyController;
   bool get _legacy =>
       widget.initialCheckIn != null &&
       !widget.initialCheckIn!.isResearchCheckIn;
@@ -91,6 +93,12 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final controller = AppScope.of(context);
+    if (!identical(controller, _studyController)) {
+      _studyController?.endSleepEnergyCheckInEditing();
+      _studyController = controller;
+      controller.beginSleepEnergyCheckInEditing();
+    }
     if (!_legacy && widget.initialCheckIn == null && _snapshot == null) {
       final localization = AppLocalizations.of(context);
       _language = localization.language;
@@ -103,6 +111,7 @@ class _DailyCheckInScreenState extends State<DailyCheckInScreen> {
 
   @override
   void dispose() {
+    _studyController?.endSleepEnergyCheckInEditing();
     noteController.dispose();
     super.dispose();
   }

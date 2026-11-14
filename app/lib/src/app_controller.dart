@@ -57,6 +57,8 @@ import 'screen_time_service.dart';
 import 'screen_time_logic.dart';
 import 'schedule_logic.dart';
 import 'sleep_sync_logic.dart';
+import 'sleep_energy_experiment.dart';
+import 'sleep_energy_study_service.dart';
 import 'today_dashboard_logic.dart';
 
 part 'backup_restore.dart';
@@ -66,6 +68,7 @@ part 'efficient_sync.dart';
 part 'local_continuity.dart';
 part 'learning_setup.dart';
 part 'oura_sync.dart';
+part 'sleep_energy_learning.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -79,6 +82,7 @@ class AppController extends ChangeNotifier {
     PrepDataSource? prepDataSource,
     EnergyModelStore? energyModelStore,
     Ai1CaptureStore? captureStore,
+    Ai1CaptureStore? sleepEnergyStore,
     this.energyModelMetadataWriter,
     CloudRepository? cloudRepository,
     RawHeartRateStore? rawHeartRateStore,
@@ -106,6 +110,8 @@ class AppController extends ChangeNotifier {
        _energyModelStore =
            energyModelStore ?? SharedPreferencesEnergyModelStore(),
        _ai1CaptureStore = captureStore ?? const MethodChannelAi1CaptureStore(),
+       _sleepEnergyStore =
+           sleepEnergyStore ?? const MethodChannelAi1CaptureStore(),
        _mlPrepService = prepDataSource == null
            ? null
            : MlPrepService(
@@ -194,6 +200,73 @@ class AppController extends ChangeNotifier {
   final MlPrepService? _mlPrepService;
   final EnergyModelStore _energyModelStore;
   final Ai1CaptureStore _ai1CaptureStore;
+  final Ai1CaptureStore _sleepEnergyStore;
+  late final _sleepEnergyStudy = SleepEnergyStudyService(
+    store: _sleepEnergyStore,
+    clock: _now,
+    onChanged: notifyListeners,
+  );
+  SleepEnergyReadiness? _sleepEnergyReadinessCache;
+  String? _sleepEnergyReadinessKey;
+  String? _sleepEnergyConsentClearedOwner;
+  String? _sleepEnergyError;
+  String _sleepEnergyPredictionMessage = 'Train an experimental model first.';
+  bool _sleepEnergyRefreshing = false;
+  bool _sleepEnergyRefreshAgain = false;
+  bool _sleepEnergyResetting = false;
+  int _sleepEnergyCheckInEditors = 0;
+  int _sleepEnergyEditorRevision = 0;
+
+  bool get sleepEnergyCanInspect =>
+      !_disposed &&
+      !_sleepEnergyResetting &&
+      !_isClearingTrackingData &&
+      _canProcessData &&
+      outcomeConsent;
+  SleepEnergyReadiness get sleepEnergyReadiness => _prepareSleepEnergy();
+  SleepEnergyRun? get sleepEnergyRun =>
+      sleepEnergyCanInspect && _sleepEnergyStudy.owner == _ai1Owner
+      ? (_sleepEnergyHealthWithdrawn &&
+                (_sleepEnergyStudy.run?.fits.any(
+                      (f) => f.sleepSource == 'healthKit',
+                    ) ??
+                    false)
+            ? null
+            : _sleepEnergyStudy.run)
+      : null;
+  bool get sleepEnergyAvailable =>
+      sleepEnergyCanInspect &&
+      _sleepEnergyStudy.owner == _ai1Owner &&
+      _sleepEnergyStudy.loaded &&
+      _sleepEnergyStudy.available;
+  bool get sleepEnergyBusy => _sleepEnergyStudy.busy;
+  bool get sleepEnergyLoggingEnabled =>
+      sleepEnergyAvailable && _sleepEnergyStudy.loggingEnabled;
+  String? get sleepEnergyStatus => sleepEnergyCanInspect
+      ? _sleepEnergyError ?? _sleepEnergyStudy.status
+      : null;
+  String get sleepEnergyPredictionStatus => _sleepEnergyPredictionMessage;
+  List<SleepEnergyPredictionEvaluation> get sleepEnergyProspectiveResults =>
+      _sleepEnergyResults();
+  Future<void> refreshSleepEnergyExperiment() => _refreshSleepEnergy();
+  Future<void> trainSleepEnergyModel() => _trainSleepEnergy();
+  Future<void> setSleepEnergyLoggingEnabled(bool value) =>
+      _setSleepEnergyLogging(value);
+  Future<void> recordSleepEnergyPrediction() => _recordSleepEnergy();
+  Future<void> clearSleepEnergyHistory() => _clearSleepEnergyHistory();
+
+  /// Reserve the whole editor lifetime, including unsaved ratings. A later
+  /// save timestamp cannot establish that a prediction preceded data entry.
+  void beginSleepEnergyCheckInEditing() {
+    _sleepEnergyCheckInEditors++;
+    _sleepEnergyEditorRevision++;
+  }
+
+  void endSleepEnergyCheckInEditing() {
+    if (_sleepEnergyCheckInEditors > 0) _sleepEnergyCheckInEditors--;
+    _sleepEnergyEditorRevision++;
+  }
+
   late final _ai1Capture = Ai1CaptureJournal(
     store: _ai1CaptureStore,
     clock: _now,
@@ -348,11 +421,18 @@ class AppController extends ChangeNotifier {
       return;
     }
     await _reconcileAi1Capture(_json());
+    await _refreshSleepEnergy();
   }
 
   void _unloadAi1Capture() {
     _ai1CaptureGeneration++;
     _ai1Capture.unload();
+    _sleepEnergyStudy.unload();
+    _sleepEnergyReadinessCache = null;
+    _sleepEnergyReadinessKey = null;
+    _sleepEnergyConsentClearedOwner = null;
+    _sleepEnergyError = null;
+    _sleepEnergyEditorRevision++;
   }
 
   _Ai1CaptureIntent? _captureIntent(
@@ -745,6 +825,7 @@ class AppController extends ChangeNotifier {
         (_) => unawaited(refreshAi1Study()),
       );
       unawaited(refreshAi1Study());
+      _scheduleSleepEnergyRefresh();
     }
     if (!_appInForeground) {
       _clearEditUploadWindow();
@@ -2820,6 +2901,7 @@ class AppController extends ChangeNotifier {
     }
     if (!_canProcessData) {
       isReady = true;
+      _scheduleSleepEnergyRefresh();
       notifyListeners();
       return;
     }
@@ -4349,10 +4431,12 @@ class AppController extends ChangeNotifier {
     try {
       if (!value) {
         outcomeConsent = false;
+        _sleepEnergyStudy.unload();
         _outcomes = [];
         _reconcileOutcomeSync();
-        await _discardPersonalizedModel();
         await _writeLocal();
+        await _eraseSleepEnergyForConsent();
+        await _discardPersonalizedModel();
       }
       final at = uid != null && cloudRepository != null
           ? await cloudRepository!.saveOutcomeConsent(uid, value)
@@ -4482,6 +4566,7 @@ class AppController extends ChangeNotifier {
       _writeLocal(),
       _disableContinuousHealthUpdates(),
       _clearAi1HealthEvidence(),
+      _sleepEnergyStudy.invalidateHealthSource(),
     ]);
     if (!_healthContextCurrent(context)) return;
     await _commit();
@@ -5341,6 +5426,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> _clearTrackingDataNow() async {
     final ensureCurrent = _beginMutation();
+    await _sleepEnergyStudy.clear(_ai1Owner);
+    ensureCurrent();
     while (_pendingCloudPush != null) {
       await _pendingCloudPush;
       ensureCurrent();
@@ -5579,6 +5666,8 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
+    _sleepEnergyResetting = true;
+    final experimentOwner = _ai1Owner;
     _clearEditUploadWindow();
     _cloudSyncActivities.clear();
     isCloudSyncing = false;
@@ -5598,6 +5687,8 @@ class AppController extends ChangeNotifier {
     // Invalidate its session, then drain it before removing the account cache,
     // so a completed deletion cannot be undone by a late language save.
     await _localWriteQueue;
+    await _sleepEnergyStudy.clear(experimentOwner);
+    await _sleepEnergyStore.clearAll();
     if (_rawHeartRateStore != null) {
       for (final owner in {
         _rawHeartRateOwner,
@@ -5757,6 +5848,7 @@ class AppController extends ChangeNotifier {
     if (_heartRateSummaryEnabled) {
       await _loadRawHeartRate('local', mergeCurrent: false);
     }
+    _sleepEnergyResetting = false;
     notifyListeners();
   }
 
@@ -6004,6 +6096,9 @@ class AppController extends ChangeNotifier {
       rethrow;
     } finally {
       if (identical(_localWriteQueue, tail)) _localWriteQueue = null;
+    }
+    if (revision == _sessionRevision && !_deviceSaveFailed) {
+      _scheduleSleepEnergyRefresh();
     }
   }
 

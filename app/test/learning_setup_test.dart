@@ -8,7 +8,7 @@ import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/privacy_consent.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // The preference platform injects a failed durable prompt-receipt write.

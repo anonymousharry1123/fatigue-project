@@ -14,7 +14,7 @@ import 'package:app/src/screens/profile_screen.dart';
 import 'package:app/src/screens/questionnaire_library_screen.dart';
 import 'package:app/src/screens/research_export_screen.dart';
 import 'package:app/src/screens/today_screen.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

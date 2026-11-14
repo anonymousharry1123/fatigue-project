@@ -2,7 +2,7 @@ import 'package:app/src/demo_data.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/privacy_consent.dart';
 import 'package:app/src/widgets/sleep_observation_card.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

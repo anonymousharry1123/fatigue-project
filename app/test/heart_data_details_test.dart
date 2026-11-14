@@ -2,7 +2,7 @@ import 'package:app/src/heart_derivation_logic.dart';
 import 'package:app/src/l10n/app_localizations.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/widgets/heart_data_details.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
