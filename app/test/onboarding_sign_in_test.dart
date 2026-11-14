@@ -178,6 +178,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Make it yours'), findsOneWidget);
 
+        await tester.enterText(
+          find.widgetWithText(TextField, 'First name'),
+          'Jordan',
+        );
         await tester.tap(find.text('Set my schedule'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Finish account setup'));
@@ -191,6 +195,9 @@ void main() {
         expect(repository.replaceUserCallCount, 0);
         final saved = (await repository.readUser('returning-uid'))!;
         expect(saved.onboardingComplete, isTrue);
+        expect(saved.profile.name, 'Jordan');
+        expect(saved.signals, isEmpty);
+        expect(saved.checkIns, isEmpty);
         expect(saved.profile.toJson(), controller.profile.toJson());
         expect(saved.privacyConsent, isNotNull);
       },

@@ -27,7 +27,6 @@ import 'cloud_sync.dart';
 import 'continuous_refresh_logic.dart';
 import 'daily_history_logic.dart';
 import 'daily_plan_logic.dart';
-import 'demo_data.dart';
 import 'device_timezone_service.dart';
 import 'fatigue_engine.dart';
 import 'energy_model_repository.dart';
@@ -3107,6 +3106,9 @@ class AppController extends ChangeNotifier {
     bool signInToExistingAccount = false,
   }) async {
     final normalizedEmail = email?.trim().toLowerCase();
+    if (newProfile.name.trim().isEmpty) {
+      throw ArgumentError('Enter your first name before finishing setup.');
+    }
     if (!signInToExistingAccount && !privacyFeaturesAllowed) {
       throw StateError('Complete privacy review before creating an account.');
     }
@@ -3169,6 +3171,9 @@ class AppController extends ChangeNotifier {
     if (!privacyFeaturesAllowed) {
       throw StateError('Complete privacy review before setup.');
     }
+    if (newProfile.name.trim().isEmpty) {
+      throw ArgumentError('Enter your first name before finishing setup.');
+    }
     if (cloudUid != null &&
         cloudRepository != null &&
         (_syncBaseline == null || _syncOwnerUid != cloudUid)) {
@@ -3184,12 +3189,13 @@ class AppController extends ChangeNotifier {
     profile = newProfile;
     accountEmail = _accountAuth.currentSession?.email ?? email ?? accountEmail;
     onboardingComplete = true;
-    if (signals.isEmpty) {
-      signals = buildDemoSignals(DateTime.now());
-      checkIns = buildDemoCheckIns(DateTime.now());
-    }
     await _setSignedOut(false);
-    await _commit(energyInputsChanged: true, immediateCloudUpload: true);
+    // Account setup persists only the person's profile and existing inputs.
+    // A new account has no measurements to seed or derive predictions from.
+    await _commit(
+      energyInputsChanged: signals.isNotEmpty || checkIns.isNotEmpty,
+      immediateCloudUpload: true,
+    );
     await _loadAi1Capture();
   }
 

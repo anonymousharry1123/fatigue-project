@@ -134,8 +134,11 @@ tests pass**, full Flutter analysis is clean, and five rendered UI captures were
 visually checked. No new runtime package or background model job was added.
 
 Rules and app changes must be released together. Existing old clients without a
-receipt cannot make new writes after these rules are deployed. Cloud Cohort Lab
-paths now require a trusted `syntheticLabAdmin` claim; ordinary accounts cannot
-use them as a sharing channel. Emulator success does not verify production IAM:
-Admin SDKs bypass client rules. No rules deployment, live-account mutation or
-real-device installation was performed by this implementation.
+receipt cannot make new writes after these rules are deployed. The legacy
+synthetic cohort paths require a trusted `syntheticLabAdmin` claim; ordinary
+accounts cannot use them as a sharing channel. Cohort Lab was removed from
+the app on 2026-11-08; the existing path restrictions remain for older clients,
+and removing the UI does not delete cloud data. Emulator success does not
+verify production IAM: Admin SDKs bypass client rules. No rules deployment,
+live-account mutation or real-device installation was performed by this
+implementation.

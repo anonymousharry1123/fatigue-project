@@ -778,8 +778,8 @@ CoachPriority coachPriorityFromGoal(String goal) => switch (goal) {
 
 class UserProfile {
   const UserProfile({
-    this.name = 'Maya',
-    this.ageRange = '16–18',
+    this.name = '',
+    this.ageRange = 'Not provided',
     this.role = 'Student athlete',
     this.goal = 'Balance focus and training',
     this.coachPriority = CoachPriority.balanced,
@@ -833,8 +833,8 @@ class UserProfile {
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final goal = (json['goal'] as String?) ?? 'Balance focus and training';
     return UserProfile(
-      name: (json['name'] as String?) ?? 'Maya',
-      ageRange: (json['ageRange'] as String?) ?? '16–18',
+      name: (json['name'] as String?) ?? '',
+      ageRange: (json['ageRange'] as String?) ?? 'Not provided',
       role: (json['role'] as String?) ?? 'Student athlete',
       goal: goal,
       preferredLanguage: normalizeLanguagePreference(json['preferredLanguage']),

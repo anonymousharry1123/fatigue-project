@@ -10,6 +10,7 @@ import '../models.dart';
 import '../language_preference.dart';
 import '../widgets/language_picker.dart';
 import '../notification_logic.dart';
+import '../public_links.dart';
 import '../screen_time_service.dart';
 import '../schedule_logic.dart';
 import '../sleep_sync_logic.dart';
@@ -20,7 +21,6 @@ import 'account_sign_in_dialog.dart';
 import 'appearance_screen.dart';
 import 'oura_connection_screen.dart';
 import 'change_password_dialog.dart';
-import 'admin/admin_cohort_screen.dart';
 import 'device_backup_flow.dart';
 import 'backup_restore_screen.dart';
 import 'sync_conflict_screen.dart';
@@ -591,24 +591,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           _SettingTile(
+            key: const Key('support-website-link'),
             icon: Icons.help_outline_rounded,
             title: 'Help & support',
-            subtitle: 'Tonyo is a wellness tool',
-            onTap: () => _preview(
-              context,
-              'Tonyo provides wellness estimates, not medical advice.',
-            ),
-          ),
-          SectionHeader(context.tr('Developer')),
-          _SettingTile(
-            icon: Icons.science_outlined,
-            title: 'Cohort Lab',
-            subtitle: 'Synthetic students · score debug dashboard',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => AdminCohortScreen(controller: controller),
-              ),
-            ),
+            subtitle: 'Contact and support website',
+            onTap: () => openTonyoPublicLink(context, TonyoPublicLink.support),
           ),
         ],
       ),
@@ -983,21 +970,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     name.dispose();
     if (updated != null) await controller.updateProfile(updated);
   }
-
-  static void _preview(BuildContext context, String message) =>
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(context.tr('Version 0.5 preview')),
-          content: Text(context.tr(message)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.tr('Close')),
-            ),
-          ],
-        ),
-      );
 
   static Future<void> _signIn(BuildContext context, AppController controller) =>
       showDialog<void>(

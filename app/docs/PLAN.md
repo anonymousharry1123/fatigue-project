@@ -217,15 +217,19 @@ Set up cloud persistence **before** scoring and forecast work so later versions 
 - Support export and permanent deletion of the user’s Firebase subtree (aligned with later Version 0.34)
 - Automated tests cover rule-safe repository mocks, schema serialization, and migration from local JSON
 
-### Side track — Synthetic Cohort Lab
+### Retired side track — Synthetic Cohort Lab
 
-Debug harness for energy/cognitive scoring against a 3000-row synthetic student CSV. Does **not** replace Versions 0.11–0.13.
+Removed from the app on 2026-11-08. This former debug harness scored a
+3000-row synthetic student CSV; it did not replace Versions 0.11–0.13.
+Its Profile entry, dashboard, bundled CSV, helper code, and cloud controls
+are no longer shipped. Independent model-evaluation tools and the shared
+scoring engine remain available, and real-account model preparation still
+uses the authenticated account's data.
 
-- Bundle `assets/data/synthetic_students.csv` and map rows into signals (sleep, folded screen+social, study, daily exercise, caffeine) plus derived check-ins
-- Score locally with `FatigueEngine`; visualize distributions and relationships in Profile → **Cohort Lab**
-- Optional Firestore publish under `syntheticUsers/{id}` + `syntheticCohort/summary` (authenticated read/write; real `users/{uid}` stays owner-only)
-- No Firebase Auth accounts are created for synthetic students
-- Shared tuning checklist: [`ENGINE_TUNING.md`](./ENGINE_TUNING.md)
+Legacy `syntheticUsers` and `syntheticCohort` paths remain denied to ordinary
+accounts by the existing trusted-operator claim requirement. Feature removal
+does not delete cloud data. The former tuning checklist is archived in
+[`ENGINE_TUNING.md`](./ENGINE_TUNING.md).
 
 ### Version 0.11 — Basic Energy Score ✅
 
@@ -248,7 +252,7 @@ Debug harness for energy/cognitive scoring against a 3000-row synthetic student 
 - Keep Cognitive drivers, confidence, and six-input completeness separate from Energy model metadata
 - Treat Version 0.11 Energy-only documents as valid legacy snapshots without creating a false zero-score comparison
 - Show the estimate, previous-day change, leading contributions, loading/offline state, and wellness-only language in Today and Insights
-- Keep the synthetic Cohort Lab compatible with the shared engine and show separate Energy/Cognitive driver cards
+- Historical integration included separate Energy/Cognitive driver cards in Cohort Lab; that UI was retired on 2026-11-08
 - Automated tests cover bounds, factors, baselines, legacy snapshots, schema round-trips, shared daily upserts, Firebase-controller integration, previous-day comparison, synthetic scoring, and UI presentation
 
 ### Version 0.13 — Today Dashboard ✅

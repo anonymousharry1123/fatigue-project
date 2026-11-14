@@ -30,6 +30,7 @@ void main() {
           )
           ..isReady = true
           ..onboardingComplete = true
+          ..profile = const UserProfile(name: 'Maya')
           ..signals = buildDemoSignals(DateTime(2026, 7, 21, 9))
           ..checkIns = buildDemoCheckIns(DateTime(2026, 7, 21, 9));
     return controller;

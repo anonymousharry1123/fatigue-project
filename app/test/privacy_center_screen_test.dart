@@ -207,6 +207,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('privacy policy opens before consent without changing data', (
+    tester,
+  ) async {
+    const channel = MethodChannel('tonyo/public_links');
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      calls.add(call);
+      return true;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    final controller = _PrivacyScreenController();
+    await open(tester, controller, requireReview: true);
+    expect(calls, isEmpty);
+    await tester.tap(find.byKey(const Key('privacy-policy-link')));
+    await tester.pumpAndSettle();
+    expect(calls.single.method, 'open');
+    expect(
+      calls.single.arguments,
+      'https://jjjjhogan.github.io/tonyoapp/privacy/',
+    );
+    expect(controller.acceptCalls, 0);
+    expect(controller.exportCalls, 0);
+    expect(controller.deleteCalls, 0);
+    expect(controller.outcomeCalls, 0);
+  });
+
   testWidgets(
     'opening requires an explicit age, region and acknowledgement; no side effects',
     (tester) async {

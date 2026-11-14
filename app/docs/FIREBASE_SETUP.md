@@ -204,42 +204,16 @@ and retains six earlier days only as score-model context. Aggregates and
 association summaries are calculated on the client and are not shared across
 users or persisted as cohort analytics.
 
-## Synthetic Cohort Lab
+## Retired synthetic cohort paths
 
-Tonyo can load a bundled synthetic student CSV for score debugging without
-creating Firebase Auth accounts.
+Cohort Lab was removed from the app on 2026-11-08, including its bundled
+student CSV and its publish, hydrate, and clear-cloud controls. The app no
+longer provides a synthetic cohort dashboard or writes through that feature.
 
-### Local visualizations
-
-1. Open the app and complete onboarding / sign in as usual (optional for charts).
-2. Profile → **Cohort Lab** → **Load CSV**.
-3. Overview / Relations / People tabs render in-memory scores from
-   `FatigueEngine`. Firebase config is not required for this path.
-
-### Optional Firestore publish
-
-Requires a signed-in Firebase account and valid compiled values in
-`lib/src/firebase_secrets.dart`.
-
-Published tree:
-
-```text
-syntheticUsers/{studentId}
-  meta, displayName, schemaVersion, updatedAt
-  ├── signals/{signalId}
-  ├── checkIns/{checkInId}
-  └── scoreSnapshots/latest
-syntheticCohort/summary
-```
-
-Security rules allow any authenticated user to read/write the synthetic tree
-only. Real `users/{uid}` documents remain owner-only. Redeploy rules after
-pulling this change:
-
-```sh
-firebase use fatigue-project-e28a3
-firebase deploy --only firestore:rules
-```
-
-Use **Clear cloud** in Cohort Lab to delete the published synthetic tree without
-touching production user accounts.
+The legacy `syntheticUsers/{studentId}` tree and `syntheticCohort/{docId}`
+remain restricted by `firestore.rules`: ordinary accounts cannot read or
+write them; access requires the trusted server-issued `syntheticLabAdmin`
+claim. These restrictions remain in place for older clients. Removing the
+feature does not delete existing cloud documents or change real
+`users/{uid}` data. No data migration or rules deployment is required for
+this UI removal.

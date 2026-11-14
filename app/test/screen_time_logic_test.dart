@@ -23,7 +23,7 @@ void main() {
     expect(readings.map((item) => item.id), ['manual']);
   });
 
-  test('Version 0.28 retains synthetic fallback for Cohort Lab', () {
+  test('Version 0.28 retains fallback for synthetic screen-time fixtures', () {
     final readings = ScreenTimeLogic.modelReadings([
       SignalReading(
         id: 'synthetic',

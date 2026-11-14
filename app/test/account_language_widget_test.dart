@@ -171,10 +171,14 @@ void main() {
       );
       await tester.tap(find.text('继续设置个人资料'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('设置我的作息'));
+      await tester.pumpAndSettle();
+      expect(find.text('请先输入名字再完成设置。'), findsOneWidget);
+      expect(controller.submitted, isNull);
       await tester.enterText(find.widgetWithText(TextField, '名字'), 'Synthetic');
       await tester.tap(find.text('设置我的作息'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('使用演示数据开始'));
+      await tester.tap(find.text('完成账户设置'));
       await tester.pumpAndSettle();
       expect(controller.submitted?.preferredLanguage, 'zh-Hans');
       expect(controller.submitted?.role, 'Student athlete');

@@ -337,11 +337,6 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "完成账户设置",
     "zh-Hant": "完成賬戶設置",
   },
-  "Start with demo data": {
-    "es": "Empezar con datos de demostración",
-    "zh-Hans": "使用演示数据开始",
-    "zh-Hant": "使用演示數據開始",
-  },
   "Your data choices come before account setup.": {
     "es": "Tus decisiones sobre los datos van antes de crear la cuenta.",
     "zh-Hans": "先选择如何使用数据，再设置账户。",
@@ -380,11 +375,11 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "账户通过 Firebase 安全同步你的 Tonyo 数据。",
     "zh-Hant": "賬戶通過 Firebase 安全同步你的 Tonyo 數據。",
   },
-  "Firebase values are not configured, so this build uses local demo storage.": {
+  "Firebase values are not configured, so this build stores your entries on this device.": {
     "es":
-        "Firebase no está configurado; esta versión usa almacenamiento local de demostración.",
-    "zh-Hans": "此版本未配置 Firebase，因此使用本地演示存储。",
-    "zh-Hant": "此版本未配置 Firebase，因此使用本地演示存儲。",
+        "Firebase no está configurado; esta versión guarda tus registros en este dispositivo.",
+    "zh-Hans": "此版本未配置 Firebase，因此将你的记录保存在此设备上。",
+    "zh-Hant": "此版本未配置 Firebase，因此將你的記錄保存在此裝置上。",
   },
   "Create a new account instead": {
     "es": "Crear una cuenta nueva",
@@ -449,11 +444,10 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "密码由 Firebase Authentication 处理。Tonyo 从不将密码写入 Firestore 或本地缓存。",
     "zh-Hant": "密碼由 Firebase Authentication 處理。Tonyo 從不將密碼寫入 Firestore 或本地緩存。",
   },
-  "Your password is validated for this demo flow but is never saved.": {
-    "es":
-        "La contraseña se valida para esta demostración, pero nunca se guarda.",
-    "zh-Hans": "演示流程会验证密码，但绝不会保存。",
-    "zh-Hant": "演示流程會驗證密碼，但絕不會保存。",
+  "Local mode does not save or verify your password.": {
+    "es": "El modo local no guarda ni verifica tu contraseña.",
+    "zh-Hans": "本地模式不会保存或验证你的密码。",
+    "zh-Hant": "本機模式不會儲存或驗證你的密碼。",
   },
   "Back to welcome": {
     "es": "Volver al inicio",
@@ -567,16 +561,21 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hant": "起床時間",
   },
   "Bedtime": {"es": "Hora de acostarse", "zh-Hans": "就寝时间", "zh-Hant": "就寢時間"},
-  "Start with a useful demo": {
-    "es": "Explora una demostración",
-    "zh-Hans": "先体验演示",
-    "zh-Hant": "先體驗演示",
+  "Start with your own data": {
+    "es": "Empieza con tus propios datos",
+    "zh-Hans": "从你自己的数据开始",
+    "zh-Hant": "從你自己的資料開始",
   },
-  "Fixture signals make every dashboard immediately explorable. Replace them with your entries whenever you’re ready.": {
+  "Your account starts with no sample measurements. Add a check-in or connect Apple Health when you are ready.": {
     "es":
-        "Los datos de ejemplo permiten explorar los paneles enseguida. Sustitúyelos por tus registros cuando quieras.",
-    "zh-Hans": "示例数据让你可以立即探索各页面。准备好后，可用自己的记录替换。",
-    "zh-Hant": "示例數據讓你可以立即探索各頁面。準備好後，可用自己的記錄替換。",
+        "Tu cuenta comienza sin mediciones de ejemplo. Añade un registro o conecta Salud de Apple cuando quieras.",
+    "zh-Hans": "你的账户初始不含示例测量数据。准备好后，可以添加自评或连接 Apple 健康。",
+    "zh-Hant": "你的帳戶初始不含範例測量資料。準備好後，可以新增自評或連接 Apple 健康。",
+  },
+  "Enter your first name before finishing setup.": {
+    "es": "Introduce tu nombre antes de finalizar la configuración.",
+    "zh-Hans": "请先输入名字再完成设置。",
+    "zh-Hant": "請先輸入名字再完成設定。",
   },
   "Could not open your local profile. Your saved data is kept. Please try again.": {
     "es":
@@ -879,6 +878,22 @@ const accountTranslations = <String, Map<String, String>>{
     "zh-Hans": "隐私中心",
     "zh-Hant": "隱私中心",
   },
+  "Privacy policy": {
+    "es": "Política de privacidad",
+    "zh-Hans": "隐私政策",
+    "zh-Hant": "隱私權政策",
+  },
+  "Contact and support website": {
+    "es": "Sitio web de contacto y soporte",
+    "zh-Hans": "联系与支持网站",
+    "zh-Hant": "聯絡與支援網站",
+  },
+  "Could not open the website. Copy the link to your browser.": {
+    "es": "No se pudo abrir el sitio web. Copia el enlace en tu navegador.",
+    "zh-Hans": "无法打开网站。请复制链接到浏览器。",
+    "zh-Hant": "無法開啟網站。請複製連結到瀏覽器。",
+  },
+  "Copy link": {"es": "Copiar enlace", "zh-Hans": "复制链接", "zh-Hant": "複製連結"},
   "Data choices, youth protections, export & deletion": {
     "es": "Opciones de datos, protección de menores, exportación y eliminación",
     "zh-Hans": "数据选择、未成年人保护、导出与删除",
@@ -898,17 +913,6 @@ const accountTranslations = <String, Map<String, String>>{
     "es": "Tonyo ofrece estimaciones de bienestar, no consejos médicos.",
     "zh-Hans": "Tonyo 提供健康生活估算，不提供医疗建议。",
     "zh-Hant": "Tonyo 提供健康生活估算，不提供醫療建議。",
-  },
-  "Developer": {"es": "Desarrollador", "zh-Hans": "开发者", "zh-Hant": "開發者"},
-  "Cohort Lab": {
-    "es": "Laboratorio de grupos",
-    "zh-Hans": "群体实验室",
-    "zh-Hant": "群體實驗室",
-  },
-  "Synthetic students · score debug dashboard": {
-    "es": "Estudiantes sintéticos · panel de depuración de puntuaciones",
-    "zh-Hans": "模拟学生 · 分数调试面板",
-    "zh-Hant": "模擬學生 · 分數調試面板",
   },
   "Not set": {"es": "Sin configurar", "zh-Hans": "未设置", "zh-Hant": "未設置"},
   "Wake time (HH:mm)": {

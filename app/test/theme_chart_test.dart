@@ -3,9 +3,7 @@ import 'dart:ui' as ui;
 import 'package:app/src/app.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/models.dart';
-import 'package:app/src/screens/admin/admin_charts.dart';
 import 'package:app/src/screens/reaction_test_screen.dart';
-import 'package:app/src/synthetic/cohort_stats.dart';
 import 'package:app/src/theme.dart';
 import 'package:app/src/widgets/common_widgets.dart';
 import 'package:flutter/material.dart';
@@ -18,12 +16,7 @@ void main() {
     ForecastPoint(DateTime(2026, 9, 20, 8), 50, 10),
     ForecastPoint(DateTime(2026, 9, 20, 12), 50, 10),
   ];
-  const scatterPoints = [
-    CohortScatterPoint(1, 40, 'first'),
-    CohortScatterPoint(2, 60, 'second'),
-  ];
-
-  testWidgets('ring, forecast and cohort painters repaint as themes change', (
+  testWidgets('ring and forecast painters repaint as themes change', (
     tester,
   ) async {
     final theme = ValueNotifier(buildTonyoTheme());
@@ -39,12 +32,6 @@ void main() {
               children: [
                 const ScoreRing(value: 65, label: 'Energy'),
                 ForecastChart(points: points, height: 150),
-                const CohortScatterChart(
-                  points: scatterPoints,
-                  xLabel: 'Sleep',
-                  yLabel: 'Energy',
-                  height: 150,
-                ),
               ],
             ),
           ),
@@ -53,7 +40,7 @@ void main() {
     );
 
     List<CustomPainter> painters() => [
-      for (final type in [ScoreRing, ForecastChart, CohortScatterChart])
+      for (final type in [ScoreRing, ForecastChart])
         tester
             .widget<CustomPaint>(
               find.descendant(
@@ -88,7 +75,6 @@ void main() {
     final withFont = painters();
     expect((withFont[1] as ForecastPainter).textStyle.fontFamily, 'ChartFont');
     expect(withFont[1].shouldRepaint(previous[1]), isTrue);
-    expect(withFont[2].shouldRepaint(previous[2]), isTrue);
   });
 
   testWidgets('identical custom colors retain dashed uncertainty boundaries', (

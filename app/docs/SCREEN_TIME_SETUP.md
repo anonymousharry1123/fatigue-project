@@ -33,6 +33,15 @@ in-flight imports. Missing data and errors never become zero-duration records.
 
 ## Apple requirements and shipping state
 
+The App Store release beginning with build 38 excludes the private report
+extension from Runner's build dependencies and embedded products. This follows
+the release decision on 2026-11-08 after Apple warned that build 37 embedded the
+extension without Family Controls distribution approval. The extension source
+and standalone Xcode target remain available for future approved provisioning.
+Manual duration entry remains available; both activation flags remain false.
+Before enabling reports in a later release, restore the Runner target dependency
+and ExtensionKit embed phase only after obtaining the required approved profiles.
+
 Apple documents customer data access as limited to devices located in the EU
 and signed in with an EU-country/region Apple Account. Development testing with
 an Apple-provided provisioning profile may work elsewhere. Only one app at a

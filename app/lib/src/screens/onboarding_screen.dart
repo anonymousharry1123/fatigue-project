@@ -185,9 +185,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                       : context.tr('Continue to my profile')
                                 : _page == 3
                                 ? context.tr('Set my schedule')
-                                : _existingAccountVerified
-                                ? context.tr('Finish account setup')
-                                : context.tr('Start with demo data'),
+                                : context.tr('Finish account setup'),
                           ),
                   ),
                 ),
@@ -247,7 +245,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'Your account securely syncs your Tonyo data through Firebase.',
                       )
               : context.tr(
-                  'Firebase values are not configured, so this build uses local demo storage.',
+                  'Firebase values are not configured, so this build stores your entries on this device.',
                 ),
           style: TextStyle(color: TonyoPalette.of(context).muted),
         ),
@@ -409,7 +407,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           'Firebase Authentication handles your password. Tonyo never writes passwords to Firestore or its local cache.',
                         )
                       : context.tr(
-                          'Your password is validated for this demo flow but is never saved.',
+                          'Local mode does not save or verify your password.',
                         ),
                   style: TextStyle(
                     color: TonyoPalette.of(context).muted,
@@ -798,13 +796,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    context.tr('Start with a useful demo'),
+                    context.tr('Start with your own data'),
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   SizedBox(height: 5),
                   Text(
                     context.tr(
-                      'Fixture signals make every dashboard immediately explorable. Replace them with your entries whenever you’re ready.',
+                      'Your account starts with no sample measurements. Add a check-in or connect Apple Health when you are ready.',
                     ),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
                   ),
@@ -822,7 +820,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final controller = AppScope.of(context);
     if (controller.canResumeLocalProfile) {
       // Resume the saved device profile without passing through setup, which
-      // would replace its profile and seeded data. Local mode is not auth.
+      // would replace its profile and saved data. Local mode is not auth.
       setState(() {
         _isSubmitting = true;
         _accountError = null;
@@ -933,6 +931,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
     }
+    if (_page == 3 && _nameController.text.trim().isEmpty) {
+      setState(() {
+        _accountError = 'Enter your first name before finishing setup.';
+      });
+      return;
+    }
     if (_page < 4) {
       setState(() {
         _isSubmitting = true;
@@ -955,7 +959,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = _nameController.text.trim();
     try {
       final profile = UserProfile(
-        name: name.isEmpty ? 'Your profile' : name,
+        name: name,
         ageRange:
             controller.privacyConsent?.ageBand.label ??
             _ageBand?.label ??

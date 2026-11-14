@@ -17,6 +17,77 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('missing profile fields never invent a name or age band', () {
+    expect(const UserProfile().name, isEmpty);
+    expect(const UserProfile().ageRange, 'Not provided');
+    final restored = UserProfile.fromJson(const {});
+    expect(restored.name, isEmpty);
+    expect(restored.ageRange, 'Not provided');
+  });
+
+  test(
+    'fresh cloud signup stores no sample inputs or derived records',
+    () async {
+      final auth = MemoryAccountAuth();
+      final repository = MemoryCloudRepository(signedInUid: 'test-uid');
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      await controller.completeOnboarding(
+        const UserProfile(name: 'Jordan', ageRange: '18+'),
+        email: 'jordan@example.com',
+        password: 'secure-pass',
+      );
+
+      expect(controller.onboardingComplete, isTrue);
+      expect(controller.signals, isEmpty);
+      expect(controller.checkIns, isEmpty);
+      expect(controller.outcomes, isEmpty);
+      expect(controller.score.canEstimateEnergy, isFalse);
+      expect(controller.score.canEstimateCognitive, isFalse);
+      expect(repository.scoreUpsertCallCount, 0);
+      expect(repository.forecastReplaceCallCount, 0);
+      final cloud = await repository.readUser('test-uid');
+      expect(cloud?.profile.name, 'Jordan');
+      expect(cloud?.signals, isEmpty);
+      expect(cloud?.checkIns, isEmpty);
+      final exported = await repository.exportUser('test-uid');
+      for (final records in (exported['collections'] as Map).values) {
+        expect(records, isEmpty);
+      }
+    },
+  );
+
+  test(
+    'blank name cannot create an account or a placeholder profile',
+    () async {
+      final auth = MemoryAccountAuth();
+      final repository = MemoryCloudRepository(signedInUid: 'test-uid');
+      final controller = AppController(
+        initialPrivacyConsent: testAdultPrivacyConsent,
+        accountAuth: auth,
+        cloudRepository: repository,
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
+      await expectLater(
+        controller.completeOnboarding(
+          const UserProfile(name: '   '),
+          email: 'jordan@example.com',
+          password: 'secure-pass',
+        ),
+        throwsArgumentError,
+      );
+      expect(auth.currentSession, isNull);
+      expect(controller.onboardingComplete, isFalse);
+      expect(await repository.readUser('test-uid'), isNull);
+    },
+  );
+
   test(
     'Version 0.5 restores onboarding and profile from local storage',
     () async {
@@ -39,7 +110,8 @@ void main() {
       expect(restored.profile.role, 'Athlete');
       expect(restored.accountEmail, 'jordan@example.com');
       expect(restored.exportJson(), isNot(contains('password')));
-      expect(restored.signals, isNotEmpty);
+      expect(restored.signals, isEmpty);
+      expect(restored.checkIns, isEmpty);
     },
   );
 
@@ -48,7 +120,7 @@ void main() {
       initialPrivacyConsent: testAdultPrivacyConsent,
     );
     await controller.load();
-    await controller.completeOnboarding(const UserProfile());
+    await controller.completeOnboarding(const UserProfile(name: 'Owner'));
     await controller.reset();
 
     final restored = AppController(

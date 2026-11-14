@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../app_controller.dart';
 import '../device_backup_service.dart';
 import '../privacy_consent.dart';
+import '../public_links.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import 'device_backup_flow.dart';
@@ -88,6 +89,16 @@ class _PrivacyCenterScreenState extends State<PrivacyCenterScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
               children: [
                 const _PrivacyHero(),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('privacy-policy-link'),
+                    onPressed: () =>
+                        openTonyoPublicLink(context, TonyoPublicLink.privacy),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: Text(context.tr('Privacy policy')),
+                  ),
+                ),
                 const SizedBox(height: 18),
                 if (_controller.deletionPending) ...[
                   _PrivacyNotice(

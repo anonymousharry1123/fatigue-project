@@ -1,10 +1,17 @@
-# FatigueEngine Tuning Loop (Cohort Lab + Versions 0.11–0.12)
+# Archived FatigueEngine Tuning Loop (Cohort Lab + Versions 0.11–0.12)
+
+> **Retired 2026-11-08:** Cohort Lab, its bundled CSV, and its dedicated helpers
+> and tests have been removed from the app. This document preserves the former
+> workflow as historical context; its UI steps and Cohort Lab commands are no
+> longer available. Use the current scoring tests and the independently
+> maintained model-evaluation tools for development. Real-account model
+> preparation remains separate from synthetic evaluation.
 
 > **2026-10-03 Phase 1 update:** Current biology, score availability, model compatibility and notification behavior is documented in [BIOLOGY_UPGRADE_PROGRESS.md](BIOLOGY_UPGRADE_PROGRESS.md). Version-specific behavior below is historical where it conflicts with that update.
 
-Use this checklist whenever you change scoring weights. The synthetic cohort
-(~3000 students) is the shared simulator; Versions 0.11–0.12 persist Energy
-and Cognitive scores through the live-app path. Keep both aligned.
+The former checklist used a synthetic cohort (~3000 students) as a shared
+simulator while Versions 0.11–0.12 persisted Energy and Cognitive scores
+through the live-app path. The remaining sections describe that retired setup.
 
 Record each attempt in [`ENGINE_TUNING_LOG.md`](./ENGINE_TUNING_LOG.md).
 

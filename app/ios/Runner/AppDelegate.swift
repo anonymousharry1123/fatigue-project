@@ -19,6 +19,7 @@ import UserNotifications
   private var backupChannel: FlutterMethodChannel?
   private var ai1CaptureChannel: FlutterMethodChannel?
   private var ouraChannel: FlutterMethodChannel?
+  private var publicLinksChannel: FlutterMethodChannel?
   private let ouraAuthorization = OuraAuthorizationBridge()
   private let backupExporter = DeviceBackupExporter()
   private let ai1CaptureStore = Ai1CaptureFileStore()
@@ -34,6 +35,29 @@ import UserNotifications
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let publicLinksChannel = FlutterMethodChannel(
+      name: "tonyo/public_links",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    publicLinksChannel.setMethodCallHandler { call, result in
+      guard call.method == "open" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let allowedLinks: Set<String> = [
+        "https://jjjjhogan.github.io/tonyoapp/privacy/",
+        "https://jjjjhogan.github.io/tonyoapp/",
+      ]
+      guard let address = call.arguments as? String,
+            allowedLinks.contains(address),
+            let url = URL(string: address) else {
+        result(false)
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in result(opened) }
+    }
+    self.publicLinksChannel = publicLinksChannel
+
     let channel = FlutterMethodChannel(
       name: "tonyo/health",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
