@@ -73,6 +73,8 @@ void main() {
     final choice = find.byKey(const Key('rating-energy-6'));
     await tester.scrollUntilVisible(choice, 250);
     await tester.ensureVisible(choice);
+    await tester.pumpAndSettle();
+    expect(choice.hitTestable(), findsOneWidget);
     final card = find.byKey(const Key('rating-energy'));
     expect(
       find.descendant(of: card, matching: find.text('Not answered')),
@@ -85,6 +87,15 @@ void main() {
     expect(
       find.descendant(of: card, matching: find.text('6 out of 10')),
       findsOneWidget,
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Energy, 6 out of 10')),
+      matchesSemantics(
+        label: 'Energy, 6 out of 10',
+        isButton: true,
+        hasSelectedState: true,
+        isSelected: true,
+      ),
     );
     semantics.dispose();
   });
@@ -137,19 +148,36 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('checkin-period-morning')),
       250,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(find.byKey(const Key('checkin-period-morning')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('rating-energy-6')),
       250,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.ensureVisible(find.byKey(const Key('rating-energy-6')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('rating-energy-6')).hitTestable(),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('rating-energy-6')));
-    await tester.scrollUntilVisible(find.byType(TextField), 300);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byType(TextField),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.enterText(find.byType(TextField), 'A busy day');
     await tester.tap(find.text('Save check-in'));
     await tester.pump();
     expect(find.text('Saving…'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).enabled,
+      isFalse,
+    );
     controller.pending.completeError(StateError('disk unavailable'));
     await tester.pumpAndSettle();
     expect(
@@ -171,6 +199,8 @@ void main() {
     expect(controller.checkInIds.first, isNotNull);
     expect(controller.checkInIds.toSet(), hasLength(1));
     expect(controller.checkIns, hasLength(1));
+    expect(controller.checkIns.single.energy, 6);
+    expect(controller.checkIns.single.note, 'A busy day');
     expect(tester.takeException(), isNull);
   });
 
@@ -274,9 +304,8 @@ Future<void> _pump(
       child: MaterialApp(
         theme: buildTonyoTheme(),
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(largeText ? 2 : 1)),
           child: child!,
         ),
         home: screen,

@@ -71,9 +71,8 @@ void main() {
       await tester.pumpAndSettle();
       final picker = find.byType(TimePickerDialog);
       expect(picker, findsOneWidget);
-      Navigator.of(
-        tester.element(picker),
-      ).pop(const TimeOfDay(hour: 8, minute: 15));
+      Navigator.of(tester.element(picker))
+          .pop(const TimeOfDay(hour: 8, minute: 15));
       await tester.pumpAndSettle();
       expect(controller.morningCheckInReminderMinutes, 495);
       expect(controller.eveningCheckInReminderMinutes, 1140);
@@ -280,6 +279,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('no cohort comparisons'), findsOneWidget);
+    await _scrollMainListTo(tester, find.text('Self-report trends'), 220);
     expect(find.byKey(const Key('self-report-trends')), findsOneWidget);
     await _scrollMainListTo(tester, find.text('7-day overview'), 220);
     expect(find.text('7-day overview'), findsOneWidget);
