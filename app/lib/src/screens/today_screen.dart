@@ -21,6 +21,7 @@ class TodayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final score = controller.score;
+    final fromSaved = controller.isScoreLoadedFromSnapshot(score);
     final available = score.canEstimateEnergy || score.canEstimateCognitive;
     final olderObservation = available
         ? null
@@ -107,7 +108,7 @@ class TodayScreen extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                controller.scoreLoadedFromSnapshot
+                                fromSaved
                                     ? Icons.cloud_done_rounded
                                     : Icons.chat_bubble_outline_rounded,
                                 color: TonyoPalette.of(context).muted,
@@ -117,7 +118,7 @@ class TodayScreen extends StatelessWidget {
                               Flexible(
                                 child: Text(
                                   context.tr(
-                                    controller.scoreLoadedFromSnapshot
+                                    fromSaved
                                         ? 'Saved snapshot'
                                         : 'Live estimate',
                                   ),
@@ -310,7 +311,8 @@ class TodayScreen extends StatelessWidget {
                 ),
                 const SectionHeader('Personal context'),
                 PersonalBaselineCard(
-                  baselines: controller.personalBaselines,
+                  baselines:
+                      score.personalBaselines ?? controller.personalBaselines,
                   compact: true,
                 ),
                 SectionHeader(

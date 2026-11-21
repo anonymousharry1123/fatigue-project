@@ -17,19 +17,18 @@ extension _EfficientSync on AppController {
       localDay(_lastHeartSummaryUploadAt!.toLocal()) !=
           localDay(_now().toLocal());
 
-  bool get _onlyDeferredHeartSummaries =>
-      !_heartSummaryPushDue &&
-      _pendingHeartRateDays.isNotEmpty &&
-      _deletedHeartRateDays.isEmpty &&
-      _legacyHeartRateCloud.isEmpty &&
-      !hasPendingOutcomeChanges &&
-      !hasPendingCoachChanges &&
-      _syncBaseline != null &&
-      _syncOwnerUid == cloudUid &&
-      InputSyncPatch(
-        _syncBaseline!,
-        _inputSnapshot(_cloudState(migrationVersion: localMigrationVersion)),
-      ).isEmpty;
+  bool get _onlyDeferredHeartSummaries => _areOnlyHeartSummariesDeferred();
+
+  bool _areOnlyHeartSummariesDeferred({int? pendingRecords}) {
+    if (_heartSummaryPushDue ||
+        _syncBaseline == null ||
+        _syncOwnerUid != cloudUid) {
+      return false;
+    }
+    final summaries = _pendingHeartRateDays.length;
+    return summaries > 0 &&
+        summaries == (pendingRecords ?? pendingCloudRecordCount);
+  }
 
   bool get _heartRateSummaryEnabled => _rawHeartRateStore != null;
   CloudQuotaGate? get _quotaGate =>
@@ -53,10 +52,11 @@ extension _EfficientSync on AppController {
         checkIns: snapshot.checkIns,
       );
 
-  InputSyncSnapshot _inputSnapshot(CloudUserState state) {
-    final snapshot = InputSyncSnapshot.fromState(state);
-    return _heartRateSummaryEnabled ? _withoutRawHeartRate(snapshot) : snapshot;
-  }
+  InputSyncSnapshot _inputSnapshot(CloudUserState state) =>
+      InputSyncSnapshot.fromState(
+        state,
+        excludeRawHeartRate: _heartRateSummaryEnabled,
+      );
 
   List<HeartRateDailySummary> get _localHeartRateDays {
     if (!identical(_heartRateSummarySource, signals) ||
@@ -102,9 +102,10 @@ extension _EfficientSync on AppController {
     final store = _rawHeartRateStore;
     if (store == null) return;
     final revision = _sessionRevision;
+    final hasSnapshot = await store.hasSnapshot(owner);
     if (_rawHeartRateSnapshotExpected &&
         _rawHeartRateOwner == owner &&
-        !await store.hasSnapshot(owner)) {
+        !hasSnapshot) {
       throw StateError(
         'Could not load device heart-rate history. The local database is missing.',
       );
@@ -112,13 +113,16 @@ extension _EfficientSync on AppController {
     final raw = await store.load(owner);
     final provenance = await store.loadProvenance(owner);
     if (revision != _sessionRevision) return;
-    final combined = HeartRateSummary.uniqueRawReadings([
-      ...raw,
-      if (mergeCurrent) ...signals.where(isRawHeartRate),
-    ]);
-    // Write before removing the legacy preferences copy. A failed transaction
-    // leaves both the original preferences and the old database intact.
-    await store.replace(owner, combined, provenance: provenance);
+    final incoming = mergeCurrent
+        ? signals.where(isRawHeartRate).toList()
+        : const <SignalReading>[];
+    final combined = HeartRateSummary.uniqueRawReadings(
+      incoming.isEmpty ? raw : [...raw, ...incoming],
+    );
+    if (!hasSnapshot || incoming.isNotEmpty) {
+      // Complete migration before removing the legacy preferences copy.
+      await store.replace(owner, combined, provenance: provenance);
+    }
     if (revision != _sessionRevision) return;
     if (_rawHeartRateOwner != owner) {
       _lastHeartSummaryUploadAt = null;
@@ -312,6 +316,16 @@ extension _EfficientSync on AppController {
         _rawHeartRateOwner != uid) {
       return;
     }
+    // Ordinary edits can upload immediately while today's heart-rate batch
+    // is deferred. Deletions, explicit refreshes and migration still need
+    // the confirmed on-disk records below.
+    if (!force &&
+        !_heartSummaryPushDue &&
+        _heartRateStorageVersion >= 1 &&
+        _legacyHeartRateCloud.isEmpty &&
+        _deletedHeartRateDays.isEmpty) {
+      return;
+    }
     // A second edit may arrive while the preferences write is awaiting disk.
     // Summarize only the database's committed snapshot, never newer mutable
     // in-memory rows. Those newer rows remain pending for the next commit.
@@ -470,7 +484,8 @@ extension _EfficientSync on AppController {
       if (!current()) return;
     }
     final efficient = _efficientInputRepository;
-    if (efficient != null &&
+    if (_heartRateStorageVersion < 1 &&
+        efficient != null &&
         _legacyHeartRateCloud.isEmpty &&
         _pendingHeartRateDays.isEmpty) {
       await _quotaGate!.run(uid, () => efficient.finishHeartRateMigration(uid));

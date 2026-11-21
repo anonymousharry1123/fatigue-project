@@ -57,10 +57,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         !_isSavingDeviceBackup &&
         !_isRestoringDeviceBackup &&
         controller.canExportDeviceBackup;
+    final backup = controller.cloudBackupStatus;
     final syncNeedsAttention =
-        controller.hasPendingCloudChanges ||
-        controller.hasPendingOutcomeChanges ||
-        controller.hasPendingCoachChanges ||
+        backup.hasPending ||
         controller.cloudSyncConflict ||
         controller.cloudSyncError != null ||
         controller.outcomeError != null;
@@ -131,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        context.tr(controller.cloudBackupLabel),
+                        context.tr(backup.label),
                         key: const Key('profile-backup-status'),
                         style: TextStyle(
                           color: syncNeedsAttention
@@ -205,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    context.tr(controller.cloudBackupLabel),
+                    context.tr(backup.label),
                     key: const Key('cloud-backup-label'),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
@@ -216,12 +215,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   Semantics(
                     liveRegion: true,
-                    child: Text(context.tr(controller.cloudSyncStatusMessage)),
+                    child: Text(context.tr(backup.message)),
                   ),
                   Text(
                     context.tr(
                       "{value0} pending changes",
-                      args: {'value0': controller.pendingCloudRecordCount},
+                      args: {'value0': backup.pendingRecords},
                     ),
                     key: const Key('cloud-sync-pending-count'),
                     style: TextStyle(color: TonyoPalette.of(context).muted),
@@ -291,11 +290,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   : 1;
               final width =
                   (constraints.maxWidth - (columns - 1) * 8) / columns;
+              final score = controller.score;
               final stats = [
                 _ProfileStat(
-                  controller.score.canEstimateEnergy
-                      ? '${controller.score.energy}'
-                      : '—',
+                  score.canEstimateEnergy ? '${score.energy}' : '—',
                   'Experimental energy',
                   TonyoPalette.of(context).secondary,
                 ),
@@ -305,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   TonyoPalette.of(context).primary,
                 ),
                 _ProfileStat(
-                  '${(controller.score.confidence * 100).round()}%',
+                  '${(score.confidence * 100).round()}%',
                   'Data coverage',
                   TonyoPalette.of(context).secondary,
                 ),

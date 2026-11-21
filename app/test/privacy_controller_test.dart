@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:app/src/ai1_capture_store.dart';
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
+import 'package:app/src/cloud_sync.dart';
 import 'package:app/src/energy_model_repository.dart';
 import 'package:app/src/health_service.dart';
 import 'package:app/src/ml_prep_models.dart';
@@ -64,6 +66,145 @@ CloudUserState _state({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('offline lease expiry during local restore opens privacy review', () async {
+    final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+    await h.controller.load();
+    final expires = h.controller.offlineAccessExpiresAt!;
+    h.now = expires.subtract(const Duration(minutes: 1));
+    h.auth.claimsError = 'network-request-failed';
+    final capture = _PausedCaptureStore();
+    final restarted = h.newController(captureStore: capture);
+    final reads = h.health.reads;
+    final launch = restarted.load();
+    await capture.started.future;
+    expect(restarted.isUsingOfflineData, true);
+    expect(restarted.isReady, false);
+    h.now = expires;
+    capture.resume.complete();
+    await launch;
+    expect(restarted.isReady, true);
+    expect(restarted.privacyReviewRequired, true);
+    expect(h.health.reads, reads);
+  });
+
+  for (final replaced in [false, true]) {
+    test('provider session change during claims, replacement=$replaced', () async {
+      final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+      await h.controller.load();
+      final started = h.auth.claimsStarted = Completer<void>();
+      final gate = h.auth.claimsGate = Completer<void>();
+      final restarted = h.newController();
+      final launch = restarted.load();
+      await started.future;
+      if (replaced) {
+        h.auth.session = const AccountSession(uid: 'other', email: 'other@example.test');
+        h.repository
+          ..signedInUid = 'other'
+          ..seed('other', _state(receipt: _adult).copyWith(signals: []));
+        final recheck = h.auth.claimsStarted = Completer<void>();
+        final verified = h.auth.claimsGate = Completer<void>();
+        gate.complete();
+        await recheck.future;
+        expect(restarted.isReady, false);
+        expect(restarted.privacyFeaturesAllowed, false);
+        verified.complete();
+        await launch;
+        expect(restarted.signals, isEmpty);
+        expect(restarted.privacyFeaturesAllowed, true);
+      } else {
+        h.auth.session = null;
+        h.auth.claimsError = 'user-disabled';
+        gate.complete();
+        await launch;
+        expect(restarted.isSignedOut, true);
+        expect(restarted.privacyFeaturesAllowed, false);
+        final nextLaunch = h.newController();
+        await nextLaunch.load();
+        expect(nextLaunch.isSignedOut, true);
+        expect(nextLaunch.signals.single.id, 'saved');
+      }
+      expect(restarted.isReady, true);
+    });
+  }
+
+  for (final signOut in [false, true]) {
+    test(
+      signOut
+          ? 'sign-out during launch backup stops later work for the old account'
+          : 'verified dashboard opens and accepts edits during launch backup',
+      () async {
+        final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+        await h.controller.load();
+        h.controller.setAppForeground(true);
+        await h.controller.saveActivityLog(
+          id: 'activity-pending',
+          hydrationLiters: 1,
+        );
+        h.controller.setAppForeground(false);
+
+        final restarted = h.newController();
+        final claims = h.auth.claimsGate = Completer<void>();
+        final started = h.repository.patchStarted = Completer<void>();
+        final backup = h.repository.patchGate = Completer<void>();
+        final priorClaims = h.auth.claimRefreshes;
+        final priorHealthReads = h.health.reads;
+        final launch = restarted.load();
+        await Future<void>.delayed(Duration.zero);
+        expect(restarted.isReady, false);
+        claims.complete();
+        await started.future.timeout(const Duration(seconds: 3));
+        expect(h.auth.claimRefreshes, priorClaims + 1);
+        expect(restarted.isReady, true);
+        expect(restarted.initialRefreshComplete, false);
+        expect(restarted.profile.name, 'Private owner');
+        expect(restarted.activityLogs.single.hydrationLiters, 1);
+        expect(restarted.privacyFeaturesAllowed, true);
+        if (signOut) {
+          await restarted.signOut();
+          expect(restarted.isSignedOut, true);
+          expect(restarted.privacyFeaturesAllowed, false);
+          expect(restarted.initialRefreshComplete, true);
+          h.repository
+            ..signedInUid = 'other'
+            ..seed('other', _state(receipt: _adult).copyWith(signals: []));
+          final signingIn = restarted.signIn(
+            email: 'other@example.test',
+            password: 'right',
+          );
+          expect(restarted.cloudUid, 'other');
+          backup.complete();
+          await Future.wait([launch, signingIn]);
+          expect(restarted.isSignedOut, false);
+          expect(restarted.privacyFeaturesAllowed, true);
+          expect(restarted.initialRefreshComplete, true);
+          expect(restarted.activityLogs, isEmpty);
+          expect(h.health.reads, priorHealthReads);
+        } else {
+          restarted.setAppForeground(true);
+          await restarted.saveActivityLog(
+            id: 'activity-pending',
+            hydrationLiters: 2,
+          );
+          backup.complete();
+          await launch;
+          expect(restarted.initialRefreshComplete, true);
+          expect(restarted.activityLogs.single.hydrationLiters, 2);
+          expect(restarted.hasPendingCloudChanges, true);
+          await restarted.syncPendingChanges();
+          expect(restarted.hasPendingCloudChanges, false);
+          final remote = (await h.repository.readUser('owner'))!;
+          expect(
+            remote.signals
+                .singleWhere((s) => s.groupId == 'activity-pending')
+                .value,
+            2,
+          );
+          restarted.setAppForeground(false);
+        }
+      },
+    );
+  }
 
   test(
     'fresh same-account sign-in reopens owned adult data during Firestore quota',
@@ -286,11 +427,11 @@ void main() {
     },
   );
 
-  test(
+  testWidgets(
     'foreground edits save immediately and upload once after the quiet period',
-    () async {
+    (tester) async {
       final h = _Harness(state: _state(receipt: _adult, onboarded: true));
-      await h.controller.load();
+      await tester.runAsync(h.controller.load);
       h.controller.setAppForeground(true);
       final writes = h.repository.inputPatchCallCount;
       await h.controller.saveActivityLog(
@@ -308,8 +449,12 @@ void main() {
       );
       expect(h.repository.inputPatchCallCount, writes);
       expect(h.controller.cloudBackupLabel, 'Backup pending');
-      h.now = h.now.add(const Duration(seconds: 3));
-      await Future<void>.delayed(const Duration(milliseconds: 2200));
+      h.now = h.now.add(const Duration(milliseconds: 349));
+      await tester.pump(const Duration(milliseconds: 349));
+      expect(h.repository.inputPatchCallCount, writes);
+      h.now = h.now.add(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump();
       expect(h.repository.inputPatchCallCount, writes + 1);
       expect(h.controller.hasPendingCloudChanges, false);
       expect(h.controller.cloudBackupLabel, 'Backed up');
@@ -321,6 +466,27 @@ void main() {
       h.controller.setAppForeground(false);
     },
   );
+
+  testWidgets('continuous foreground choices upload within two seconds', (
+    tester,
+  ) async {
+    final h = _Harness(state: _state(receipt: _adult, onboarded: true));
+    await tester.runAsync(h.controller.load);
+    h.controller.setAppForeground(true);
+    final writes = h.repository.inputPatchCallCount;
+    for (var i = 0; i < 8; i++) {
+      await h.controller.setPreferredLanguage(i.isEven ? 'es' : 'zh-Hant');
+      expect(h.repository.inputPatchCallCount, writes);
+      const step = Duration(milliseconds: 250);
+      h.now = h.now.add(step);
+      await tester.pump(step);
+    }
+    await tester.pump();
+    expect(h.repository.inputPatchCallCount, writes + 1);
+    final cloud = (await h.repository.readUser('owner'))!;
+    expect(cloud.profile.preferredLanguage, 'zh-Hant');
+    h.controller.setAppForeground(false);
+  });
 
   test(
     'closing during the quiet period retains changes and restart uploads them',
@@ -1067,8 +1233,9 @@ class _Harness {
   late final _Models models;
   late final AppController controller;
 
-  AppController newController() {
+  AppController newController({Ai1CaptureStore? captureStore}) {
     final controller = AppController(
+      captureStore: captureStore,
       accountAuth: auth,
       cloudRepository: repository,
       healthService: health,
@@ -1082,6 +1249,18 @@ class _Harness {
   }
 }
 
+class _PausedCaptureStore extends MethodChannelAi1CaptureStore {
+  final started = Completer<void>();
+  final resume = Completer<void>();
+
+  @override
+  Future<bool> isAvailable() async {
+    started.complete();
+    await resume.future;
+    return false;
+  }
+}
+
 class _Auth extends MemoryAccountAuth {
   _Auth(this.events) : super(session: _session, expectedPassword: 'right');
   final List<String> events;
@@ -1091,6 +1270,7 @@ class _Auth extends MemoryAccountAuth {
   bool grantGuardian = false;
   bool failClaims = false;
   String? claimsError;
+  Completer<void>? claimsStarted;
   Completer<void>? claimsGate;
   void Function()? afterReauth;
   @override
@@ -1110,6 +1290,8 @@ class _Auth extends MemoryAccountAuth {
   @override
   Future<void> refreshPrivacyClaims() async {
     claimRefreshes++;
+    claimsStarted?.complete();
+    claimsStarted = null;
     await claimsGate?.future;
     if (failClaims) throw StateError('offline token verification');
     if (claimsError != null) {
@@ -1149,6 +1331,19 @@ class _Repository extends MemoryCloudRepository {
   int outcomeWrites = 0;
   int deletes = 0;
   bool failPrivacyRead = false;
+  Completer<void>? patchStarted;
+  Completer<void>? patchGate;
+  @override
+  Future<void> applyInputPatch(String uid, InputSyncPatch patch) async {
+    final gate = patchGate;
+    if (gate != null) {
+      patchGate = null;
+      patchStarted!.complete();
+      await gate.future;
+    }
+    await super.applyInputPatch(uid, patch);
+  }
+
   String? readError;
   void checkRead() {
     if (readError != null) {

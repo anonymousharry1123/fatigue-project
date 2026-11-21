@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show listEquals;
+
 import 'ai1_capture_store.dart';
 import 'models.dart';
 import 'sleep_energy_experiment.dart';
@@ -360,6 +362,19 @@ class SleepEnergyStudyService {
     required SleepEnergyReadiness readiness,
     required Iterable<DailyCheckIn> checkIns,
     required Iterable<SignalReading> signals,
+  }) => reconcileHistory(
+    SleepEnergyHistory(checkIns: checkIns, signals: signals, asOf: clock()),
+    readiness: readiness,
+  );
+
+  bool get needsReconciliation =>
+      available &&
+      loaded &&
+      (_needsPersistence || run != null || _predictions.isNotEmpty);
+
+  Future<void> reconcileHistory(
+    SleepEnergyHistory history, {
+    SleepEnergyReadiness? readiness,
   }) async {
     if (!available || !loaded || owner == null) return;
     final key = owner!;
@@ -367,25 +382,25 @@ class SleepEnergyStudyService {
     await _serialized(() async {
       if (!_current(key, generation)) return;
       final oldRun = run;
+      final now = clock();
+      final current = history.at(now);
       final retainedRun =
           oldRun != null &&
-              !SleepEnergyExperiment.isRunCurrent(oldRun, readiness)
+              !SleepEnergyExperiment.isRunCurrent(
+                oldRun,
+                readiness ?? current.readiness,
+              )
           ? null
           : oldRun;
-      final revised = _predictions
-          .map(
-            (p) => SleepEnergyExperiment.evaluatePrediction(
-              p,
-              checkIns: checkIns,
-              signals: signals,
-              now: clock(),
-            ).prediction,
-          )
+      final revised = current
+          .evaluate(_predictions, now)
+          .map((result) => result.prediction)
           .toList();
+      // Evaluation returns existing immutable records until a result is sealed or
+      // invalidated. A retained identity means the persisted row is unchanged.
       if (!_needsPersistence &&
           identical(oldRun, retainedRun) &&
-          jsonEncode(revised.map((p) => p.toJson()).toList()) ==
-              jsonEncode(_predictions.map((p) => p.toJson()).toList())) {
+          listEquals(revised, _predictions)) {
         return;
       }
       // Invalidations must stay in memory even if a native replacement fails;

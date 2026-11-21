@@ -113,6 +113,19 @@ SelfReportSleepMatch _match(
 );
 
 void main() {
+  test('batch sleep matching resolves revisions before filtering types', () {
+    final sleep = _sleep('revised', recordedAt: _reportTime);
+    final match = SelfReportTrendsLogic.sleepMatcher([
+      sleep,
+      sleep.copyWith(
+        type: SignalType.hrv,
+        recordedAt: _reportTime.add(const Duration(minutes: 1)),
+      ),
+    ], _now);
+    expect(match(_report('first')).isMatched, isFalse);
+    expect(match(_report('second')).isMatched, isFalse);
+  });
+
   test('28 captured days preserve gaps and six independent raw measures', () {
     final reports = [
       _report(

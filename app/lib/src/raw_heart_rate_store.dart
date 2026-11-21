@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:sqflite/sqflite.dart';
 
 import 'heart_rate_summary.dart';
@@ -85,6 +86,8 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
   Database? _database;
   Future<void> _tail = Future.value();
   bool _closed = false;
+  _RawSnapshotInputs? _lastInputs;
+  (int, int, int)? _lastDatabaseVersion;
 
   Future<T> _serial<T>(Future<T> Function() operation) {
     final next = _tail.then((_) {
@@ -169,10 +172,16 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
       final db = await _open();
       final rows = await db.query(
         'raw_heart_rate',
+        columns: ['sample_id', 'provenance'],
         where: 'owner = ? AND provenance IS NOT NULL',
         whereArgs: [uid],
       );
-      return _decodeProvenance(rows.map(_RawRecord.fromSql));
+      return {
+        for (final row in rows)
+          row['sample_id'] as String: HeartRateSampleProvenance.fromJson(
+            jsonDecode(row['provenance'] as String) as Map<String, dynamic>,
+          ),
+      };
     });
   }
 
@@ -183,12 +192,17 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
     Map<String, HeartRateSampleProvenance> provenance = const {},
   }) {
     _validateOwner(uid);
-    // Capture and validate before scheduling so mutable caller lists cannot
-    // change while another account's transaction is in flight.
-    final replacement = _records(readings, provenance);
+    // Freeze the caller's collections before queueing. The row objects and
+    // provenance values are immutable.
+    final inputs = _RawSnapshotInputs(uid, readings, provenance);
     return _serial(() async {
       final db = await _open();
-      await db.transaction((txn) async {
+      final version = await db.transaction((txn) async {
+        if (inputs.matches(_lastInputs)) {
+          final currentVersion = await _databaseVersion(txn);
+          if (currentVersion == _lastDatabaseVersion) return currentVersion;
+        }
+        final replacement = _records(inputs.readings, inputs.provenance);
         final ownerRows = await txn.query(
           'raw_heart_rate_owners',
           columns: ['owner'],
@@ -237,8 +251,26 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
           changed = true;
         }
         if (changed) await batch.commit(noResult: true);
+        return _databaseVersion(txn);
       });
+      _lastInputs = inputs;
+      _lastDatabaseVersion = version;
     });
+  }
+
+  // Track row writes, commits from other connections, and schema repairs.
+  // Publish the stamps only after the transaction commits.
+  Future<(int, int, int)> _databaseVersion(Transaction txn) async {
+    final writes = Sqflite.firstIntValue(
+      await txn.rawQuery('SELECT total_changes()'),
+    )!;
+    final version = Sqflite.firstIntValue(
+      await txn.rawQuery('PRAGMA data_version'),
+    )!;
+    final schema = Sqflite.firstIntValue(
+      await txn.rawQuery('PRAGMA schema_version'),
+    )!;
+    return (writes, version, schema);
   }
 
   @override
@@ -258,6 +290,7 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
           whereArgs: [uid],
         );
       });
+      if (_lastInputs?.owner == uid) _lastInputs = null;
     });
   }
 
@@ -266,12 +299,32 @@ class SqliteRawHeartRateStore implements RawHeartRateStore {
     final result = _tail.then((_) async {
       if (_closed) return;
       _closed = true;
+      _lastInputs = null;
       await _database?.close();
       _database = null;
     });
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result;
   }
+}
+
+class _RawSnapshotInputs {
+  _RawSnapshotInputs(
+    this.owner,
+    Iterable<SignalReading> readings,
+    Map<String, HeartRateSampleProvenance> provenance,
+  ) : readings = readings.where(isRawHeartRate).toList(),
+      provenance = Map.of(provenance);
+
+  final String owner;
+  final List<SignalReading> readings;
+  final Map<String, HeartRateSampleProvenance> provenance;
+
+  bool matches(_RawSnapshotInputs? other) =>
+      other != null &&
+      owner == other.owner &&
+      listEquals(readings, other.readings) &&
+      mapEquals(provenance, other.provenance);
 }
 
 class _RawRecord {

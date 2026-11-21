@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'cloud_schema.dart';
+import 'heart_rate_summary.dart';
 import 'models.dart';
 
 Object? syncCanonical(Object? value) {
@@ -23,6 +24,39 @@ Object? syncCanonical(Object? value) {
 
 bool sameSyncValue(Object? a, Object? b) =>
     jsonEncode(syncCanonical(a)) == jsonEncode(syncCanonical(b));
+
+// Snapshots contain JSON data. Match the canonical wire representation without
+// sorting keys and allocating two JSON strings for each unchanged document.
+bool _sameInputValue(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is Map && b is Map) {
+    for (final key in a.keys) {
+      if (key != 'schemaVersion' && !_sameInputValue(a[key], b[key])) {
+        return false;
+      }
+    }
+    return b.keys.every(
+      (key) => key == 'schemaVersion' || b[key] == null || a.containsKey(key),
+    );
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_sameInputValue(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a == null || b == null) return false;
+  if (a is String && b is String) return a == b;
+  if (a is num && b is num && a.isFinite && b.isFinite) {
+    return a.runtimeType == b.runtimeType &&
+        a == b &&
+        (a != 0 || a.isNegative == b.isNegative);
+  }
+  // Legacy snapshots can still contain native dates or other encodable values.
+  return sameSyncValue(a, b);
+}
+
 Map<String, dynamic> _map(Object? value) =>
     Map<String, dynamic>.from(value as Map);
 
@@ -49,7 +83,24 @@ class InputSyncSnapshot {
   final Map<String, Map<String, dynamic>> signals;
   final Map<String, Map<String, dynamic>> checkIns;
 
-  factory InputSyncSnapshot.fromState(CloudUserState state) {
+  bool hasSameInputs(InputSyncSnapshot other) =>
+      identical(this, other) ||
+      (_sameInputValue(root, other.root) &&
+          _sameDocuments(signals, other.signals) &&
+          _sameDocuments(checkIns, other.checkIns));
+
+  static bool _sameDocuments(
+    Map<String, Map<String, dynamic>> a,
+    Map<String, Map<String, dynamic>> b,
+  ) =>
+      identical(a, b) ||
+      (a.length == b.length &&
+          a.entries.every((entry) => _sameInputValue(entry.value, b[entry.key])));
+
+  factory InputSyncSnapshot.fromState(
+    CloudUserState state, {
+    bool excludeRawHeartRate = false,
+  }) {
     final root =
         profileToCloud(
             profile: state.profile,
@@ -76,12 +127,18 @@ class InputSyncSnapshot {
           )
           ..remove('consentFlags')
           ..remove('updatedAt');
+    final signals = <String, Map<String, dynamic>>{};
+    for (final item in state.signals) {
+      if (excludeRawHeartRate && isRawHeartRate(item)) {
+        // A later observation with the same ID supersedes the earlier one.
+        signals.remove(item.id);
+      } else {
+        signals[item.id] = _map(syncCanonical(signalToCloud(item)));
+      }
+    }
     return InputSyncSnapshot(
       root: _inputRoot(root),
-      signals: {
-        for (final item in state.signals)
-          item.id: _map(syncCanonical(signalToCloud(item))),
-      },
+      signals: signals,
       checkIns: {
         for (final item in state.checkIns)
           item.id: _map(syncCanonical(checkInToCloud(item))),
@@ -224,7 +281,7 @@ class InputSyncPatch {
     Map<String, Map<String, dynamic>> after,
   ) => [
     for (final id in {...before.keys, ...after.keys})
-      if (!sameSyncValue(before[id], after[id]))
+      if (!_sameInputValue(before[id], after[id]))
         InputDocumentEdit(id, before[id], after[id]),
   ];
 

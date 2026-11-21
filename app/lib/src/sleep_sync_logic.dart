@@ -338,7 +338,6 @@ class SleepSyncLogic {
     Iterable<SignalReading> readings,
   ) {
     final all = readings.toList();
-    final main = preferredSleepReadings(all);
     final naps =
         all
             .where(
@@ -355,11 +354,21 @@ class SleepSyncLogic {
             );
             return source != 0 ? source : _mainSleepOrder(a, b);
           });
-    bool overlaps(SignalReading a, SignalReading b) {
-      final aStart = _intervalStart(a, all);
-      final bStart = _intervalStart(b, all);
-      return aStart.isBefore(b.timestamp) && bStart.isBefore(a.timestamp);
+    if (naps.isEmpty) return naps;
+    final main = preferredSleepReadings(all);
+    final bedtimes = <String, List<SignalReading>>{};
+    for (final row in all) {
+      final group = row.groupId;
+      if (row.type == SignalType.bedtime && group != null) {
+        (bedtimes[group] ??= []).add(row);
+      }
     }
+    final starts = {
+      for (final row in [...main, ...naps])
+        row: _intervalStart(row, bedtimes[row.groupId] ?? const []),
+    };
+    bool overlaps(SignalReading a, SignalReading b) =>
+        starts[a]!.isBefore(b.timestamp) && starts[b]!.isBefore(a.timestamp);
 
     final selected = <SignalReading>[];
     for (final nap in naps) {

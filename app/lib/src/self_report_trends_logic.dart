@@ -65,16 +65,14 @@ abstract final class SelfReportTrendsLogic {
       }
       selected.removeWhere((_, response) => !response.isValidResearchResponse);
     }
-    final sleep = signals.toList();
+    final match = sleepMatcher(signals, now);
     final days = List.generate(windowDays, (index) {
       final date = _dateText(start.add(Duration(days: index)));
       final response = selected[date];
       return SelfReportTrendDay(
         date: date,
         response: response,
-        matchedSleep: response == null
-            ? null
-            : matchSleep(response, sleep, now),
+        matchedSleep: response == null ? null : match(response),
       );
     });
     return SelfReportTrendsSummary(
@@ -112,12 +110,28 @@ abstract final class SelfReportTrendsLogic {
     DailyCheckIn response,
     Iterable<SignalReading> signals,
     DateTime asOf,
+  ) => sleepMatcher(signals, asOf)(response);
+
+  /// Reuse the same resolved observations for every check-in in a snapshot.
+  static SelfReportSleepMatch Function(DailyCheckIn) sleepMatcher(
+    Iterable<SignalReading> signals,
+    DateTime asOf,
   ) {
-    if (!_genuine(response) ||
-        !response.isValidResearchResponse ||
-        !_availableResponse(response, asOf)) {
-      return const SelfReportSleepMatch.unavailable(ineligibleResponseReason);
-    }
+    late final rows = _sleepRevisions(signals, asOf);
+    return (response) {
+      if (!_genuine(response) ||
+          !response.isValidResearchResponse ||
+          !_availableResponse(response, asOf)) {
+        return const SelfReportSleepMatch.unavailable(ineligibleResponseReason);
+      }
+      return _matchEligibleSleep(response, rows);
+    };
+  }
+
+  static List<SignalReading> _sleepRevisions(
+    Iterable<SignalReading> signals,
+    DateTime asOf,
+  ) {
     final revisions = <String, SignalReading>{};
     for (final signal in signals) {
       final prior = revisions[signal.id];
@@ -125,9 +139,22 @@ abstract final class SelfReportTrendsLogic {
         revisions[signal.id] = signal;
       }
     }
-    final rows = revisions.values
-        .where((signal) => _usableSignal(signal, asOf))
-        .toList();
+    // Resolve IDs before filtering: a newer revision can change signal type.
+    return revisions.values
+        .where(
+          (signal) =>
+              (signal.type == SignalType.sleep ||
+                  signal.type == SignalType.bedtime ||
+                  SleepSyncLogic.detailedStageTypes.contains(signal.type)) &&
+              _usableSignal(signal, asOf),
+        )
+        .toList(growable: false);
+  }
+
+  static SelfReportSleepMatch _matchEligibleSleep(
+    DailyCheckIn response,
+    List<SignalReading> rows,
+  ) {
     final candidates =
         rows.where((signal) {
           if (signal.type != SignalType.sleep ||

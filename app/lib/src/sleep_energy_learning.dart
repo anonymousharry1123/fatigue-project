@@ -1,5 +1,50 @@
 part of 'app_controller.dart';
 
+/// Retains immutable signal records. Check-in definitions may contain mutable
+/// maps, so their serialized values still participate in each comparison.
+class _SleepEnergyInputs {
+  _SleepEnergyInputs(this.owner, this.checkInsJson, List<SignalReading> signals)
+    : readings = signals
+          .where((s) => s.type != SignalType.heartRate)
+          .toList(growable: false);
+
+  final String owner;
+  final String checkInsJson;
+  final List<SignalReading> readings;
+
+  SleepEnergyHistory? _history;
+
+  SleepEnergyHistory historyAt(List<DailyCheckIn> reports, DateTime now) {
+    final cached = _history;
+    if (cached != null && cached.covers(now)) return cached;
+    return _history = SleepEnergyHistory(
+      checkIns: reports,
+      signals: readings,
+      asOf: now,
+    );
+  }
+
+  bool matches(
+    String currentOwner,
+    String currentCheckIns,
+    List<SignalReading> signals,
+  ) {
+    if (owner != currentOwner || checkInsJson != currentCheckIns) return false;
+    var i = 0;
+    for (final signal in signals) {
+      if (signal.type == SignalType.heartRate) continue;
+      if (i == readings.length) return false;
+      final previous = readings[i];
+      if (!identical(signal, previous)) {
+        if (!mapEquals(signal.toJson(), previous.toJson())) return false;
+        readings[i] = signal;
+      }
+      i++;
+    }
+    return i == readings.length;
+  }
+}
+
 /// Explicit local fits and optional future collection. This experiment never
 /// supplies the production score, cloud model, or recommendation engine.
 extension _SleepEnergyLearning on AppController {
@@ -7,55 +52,45 @@ extension _SleepEnergyLearning on AppController {
       !healthAuthorized &&
       healthAuthorization == HealthAuthorizationState.revoked;
 
-  List<SignalReading> get _sleepEnergySignals => signals
-      .where((s) => s.type != SignalType.heartRate)
-      .toList(growable: false);
-
-  String get _sleepEnergyInputsKey => jsonEncode({
-    'owner': _ai1Owner,
-    'checkIns': checkIns.map((r) => r.toJson()).toList(),
-    'signals': _sleepEnergySignals.map((s) => s.toJson()).toList(),
-  });
+  _SleepEnergyInputs get _sleepEnergyInputs {
+    final owner = _ai1Owner;
+    final reports = jsonEncode(checkIns.map((r) => r.toJson()).toList());
+    final cached = _sleepEnergyInputCache;
+    if (cached != null && cached.matches(owner, reports, signals)) {
+      return cached;
+    }
+    return _sleepEnergyInputCache = _SleepEnergyInputs(owner, reports, signals);
+  }
 
   SleepEnergyReadiness _prepareSleepEnergy() {
     final now = _now();
     if (!sleepEnergyCanInspect) {
       return SleepEnergyExperiment.prepare(checkIns: [], signals: [], now: now);
     }
-    // A minute also advances availability checks when the source lists have
-    // not changed. Account identity is part of the cache key.
-    final key = '${now.millisecondsSinceEpoch ~/ 60000}|$_sleepEnergyInputsKey';
-    if (_sleepEnergyReadinessKey != key) {
-      _sleepEnergyReadinessCache = SleepEnergyExperiment.prepare(
-        checkIns: checkIns,
-        signals: _sleepEnergySignals,
-        now: now,
-      );
-      _sleepEnergyReadinessKey = key;
-    }
-    return _sleepEnergyReadinessCache!;
+    return _sleepEnergyInputs.historyAt(checkIns, now).readiness;
   }
 
   List<SleepEnergyPredictionEvaluation> _sleepEnergyResults() {
     if (!sleepEnergyCanInspect || _sleepEnergyStudy.owner != _ai1Owner) {
       return [];
     }
-    final readings = _sleepEnergySignals;
-    return _sleepEnergyStudy.predictions
-        .map(
-          (p) => SleepEnergyExperiment.evaluatePrediction(
-            _sleepEnergyHealthWithdrawn && p.source == 'healthKit'
-                ? p.invalidate('health_source_disconnected', _now())
+    final predictions = _sleepEnergyStudy.predictions;
+    if (predictions.isEmpty) return [];
+    final now = _now();
+    return _sleepEnergyInputs
+        .historyAt(checkIns, now)
+        .evaluate(
+          predictions.map(
+            (p) => _sleepEnergyHealthWithdrawn && p.source == 'healthKit'
+                ? p.invalidate('health_source_disconnected', now)
                 : p,
-            checkIns: checkIns,
-            signals: readings,
-            now: _now(),
           ),
-        )
-        .toList(growable: false);
+          now,
+        );
   }
 
   Future<void> _eraseSleepEnergyForConsent() async {
+    _sleepEnergyInputCache = null;
     final owner = _ai1Owner;
     final revision = _sessionRevision;
     if (_sleepEnergyConsentClearedOwner == owner) return;
@@ -105,16 +140,15 @@ extension _SleepEnergyLearning on AppController {
         await _sleepEnergyStudy.invalidateHealthSource();
         if (!current()) return;
       }
-      final inputKey = _sleepEnergyInputsKey;
-      await _sleepEnergyStudy.reconcile(
-        readiness: sleepEnergyReadiness,
-        checkIns: List.of(checkIns),
-        signals: _sleepEnergySignals,
-      );
-      if (!current()) return;
-      // A queued reconciliation must not be treated as a fresh source check
-      // if an edit completed while its native write was running.
-      if (inputKey != _sleepEnergyInputsKey) _sleepEnergyRefreshAgain = true;
+      if (_sleepEnergyStudy.needsReconciliation) {
+        final inputs = _sleepEnergyInputs;
+        await _sleepEnergyStudy.reconcileHistory(
+          inputs.historyAt(checkIns, _now()),
+        );
+        if (!current()) return;
+        // An edit can finish while the native write is pending.
+        if (inputs != _sleepEnergyInputs) _sleepEnergyRefreshAgain = true;
+      }
       _sleepEnergyError = null;
     } on Object {
       if (current()) {
@@ -136,7 +170,7 @@ extension _SleepEnergyLearning on AppController {
           _sleepEnergyRefreshAgain = false;
           await _refreshSleepEnergy();
           if (_appInForeground &&
-              isReady &&
+              initialRefreshComplete &&
               !isPrivacyBusy &&
               sleepEnergyLoggingEnabled &&
               _sleepEnergyError == null &&
@@ -186,7 +220,7 @@ extension _SleepEnergyLearning on AppController {
     }
     final owner = _ai1Owner;
     final revision = _sessionRevision;
-    final key = _sleepEnergyInputsKey;
+    final key = _sleepEnergyInputs;
     final run = SleepEnergyExperiment.train(readiness, trainedAt: _now());
     if (_sleepEnergyHealthWithdrawn &&
         run.fits.any((f) => f.sleepSource == 'healthKit')) {
@@ -200,7 +234,7 @@ extension _SleepEnergyLearning on AppController {
           sleepEnergyCanInspect &&
           owner == _ai1Owner &&
           revision == _sessionRevision &&
-          key == _sleepEnergyInputsKey,
+          key == _sleepEnergyInputs,
     );
     ensureCurrent();
     await _refreshSleepEnergy();
@@ -258,12 +292,12 @@ extension _SleepEnergyLearning on AppController {
       return;
     }
     final editorRevision = _sleepEnergyEditorRevision;
-    final key = _sleepEnergyInputsKey;
+    final key = _sleepEnergyInputs;
     final result = SleepEnergyExperiment.draftPrediction(
       run: run,
       readiness: sleepEnergyReadiness,
       checkIns: checkIns,
-      signals: _sleepEnergySignals,
+      signals: key.readings,
       now: _now(),
       timezone: timezone,
     );
@@ -303,7 +337,7 @@ extension _SleepEnergyLearning on AppController {
           _localWriteQueue == null &&
           !isPrivacyBusy &&
           (!automatic || _appInForeground) &&
-          key == _sleepEnergyInputsKey,
+          key == _sleepEnergyInputs,
     );
     if (revision == _sessionRevision && owner == _ai1Owner) {
       _sleepEnergyPredictionMessage =

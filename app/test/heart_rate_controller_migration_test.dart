@@ -103,6 +103,23 @@ class _CloudDays extends MemoryHeartRateCloudStore {
   }
 }
 
+class _CountingRawStore extends MemoryRawHeartRateStore {
+  int snapshotChecks = 0;
+  int historyReads = 0;
+
+  @override
+  Future<List<SignalReading>> load(String uid) {
+    historyReads++;
+    return super.load(uid);
+  }
+
+  @override
+  Future<bool> hasSnapshot(String uid) {
+    snapshotChecks++;
+    return super.hasSnapshot(uid);
+  }
+}
+
 class _InterruptedRawStore extends MemoryRawHeartRateStore {
   void Function()? afterNextCommit;
   int commitsBeforeInterruption = 0;
@@ -257,17 +274,26 @@ void main() {
       final samples = [_heart('healthkit-a')];
       final state = _state(signals: samples);
       _legacyPreferences(cloud: state);
-      final raw = MemoryRawHeartRateStore();
+      final raw = _CountingRawStore();
       final events = <String>[];
       final days = _CloudDays(events);
       final repository = _Repository(events, raw, days)..seed('owner', state);
       final first = _app(repository: repository, raw: raw, days: days);
       await first.load();
+      expect(raw.snapshotChecks, 1);
       first.dispose();
       final writes = days.writes;
-      final restarted = _app(repository: repository, raw: raw, days: days);
+      final inputReads = repository.inputReads;
+      final restarted = _app(
+        repository: repository,
+        raw: raw,
+        days: days,
+        clock: () => _now.add(const Duration(hours: 4)),
+      );
       addTearDown(restarted.dispose);
       await restarted.load();
+      expect(repository.inputReads, inputReads + 1);
+      expect(raw.snapshotChecks, 2);
       expect(
         restarted.signals.where(isRawHeartRate).single.toJson(),
         samples.single.toJson(),
@@ -666,7 +692,7 @@ void main() {
       var clock = _now;
       final state = _state(signals: [_heart('healthkit-a')]);
       _legacyPreferences(cloud: state);
-      final raw = MemoryRawHeartRateStore();
+      final raw = _CountingRawStore();
       final events = <String>[];
       final days = _CloudDays(events);
       final repository = _Repository(events, raw, days)..seed('owner', state);
@@ -680,7 +706,9 @@ void main() {
       expect(days.writes, 1);
 
       first.signals = [...first.signals, _heart('healthkit-b', value: 80)];
+      final reads = raw.historyReads;
       await first.updateProfile(first.profile.copyWith(name: 'Updated'));
+      expect(raw.historyReads, reads);
       expect(days.writes, 1);
       expect((await repository.readUser('owner'))!.profile.name, 'Updated');
       expect(await raw.load('owner'), hasLength(2));

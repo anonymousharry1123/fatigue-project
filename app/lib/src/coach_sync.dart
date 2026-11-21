@@ -335,10 +335,15 @@ extension CloudRetry on AppController {
     if (!_appInForeground || cloudUid == null || cloudRepository == null) {
       return false;
     }
+    if (cloudSyncFailureKind != null) {
+      // Further local edits must respect an existing network retry or block.
+      scheduleCloudRetry();
+      return true;
+    }
     final now = _now();
     _editUploadStartedAt ??= now;
-    final maximum = _editUploadStartedAt!.add(const Duration(seconds: 10));
-    final quiet = now.add(const Duration(seconds: 2));
+    final maximum = _editUploadStartedAt!.add(const Duration(seconds: 2));
+    final quiet = now.add(const Duration(milliseconds: 350));
     _editUploadNotBefore = quiet.isBefore(maximum) ? quiet : maximum;
     _cloudRetryTimer?.cancel();
     _cloudRetryTimer = null;
@@ -355,7 +360,7 @@ extension CloudRetry on AppController {
   bool get _retryEligible =>
       !_disposed &&
       _appInForeground &&
-      isReady &&
+      initialRefreshComplete &&
       !isSignedOut &&
       !_isSigningOut &&
       !deletionPending &&
@@ -364,10 +369,8 @@ extension CloudRetry on AppController {
       cloudRepository != null &&
       _privacyConsent?.validAt(_now()) == true &&
       guardianConsentBlocker == null &&
-      hasAnyPendingCloudChanges &&
       !cloudSyncConflict &&
-      (cloudSyncFailureKind != CloudSyncFailureKind.quota ||
-          _quotaGate?.paused(cloudUid!) != true) &&
+      _quotaGate?.paused(cloudUid!) != true &&
       cloudSyncFailureKind != CloudSyncFailureKind.authentication &&
       cloudSyncFailureKind != CloudSyncFailureKind.permission &&
       cloudSyncFailureKind != CloudSyncFailureKind.deviceStorage;
@@ -379,15 +382,16 @@ extension CloudRetry on AppController {
       _cloudRetryScheduledAt = null;
       return;
     }
-    var delay = _editUploadNotBefore == null
-        ? _cloudRetryDelay
-        : _editUploadNotBefore!.difference(_now());
-    if (delay.isNegative) delay = Duration.zero;
-    if (_onlyDeferredHeartSummaries) {
-      final clock = _now().toLocal();
-      delay = localDay(clock, 1).difference(clock);
-    }
-    final scheduledAt = _now().add(delay);
+    if (_pendingSyncCycle != null || isCloudSyncing) return;
+    final now = _now();
+    final scheduledAt =
+        cloudSyncFailureKind == null && _editUploadNotBefore != null
+        ? _editUploadNotBefore!
+        : now.add(_cloudRetryDelay);
+    _scheduleCloudRetryAt(scheduledAt, now);
+  }
+
+  void _scheduleCloudRetryAt(DateTime scheduledAt, DateTime now) {
     if (_cloudRetryTimer != null &&
         _cloudRetryScheduledAt != null &&
         !_cloudRetryScheduledAt!.isAfter(scheduledAt)) {
@@ -395,10 +399,23 @@ extension CloudRetry on AppController {
     }
     _cloudRetryTimer?.cancel();
     _cloudRetryScheduledAt = scheduledAt;
-    _cloudRetryTimer = Timer(delay, () async {
+    _cloudRetryTimer = Timer(scheduledAt.difference(now), () async {
       _cloudRetryTimer = null;
       _cloudRetryScheduledAt = null;
-      if (!_retryEligible) return;
+      if (!_retryEligible || _pendingSyncCycle != null || isCloudSyncing) return;
+      // Listeners also fire for navigation, model progress and local-only
+      // changes. Diffing the account here keeps those notifications cheap.
+      final count = pendingCloudRecordCount;
+      if (count == 0) {
+        _clearEditUploadWindow();
+        return;
+      }
+      if (_areOnlyHeartSummariesDeferred(pendingRecords: count)) {
+        _clearEditUploadWindow();
+        final clock = _now().toLocal();
+        _scheduleCloudRetryAt(localDay(clock, 1), clock);
+        return;
+      }
       _cloudRetryDelay = Duration(
         seconds: (_cloudRetryDelay.inSeconds * 2).clamp(5, 60),
       );
@@ -414,8 +431,8 @@ extension CloudRetry on AppController {
 
   /// Upload the durable journals without regenerating every derived view.
   Future<void> syncPendingChanges() async {
-    _clearEditUploadWindow();
     if (_pendingSyncCycle != null) return _pendingSyncCycle;
+    _clearEditUploadWindow();
     if (_disposed ||
         isSignedOut ||
         _isSigningOut ||

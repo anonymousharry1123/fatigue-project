@@ -10,6 +10,7 @@ class InputConflictReview {
     required InputSyncSnapshot baseline,
     required InputSyncSnapshot phone,
     required InputSyncSnapshot cloud,
+    required this._cloudRevision,
   }) : _baseline = baseline,
        _phone = phone,
        _cloud = cloud,
@@ -21,21 +22,54 @@ class InputConflictReview {
   final InputSyncSnapshot _baseline;
   final InputSyncSnapshot _phone;
   final InputSyncSnapshot _cloud;
+  final int? _cloudRevision;
   final List<InputConflictItem> items;
+
+  Map<String, bool> retainChoicesFrom(
+    InputConflictReview previous,
+    Map<String, bool> choices,
+  ) {
+    if (!identical(_controller, previous._controller) ||
+        _uid != previous._uid ||
+        _revision != previous._revision ||
+        choices.isEmpty) {
+      return {};
+    }
+    final selected = {
+      for (final item in previous.items)
+        if (choices.containsKey(item.key)) item.key: item,
+    };
+    return {
+      for (final item in items)
+        if (selected[item.key] case final old?)
+          if (sameSyncValue(item._phoneValue, old._phoneValue) &&
+              sameSyncValue(item._cloudValue, old._cloudValue))
+            item.key: choices[item.key]!,
+    };
+  }
 }
 
 class InputConflictItem {
-  const InputConflictItem._({
+  InputConflictItem._({
     required this.key,
     required this.title,
-    required this.phoneDescription,
-    required this.cloudDescription,
-  });
+    required Object? phone,
+    required Object? cloud,
+    this._field,
+  }) : _phoneValue = phone,
+       _cloudValue = cloud;
 
   final String key;
   final String title;
-  final String phoneDescription;
-  final String cloudDescription;
+  final Object? _phoneValue;
+  final Object? _cloudValue;
+  final String? _field;
+  late final String phoneDescription = _describe(_phoneValue);
+  late final String cloudDescription = _describe(_cloudValue);
+
+  String _describe(Object? value) => _field == null
+      ? _conflictRecordDescription(value as Map<String, dynamic>?)
+      : _conflictFieldValue(_field, value);
 }
 
 extension InputConflictResolution on AppController {
@@ -73,7 +107,11 @@ extension InputConflictResolution on AppController {
     final phone = _conflictInputSnapshot();
     if (!await _refreshCloudPrivacy(current)) ensureCurrent();
     ensureCurrent();
-    final remote = await repository.readUser(uid);
+    final remote = await _readConflictCloud(
+      uid,
+      baseline: _remoteInputOwner == uid ? _remoteInputSnapshot : null,
+      revision: _remoteInputRevision,
+    );
     ensureCurrent();
     _requireReviewableRemote(remote);
     if (!_sameConflictSnapshot(phone, _conflictInputSnapshot()) ||
@@ -89,15 +127,38 @@ extension InputConflictResolution on AppController {
       baseline: baseline,
       phone: phone,
       cloud: _inputSnapshot(remote!),
+      cloudRevision: remote.inputSyncVersion == 1 ? remote.inputRevision : null,
     );
+  }
+
+  Future<CloudUserState?> _readConflictCloud(
+    String uid, {
+    required InputSyncSnapshot? baseline,
+    required int? revision,
+  }) {
+    final efficient = _efficientInputRepository;
+    if (efficient != null && baseline != null && revision != null) {
+      return _quotaGate!.run(
+        uid,
+        () => efficient.readUserSince(
+          uid,
+          baseline: baseline,
+          revision: revision,
+        ),
+      );
+    }
+    return cloudRepository!.readUser(uid);
   }
 
   /// True keeps the displayed phone version; false keeps the cloud version.
   /// Every conflict requires an explicit choice. Other local edits are retained.
+  /// [onChoicesSaved] fires after the local commit. The returned future also
+  /// waits for the guarded upload and refreshes for existing callers.
   Future<void> resolveInputConflicts(
     InputConflictReview review,
-    Map<String, bool> keepPhone,
-  ) async {
+    Map<String, bool> keepPhone, {
+    void Function()? onChoicesSaved,
+  }) async {
     final choices = Map<String, bool>.unmodifiable(keepPhone);
     final expected = review.items.map((item) => item.key).toSet();
     if (choices.length != expected.length ||
@@ -110,7 +171,19 @@ extension InputConflictResolution on AppController {
       await _pendingOutcomePush;
       _ensureConflictReviewCurrent(review);
     }
-    final task = _resolveInputConflictsNow(review, choices);
+    final generation = ++_privacyRefreshGeneration;
+    bool current() =>
+        review._uid == cloudUid &&
+        review._revision == _sessionRevision &&
+        generation == _privacyRefreshGeneration &&
+        _canProcessData &&
+        !isPrivacyBusy;
+    final task = _resolveInputConflictsNow(
+      review,
+      choices,
+      current,
+      onChoicesSaved,
+    );
     _pendingCloudPush = task;
     _pendingOutcomePush = task;
     try {
@@ -120,11 +193,16 @@ extension InputConflictResolution on AppController {
       if (identical(_pendingOutcomePush, task)) _pendingOutcomePush = null;
       scheduleCloudRetry();
     }
-    if (review._uid == cloudUid &&
-        review._revision == _sessionRevision &&
-        _canProcessData &&
-        hasPendingOutcomeChanges) {
-      await _retryOutcomeSync();
+    if (!current()) return;
+    if (hasPendingOutcomeChanges) await _retryOutcomeSync();
+    if (!current() || !onboardingComplete) return;
+    await refreshScores(forceRecalculate: true);
+    if (!current()) return;
+    await refreshForecasts(forceRecalculate: true);
+    if (!current()) return;
+    await refreshGuidance();
+    if (current()) {
+      await refreshInsights();
     }
   }
 
@@ -160,16 +238,10 @@ extension InputConflictResolution on AppController {
   Future<void> _resolveInputConflictsNow(
     InputConflictReview review,
     Map<String, bool> keepPhone,
+    bool Function() current,
+    void Function()? onChoicesSaved,
   ) async {
     final uid = review._uid;
-    final revision = review._revision;
-    final generation = ++_privacyRefreshGeneration;
-    bool current() =>
-        uid == cloudUid &&
-        revision == _sessionRevision &&
-        generation == _privacyRefreshGeneration &&
-        _canProcessData &&
-        !isPrivacyBusy;
     void ensureReviewCurrent() {
       _ensureConflictReviewCurrent(review);
       if (!current()) {
@@ -187,7 +259,11 @@ extension InputConflictResolution on AppController {
         throw StateError('Privacy status could not be verified. Retry review.');
       }
       ensureReviewCurrent();
-      final remote = await cloudRepository!.readUser(uid);
+      final remote = await _readConflictCloud(
+        uid,
+        baseline: review._cloud,
+        revision: review._cloudRevision,
+      );
       ensureReviewCurrent();
       _requireReviewableRemote(remote);
       final cloud = _inputSnapshot(remote!);
@@ -264,16 +340,10 @@ extension InputConflictResolution on AppController {
       notifyListeners();
       // The normal guarded transaction checks the freshly reviewed baseline
       // again. A third device editing now still produces a recoverable conflict.
-      await _pushCloudNow();
-      if (!current()) return;
-      if (onboardingComplete) {
-        await refreshScores(forceRecalculate: true);
-        if (!current()) return;
-        await refreshForecasts(forceRecalculate: true);
-        if (!current()) return;
-        await refreshGuidance();
-        if (!current()) return;
-        await refreshInsights();
+      try {
+        onChoicesSaved?.call();
+      } finally {
+        if (current()) await _pushCloudNow();
       }
     } finally {
       _endCloudSyncActivity(syncActivity);
@@ -386,7 +456,7 @@ extension InputConflictResolution on AppController {
 }
 
 bool _sameConflictSnapshot(InputSyncSnapshot a, InputSyncSnapshot? b) =>
-    b != null && sameSyncValue(a.toJson(), b.toJson());
+    b != null && a.hasSameInputs(b);
 
 Object? _conflictRootValue(Map<String, dynamic> root, String path) {
   Object? value = root;
@@ -416,11 +486,9 @@ List<InputConflictItem> _inputConflictItems(
         InputConflictItem._(
           key: 'profile:${entry.key}',
           title: _conflictFieldLabel(entry.key),
-          phoneDescription: _conflictFieldValue(entry.key, entry.value.after),
-          cloudDescription: _conflictFieldValue(
-            entry.key,
-            _conflictRootValue(cloud.root, entry.key),
-          ),
+          field: entry.key,
+          phone: entry.value.after,
+          cloud: _conflictRootValue(cloud.root, entry.key),
         ),
     for (final edit in pending.signals)
       if (conflicts(edit.before, edit.after, cloud.signals[edit.id]))
@@ -430,8 +498,8 @@ List<InputConflictItem> _inputConflictItems(
             'signal',
             edit.after ?? cloud.signals[edit.id] ?? edit.before!,
           ),
-          phoneDescription: _conflictRecordDescription(edit.after),
-          cloudDescription: _conflictRecordDescription(cloud.signals[edit.id]),
+          phone: edit.after,
+          cloud: cloud.signals[edit.id],
         ),
     for (final edit in pending.checkIns)
       if (conflicts(edit.before, edit.after, cloud.checkIns[edit.id]))
@@ -441,8 +509,8 @@ List<InputConflictItem> _inputConflictItems(
             'check-in',
             edit.after ?? cloud.checkIns[edit.id] ?? edit.before!,
           ),
-          phoneDescription: _conflictRecordDescription(edit.after),
-          cloudDescription: _conflictRecordDescription(cloud.checkIns[edit.id]),
+          phone: edit.after,
+          cloud: cloud.checkIns[edit.id],
         ),
   ];
 }

@@ -145,6 +145,41 @@ void main() {
   );
 
   test(
+    'repeated saves capture replacements and mutable legacy answers',
+    () async {
+      final app = local();
+      final first = SignalReading(
+        id: 'reading',
+        type: SignalType.hrv,
+        value: 25,
+        timestamp: now,
+        note: 'quoted "value"\n睡眠',
+      );
+      final priorRatings = [1];
+      app.signals.add(first);
+      app.checkIns.add(
+        DailyCheckIn(
+          id: 'legacy',
+          timestamp: now,
+          originalLegacyRatings: {
+            'mood': {'priorRatings': priorRatings},
+          },
+        ),
+      );
+      await app.setPreferredLanguage('es');
+      expect(await storedState(), jsonDecode(app.exportJson()));
+
+      app.signals[0] = first.copyWith(value: 28);
+      priorRatings.add(2);
+      await app.setPreferredLanguage('en');
+      final saved = (await storedState())!;
+      expect(saved, jsonDecode(app.exportJson()));
+      expect(saved['signals'].single['value'], 28);
+      expect(saved['checkIns'].single['mood']['priorRatings'], [1, 2]);
+    },
+  );
+
+  test(
     'signup preview changes presentation without persisting or granting consent',
     () async {
       final app = local(acknowledged: false);

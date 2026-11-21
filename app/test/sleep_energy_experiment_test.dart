@@ -379,6 +379,28 @@ void main() {
       now = _at(4, 12);
       run = _train(reports, signals, now: now);
     });
+    test('a reused history observes exact save times and clock reversals', () {
+      final prediction = draft().draft!.withReceipt(now);
+      final observed = _at(4, 20);
+      final saved = observed.add(const Duration(seconds: 30));
+      final history = SleepEnergyHistory(
+        checkIns: [...reports, _response(4, savedAt: saved)],
+        signals: signals,
+        asOf: observed,
+      );
+      expect(history.readiness.pairCount, 3);
+      final beforeSave = saved.subtract(const Duration(microseconds: 1));
+      expect(
+        history.evaluate([prediction], beforeSave).single.status,
+        'awaiting_evening',
+      );
+      expect(history.evaluate([prediction], saved).single.status, 'scored');
+      final beforeReceipt = now.subtract(const Duration(seconds: 1));
+      expect(
+        history.evaluate([prediction], beforeReceipt).single.reason,
+        'invalid_receipt_time',
+      );
+    });
     test(
       'known sleep, strictly earlier dates, and no Evening answer are required',
       () {

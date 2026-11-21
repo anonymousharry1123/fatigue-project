@@ -33,6 +33,10 @@ class _SyncController extends AppController {
   bool get hasPendingOutcomeChanges => pendingOutcome;
 
   @override
+  int get pendingCloudRecordCount =>
+      (pending ? 1 : 0) + (pendingOutcome ? 1 : 0);
+
+  @override
   int get sessionRevision => revision;
 
   @override

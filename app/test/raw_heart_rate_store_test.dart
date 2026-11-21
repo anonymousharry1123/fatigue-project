@@ -170,6 +170,52 @@ void main() {
         );
 
         test(
+          'repeated save restores rows changed through either connection',
+          () async {
+            final sample = raw('healthkit-a');
+            final rows = [sample];
+            await store.replace('alice', rows);
+            final shared = await databaseFactoryFfi.openDatabase(path);
+            final independent = await databaseFactoryFfi.openDatabase(
+              path,
+              options: OpenDatabaseOptions(singleInstance: false),
+            );
+            addTearDown(independent.close);
+            for (final connection in [shared, independent]) {
+              await connection.delete(
+                'raw_heart_rate',
+                where: 'owner = ?',
+                whereArgs: ['alice'],
+              );
+              await store.replace('alice', rows);
+              expect(
+                (await store.load('alice')).single.toJson(),
+                sample.toJson(),
+              );
+            }
+          },
+        );
+
+        test(
+          'identical save repairs a table recreated on the store connection',
+          () async {
+            final sample = raw('healthkit-a');
+            await store.replace('alice', [sample]);
+            final db = await databaseFactoryFfi.openDatabase(path);
+            final table = await db.query(
+              'sqlite_master',
+              columns: ['sql'],
+              where: 'type = ? AND name = ?',
+              whereArgs: ['table', 'raw_heart_rate'],
+            );
+            await db.execute('DROP TABLE raw_heart_rate');
+            await db.execute(table.single['sql'] as String);
+            await store.replace('alice', [sample]);
+            expect((await store.load('alice')).single.toJson(), sample.toJson());
+          },
+        );
+
+        test(
           'unchanged snapshot does no row writes and one correction updates one',
           () async {
             final samples = List.generate(100, (i) => raw('healthkit-$i'));

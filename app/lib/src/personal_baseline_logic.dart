@@ -10,6 +10,13 @@ import 'sleep_sync_logic.dart';
 abstract final class PersonalBaselineLogic {
   static const windowDays = 42;
 
+  static bool _isBaselineInput(SignalReading item) =>
+      item.type == SignalType.hrv ||
+      item.type == SignalType.restingHeartRate ||
+      item.type == SignalType.reactionTime ||
+      item.type == SignalType.sleep ||
+      SleepSyncLogic.detailedStageTypes.contains(item.type);
+
   static PersonalBaselines build({
     required Iterable<SignalReading> signals,
     required DateTime asOf,
@@ -19,6 +26,7 @@ abstract final class PersonalBaselineLogic {
     final historical = signals
         .where(
           (item) =>
+              _isBaselineInput(item) &&
               !OuraData.isOuraOrigin(item) &&
               !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
               !item.timestamp.isBefore(start) &&
@@ -61,6 +69,7 @@ abstract final class PersonalBaselineLogic {
     final readings = signals
         .where(
           (item) =>
+              _isBaselineInput(item) &&
               !OuraData.isOuraOrigin(item) &&
               !HeartDerivationLogic.isEstimatedRestingHeartRate(item) &&
               !item.timestamp.isBefore(start) &&

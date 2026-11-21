@@ -908,6 +908,34 @@ void main() {
   );
 
   testWidgets(
+    'a new Coach choice respects the backoff after a failed upload',
+    (tester) async {
+      final controller = (await tester.runAsync(load))!;
+      controller.setAppForeground(true);
+      final id = controller.recommendations.first.id;
+      repository.actionFailure = StateError('Offline');
+      await controller.setRecommendationStatus(id, RecommendationStatus.completed);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      final attempts = repository.actionAttempts;
+      expect(attempts, 1);
+      expect(controller.cloudSyncFailureKind, CloudSyncFailureKind.connection);
+
+      repository.actionFailure = null;
+      await controller.setRecommendationFeedback(id, false);
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.actionAttempts, attempts);
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pump();
+      final saved = await remote(id);
+      expect(repository.actionAttempts, attempts + 1);
+      expect(saved.status, RecommendationStatus.completed);
+      expect(saved.helpful, false);
+      controller.setAppForeground(false);
+    },
+  );
+
+  testWidgets(
     'permission failure gives actionable status and does not keep polling',
     (tester) async {
       final controller = (await tester.runAsync(load))!;

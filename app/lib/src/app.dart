@@ -114,7 +114,7 @@ class _TonyoAppState extends State<TonyoApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     controller.setAppForeground(state == AppLifecycleState.resumed);
-    if (state == AppLifecycleState.resumed && controller.isReady) {
+    if (state == AppLifecycleState.resumed && controller.initialRefreshComplete) {
       controller.handleAppResumed();
     }
   }

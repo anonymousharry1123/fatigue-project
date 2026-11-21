@@ -119,6 +119,29 @@ void main() {
     await app.trainSleepEnergyModel();
   }
 
+  test('readiness reuses equivalent inputs and detects edited evidence', () async {
+    await app.setOutcomeConsent(true);
+    await sources();
+    final initial = app.sleepEnergyReadiness;
+    expect(initial.pairCount, 3);
+    final index = app.signals.indexWhere(
+      (row) => row.type == SignalType.sleep && row.timestamp.toUtc().day == 1,
+    );
+    final sleep = app.signals[index];
+    app.signals = [
+      ...app.signals,
+      sleep.copyWith(id: 'pulse', type: SignalType.heartRate, value: 70),
+    ];
+    app.signals[index] = sleep.copyWith();
+    expect(app.sleepEnergyReadiness, same(initial));
+    app.signals[index] = sleep.copyWith(value: sleep.value + 1);
+    final edited = app.sleepEnergyReadiness;
+    expect(edited.fingerprint, isNot(initial.fingerprint));
+    final items = app.checkIns.first.questionnaireSnapshot!['items'] as List;
+    (items.first as Map)['prompt'] = 'Updated prompt';
+    expect(app.sleepEnergyReadiness.fingerprint, isNot(edited.fingerprint));
+  });
+
   test(
     'collection stays off without consent; ordinary saves never implicitly fit or enable',
     () async {

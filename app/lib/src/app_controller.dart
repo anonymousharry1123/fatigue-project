@@ -174,7 +174,10 @@ class AppController extends ChangeNotifier {
   Map<String, String> _heartRateAcknowledged = {};
   Map<String, Map<String, dynamic>> _legacyHeartRateCloud = {};
   int _heartRateStorageVersion = 0;
-  InputSyncSnapshot? _remoteInputSnapshot;
+  _StoredInputSnapshot? _remoteInputs;
+  _StoredInputSnapshot? get _remoteInputSnapshot => _remoteInputs;
+  set _remoteInputSnapshot(InputSyncSnapshot? value) =>
+      _remoteInputs = _StoredInputSnapshot.retain(value);
   int? _remoteInputRevision;
   String? _remoteInputOwner;
   String? _lastInputHydrationOwner;
@@ -206,8 +209,7 @@ class AppController extends ChangeNotifier {
     clock: _now,
     onChanged: notifyListeners,
   );
-  SleepEnergyReadiness? _sleepEnergyReadinessCache;
-  String? _sleepEnergyReadinessKey;
+  _SleepEnergyInputs? _sleepEnergyInputCache;
   String? _sleepEnergyConsentClearedOwner;
   String? _sleepEnergyError;
   String _sleepEnergyPredictionMessage = 'Train an experimental model first.';
@@ -420,7 +422,7 @@ class AppController extends ChangeNotifier {
       if (generation == _ai1CaptureGeneration) _unloadAi1Capture();
       return;
     }
-    await _reconcileAi1Capture(_json());
+    await _reconcileAi1Capture(_ai1SourceState());
     await _refreshSleepEnergy();
   }
 
@@ -428,8 +430,7 @@ class AppController extends ChangeNotifier {
     _ai1CaptureGeneration++;
     _ai1Capture.unload();
     _sleepEnergyStudy.unload();
-    _sleepEnergyReadinessCache = null;
-    _sleepEnergyReadinessKey = null;
+    _sleepEnergyInputCache = null;
     _sleepEnergyConsentClearedOwner = null;
     _sleepEnergyError = null;
     _sleepEnergyEditorRevision++;
@@ -449,7 +450,7 @@ class AppController extends ChangeNotifier {
       return _Ai1CaptureIntent(
         observation: observation,
         generation: generation,
-        sourceSnapshot: _ai1SourceSnapshot(_json(), observation),
+        sourceSnapshot: _ai1SourceSnapshot(_ai1SourceState(), observation),
       );
     } on FormatException {
       _ai1CaptureGeneration++;
@@ -457,6 +458,16 @@ class AppController extends ChangeNotifier {
       return null;
     }
   }
+
+  // Study history only references check-ins and grouped sleep logs. Capture
+  // those rows at the save boundary without serializing the entire account.
+  Map<String, Object?> _ai1SourceState() => {
+    'checkIns': [for (final row in checkIns) row.toJson()],
+    'signals': [
+      for (final row in signals)
+        if (row.groupId != null) row.toJson(),
+    ],
+  };
 
   String _ai1SourceSnapshot(
     Map<String, Object?> state,
@@ -647,12 +658,20 @@ class AppController extends ChangeNotifier {
       : null;
 
   bool isReady = false;
+  int? _launchRefreshRevision;
+
+  /// Automatic sync can resume when this session's startup refresh has ended.
+  bool get initialRefreshComplete =>
+      isReady && _launchRefreshRevision != _sessionRevision;
   bool onboardingComplete = false;
   bool isSignedOut = false;
   bool _isSigningOut = false;
   int _sessionRevision = 0;
   int get sessionRevision => _sessionRevision;
-  InputSyncSnapshot? _syncBaseline;
+  _StoredInputSnapshot? _savedInputs;
+  _StoredInputSnapshot? get _syncBaseline => _savedInputs;
+  set _syncBaseline(InputSyncSnapshot? value) =>
+      _savedInputs = _StoredInputSnapshot.retain(value);
   String? _syncOwnerUid;
   Future<void>? _pendingCloudPush;
   bool cloudSyncConflict = false;
@@ -712,13 +731,30 @@ class AppController extends ChangeNotifier {
   bool _deviceSaveFailed = false;
   int _localSaveSequence = 0;
 
-  String get cloudBackupLabel {
+  ({bool hasPending, int pendingRecords, String label, String message})
+  get cloudBackupStatus {
+    final pendingRecords = pendingCloudRecordCount;
+    final hasPending = pendingRecords > 0;
+    return (
+      hasPending: hasPending,
+      pendingRecords: pendingRecords,
+      label: _cloudBackupLabel(hasPending),
+      message: _cloudSyncStatusMessage(
+        hasPending: hasPending,
+        pendingRecords: pendingRecords,
+      ),
+    );
+  }
+
+  String get cloudBackupLabel => _cloudBackupLabel();
+
+  String _cloudBackupLabel([bool? hasPending]) {
     if (_deviceSaveFailed ||
         cloudSyncFailureKind == CloudSyncFailureKind.deviceStorage) {
       return 'Save needs attention';
     }
     if (!isCloudAuthenticated || isSignedOut) return 'Saved on iPhone';
-    if (hasAnyPendingCloudChanges ||
+    if ((hasPending ?? hasAnyPendingCloudChanges) ||
         !_cloudPrivacyVerified ||
         cloudSyncError != null ||
         deletionPending) {
@@ -729,7 +765,9 @@ class AppController extends ChangeNotifier {
         : 'Saved on iPhone';
   }
 
-  String get cloudSyncStatusMessage {
+  String get cloudSyncStatusMessage => _cloudSyncStatusMessage();
+
+  String _cloudSyncStatusMessage({bool? hasPending, int? pendingRecords}) {
     if (isSignedOut || !isCloudAuthenticated) {
       return 'Sign in to sync this device.';
     }
@@ -747,7 +785,7 @@ class AppController extends ChangeNotifier {
       return 'Saved on iPhone. Offline access is available for up to 72 hours after verification; cloud backup is pending.';
     }
     if (cloudSyncError != null) return cloudSyncError!;
-    if (_onlyDeferredHeartSummaries) {
+    if (_areOnlyHeartSummariesDeferred(pendingRecords: pendingRecords)) {
       return 'Heart-rate summaries are saved on this device and will sync with the next daily update.';
     }
     if (_pendingHeartRateDays.isNotEmpty) {
@@ -758,8 +796,9 @@ class AppController extends ChangeNotifier {
       final n = _legacyHeartRateCloud.length;
       return 'Removing $n legacy heart-rate cloud ${n == 1 ? "sample" : "samples"} after summaries. Retry sync again later if Spark quota pauses the batch.';
     }
-    if (hasAnyPendingCloudChanges) {
-      return '$pendingCloudRecordCount ${pendingCloudRecordCount == 1 ? "record" : "records"} saved on this device · waiting to sync';
+    if (hasPending ?? hasAnyPendingCloudChanges) {
+      final count = pendingRecords ?? pendingCloudRecordCount;
+      return '$count ${count == 1 ? "record" : "records"} saved on this device · waiting to sync';
     }
     if (!_cloudPrivacyVerified) {
       return 'Reconnect to verify account privacy and resume sync.';
@@ -814,7 +853,7 @@ class AppController extends ChangeNotifier {
         ContinuousRefreshLogic.foregroundRefreshInterval,
         (_) {
           unawaited(_pollForegroundHealth());
-          if (isReady) {
+          if (initialRefreshComplete) {
             unawaited(syncScreenTimeIfDue());
             unawaited(syncOura(automatic: true));
           }
@@ -838,7 +877,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _pollForegroundHealth() async {
     if (!_appInForeground ||
-        !isReady ||
+        !initialRefreshComplete ||
         isPrivacyBusy ||
         isHealthAuthorizing ||
         isSyncing) {
@@ -1215,6 +1254,7 @@ class AppController extends ChangeNotifier {
   String? _onboardingLanguagePreference;
   Future<void>? _languageWriteQueue;
   Future<void>? _localWriteQueue;
+  final _localSignalJson = Expando<String>();
   String get effectiveLanguage => normalizeLanguagePreference(
     onboardingComplete && !isSignedOut
         ? profile.preferredLanguage
@@ -1527,11 +1567,13 @@ class AppController extends ChangeNotifier {
 
   bool get isScoreLoading => isEnergyScoreLoading;
   String? get scoreError => energyScoreError;
-  bool get scoreLoadedFromSnapshot =>
+  bool get scoreLoadedFromSnapshot => isScoreLoadedFromSnapshot();
+  bool isScoreLoadedFromSnapshot([ScoreSnapshot? currentScore]) =>
       _scoreLoadedFromSnapshot &&
       _scoreSnapshot != null &&
       _currentScoreReference(_scoreSnapshot!, _now()) &&
-      _scoreReferenceKey(_scoreSnapshot!) == _scoreReferenceKey(score);
+      _scoreReferenceKey(_scoreSnapshot!) ==
+          _scoreReferenceKey(currentScore ?? score);
   bool get forecastLoadedFromCloud => _forecastLoadedFromCloud;
   bool get guidanceSavedToCloud => _guidanceSavedToCloud;
   InsightsSnapshot get insightsSnapshot =>
@@ -1542,7 +1584,10 @@ class AppController extends ChangeNotifier {
 
   DateTime get currentTime => _now();
   bool get canOpenNotificationTarget =>
-      isReady && onboardingComplete && _canProcessData && !isPrivacyBusy;
+      initialRefreshComplete &&
+      onboardingComplete &&
+      _canProcessData &&
+      !isPrivacyBusy;
 
   Future<void> initializeNotificationResponses(
     void Function(String payload) onTap,
@@ -2199,10 +2244,10 @@ class AppController extends ChangeNotifier {
       _scoreSnapshot = snapshot;
       _scoreLoadedFromSnapshot = false;
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       // A network/query failure must not make the wellness estimate disappear.
       _scoreSnapshot = FatigueEngine.score(
         signals: signals,
@@ -2349,10 +2394,10 @@ class AppController extends ChangeNotifier {
         forecastError = 'Cloud sync pending · using saved device inputs';
       }
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       _generateLocalForecasts(days, generatedAt: clock);
       _forecastLoadedFromCloud = false;
       forecastError = 'Cloud forecast unavailable · using cached inputs';
@@ -2519,10 +2564,10 @@ class AppController extends ChangeNotifier {
         guidanceError = 'Cloud sync pending · using saved device inputs';
       }
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       derive(sourceSignals: signals, sourceCheckIns: checkIns);
       _guidanceSavedToCloud = false;
       guidanceError = 'Cloud guidance unavailable · using cached inputs';
@@ -2611,10 +2656,10 @@ class AppController extends ChangeNotifier {
         await _notificationService.cancelGuidance();
       }
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       notificationError = 'Notification schedule unavailable · try again';
     } finally {
       if (sameRequest()) {
@@ -2689,10 +2734,10 @@ class AppController extends ChangeNotifier {
         insightsError = 'Cloud sync pending · using saved device inputs';
       }
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       _insightsSnapshot = InsightsLogic.build(
         now: clock,
         signals: signals,
@@ -2790,10 +2835,10 @@ class AppController extends ChangeNotifier {
               );
       }
     } on Object catch (error) {
+      if (!currentRequest()) return;
       if (error is FirebaseException && error.code == 'resource-exhausted') {
         _recordCloudFailure(error);
       }
-      if (!currentRequest()) return;
       outcomeError = 'Private outcomes unavailable · cached records retained';
     } finally {
       if (sameRequest()) {
@@ -2820,8 +2865,8 @@ class AppController extends ChangeNotifier {
     final raw = preferences.getString(_storageKey);
     if (raw != null) {
       try {
-        _restoreLocal(jsonDecode(raw) as Map<String, dynamic>);
         final saved = jsonDecode(raw) as Map<String, dynamic>;
+        _restoreLocal(saved);
         _localClockChanged =
             saved['derivedRulesVersion'] != FatigueEngine.energyModelVersion ||
             saved['deviceTimezone'] != deviceTimezoneIdentifier ||
@@ -2864,13 +2909,54 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final revision = _sessionRevision;
+    final owner = cloudUid;
+    bool sameSession() =>
+        revision == _sessionRevision && owner == cloudUid && !_disposed;
+    await _loadLaunchSession(revision, sameSession);
+    if (_disposed || revision != _sessionRevision || owner == cloudUid) return;
+
+    // Firebase may end or replace a session while refreshing its claims.
+    // Only the newly observed identity can open a dashboard after that point.
+    _sessionRevision++;
+    _launchRefreshRevision = null;
+    _invalidateOuraWork();
+    _invalidateHealthWork();
+    _invalidateScreenTimeWork();
+    _cloudPrivacyVerified = false;
+    _quotaLocalAccess = false;
+    _offlineLocalAccess = false;
+    _unloadAi1Capture();
+    _energyModelService.unload();
+    if (cloudUid == null) {
+      // Submit the gate before presenting sign-in. A successful new login
+      // writes its own preference after this one, and retains its own state.
+      final saved = preferences.setBool(_signedOutKey, true);
+      isSignedOut = true;
+      isReady = true;
+      notifyListeners();
+      if (!await saved) throw StateError('Could not save the device session state.');
+      return;
+    }
+    isReady = false;
+    notifyListeners();
+    await load();
+  }
+
+  Future<void> _loadLaunchSession(
+    int revision,
+    bool Function() sameSession,
+  ) async {
     if (isCloudAuthenticated) {
       _cloudPrivacyVerified = false;
       var freshAuthVerified = false;
+      var privacySaved = false;
       try {
-        await _refreshPrivacyClaims();
+        await _refreshPrivacyClaims(current: sameSession);
+        if (!sameSession()) return;
         freshAuthVerified = true;
       } on Object catch (error) {
+        if (!sameSession()) return;
         privacyOperationError =
             'Account privacy could not be verified. Reconnect and retry.';
         _recordCloudFailure(error);
@@ -2884,20 +2970,25 @@ class AppController extends ChangeNotifier {
       if (!freshAuthVerified) {
         // No server requests until fresh Auth verification succeeds.
       } else if (_cloudInputsPullDue) {
-        await _hydrateOrMigrateCloud();
+        await _hydrateOrMigrateCloud(
+          isCurrent: sameSession,
+          restoredRawOwner: _rawHeartRateLoaded ? _rawHeartRateOwner : null,
+        );
       } else {
-        final revision = _sessionRevision;
-        final owner = cloudUid;
         try {
-          await _refreshCloudPrivacy(
-            () => revision == _sessionRevision && owner == cloudUid,
-          );
+          privacySaved = await _readVerifiedAccountPrivacy(sameSession);
         } on Object catch (error) {
+          if (!sameSession()) return;
           _recordCloudFailure(error);
         }
       }
-      await _writeLocal();
-      if (!outcomeConsent) await _discardPersonalizedModel();
+      if (!sameSession()) return;
+      if (!privacySaved) {
+        await _writeLocal();
+        if (!sameSession()) return;
+        if (!outcomeConsent) await _discardPersonalizedModel();
+        if (!sameSession()) return;
+      }
     }
     if (!_canProcessData) {
       isReady = true;
@@ -2905,39 +2996,75 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    bool current() => sameSession() && _canProcessData;
     await _loadAi1Capture();
-    if (hasPendingCloudChanges) await _pushCloud();
-    if (hasPendingCoachChanges) await _retryCoachSync();
+    if (current()) await _energyModelService.load();
+    if (!sameSession()) return;
+    if (current() && onboardingComplete) {
+      // The verified local dashboard can accept edits while sync is pending.
+      _launchRefreshRevision = revision;
+      isReady = true;
+      notifyListeners();
+    }
+    try {
+      await _refreshLaunchData(current);
+    } finally {
+      if (sameSession()) {
+        _launchRefreshRevision = null;
+        isReady = true;
+        notifyListeners();
+      }
+    }
+    if (current()) await refreshAi1Study();
+  }
+
+  Future<void> _refreshLaunchData(bool Function() current) async {
+    if (!current()) return;
+    if (hasPendingCloudChanges) {
+      await _pushCloud();
+      if (!current()) return;
+    }
+    if (hasPendingCoachChanges) {
+      await _retryCoachSync();
+      if (!current()) return;
+    }
     await refreshHealthAuthorization(notify: false);
+    if (!current()) return;
     await refreshScreenTimeAuthorization(notify: false);
-    await _energyModelService.load();
+    if (!current()) return;
     await syncScreenTimeIfDue();
+    if (!current()) return;
     await syncOura(automatic: true);
+    if (!current()) return;
     if (outcomeConsent || hasPendingOutcomeChanges) {
       await refreshOutcomes(notify: false);
+      if (!current()) return;
     }
     if (healthAuthorized &&
         healthAuthorization == HealthAuthorizationState.authorized) {
       await _ensureContinuousHealthUpdates();
+      if (!current()) return;
       await refreshHealthIfDue(
         reason: HealthRefreshReason.initial,
         notify: false,
       );
+      if (!current()) return;
     }
     if (onboardingComplete) {
       await refreshScores(notify: false, forceRecalculate: _localClockChanged);
+      if (!current()) return;
       await refreshForecasts(
         notify: false,
         forceRecalculate: _localClockChanged,
       );
+      if (!current()) return;
       await refreshGuidance(notify: false);
+      if (!current()) return;
       await refreshInsights(notify: false);
+      if (!current()) return;
     }
     _localClockChanged = false;
     await _writeLocal();
-    isReady = true;
-    await refreshAi1Study();
-    notifyListeners();
   }
 
   Future<void> handleAppResumed() async {
@@ -3001,7 +3128,7 @@ class AppController extends ChangeNotifier {
           !_cloudPrivacyVerified || cloudSyncError != null;
       try {
         if (!await _refreshCloudPrivacy(current)) return;
-        if (isReady && _cloudInputsPullDue) {
+        if (initialRefreshComplete && _cloudInputsPullDue) {
           await _hydrateOrMigrateCloud(isCurrent: current);
           if (!current()) return;
         }
@@ -3104,10 +3231,15 @@ class AppController extends ChangeNotifier {
   /// A failed offline launch must be recoverable without passing the privacy
   /// mutation gate first. Server verification still precedes any upload.
   Future<bool> _refreshCloudPrivacy(bool Function() current) async {
+    if (cloudUid == null || cloudRepository == null) return false;
+    await _refreshPrivacyClaims(current: current);
+    return _readVerifiedAccountPrivacy(current);
+  }
+
+  Future<bool> _readVerifiedAccountPrivacy(bool Function() current) async {
     final uid = cloudUid;
     final repository = cloudRepository;
     if (uid == null || repository == null) return false;
-    await _refreshPrivacyClaims(current: current);
     if (!current() || deletionPending) return false;
     AccountPrivacySnapshot state;
     try {
@@ -4432,6 +4564,7 @@ class AppController extends ChangeNotifier {
       if (!value) {
         outcomeConsent = false;
         _sleepEnergyStudy.unload();
+        _sleepEnergyInputCache = null;
         _outcomes = [];
         _reconcileOutcomeSync();
         await _writeLocal();
@@ -5426,6 +5559,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _clearTrackingDataNow() async {
     final ensureCurrent = _beginMutation();
+    _sleepEnergyInputCache = null;
     await _sleepEnergyStudy.clear(_ai1Owner);
     ensureCurrent();
     while (_pendingCloudPush != null) {
@@ -5852,7 +5986,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Map<String, Object?> _json({bool includeRawHeartRate = true}) => {
+  Map<String, Object?> _json({bool includeSignals = true}) => {
     'cloudQuotaCooldown': _quotaGate?.toJson(),
     'offlineAccess': {'version': 1, 'lease': _offlineAccessLease?.toJson()},
     if (_heartRateSummaryEnabled) 'efficientSync': _efficientSyncJson(),
@@ -5917,10 +6051,7 @@ class AppController extends ChangeNotifier {
     'lastHealthRefreshReason': lastHealthRefreshReason?.name,
     'healthBackgroundRefreshEnabled': healthBackgroundRefreshEnabled,
     'profile': profile.toJson(),
-    'signals': signals
-        .where((item) => includeRawHeartRate || !isRawHeartRate(item))
-        .map((item) => item.toJson())
-        .toList(),
+    if (includeSignals) 'signals': [for (final item in signals) item.toJson()],
     'checkIns': checkIns.map((item) => item.toJson()).toList(),
     'outcomes': _outcomes.map((item) => item.toJson()).toList(),
     if (_outcomeSyncOwnerUid != null && _pendingOutcomeWrites.isNotEmpty)
@@ -5939,6 +6070,52 @@ class AppController extends ChangeNotifier {
     'recommendationFeedback': _recommendationFeedback,
     'dismissedRiskAlertIds': _dismissedRiskAlertIds.toList(),
   };
+
+  String _encodeLocalState() {
+    final state = _json(includeSignals: false);
+    // The list can be edited in place, but each reading is immutable.
+    final rows = [
+      for (final row in signals)
+        if (!_heartRateSummaryEnabled || !isRawHeartRate(row))
+          _localSignalJson[row] ??= jsonEncode(row.toJson()),
+    ];
+    final parts = {'signals': '[${rows.join(',')}]'};
+    final baseline = state['inputSync'] as Map<String, Object?>?;
+    if (baseline != null) {
+      parts['inputSync'] = _jsonWithEncodedFields(baseline, {
+        'baseline': _syncBaseline!.encoded,
+      });
+    }
+    final efficient = state['efficientSync'] as Map<String, Object?>?;
+    final remote = efficient?['remoteInputs'] as Map<String, Object?>?;
+    if (efficient != null && remote != null) {
+      parts['efficientSync'] = _jsonWithEncodedFields(efficient, {
+        'remoteInputs': _jsonWithEncodedFields(remote, {
+          'snapshot': _remoteInputSnapshot!.encoded,
+        }),
+      });
+    }
+    return _jsonWithEncodedFields(state, parts);
+  }
+
+  // Preserve one atomic preferences document. All supplied fragments have
+  // already been encoded with jsonEncode, including user-entered strings.
+  static String _jsonWithEncodedFields(
+    Map<String, Object?> fields,
+    Map<String, String> encoded,
+  ) {
+    final buffer = StringBuffer('{');
+    var separator = '';
+    for (final key in {...fields.keys, ...encoded.keys}) {
+      buffer
+        ..write(separator)
+        ..write(jsonEncode(key))
+        ..write(':')
+        ..write(encoded[key] ?? jsonEncode(fields[key]));
+      separator = ',';
+    }
+    return (buffer..write('}')).toString();
+  }
 
   Future<void> _commit({
     bool energyInputsChanged = false,
@@ -6013,7 +6190,9 @@ class AppController extends ChangeNotifier {
           isDeletingAccount) {
         return;
       }
-      final savedState = _json();
+      final studyState = ai1Capture != null || _ai1Capture.entries.isNotEmpty
+          ? _ai1SourceState()
+          : null;
       if (_heartRateSummaryEnabled) {
         if (!_rawHeartRateLoaded) {
           throw StateError(
@@ -6038,9 +6217,7 @@ class AppController extends ChangeNotifier {
           return;
         }
       }
-      final encoded = jsonEncode(
-        _json(includeRawHeartRate: !_heartRateSummaryEnabled),
-      );
+      final encoded = _encodeLocalState();
       if (!await preferences.setString(_storageKey, encoded)) {
         throw StateError(
           'Could not save to this device. Keep this screen open and retry.',
@@ -6055,7 +6232,8 @@ class AppController extends ChangeNotifier {
         if (ai1Capture != null &&
             ai1Capture.generation == _ai1CaptureGeneration &&
             ai1CaptureEnabled &&
-            _ai1SourceSnapshot(savedState, ai1Capture.observation) ==
+            studyState != null &&
+            _ai1SourceSnapshot(studyState, ai1Capture.observation) ==
                 ai1Capture.sourceSnapshot) {
           await _ai1Capture.capture(
             owner: _ai1Owner,
@@ -6067,7 +6245,7 @@ class AppController extends ChangeNotifier {
             isDeletingAccount) {
           return;
         }
-        await _reconcileAi1Capture(savedState);
+        if (studyState != null) await _reconcileAi1Capture(studyState);
         if (previousCaptureCount != ai1CapturedRevisionCount ||
             previousCaptureError != ai1CaptureError ||
             previousCaptureEnabled != ai1CaptureEnabled) {
@@ -6104,6 +6282,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _hydrateOrMigrateCloud({
     bool Function()? isCurrent,
+    String? restoredRawOwner,
     bool allowSignedOutQuotaRestore = false,
   }) async {
     final session = _accountAuth.currentSession;
@@ -6153,14 +6332,17 @@ class AppController extends ChangeNotifier {
           remote != null &&
           !remote.deletionPending &&
           remote.privacyConsent?.validAt(_now()) == true) {
-        await _loadRawHeartRate(
-          session.uid,
-          mergeCurrent: _rawHeartRateOwner == session.uid,
-        );
-        if (cloudUid != session.uid ||
-            _sessionRevision != revision ||
-            (isCurrent != null && !isCurrent())) {
-          return;
+        // On launch the verified owner's SQLite history may already be loaded.
+        if (restoredRawOwner != session.uid) {
+          await _loadRawHeartRate(
+            session.uid,
+            mergeCurrent: _rawHeartRateOwner == session.uid,
+          );
+          if (cloudUid != session.uid ||
+              _sessionRevision != revision ||
+              (isCurrent != null && !isCurrent())) {
+            return;
+          }
         }
         await _readHeartRateCloud(session.uid);
         if (cloudUid != session.uid ||
@@ -6217,7 +6399,7 @@ class AppController extends ChangeNotifier {
           _syncBaseline = remoteInputs.overlay(pending, useBefore: true);
           _applyCloud(remoteInputs.overlay(pending).toState(remote));
         } else {
-          _syncBaseline = remoteInputs;
+          _syncBaseline = _remoteInputSnapshot;
           _applyCloud(remote);
         }
         _syncOwnerUid = session.uid;
@@ -6518,12 +6700,9 @@ class AppController extends ChangeNotifier {
   void _applyCloud(CloudUserState state) {
     if (_privacyOwnerUid == cloudUid &&
         _syncOwnerUid == cloudUid &&
-        sameSyncValue(
-          _inputSnapshot(
-            _cloudState(migrationVersion: localMigrationVersion),
-          ).toJson(),
-          _inputSnapshot(state).toJson(),
-        ) &&
+        _inputSnapshot(
+          _cloudState(migrationVersion: localMigrationVersion),
+        ).hasSameInputs(_inputSnapshot(state)) &&
         sameSyncValue(
           _privacyConsent?.toJson(),
           state.privacyConsent?.toJson(),
@@ -6546,6 +6725,8 @@ class AppController extends ChangeNotifier {
     isEnergyScoreLoading = false;
     final prepInputsChanged =
         outcomeConsent != state.outcomeConsent ||
+        signals.length != state.signals.length ||
+        checkIns.length != state.checkIns.length ||
         jsonEncode(signals.map((item) => item.toJson()).toList()) !=
             jsonEncode(state.signals.map((item) => item.toJson()).toList()) ||
         jsonEncode(checkIns.map((item) => item.toJson()).toList()) !=
@@ -6663,18 +6844,18 @@ class AppController extends ChangeNotifier {
     if (sync is Map && sync['version'] == 1 && sync['uid'] is String) {
       try {
         _syncOwnerUid = sync['uid'] as String;
-        _syncBaseline = InputSyncSnapshot.fromJson(
+        final restored = InputSyncSnapshot.fromJson(
           Map<String, dynamic>.from(sync['baseline'] as Map),
         );
+        _syncBaseline = _heartRateSummaryEnabled
+            ? _withoutRawHeartRate(restored)
+            : restored;
       } on Object {
         _syncOwnerUid = null;
         _syncBaseline = null;
       }
     }
 
-    if (_heartRateSummaryEnabled && _syncBaseline != null) {
-      _syncBaseline = _withoutRawHeartRate(_syncBaseline!);
-    }
     _privacyConsent = PrivacyConsent.tryParse(json['privacyConsent']);
     _privacyOwnerUid = json['privacyOwnerUid'] as String?;
     outcomeConsentUpdatedAt = DateTime.tryParse(
@@ -6961,6 +7142,42 @@ class AppController extends ChangeNotifier {
   }
 
   static String _dayKey(DateTime day) => localDayKey(day);
+}
+
+/// The durable sync baseline is a point-in-time value, including nested
+/// check-in answers. An acknowledgement or hydration replaces the snapshot.
+class _StoredInputSnapshot extends InputSyncSnapshot {
+  _StoredInputSnapshot._(InputSyncSnapshot source)
+    : super(
+        root: _freezeMap(source.root),
+        signals: _freezeDocuments(source.signals),
+        checkIns: _freezeDocuments(source.checkIns),
+      );
+
+  static _StoredInputSnapshot? retain(InputSyncSnapshot? source) {
+    if (source == null) return null;
+    if (source is _StoredInputSnapshot) return source;
+    return _StoredInputSnapshot._(source);
+  }
+
+  late final String encoded = jsonEncode(toJson());
+
+  static Map<String, Map<String, dynamic>> _freezeDocuments(
+    Map<String, Map<String, dynamic>> documents,
+  ) => Map.unmodifiable({
+    for (final entry in documents.entries) entry.key: _freezeMap(entry.value),
+  });
+
+  static Map<String, dynamic> _freezeMap(Map map) =>
+      Map<String, dynamic>.unmodifiable({
+        for (final key in map.keys) key as String: _freezeValue(map[key]),
+      });
+
+  static Object? _freezeValue(Object? value) {
+    if (value is Map) return _freezeMap(value);
+    if (value is List) return List.unmodifiable(value.map(_freezeValue));
+    return value;
+  }
 }
 
 class _Ai1CaptureIntent {

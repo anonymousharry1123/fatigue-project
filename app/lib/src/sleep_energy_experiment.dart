@@ -96,6 +96,7 @@ abstract final class SleepEnergyExperiment {
     selected.sort(_compareExportRows);
     final usedSleeps = <String>{};
     final pairs = <SleepEnergyPair>[];
+    final matchSleep = SelfReportTrendsLogic.sleepMatcher(readings, now);
     for (final row in selected) {
       final sleepRef = row['sleep_ref'] as String?;
       final sleep = sleeps[sleepRef];
@@ -180,7 +181,7 @@ abstract final class SleepEnergyExperiment {
       final zone = report.timezone!;
       final measurementKey =
           '${CheckInMeasurement.currentVersion}:en:$pairingPolicy:${_hashText('$definitionHash|$zone')}';
-      final match = SelfReportTrendsLogic.matchSleep(report, readings, now);
+      final match = matchSleep(report);
       final rawSleep = match.reading!;
       final activity = pairAvailable.isAfter(report.timestamp)
           ? null
@@ -410,112 +411,11 @@ abstract final class SleepEnergyExperiment {
     required Iterable<DailyCheckIn> checkIns,
     required Iterable<SignalReading> signals,
     required DateTime now,
-  }) {
-    SleepEnergyPredictionEvaluation result(
-      String status,
-      String? reason, {
-      SleepEnergyPrediction? record,
-      double? actual,
-    }) => SleepEnergyPredictionEvaluation(
-      prediction: status == 'invalidated'
-          ? (record ?? prediction).invalidate(reason!, now)
-          : record ?? prediction,
-      status: status,
-      reason: reason,
-      actual: actual,
-    );
-    if (prediction.invalidatedAt != null) {
-      return result('invalidated', prediction.invalidationReason);
-    }
-    final receipt = prediction.receiptAt;
-    if (receipt == null) {
-      return result('pending_receipt', 'prediction_not_durably_committed');
-    }
-    if (receipt.isBefore(prediction.createdAt) || receipt.isAfter(now)) {
-      return result('invalidated', 'invalid_receipt_time');
-    }
-    final reports = checkIns.toList();
-    final readings = signals.toList();
-    final readiness = prepare(checkIns: reports, signals: readings, now: now);
-    final pairMap = {
-      for (final p in readiness.pairs) p.responseId: p.fingerprint,
-    };
-    if (!prediction.dependencies.entries.every(
-      (e) => pairMap[e.key] == e.value,
-    )) {
-      return result('invalidated', 'training_example_edited_or_deleted');
-    }
-    final rawSleep = readings.where((s) => s.id == prediction.sleepId).toList();
-    if (rawSleep.isEmpty ||
-        rawSleep.any(
-          (s) => _signalFingerprint(s) != prediction.sleepFingerprint,
-        )) {
-      return result('invalidated', 'prediction_sleep_edited_or_deleted');
-    }
-    final currentSignals = <String, List<String>>{};
-    for (final signal in readings) {
-      if (!prediction.signalDependencies.containsKey(signal.id)) continue;
-      currentSignals
-          .putIfAbsent(signal.id, () => [])
-          .add(_signalFingerprint(signal));
-    }
-    if (!prediction.signalDependencies.entries.every(
-      (e) => currentSignals[e.key]?.every((hash) => hash == e.value) == true,
-    )) {
-      return result(
-        'invalidated',
-        'prediction_sleep_dependency_edited_or_deleted',
-      );
-    }
-    final retained = _retained(reports, now);
-    final references = {
-      for (var i = 0; i < retained.length; i++)
-        retained[i].id: 'response-${i + 1}',
-    };
-    final compatible =
-        retained
-            .where(
-              (r) =>
-                  r.period == CheckInPeriod.evening &&
-                  r.localDate == prediction.localDate &&
-                  r.timezone == prediction.timezone &&
-                  _validTiming(r, now) &&
-                  _definitionHash(r.questionnaireSnapshot) ==
-                      _definitionHash(prediction.definition),
-            )
-            .toList()
-          ..sort((a, b) {
-            final order = _compareReports(a, b);
-            return order == 0
-                ? references[a.id]!.compareTo(references[b.id]!)
-                : order;
-          });
-    final target = compatible.firstOrNull;
-    if (prediction.targetId != null &&
-        (target == null ||
-            target.id != prediction.targetId ||
-            _hash(target.toJson()) != prediction.targetFingerprint)) {
-      return result('invalidated', 'first_target_edited_or_deleted');
-    }
-    if (target == null) return result('awaiting_evening', null);
-    final sealed = prediction.withTarget(target, now);
-    if (!target.timestamp.isAfter(receipt) ||
-        !target.recordedAt!.isAfter(receipt)) {
-      return result(
-        'invalidated',
-        'target_not_observed_and_saved_after_receipt',
-        record: sealed,
-      );
-    }
-    if (target.energy == null) {
-      return result(
-        'excluded',
-        'first_evening_response_missing_energy',
-        record: sealed,
-      );
-    }
-    return result('scored', null, record: sealed, actual: target.energy);
-  }
+  }) => SleepEnergyHistory(
+    checkIns: checkIns,
+    signals: signals,
+    asOf: now,
+  ).evaluate([prediction], now).single;
 
   static SleepEnergyFit _fit(List<SleepEnergyPair> rows) {
     final held = (rows.length / 5).ceil().clamp(1, rows.length);
@@ -634,6 +534,190 @@ abstract final class SleepEnergyExperiment {
       meanMae: _mean(testing.map((p) => (my - p.energy).abs())),
       previousMae: _mean(testing.map((p) => (y.last - p.energy).abs())),
     );
+  }
+}
+
+/// Prepared history for one set of records. The sleep match and dependency
+/// indices are shared across its predictions and across UI refreshes.
+class SleepEnergyHistory {
+  SleepEnergyHistory({
+    required Iterable<DailyCheckIn> checkIns,
+    required Iterable<SignalReading> signals,
+    required this.asOf,
+  }) : _reports = List.of(checkIns, growable: false),
+       _readings = List.of(signals, growable: false);
+
+  final List<DailyCheckIn> _reports;
+  final List<SignalReading> _readings;
+  final DateTime asOf;
+  late final DateTime? _nextChange = _nextAvailability();
+  DateTime? _nextAvailability() {
+    DateTime? first;
+    void consider(DateTime? at) {
+      if (at != null &&
+          at.isAfter(asOf) &&
+          (first == null || at.isBefore(first!))) {
+        first = at;
+      }
+    }
+
+    for (final report in _reports) {
+      consider(report.timestamp);
+      consider(report.recordedAt);
+    }
+    for (final reading in _readings) {
+      consider(reading.timestamp);
+      consider(reading.recordedAt);
+      consider(reading.syncedAt);
+    }
+    return first;
+  }
+
+  bool covers(DateTime at) =>
+      !at.isBefore(asOf) && (_nextChange == null || at.isBefore(_nextChange));
+
+  // Native saves serialize, so eligibility can change while a save waits.
+  SleepEnergyHistory at(DateTime now) => covers(now)
+      ? this
+      : SleepEnergyHistory(checkIns: _reports, signals: _readings, asOf: now);
+
+  late final readiness = SleepEnergyExperiment.prepare(
+    checkIns: _reports,
+    signals: _readings,
+    now: asOf,
+  );
+  late final _pairMap = {
+    for (final p in readiness.pairs) p.responseId: p.fingerprint,
+  };
+  late final _readingsById = _indexReadings();
+  final _hashes = <String, List<String>>{};
+  Map<String, List<SignalReading>> _indexReadings() {
+    final byId = <String, List<SignalReading>>{};
+    for (final row in _readings) {
+      (byId[row.id] ??= []).add(row);
+    }
+    return byId;
+  }
+
+  List<String> _hashesFor(String id) => _hashes.putIfAbsent(
+    id,
+    () => (_readingsById[id] ?? const <SignalReading>[])
+        .map(_signalFingerprint)
+        .toList(growable: false),
+  );
+
+  late final _retainedReports = _retained(_reports, asOf);
+  late final _references = {
+    for (var i = 0; i < _retainedReports.length; i++)
+      _retainedReports[i].id: 'response-${i + 1}',
+  };
+  late final _eveningReports = _indexEvenings();
+  Map<(String?, String?), List<DailyCheckIn>> _indexEvenings() {
+    final byDay = <(String?, String?), List<DailyCheckIn>>{};
+    for (final report in _retainedReports) {
+      if (report.period == CheckInPeriod.evening &&
+          _validTiming(report, asOf)) {
+        (byDay[(report.localDate, report.timezone)] ??= []).add(report);
+      }
+    }
+    return byDay;
+  }
+
+  List<SleepEnergyPredictionEvaluation> evaluate(
+    Iterable<SleepEnergyPrediction> predictions,
+    DateTime now,
+  ) {
+    final current = at(now);
+    return predictions
+        .map((p) => current._evaluate(p, now))
+        .toList(growable: false);
+  }
+
+  SleepEnergyPredictionEvaluation _evaluate(
+    SleepEnergyPrediction prediction,
+    DateTime now,
+  ) {
+    SleepEnergyPredictionEvaluation result(
+      String status,
+      String? reason, {
+      SleepEnergyPrediction? record,
+      double? actual,
+    }) => SleepEnergyPredictionEvaluation(
+      prediction: status == 'invalidated'
+          ? (record ?? prediction).invalidate(reason!, now)
+          : record ?? prediction,
+      status: status,
+      reason: reason,
+      actual: actual,
+    );
+    if (prediction.invalidatedAt != null) {
+      return result('invalidated', prediction.invalidationReason);
+    }
+    final receipt = prediction.receiptAt;
+    if (receipt == null) {
+      return result('pending_receipt', 'prediction_not_durably_committed');
+    }
+    if (receipt.isBefore(prediction.createdAt) || receipt.isAfter(now)) {
+      return result('invalidated', 'invalid_receipt_time');
+    }
+    if (!prediction.dependencies.entries.every(
+      (e) => _pairMap[e.key] == e.value,
+    )) {
+      return result('invalidated', 'training_example_edited_or_deleted');
+    }
+    final sleep = _hashesFor(prediction.sleepId);
+    if (sleep.isEmpty ||
+        sleep.any((hash) => hash != prediction.sleepFingerprint)) {
+      return result('invalidated', 'prediction_sleep_edited_or_deleted');
+    }
+    if (!prediction.signalDependencies.entries.every((e) {
+      final hashes = _hashesFor(e.key);
+      return hashes.isNotEmpty && hashes.every((hash) => hash == e.value);
+    })) {
+      return result(
+        'invalidated',
+        'prediction_sleep_dependency_edited_or_deleted',
+      );
+    }
+    final definitionHash = _definitionHash(prediction.definition);
+    final compatible =
+        (_eveningReports[(prediction.localDate, prediction.timezone)] ??
+                const <DailyCheckIn>[])
+            .where(
+              (r) => _definitionHash(r.questionnaireSnapshot) == definitionHash,
+            )
+            .toList()
+          ..sort((a, b) {
+            final order = _compareReports(a, b);
+            return order == 0
+                ? _references[a.id]!.compareTo(_references[b.id]!)
+                : order;
+          });
+    final target = compatible.firstOrNull;
+    if (prediction.targetId != null &&
+        (target == null ||
+            target.id != prediction.targetId ||
+            _hash(target.toJson()) != prediction.targetFingerprint)) {
+      return result('invalidated', 'first_target_edited_or_deleted');
+    }
+    if (target == null) return result('awaiting_evening', null);
+    final sealed = prediction.withTarget(target, now);
+    if (!target.timestamp.isAfter(receipt) ||
+        !target.recordedAt!.isAfter(receipt)) {
+      return result(
+        'invalidated',
+        'target_not_observed_and_saved_after_receipt',
+        record: sealed,
+      );
+    }
+    if (target.energy == null) {
+      return result(
+        'excluded',
+        'first_evening_response_missing_energy',
+        record: sealed,
+      );
+    }
+    return result('scored', null, record: sealed, actual: target.energy);
   }
 }
 

@@ -6,6 +6,7 @@ import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
 import 'package:app/src/models.dart';
 import 'package:app/src/notification_service.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -349,6 +350,21 @@ void main() {
     await stopped;
     expect(controller.isSignedOut, isTrue);
     expect(controller.outcomeError, isNull);
+  });
+
+  test('a late outcome quota error cannot change signed-out state', () async {
+    final controller = await load();
+    final gate = repository.readGate = Completer<void>();
+    final started = repository.readStarted = Completer<void>();
+    final refresh = controller.refreshOutcomes();
+    await started.future;
+    await controller.signOut();
+    gate.completeError(
+      FirebaseException(plugin: 'cloud_firestore', code: 'resource-exhausted'),
+    );
+    await refresh;
+    expect(controller.cloudSyncError, isNull);
+    expect(controller.cloudSyncFailureKind, isNull);
   });
 
   test(

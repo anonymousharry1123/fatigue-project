@@ -624,9 +624,12 @@ class FirestoreCloudRepository
             after = page.docs.last;
           }
         }
-        final confirmed = await user.get(
-          const GetOptions(source: Source.server),
-        );
+        // When the journal revision matches, the first server read already
+        // captures the entire change since the baseline, including root fields.
+        // Only a paginated delta needs a second read to fence concurrent edits.
+        final confirmed = readRevision == revision
+            ? before
+            : await user.get(const GetOptions(source: Source.server));
         _authorize(uid);
         final confirmedData = confirmed.data();
         if (confirmedData == null) {

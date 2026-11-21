@@ -74,6 +74,24 @@ void main() {
     },
   );
 
+  test('an unchanged revision needs only the current server root', () async {
+    final before = (await repository.readUser('owner'))!;
+    final baseline = InputSyncSnapshot.fromState(before);
+    store.documents['users/owner']!['profile'] = {'name': 'Updated'};
+    store.reads.clear();
+    final after = (await repository.readUserSince(
+      'owner',
+      baseline: baseline,
+      revision: before.inputRevision!,
+    ))!;
+    expect(after.profile.name, 'Updated');
+    expect(
+      after.signals.map((row) => row.id),
+      unorderedEquals(['old', 'heart']),
+    );
+    expect(store.reads, ['document users/owner']);
+  });
+
   test('delta read edits old observations and propagates deletion', () async {
     final restored = await repository.readUser('owner');
     final baseline = InputSyncSnapshot.fromState(restored!);

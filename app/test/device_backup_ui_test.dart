@@ -36,6 +36,8 @@ class _BackupController extends AppController {
   @override
   bool get hasPendingCloudChanges => cloud;
   @override
+  int get pendingCloudRecordCount => cloud ? 1 : 0;
+  @override
   bool get privacyReviewRequired => review;
   @override
   bool get canExportDeviceBackup =>

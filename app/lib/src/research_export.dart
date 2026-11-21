@@ -72,7 +72,7 @@ abstract final class ResearchExport {
       final order = a.timestamp.compareTo(b.timestamp);
       return order == 0 ? a.id.compareTo(b.id) : order;
     });
-    final sourceSignals = signals.toList(growable: false);
+    final matchSleep = SelfReportTrendsLogic.sleepMatcher(signals, generatedAt);
     final definitions = <String, Map<String, dynamic>>{};
     final definitionKeys = <String, String>{};
     final sleepRows = <String, Map<String, Object?>>{};
@@ -84,11 +84,7 @@ abstract final class ResearchExport {
         () => 'definition-${definitionKeys.length + 1}',
       );
       definitions[definitionId] = report.questionnaireSnapshot!;
-      final sleep = SelfReportTrendsLogic.matchSleep(
-        report,
-        sourceSignals,
-        generatedAt,
-      );
+      final sleep = matchSleep(report);
       final reading = sleep.reading;
       String? sleepId;
       if (sleep.isMatched && reading != null) {

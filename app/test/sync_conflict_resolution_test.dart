@@ -54,6 +54,7 @@ class _Repository extends MemoryCloudRepository {
   Completer<void>? outcomeGate;
   Completer<void>? outcomeStarted;
   void Function()? beforePatch;
+  Completer<void>? patchGate;
   Completer<void>? readGate;
   Completer<void>? readStarted;
   Completer<void>? privacyGate;
@@ -107,6 +108,9 @@ class _Repository extends MemoryCloudRepository {
     patches++;
     if (offline) throw StateError('offline');
     beforePatch?.call();
+    final gate = patchGate;
+    patchGate = null;
+    if (gate != null) await gate.future;
     await super.applyInputPatch(uid, patch);
   }
 }
@@ -119,6 +123,27 @@ AppController _controller(_Repository repo) => AppController(
   initialPrivacyConsent: testAdultPrivacyConsent,
   clock: () => _when,
 );
+
+class _VersionedRepository extends _Repository {
+  int fullReads = 0;
+  final fromRevisions = <int>[];
+
+  @override
+  Future<CloudUserState?> readUser(String uid) {
+    fullReads++;
+    return super.readUser(uid);
+  }
+
+  @override
+  Future<CloudUserState?> readUserSince(
+    String uid, {
+    required InputSyncSnapshot baseline,
+    required int revision,
+  }) {
+    fromRevisions.add(revision);
+    return super.readUserSince(uid, baseline: baseline, revision: revision);
+  }
+}
 
 Future<({_Repository repo, AppController app})> _profileConflict() async {
   final repo = _Repository()..seed('owner', _state());
@@ -139,6 +164,72 @@ Future<({_Repository repo, AppController app})> _profileConflict() async {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test(
+    'review and save use verified remote revisions and catch newer edits',
+    () async {
+      final repo = _VersionedRepository();
+      final initial = _state().copyWith(inputSyncVersion: 1, inputRevision: 1);
+      repo.seed('owner', initial);
+      final app = _controller(repo);
+      addTearDown(app.dispose);
+      await app.load();
+      repo.offline = true;
+      await app.updateProfile(app.profile.copyWith(name: 'Phone'));
+      final cloud = _state(profile: const UserProfile(name: 'Cloud'))
+          .copyWith(inputSyncVersion: 1, inputRevision: 2);
+      repo.seed('owner', cloud);
+      final fullReads = repo.fullReads;
+      repo.fromRevisions.clear();
+      final review = await app.reviewInputConflicts();
+      repo.seed(
+        'owner',
+        _state(
+          profile: const UserProfile(name: 'Cloud'),
+          signals: [_signal('new')],
+        ).copyWith(inputSyncVersion: 1, inputRevision: 3),
+      );
+      var saved = false;
+      await expectLater(
+        app.resolveInputConflicts(review, {
+          review.items.single.key: true,
+        }, onChoicesSaved: () => saved = true),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Cloud data changed'),
+          ),
+        ),
+      );
+      expect(repo.fromRevisions, [1, 2]);
+      expect(repo.fullReads, fullReads);
+      expect(saved, isFalse);
+      expect(app.profile.name, 'Phone');
+    },
+  );
+
+  test(
+    'refresh retains an explicit choice only for the same owner and versions',
+    () async {
+      final (:repo, :app) = await _profileConflict();
+      addTearDown(app.dispose);
+      final first = await app.reviewInputConflicts();
+      final decisions = {first.items.single.key: false};
+      final same = await app.reviewInputConflicts();
+      expect(same.retainChoicesFrom(first, decisions), decisions);
+      repo.seed(
+        'owner',
+        _state(profile: const UserProfile(name: 'New cloud name')),
+      );
+      final changed = await app.reviewInputConflicts();
+      expect(changed.retainChoicesFrom(first, decisions), isEmpty);
+      final second = await _profileConflict();
+      addTearDown(second.app.dispose);
+      final other = await second.app.reviewInputConflicts();
+      expect(other.retainChoicesFrom(first, decisions), isEmpty);
+    },
+  );
 
   test(
     'field choices retain unrelated local edits, cloud fields and protected consent',
@@ -743,7 +834,7 @@ void main() {
   );
 
   testWidgets(
-    'saving selected conflicts syncs and returns to the previous screen',
+    'returns after saving choices locally while the upload is still pending',
     (tester) async {
       final (:repo, :app) = (await tester.runAsync(_profileConflict))!;
       addTearDown(app.dispose);
@@ -777,14 +868,147 @@ void main() {
       final save = find.byKey(const Key('sync-conflict-save'));
       await tester.scrollUntilVisible(save, 200);
       await tester.pumpAndSettle();
+      final upload = repo.patchGate = Completer<void>();
+      addTearDown(() {
+        if (!upload.isCompleted) upload.complete();
+      });
       await tester.tap(save);
       await tester.pumpAndSettle();
       expect(find.text('Open review'), findsOneWidget);
-      expect(find.text('Your choices are saved and synced.'), findsOneWidget);
+      expect(
+        find.text('Choices saved on this device. Finishing sync…'),
+        findsOneWidget,
+      );
+      expect(repo.patchGate, isNull);
+      expect((await repo.readUser('owner'))!.profile.name, 'Cloud name');
+      upload.complete();
+      await tester.pumpAndSettle();
       expect((await repo.readUser('owner'))!.profile.name, 'Phone name');
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('group choices preserve individual picks and can be undone', (
+    tester,
+  ) async {
+    List<SignalReading> rows(double value) => List.generate(
+      30,
+      (i) => _signal('r${i.toString().padLeft(2, '0')}', value),
+    );
+    final repo = _Repository()..seed('owner', _state(signals: rows(1)));
+    final app = _controller(repo);
+    addTearDown(app.dispose);
+    await tester.runAsync(app.load);
+    app.signals = rows(2);
+    repo.seed('owner', _state(signals: rows(3)));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTonyoTheme(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SyncConflictScreen(controller: app),
+                ),
+              ),
+              child: const Text('Open review'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open review'));
+    await tester.pumpAndSettle();
+    final save = find.byKey(const Key('sync-conflict-save'));
+    final list = find.byKey(const Key('sync-conflict-list'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.widget<ListView>(list).childrenDelegate,
+      isA<SliverChildBuilderDelegate>(),
+    );
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+
+    Future<void> choose(Finder control, double delta) async {
+      await tester.scrollUntilVisible(control, delta, scrollable: scrollable);
+      await tester.ensureVisible(control);
+      await tester.pumpAndSettle();
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+    }
+
+    await choose(find.byKey(const Key('sync-conflict-phone-signal:r00')), 150);
+    final cloudForRemaining = find.text('Use cloud for remaining');
+    await choose(cloudForRemaining, -200);
+    expect(find.text('30 of 30 choices made'), findsOneWidget);
+    await choose(find.byKey(const Key('sync-conflict-phone-signal:r01')), 250);
+    await choose(find.text('Undo group choice (cloud)'), -250);
+    expect(find.text('2 of 30 choices made'), findsOneWidget);
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+    await choose(cloudForRemaining, -200);
+    expect(
+      (await repo.readUser('owner'))!.signals.every((s) => s.value == 3),
+      isTrue,
+    );
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final merged = (await repo.readUser('owner'))!.signals;
+    expect(merged, hasLength(30));
+    for (final signal in merged) {
+      expect(signal.value, ['r00', 'r01'].contains(signal.id) ? 2 : 3);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('refresh can retry and keeps only still-current choices', (
+    tester,
+  ) async {
+    final (:repo, :app) = (await tester.runAsync(_profileConflict))!;
+    addTearDown(app.dispose);
+    repo.offline = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTonyoTheme(),
+        home: SyncConflictScreen(controller: app),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final keep = find.byKey(
+      const Key('sync-conflict-phone-profile:profile.name'),
+    );
+    await tester.scrollUntilVisible(keep, 200);
+    await tester.ensureVisible(keep);
+    await tester.tap(keep);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 1 choices made'), findsOneWidget);
+
+    final refresh = find.byKey(const Key('sync-conflict-refresh'));
+    await tester.scrollUntilVisible(refresh, 200);
+    final read = repo.readGate = Completer<void>();
+    await tester.tap(refresh);
+    await tester.pump();
+    expect(repo.readGate, isNull);
+    read.completeError(StateError('Connection interrupted'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection interrupted'), findsOneWidget);
+    expect(find.byKey(const Key('sync-conflict-save')), findsNothing);
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 1 choices made'), findsOneWidget);
+
+    repo.seed(
+      'owner',
+      _state(profile: const UserProfile(name: 'New cloud name')),
+    );
+    await tester.scrollUntilVisible(refresh, 200);
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(find.text('0 of 1 choices made'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'conflict choices are explicit and readable at 320px and 2x text',
@@ -800,9 +1024,8 @@ void main() {
         MaterialApp(
           theme: buildTonyoTheme(),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(2)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
             child: child!,
           ),
           home: SyncConflictScreen(controller: app),
@@ -815,7 +1038,7 @@ void main() {
       final keepPhone = find.byKey(
         const Key('sync-conflict-phone-profile:profile.name'),
       );
-      await tester.scrollUntilVisible(keepPhone, -300);
+      await tester.scrollUntilVisible(keepPhone, 300);
       await tester.ensureVisible(keepPhone);
       await tester.pumpAndSettle();
       expect(find.text('Phone name'), findsOneWidget);

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:app/src/app_controller.dart';
 import 'package:app/src/cloud_repository.dart';
 import 'package:app/src/cloud_schema.dart';
@@ -6,6 +7,7 @@ import 'package:app/src/cloud_sync.dart';
 import 'package:app/src/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'privacy_test_support.dart';
 
 final when = DateTime(2026, 9, 19, 12);
@@ -64,6 +66,49 @@ AppController controller(Repository repo) => AppController(
 );
 
 void main() {
+  test(
+    'snapshot equality and patches preserve wire and document identities',
+    () {
+      InputSyncSnapshot snapshot(
+        Map<String, dynamic> row, {
+        String id = 'record',
+      }) => InputSyncSnapshot(root: {}, signals: {id: row}, checkIns: {});
+      final at = DateTime.utc(2026, 11, 21);
+      final original = snapshot({
+        'value': 1,
+        'rows': [
+          {'schemaVersion': 1, 'blank': null, 'at': at},
+          -0.0,
+        ],
+      });
+      final equivalent = snapshot({
+        'rows': [
+          {'at': at.toIso8601String(), 'schemaVersion': 3},
+          -0.0,
+        ],
+        'value': 1,
+      });
+      expect(original.hasSameInputs(equivalent), isTrue);
+      expect(InputSyncPatch(original, equivalent).isEmpty, isTrue);
+      for (final changed in [
+        snapshot({...equivalent.signals['record']!, 'value': 1.0}),
+        snapshot({
+          'value': 1,
+          'rows': [
+            {'at': at},
+            0.0,
+          ],
+        }),
+        snapshot(equivalent.signals['record']!, id: 'schemaVersion'),
+      ]) {
+        expect(original.hasSameInputs(changed), isFalse);
+        expect(InputSyncPatch(original, changed).isEmpty, isFalse);
+      }
+      final a = snapshot({'value': 1}, id: 'schemaVersion');
+      final b = snapshot({'value': 2}, id: 'schemaVersion');
+      expect(a.hasSameInputs(b), isFalse);
+    },
+  );
   setUp(() => SharedPreferences.setMockInitialValues({}));
   test(
     'ordinary saves preserve unseen records and protected consent',

@@ -94,6 +94,10 @@ class SleepObservations {
     final rows = signals
         .where(
           (row) =>
+              (row.type == SignalType.sleep ||
+                  row.type == SignalType.nap ||
+                  row.type == SignalType.bedtime ||
+                  SleepSyncLogic.stageTypes.contains(row.type)) &&
               row.source != SignalSource.model &&
               row.quality.isFinite &&
               row.quality > 0 &&
@@ -108,6 +112,7 @@ class SleepObservations {
     var napCount = 0;
     for (final row in [...mains, ...naps]) {
       final finish = row.timestamp.toUtc();
+      if (!finish.isAfter(start)) continue;
       final duration = Duration(
         microseconds: (row.value * Duration.microsecondsPerHour).round(),
       );
@@ -216,13 +221,6 @@ class SleepObservations {
     );
     final relevant =
         rows
-            .where(
-              (row) =>
-                  row.type == SignalType.sleep ||
-                  row.type == SignalType.nap ||
-                  row.type == SignalType.bedtime ||
-                  SleepSyncLogic.stageTypes.contains(row.type),
-            )
             .map(
               (row) =>
                   '${row.id}:${row.value}:${row.timestamp.toUtc()}:${row.source.name}:${row.groupId}:${EvidenceProvenance.signalIsDemo(row)}',

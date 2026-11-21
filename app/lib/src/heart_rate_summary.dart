@@ -101,6 +101,11 @@ abstract final class HeartRateSummary {
     for (final sample in uniqueRawReadings(all)) {
       byDay.putIfAbsent(dayId(sample.timestamp), () => []).add(sample);
     }
+    if (byDay.isEmpty) return [];
+    final contextByDay = {for (final day in byDay.keys) day: <SignalReading>[]};
+    for (final reading in all) {
+      contextByDay[dayId(reading.timestamp)]?.add(reading);
+    }
     return [
       for (final entry in byDay.entries)
         HeartRateDailySummary._fromSamples(
@@ -108,7 +113,7 @@ abstract final class HeartRateSummary {
           entry.value,
           sampleProvenance,
           HeartRateCardiacContext._build(
-            all.where((item) => dayId(item.timestamp) == entry.key),
+            contextByDay[entry.key]!,
             entry.value,
             sampleProvenance,
           ),

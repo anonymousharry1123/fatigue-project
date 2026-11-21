@@ -26,6 +26,41 @@ InputSyncSnapshot _snapshot(Map<String, dynamic> root) =>
     InputSyncSnapshot(root: root, signals: {}, checkIns: {});
 
 void main() {
+  test('summary sync excludes only the final raw HealthKit reading per ID', () {
+    final raw = SignalReading(
+      id: 'raw',
+      type: SignalType.heartRate,
+      source: SignalSource.healthKit,
+      timestamp: DateTime.utc(2026, 9, 20),
+      value: 70,
+    );
+    final manual = raw.copyWith(id: 'manual', source: SignalSource.manual);
+    final hrv = raw.copyWith(id: 'hrv', type: SignalType.hrv);
+    final state = _state(
+      signals: [
+        raw,
+        manual,
+        hrv,
+        manual.copyWith(id: 'raw-last'),
+        raw.copyWith(id: 'raw-last'),
+        raw.copyWith(id: 'manual-last'),
+        manual.copyWith(id: 'manual-last'),
+      ],
+    );
+    final full = InputSyncSnapshot.fromState(state);
+    final summary = InputSyncSnapshot.fromState(
+      state,
+      excludeRawHeartRate: true,
+    );
+
+    expect(full.signals.keys, containsAll(['raw', 'raw-last']));
+    expect(summary.signals, {
+      for (final id in ['manual', 'hrv', 'manual-last']) id: full.signals[id],
+    });
+    expect(summary.root, full.root);
+    expect(summary.checkIns, full.checkIns);
+  });
+
   test(
     'independent profile edits merge while new phone records upload',
     () async {
